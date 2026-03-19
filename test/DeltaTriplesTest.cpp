@@ -178,12 +178,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
     return AllOf(
         NumTriples(numInserted, numDeleted, numTriplesInAllPermutations,
                    numInternalInserted, numInternalDeleted),
-        AD_FIELD(DeltaTriples, triplesToHandlesNormal_,
+        AD_FIELD(DeltaTriples, triplesSetsNormal_,
                  AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
                                 TriplesAreStr(inserted)),
                        AD_FIELD(TriplesNormal, triplesDeleted_,
                                 TriplesAreStr(deleted)))),
-        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+        AD_FIELD(DeltaTriples, triplesSetsInternal_,
                  AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
                                 TriplesAreStr(internalInserted)),
                        AD_FIELD(TriplesInternal, triplesDeleted_,
@@ -405,12 +405,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
     using TriplesNormal = DeltaTriples::TriplesSets<false>;
     using TriplesInternal = DeltaTriples::TriplesSets<true>;
     return AllOf(
-        AD_FIELD(DeltaTriples, triplesToHandlesNormal_,
+        AD_FIELD(DeltaTriples, triplesSetsNormal_,
                  AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
                                 keysMatch(std::move(inserted))),
                        AD_FIELD(TriplesNormal, triplesDeleted_,
                                 keysMatch(std::move(deleted))))),
-        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+        AD_FIELD(DeltaTriples, triplesSetsInternal_,
                  AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
                                 keysMatch(std::move(internalInserted))),
                        AD_FIELD(TriplesInternal, triplesDeleted_,
@@ -870,7 +870,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                                 ::testing::Eq("<other>"))));
 
     std::vector<IdTriple<>> insertedTriples;
-    ql::ranges::copy(deltaTriples.triplesToHandlesNormal_.triplesInserted_,
+    ql::ranges::copy(deltaTriples.triplesSetsNormal_.triplesInserted_,
                      std::back_inserter(insertedTriples));
     EXPECT_THAT(
         insertedTriples,
@@ -883,7 +883,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                      .value()),
              Id::makeFromBool(true)}})));
     std::vector<IdTriple<>> deletedTriples;
-    ql::ranges::copy(deltaTriples.triplesToHandlesNormal_.triplesDeleted_,
+    ql::ranges::copy(deltaTriples.triplesSetsNormal_.triplesDeleted_,
                      std::back_inserter(deletedTriples));
     EXPECT_THAT(
         deletedTriples,

@@ -146,8 +146,8 @@ TEST(SortedVectorTest, equality) {
   sv2.insert(LT(0, IT(1, 2, 3), true));
 
   // Force sorting.
-  sv1.ensureIntegration();
-  sv2.ensureIntegration();
+  sv1.ensureItemsAreSorted();
+  sv2.ensureItemsAreSorted();
 
   EXPECT_EQ(sv1, sv2);
 }

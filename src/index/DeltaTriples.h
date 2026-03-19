@@ -155,8 +155,8 @@ class DeltaTriples {
     TriplesSet triplesDeleted_;
   };
 
-  TriplesSets<false> triplesToHandlesNormal_;
-  TriplesSets<true> triplesToHandlesInternal_;
+  TriplesSets<false> triplesSetsNormal_;
+  TriplesSets<true> triplesSetsInternal_;
 
  public:
   // Construct for given index.
@@ -185,22 +185,19 @@ class DeltaTriples {
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesNormal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesInserted_.size());
   }
   int64_t numDeleted() const {
-    return static_cast<int64_t>(triplesToHandlesNormal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesDeleted_.size());
   }
   DeltaTriplesCount getCounts() const;
 
   // The number of internal delta triples added and subtracted.
   int64_t numInternalInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesInserted_.size());
   }
   int64_t numInternalDeleted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesDeleted_.size());
   }
 
   // From the triples that are explicitly being added to the index, compute a
@@ -282,8 +279,8 @@ class DeltaTriples {
 
  private:
   // The proper state according to the template parameter. This will either
-  // return a reference to `triplesToHandlesInternal_` or
-  // `triplesToHandlesNormal_`.
+  // return a reference to `triplesSetsInternal_` or
+  // `triplesSetsNormal_`.
   template <bool isInternal>
   TriplesSets<isInternal>& getState();
 

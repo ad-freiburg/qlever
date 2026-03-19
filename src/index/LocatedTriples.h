@@ -85,16 +85,18 @@ struct LocatedTripleCompare {
   }
 };
 
+// Data structure for `LocatedTriples` optimized for sorted access.
+// The `LocatedTriples` are stored in a vector sorted by the triple. Newly
+// inserted triples are sorted on access. Only the last inserted `LocatedTriple`
+// for a triple is retained, so the last operation for a triple is retained.
 class SortedLocatedTriplesVector {
   using storage = std::vector<LocatedTriple>;
   mutable storage triples_ = {};
   mutable size_t sortedUntil_ = 0;
   mutable bool dirty_ = false;
 
-  using iterator = storage::iterator;
-  using const_iterator = storage::const_iterator;
-  using const_reverse_iterator = storage::const_reverse_iterator;
-
+  // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
+  // triple.
   void zipSort() const;
   void fullSort() const;
 
@@ -106,9 +108,13 @@ class SortedLocatedTriplesVector {
   static SortedLocatedTriplesVector fromSorted(
       std::vector<LocatedTriple> sortedTriples);
 
-  void ensureIntegration() const;
+  void ensureItemsAreSorted() const;
 
   void insert(LocatedTriple lt);
+
+  using iterator = storage::iterator;
+  using const_iterator = storage::const_iterator;
+  using const_reverse_iterator = storage::const_reverse_iterator;
 
   iterator begin();
   const_iterator begin() const;
@@ -124,8 +130,8 @@ class SortedLocatedTriplesVector {
   bool empty() const;
 
   bool operator==(const SortedLocatedTriplesVector& other) const {
-    ensureIntegration();
-    other.ensureIntegration();
+    ensureItemsAreSorted();
+    other.ensureItemsAreSorted();
     return triples_ == other.triples_;
   }
 };

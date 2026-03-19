@@ -83,19 +83,17 @@ void DeltaTriples::clear() {
     state.triplesDeleted_.clear();
     ql::ranges::for_each(locatedTriples, &LocatedTriplesPerBlock::clear);
   };
-  clearImpl(triplesToHandlesNormal_,
-            locatedTriples_->getLocatedTriples<false>());
-  clearImpl(triplesToHandlesInternal_,
-            locatedTriples_->getLocatedTriples<true>());
+  clearImpl(triplesSetsNormal_, locatedTriples_->getLocatedTriples<false>());
+  clearImpl(triplesSetsInternal_, locatedTriples_->getLocatedTriples<true>());
 }
 
 // ____________________________________________________________________________
 template <bool isInternal>
 DeltaTriples::TriplesSets<isInternal>& DeltaTriples::getState() {
   if constexpr (isInternal) {
-    return triplesToHandlesInternal_;
+    return triplesSetsInternal_;
   } else {
-    return triplesToHandlesNormal_;
+    return triplesSetsNormal_;
   }
 }
 
@@ -532,8 +530,8 @@ void DeltaTriples::writeToDisk() const {
   tempPath += ".tmp";
   ad_utility::serializeIds(
       tempPath, localVocab_,
-      std::array{toRange(triplesToHandlesNormal_.triplesDeleted_),
-                 toRange(triplesToHandlesNormal_.triplesInserted_)});
+      std::array{toRange(triplesSetsNormal_.triplesDeleted_),
+                 toRange(triplesSetsNormal_.triplesInserted_)});
   std::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
