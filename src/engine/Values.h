@@ -15,9 +15,12 @@ class Values : virtual public Operation {
 
  private:
   std::vector<float> multiplicities_;
+  SparqlValues parsedValues_;
 
  protected:
-  SparqlValues parsedValues_;
+  // Accessors for the parsed values.
+  const SparqlValues& parsedValues() const { return parsedValues_; }
+  SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
   // Create operation from parsed values. This calls `sanitizeValues`.

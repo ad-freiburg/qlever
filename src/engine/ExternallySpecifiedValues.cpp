@@ -40,29 +40,37 @@ ExternallySpecifiedValues::ExternallySpecifiedValues(
 
 // ____________________________________________________________________________
 std::string ExternallySpecifiedValues::getCacheKeyImpl() const {
-  // auto gen = ad_utility::FastRandomIntGenerator<size_t>{};
-  return absl::StrCat("EXTERNAL VALUES #" /*,gen()*/, identifier_, "# (",
-                      parsedValues_.variablesToString(), ") { ",
-                      parsedValues_.valuesToString(), " }");
+  // ExternallySpecifiedValues must only be used with caching disabled.
+  throw std::runtime_error(
+      "ExternallySpecifiedValues does not support cache keys. "
+      "Caching must be disabled when using externally specified values.");
+}
+
+// ____________________________________________________________________________
+Result ExternallySpecifiedValues::computeResult(bool requestLaziness) {
+  AD_CONTRACT_CHECK(
+      getExecutionContext()->disableCaching(),
+      "ExternallySpecifiedValues can only be used when caching is disabled. "
+      "Set the runtime parameter `disable-caching` to true.");
+  return Values::computeResult(requestLaziness);
 }
 
 // ____________________________________________________________________________
 std::string ExternallySpecifiedValues::getDescriptor() const {
-  return absl::StrCat("External values with identifier '", identifier_,
-                      "' and variables ", parsedValues_.variablesToString());
+  return absl::StrCat("EXTERNAL VALUES '", identifier_, "'");
 }
 
 // ____________________________________________________________________________
 void ExternallySpecifiedValues::updateValues(
     parsedQuery::SparqlValues newValues) {
   AD_CONTRACT_CHECK(
-      newValues._variables == parsedValues_._variables,
+      newValues._variables == parsedValues()._variables,
       absl::StrCat(
           "Variables in updateValues must match the existing variables. "
           "Expected: ",
-          parsedValues_.variablesToString(),
+          parsedValues().variablesToString(),
           ", got: ", newValues.variablesToString()));
-  parsedValues_ = std::move(newValues);
+  parsedValues() = std::move(newValues);
 }
 
 // ____________________________________________________________________________

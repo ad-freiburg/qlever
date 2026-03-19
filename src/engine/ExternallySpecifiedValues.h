@@ -22,7 +22,6 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
 
  public:
   // Inherit public member functions from `Values` that are not overridden.
-  using Values::computeResult;
   using Values::computeVariableToColumnMap;
   using Values::getChildren;
   using Values::getCostEstimate;
@@ -53,8 +52,9 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
   // Override to ensure external values are never considered empty.
   bool knownEmptyResult() override { return false; }
 
-  std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
+  Result computeResult(bool requestLaziness) override;
+  std::string getCacheKeyImpl() const override;
 
   // ___________________________________________________________________________
   void getExternallySpecifiedValues(
