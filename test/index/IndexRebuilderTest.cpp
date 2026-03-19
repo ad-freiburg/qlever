@@ -442,6 +442,12 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   threadPool.join();
   for (std::string_view suffix : suffixes) {
     EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+  }
+  // PSO is writer1 (canonical) in pair mode, so its files are byte-identical
+  // to the single-permutation rebuild.  POS is writer2 and may have sister
+  // sharing blocks in the original, which the single-permutation rebuild does
+  // not produce, so we only compare PSO files byte-for-byte.
+  for (std::string_view suffix : {".index.pso", ".index.pso.meta"}) {
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
   }

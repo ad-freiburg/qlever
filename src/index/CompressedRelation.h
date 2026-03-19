@@ -54,6 +54,28 @@ struct DecompressedBlockAndMetadata {
 // `IdTable`.
 using CompressedBlock = std::vector<std::vector<char>>;
 
+// Information about how a block's data is shared with another permutation.
+// When set, the block does not store its own compressed data; instead it
+// references a block in a source permutation.
+struct BlockSharingInfo {
+  enum class Type : uint8_t {
+    // Data is in the sister permutation (same col0, col1/col2 swapped).
+    // Must resort by (col1, col2, graph) after decompression.
+    SisterPermutation,
+    // Data is in a cross-pair permutation (col0/col1 swapped).
+    // Swap the constant col0/col1 columns after decompression (cheap).
+    CrossPairPermutation
+  };
+  Type type_;
+  // Block index in the source permutation that holds the actual compressed
+  // data.  Initially SIZE_MAX for unresolved cross-pair dummies; resolved
+  // after all permutations are built.
+  size_t sourceBlockIndex_ = std::numeric_limits<size_t>::max();
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BlockSharingInfo, type_,
+                                              sourceBlockIndex_)
+};
+
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadataNoBlockIndex {
   // Since we have column-based indices, the two columns of each block are
@@ -125,6 +147,12 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  // If set, this block's data is shared with another permutation and no
+  // compressed data is stored for this block in this permutation's file.
+  // When `sharingInfo_` has a value, `offsetsAndCompressedSize_` is
+  // `std::nullopt`.
+  std::optional<BlockSharingInfo> sharingInfo_;
+
   // Check for constant values in `firstTriple_` and `lastTriple` over all
   // columns `< columnIndex`.
   // Returns `true` if the respective column values of `firstTriple_` and
@@ -144,7 +172,7 @@ struct CompressedBlockMetadataNoBlockIndex {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
       firstTriple_, lastTriple_, graphInfo_,
-      containsDuplicatesWithDifferentGraphs_)
+      containsDuplicatesWithDifferentGraphs_, sharingInfo_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -207,16 +235,50 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
+  // Serialize the sharing info manually (std::optional<BlockSharingInfo> is
+  // trivially copyable and thus not handled by SerializeOptional).
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-    AD_CORRECTNESS_CHECK(arg.offsetsAndCompressedSize_.has_value(),
-                         "When serializing blocks offsets and compressed sizes "
-                         "need to be present.");
+    bool hasSharing = arg.sharingInfo_.has_value();
+    serializer | hasSharing;
+    if (hasSharing) {
+      auto typeAsUint = static_cast<uint8_t>(arg.sharingInfo_->type_);
+      serializer | typeAsUint;
+      serializer | arg.sharingInfo_->sourceBlockIndex_;
+    }
   } else {
-    static_assert(ad_utility::serialization::ReadSerializer<S>);
-    // Insert a dummy to overwrite.
-    arg.offsetsAndCompressedSize_.emplace();
+    bool hasSharing;
+    serializer | hasSharing;
+    if (hasSharing) {
+      uint8_t typeAsUint;
+      serializer | typeAsUint;
+      size_t sourceBlockIndex;
+      serializer | sourceBlockIndex;
+      arg.sharingInfo_ = BlockSharingInfo{
+          static_cast<BlockSharingInfo::Type>(typeAsUint), sourceBlockIndex};
+    } else {
+      arg.sharingInfo_ = std::nullopt;
+    }
   }
-  serializer | arg.offsetsAndCompressedSize_.value();
+
+  if (!arg.sharingInfo_.has_value()) {
+    // Normal block: offsets and compressed sizes are present.
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      AD_CORRECTNESS_CHECK(
+          arg.offsetsAndCompressedSize_.has_value(),
+          "When serializing blocks offsets and compressed sizes "
+          "need to be present.");
+    } else {
+      static_assert(ad_utility::serialization::ReadSerializer<S>);
+      // Insert a dummy to overwrite.
+      arg.offsetsAndCompressedSize_.emplace();
+    }
+    serializer | arg.offsetsAndCompressedSize_.value();
+  } else {
+    // Shared block: no compressed data stored.
+    if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      arg.offsetsAndCompressedSize_ = std::nullopt;
+    }
+  }
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
@@ -312,13 +374,24 @@ class CompressedRelationWriter {
   // same block), after this block has been completely handled by this writer.
   // The callback is used to efficiently pass the block from a permutation to
   // its twin permutation, which only has to re-sort and write the block.
-  using SmallBlocksCallback = std::function<void(IdTable)>;
+  // The second argument is the buffer index of the block in this writer's
+  // `blockBuffer_` (used for sister permutation sharing fix-up).
+  using SmallBlocksCallback = std::function<void(IdTable, size_t)>;
   SmallBlocksCallback smallBlocksCallback_;
 
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
 
+  // If true, blocks with a constant prefix of length >= 2 (i.e., col0 AND
+  // col1 are constant) are not compressed/written but stored as unresolved
+  // cross-pair sharing dummies.  Set to true for non-canonical writers.
+  bool skipConstantPrefixBlocks_ = false;
+
  public:
+  // Enable cross-pair sharing for this writer.
+  void setSkipConstantPrefixBlocks(bool value) {
+    skipConstantPrefixBlocks_ = value;
+  }
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
@@ -380,6 +453,14 @@ class CompressedRelationWriter {
   struct AddBlockOfSmallRelationsToSwitched;
 
  public:
+  // The result of `getFinishedBlocks`: the block metadata and a mapping
+  // from buffer insertion index to final sorted block index.
+  struct FinishedBlocksResult {
+    std::vector<CompressedBlockMetadata> blockMetadata_;
+    // Maps buffer insertion index → final block index (after sorting).
+    std::vector<size_t> bufferIndexToBlockIndex_;
+  };
+
   // Helper struct for the result of `createPermutation`.
   struct PermutationPairResult {
     size_t numDistinctCol0_;
@@ -414,23 +495,41 @@ class CompressedRelationWriter {
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
-  /// add all relations and then call this method.
-  std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
+  /// add all relations and then call this method.  Returns both the sorted
+  /// block metadata and a mapping from buffer insertion index to final sorted
+  /// block index.
+  FinishedBlocksResult getFinishedBlocksWithMapping() && {
     finish();
     auto blocks = std::move(*(blockBuffer_.wlock()));
-    ql::ranges::sort(blocks, {},
-                     &CompressedBlockMetadataNoBlockIndex::firstTriple_);
+
+    // Build a permutation that sorts the blocks by `firstTriple_`.
+    std::vector<size_t> sortPermutation(blocks.size());
+    std::iota(sortPermutation.begin(), sortPermutation.end(), 0);
+    ql::ranges::sort(sortPermutation, {},
+                     [&blocks](size_t i) { return blocks[i].firstTriple_; });
+
+    // Build the inverse mapping: bufferIndex → blockIndex.
+    std::vector<size_t> bufferIndexToBlockIndex(blocks.size());
+    for (size_t blockIdx : ad_utility::integerRange(blocks.size())) {
+      bufferIndexToBlockIndex[sortPermutation[blockIdx]] = blockIdx;
+    }
 
     std::vector<CompressedBlockMetadata> result;
     result.reserve(blocks.size());
-    // Write the correct block indices
-    for (size_t i : ad_utility::integerRange(blocks.size())) {
-      result.push_back({std::move(blocks.at(i)), i});
+    for (size_t blockIdx : ad_utility::integerRange(blocks.size())) {
+      result.push_back(
+          {std::move(blocks[sortPermutation[blockIdx]]), blockIdx});
     }
 
     AD_CORRECTNESS_CHECK(
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(result));
-    return result;
+    return {std::move(result), std::move(bufferIndexToBlockIndex)};
+  }
+
+  /// Convenience wrapper that returns only the block metadata (discards the
+  /// buffer-to-block mapping).
+  std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
+    return std::move(*this).getFinishedBlocksWithMapping().blockMetadata_;
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -480,10 +579,19 @@ class CompressedRelationWriter {
   // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
   // which is appended to the internal buffer. If `invokeCallback` is true and
   // the `smallBlocksCallback_` is not empty, then
-  // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
-  // completely been dealt with.
+  // `smallBlocksCallback_(std::move(block), bufferIndex)` is called AFTER the
+  // block has completely been dealt with.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
                              bool invokeCallback);
+
+  // Add a block's metadata to `blockBuffer_` without compressing or writing
+  // any data.  The block's data is shared from a source permutation.  The
+  // `block` is used only to extract `firstTriple_`, `lastTriple_`,
+  // `graphInfo_`, and `containsDuplicatesWithDifferentGraphs_`.
+  // Returns the buffer index of the newly appended entry.
+  size_t addSharedBlockMetadata(Id firstCol0Id, Id lastCol0Id,
+                                const IdTable& block,
+                                BlockSharingInfo sharingInfo);
 
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
@@ -702,6 +810,26 @@ class CompressedRelationReader {
   using IdTableGeneratorInputRange =
       ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
+ public:
+  // Access to a related permutation's reader and block metadata, used to
+  // read shared blocks from sister or cross-pair permutations.
+  struct SharedPermutationAccess {
+    const CompressedRelationReader* reader;
+    const std::vector<CompressedBlockMetadata>* blocks;
+  };
+
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing = true)
+      : allocator_{std::move(allocator)},
+        file_{std::move(file)},
+        useGraphPostProcessing_{useGraphPostProcessing} {}
+
+  // Set the access to the sister permutation's reader and blocks.
+  void setSisterAccess(const CompressedRelationReader* reader,
+                       const std::vector<CompressedBlockMetadata>* blocks) {
+    sisterAccess_ = SharedPermutationAccess{reader, blocks};
+  }
+
  private:
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
@@ -714,13 +842,11 @@ class CompressedRelationReader {
   // used for materialized views where repeated rows are meaningful.
   bool useGraphPostProcessing_;
 
- public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
-                                    bool useGraphPostProcessing = true)
-      : allocator_{std::move(allocator)},
-        file_{std::move(file)},
-        useGraphPostProcessing_{useGraphPostProcessing} {}
+  // Access to the sister permutation's reader and blocks for reading shared
+  // blocks.
+  std::optional<SharedPermutationAccess> sisterAccess_;
 
+ public:
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
   // the given `ScanSpecification`, then `col1Id` is returned. If the given
@@ -893,6 +1019,13 @@ class CompressedRelationReader {
   template <typename Iterator>
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
+
+  // Read a block whose data is shared from another permutation.  Depending on
+  // `sharingInfo.type_`, this reads from the sister or cross-pair permutation,
+  // decompresses, and applies the necessary column swap / resort.
+  DecompressedBlockAndMetadata readSharedBlock(
+      const CompressedBlockMetadata& blockMetaData,
+      const ScanImplConfig& scanConfig) const;
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that
