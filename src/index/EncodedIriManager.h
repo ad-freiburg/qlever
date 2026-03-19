@@ -254,32 +254,38 @@ class EncodedIriManagerImpl {
     return result;
   }
 
-  // The inverse of `encodeDecimalToNBit`. The result is appended to the
-  // `result` string.
-  static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
+  template <typename F>
+  static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
     size_t shift = NumBitsEncoding - NibbleSize;
     auto numTrailingZeros = absl::countr_zero(encoded);
     size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
     size_t len = NumDigits - numTrailingZeroNibbles;
     for (size_t i = 0; i < len; ++i) {
-      result.push_back(static_cast<char>(((encoded >> shift) & 0xF) + '0' - 1));
+      processDigit(((encoded >> shift) & 0xF) - 1);
       shift -= NibbleSize;
     }
+  }
+
+  // The inverse of `encodeDecimalToNBit`. The result is appended to the
+  // `result` string.
+  static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
+    decodeDecimalFrom64BitHelper(
+        [&result](auto digit) {
+          result.push_back(static_cast<char>(digit + '0'));
+        },
+        encoded);
   }
 
   // Overload of `decodeDecimalFrom64Bit` that returns the result as a
   // `uint64_t`.
   static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
     uint64_t result = 0;
-    size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = absl::countr_zero(encoded);
-    size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
-    size_t len = NumDigits - numTrailingZeroNibbles;
-    for (size_t i = 0; i < len; ++i) {
-      result *= 10;
-      result += static_cast<char>(((encoded >> shift) & 0xF) - 1);
-      shift -= NibbleSize;
-    }
+    decodeDecimalFrom64BitHelper(
+        [&result](auto digit) {
+          result *= 10;
+          result += static_cast<char>(digit);
+        },
+        encoded);
     return result;
   }
 };

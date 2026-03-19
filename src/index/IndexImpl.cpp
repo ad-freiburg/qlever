@@ -1071,8 +1071,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    graphNamespaceManager_.setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".allocated-graphs-state");
+    persistGraphNamespaceManager_ = onDiskBase + ".allocated-graphs-state";
   }
 }
 

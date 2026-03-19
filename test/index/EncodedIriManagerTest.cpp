@@ -158,10 +158,19 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
 }
 
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
-  using m = EncodedIriManager;
-  EXPECT_EQ(0, m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("0")));
-  EXPECT_EQ(123, m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("123")));
-  EXPECT_EQ(143215,
-            m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("143215")));
+  auto testNumber = [](uint64_t number, ad_utility::source_location l =
+                                            AD_CURRENT_SOURCE_LOC()) {
+    using m = EncodedIriManager;
+    auto trace = generateLocationTrace(l);
+    EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
+                          m::encodeDecimalToNBit(std::to_string(number))));
+  };
+  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
+  testNumber(0);
+  testNumber(MAX);
+  auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
+  for (auto _ = 0; _ < 20; ++_) {
+    testNumber(intGenerator());
+  }
 }
 }  // namespace

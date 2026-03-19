@@ -13,31 +13,33 @@
 #include "global/Constants.h"
 #include "gtest/gtest_prod.h"
 #include "rdfTypes/Iri.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeSynchronized.h"
+#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 #include "util/json.h"
 
-// Manages the allocated (but not necessarily used or existing) graphs from a
-// graph namespace (defined by having the same prefix in the IRI).
+// Generates new graphs with a fixed prefix that don't exist yet. Currently,
+// the graphs are of the form `{prefix}/{ascending number}`.
 class GraphNamespaceManager {
   std::string prefixWithoutBraces_ = std::string(QLEVER_NEW_GRAPH_PREFIX);
-  ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
+  // The smallest number such that the graph for this number and all after it
+  // are not used. Graphs that are generated are not necessarily all used so
+  // there may be "gaps" in the actually used graphs.
+  ad_utility::Synchronized<uint64_t> nextUnallocatedGraph_ =
       ad_utility::Synchronized<uint64_t>(0ul);
-  std::optional<std::string> fileNameForPersisting_;
 
   FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
   FRIEND_TEST(IndexImpl, graphNamespaceManagerIntegration);
 
  public:
   GraphNamespaceManager() = default;
-  GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
+  // `nextUnallocatedGraph` is the smallest number for which the graph does not
+  // exist for it and any larger number.
+  GraphNamespaceManager(std::string prefix, uint64_t nextUnallocatedGraph);
 
-  // Returns a new graph IRI with the prefix that is not used.
+  // Return a new graph IRI that has not been allocated previously.
   ad_utility::triple_component::Iri allocateNewGraph();
-
-  // Enable persisting the state to disk and read the previously
-  // persisted state from disk.
-  void setFilenameForPersistentUpdatesAndReadFromDisk(
-      std::optional<std::string> filename);
 
   friend void to_json(nlohmann::json& j,
                       const GraphNamespaceManager& namespaceManager);
@@ -47,9 +49,10 @@ class GraphNamespaceManager {
   friend std::ostream& operator<<(
       std::ostream& os, const GraphNamespaceManager& namespaceManager);
 
- private:
-  void writeToDisk(uint64_t allocatedGraphs) const;
-  void readFromDisk();
+  AD_SERIALIZE_FRIEND_FUNCTION(GraphNamespaceManager) {
+    serializer | arg.prefixWithoutBraces_;
+    serializer | arg.nextUnallocatedGraph_;
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H

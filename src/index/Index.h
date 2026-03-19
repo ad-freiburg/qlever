@@ -122,6 +122,7 @@ class Index {
   // Get a reference to the GraphNamespaceManager of this Index.
   GraphNamespaceManager& graphNamespaceManager();
   const GraphNamespaceManager& graphNamespaceManager() const;
+  const std::optional<std::string>& getPersistGraphNamespaceManager() const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL

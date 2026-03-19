@@ -506,11 +506,11 @@ ReturnType DeltaTriplesManager::modify(
 #define INSTANTIATE_MODIFY(T)                             \
   template T DeltaTriplesManager::modify<T>(              \
       const std::function<T(DeltaTriples&)>&, bool, bool, \
-      ad_utility::timer::TimeTracer&);
-INSTANTIATE_MODIFY(void)
-INSTANTIATE_MODIFY(UpdateMetadata)
-INSTANTIATE_MODIFY(DeltaTriplesCount)
-INSTANTIATE_MODIFY(nlohmann::json)
+      ad_utility::timer::TimeTracer&)
+INSTANTIATE_MODIFY(void);
+INSTANTIATE_MODIFY(UpdateMetadata);
+INSTANTIATE_MODIFY(DeltaTriplesCount);
+INSTANTIATE_MODIFY(nlohmann::json);
 #undef INSTANTIATE_MODIFY
 
 // _____________________________________________________________________________

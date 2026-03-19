@@ -921,7 +921,7 @@ TEST(IndexImpl, graphNamespaceManagerIntegration) {
   c.indexType = qlever::Filetype::NQuad;
   auto qec = getQec(c);
   const auto graphManager = qec->getIndex().graphNamespaceManager();
-  EXPECT_EQ(*graphManager.allocatedGraphs_.rlock(), 2);
+  EXPECT_EQ(*graphManager.nextUnallocatedGraph_.rlock(), 2);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }

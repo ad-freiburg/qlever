@@ -10,8 +10,12 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include "../util/AllocatorTestHelpers.h"
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "index/GraphNamespaceManager.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/Serializer.h"
 
 // _____________________________________________________________________________
 TEST(GraphNamespaceManager, allocateNewGraph) {
@@ -34,24 +38,21 @@ TEST(GraphNamespaceManager, allocateNewGraph) {
 
 // _____________________________________________________________________________
 TEST(GraphNamespaceManager, storeAndRestoreData) {
-  auto tmpFile =
-      std::filesystem::temp_directory_path() / "testGraphNamespaceManager";
-  // Make sure no file like this exists
-  std::filesystem::remove(tmpFile);
-  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  auto [tmpFile, cleanup] = ad_utility::testing::filenameForTesting();
 
   {
     auto allocatedGraphs = 13;
     auto nsm = GraphNamespaceManager("http://example.org/g/", allocatedGraphs);
-    nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
-    nsm.writeToDisk(allocatedGraphs);
+    ad_utility::serialization::FileWriteSerializer serializer{tmpFile.c_str()};
+    serializer << nsm;
   }
   {
     auto nsm = GraphNamespaceManager();
-    nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
+    ad_utility::serialization::FileReadSerializer serializer{tmpFile.c_str()};
+    serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
                 testing::StrEq("http://example.org/g/"));
-    EXPECT_EQ(*nsm.allocatedGraphs_.rlock(), 13);
+    EXPECT_EQ(*nsm.nextUnallocatedGraph_.rlock(), 13);
   }
 }
 

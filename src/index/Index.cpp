@@ -304,3 +304,9 @@ GraphNamespaceManager& Index::graphNamespaceManager() {
 const GraphNamespaceManager& Index::graphNamespaceManager() const {
   return pimpl_->graphNamespaceManager();
 }
+
+// ____________________________________________________________________________
+const std::optional<std::string>& Index::getPersistGraphNamespaceManager()
+    const {
+  return pimpl_->getPersistedGraphNamespaceManager();
+}
