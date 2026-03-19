@@ -1721,61 +1721,76 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   using namespace compressedRelationHelpers;
   DistinctIdCounter distinctCol1Counter;
 
-  // Buffer used to ensure the invariant that equal triples (when disregarding
-  // the graph) stay in the same block.
-  // TODO<cross-pair> Add col1-boundary splitting here for twin permutation
-  // alignment (needed for OPS→POS cross-pair sharing on large datasets).
-  std::optional<IdTable> bufferedBlock;
+  // Row buffer for the current (col0, col1) group. We process the twin sorter
+  // output row by row and build aligned blocks from scratch, mirroring the
+  // alignment logic in writePermutation(). This ensures that large (col0, col1)
+  // pairs get exclusive blocks, enabling cross-pair sharing with the sister
+  // permutation.
+  IdTable rowBuffer(0, ad_utility::makeUnlimitedAllocator<Id>());
+  bool rowBufferInitialized = false;
+  std::optional<Id> currentCol1;
+  const size_t bs = blocksize();
+  // Whether we have written at least one aligned block for the current col1
+  // group. Only large groups allow cross-pair sharing.
+  bool currentGroupIsLarge = false;
+
+  // Flush the entire rowBuffer as blocks at the end of a col1 group.
+  auto finishCurrentCol1Group = [&](size_t numCols,
+                                    ad_utility::AllocatorWithLimit<Id> alloc) {
+    if (rowBuffer.empty()) {
+      currentGroupIsLarge = false;
+      return;
+    }
+    // Write the remainder (which may be the only block for small groups).
+    addBlockForLargeRelation(col0Id, std::move(rowBuffer), currentGroupIsLarge);
+    rowBuffer = IdTable(numCols, alloc);
+    currentCol1.reset();
+    currentGroupIsLarge = false;
+  };
 
   for (auto& block :
        sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
 
-    if (!bufferedBlock.has_value()) {
-      // First non-empty block - initialize buffer.
-      bufferedBlock = std::move(block);
-      continue;
+    if (!rowBufferInitialized) {
+      rowBuffer = IdTable(block.numColumns(), block.getAllocator());
+      rowBufferInitialized = true;
     }
 
-    const auto& lastRowFromPrevious = bufferedBlock.value().back();
+    // Process each row, detecting col1 boundaries and blocksize thresholds.
+    for (size_t i = 0; i < block.numRows(); ++i) {
+      Id col1 = block(i, 1);
 
-    // Find how many rows from current block have the same first three columns
-    // as the last row in the buffered block.
-    const size_t upperBoundEqualTriples =
-        ql::ranges::find_if(
-            block,
-            [&lastRowFromPrevious](const auto& row) {
-              return tieFirstThreeColumns(lastRowFromPrevious) !=
-                     tieFirstThreeColumns(row);
-            }) -
-        block.begin();
+      // Col1 changed: finish the previous group.
+      if (currentCol1.has_value() && col1 != currentCol1.value()) {
+        finishCurrentCol1Group(block.numColumns(), block.getAllocator());
+      }
+      if (!currentCol1.has_value()) {
+        currentCol1 = col1;
+      }
 
-    // If we found rows to merge, add them to the buffered block.
-    if (upperBoundEqualTriples > 0) {
-      bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
+      // Before adding the row, check if we should flush a full aligned block.
+      // This mirrors the `isEndOfBlockForLargeRelation` check: flush when the
+      // buffer has reached blocksize and the incoming row differs in the first
+      // three columns from the last buffered row.
+      if (rowBuffer.numRows() >= bs &&
+          tieFirstThreeColumns(block[i]) !=
+              tieFirstThreeColumns(rowBuffer.back())) {
+        currentGroupIsLarge = true;
+        addBlockForLargeRelation(col0Id, std::move(rowBuffer),
+                                 true /* allowCrossPairSharing */);
+        rowBuffer = IdTable(block.numColumns(), block.getAllocator());
+      }
 
-      // Remove the merged rows from the current block.
-      block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
+      rowBuffer.push_back(block[i]);
     }
-
-    // If the `block` is empty after moving the duplicate triples into the
-    // buffer, continue without writing a block, because the next block might
-    // again contain the `lastRowFromPrevious`.
-    if (block.empty()) {
-      continue;
-    }
-
-    // At this point we know that the `block` contains at least a single triple
-    // larger than `lastRowFromPrevious`, so we can safely write the
-    // `bufferedBlock`.
-    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
-    bufferedBlock = std::move(block);
   }
 
-  // Write the remaining triples from the buffer.
-  if (bufferedBlock.has_value()) {
-    AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
-    addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
+  // Flush the final col1 group.
+  if (!rowBuffer.empty()) {
+    // We need valid numColumns/allocator for the replacement table, but since
+    // this is the last flush we can just move and not replace.
+    addBlockForLargeRelation(col0Id, std::move(rowBuffer), currentGroupIsLarge);
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
