@@ -1723,6 +1723,8 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
+  // TODO<cross-pair> Add col1-boundary splitting here for twin permutation
+  // alignment (needed for OPS→POS cross-pair sharing on large datasets).
   std::optional<IdTable> bufferedBlock;
 
   for (auto& block :
@@ -1730,12 +1732,15 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
 
     if (!bufferedBlock.has_value()) {
+      // First non-empty block - initialize buffer.
       bufferedBlock = std::move(block);
       continue;
     }
 
     const auto& lastRowFromPrevious = bufferedBlock.value().back();
 
+    // Find how many rows from current block have the same first three columns
+    // as the last row in the buffered block.
     const size_t upperBoundEqualTriples =
         ql::ranges::find_if(
             block,
@@ -1745,19 +1750,29 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
             }) -
         block.begin();
 
+    // If we found rows to merge, add them to the buffered block.
     if (upperBoundEqualTriples > 0) {
       bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
+
+      // Remove the merged rows from the current block.
       block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
     }
 
+    // If the `block` is empty after moving the duplicate triples into the
+    // buffer, continue without writing a block, because the next block might
+    // again contain the `lastRowFromPrevious`.
     if (block.empty()) {
       continue;
     }
 
+    // At this point we know that the `block` contains at least a single triple
+    // larger than `lastRowFromPrevious`, so we can safely write the
+    // `bufferedBlock`.
     addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
     bufferedBlock = std::move(block);
   }
 
+  // Write the remaining triples from the buffer.
   if (bufferedBlock.has_value()) {
     AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
     addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
