@@ -55,6 +55,7 @@ RuntimeParameters::RuntimeParameters() {
   add(prefilteredOptionalJoin_);
   add(enableMaterializedViewQueryRewrite_);
   add(serviceAllowedIriPrefixes_);
+  add(permutationWriterNumThreads_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {
