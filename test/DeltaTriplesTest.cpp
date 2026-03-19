@@ -154,11 +154,16 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
+  auto TriplesAreStr = [this, &vocab,
+                        &localVocab](const std::vector<std::string>& triples) {
+    return testing::UnorderedElementsAreArray(
+        makeIdTriples(vocab, localVocab, triples));
+  };
   // A matcher that checks the state of a `DeltaTriples`:
   // - `numInserted()` and `numDeleted()` and the derived `getCounts()`
   // - `numTriples()` for all `LocatedTriplesPerBlock`
   // - the inserted and deleted triples (unordered)
-  auto StateIs = [this, &vocab, &localVocab](
+  auto StateIs = [this, &TriplesAreStr](
                      size_t numInserted, size_t numDeleted,
                      size_t numTriplesInAllPermutations,
                      size_t numInternalInserted, size_t numInternalDeleted,
@@ -173,22 +178,16 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
     return AllOf(
         NumTriples(numInserted, numDeleted, numTriplesInAllPermutations,
                    numInternalInserted, numInternalDeleted),
-        AD_FIELD(
-            DeltaTriples, triplesToHandlesNormal_,
-            AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
-                           testing::UnorderedElementsAreArray(
-                               makeIdTriples(vocab, localVocab, inserted))),
-                  AD_FIELD(TriplesNormal, triplesDeleted_,
-                           testing::UnorderedElementsAreArray(
-                               makeIdTriples(vocab, localVocab, deleted))))),
-        AD_FIELD(
-            DeltaTriples, triplesToHandlesInternal_,
-            AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
-                           testing::UnorderedElementsAreArray(makeIdTriples(
-                               vocab, localVocab, internalInserted))),
-                  AD_FIELD(TriplesInternal, triplesDeleted_,
-                           testing::UnorderedElementsAreArray(makeIdTriples(
-                               vocab, localVocab, internalDeleted))))));
+        AD_FIELD(DeltaTriples, triplesToHandlesNormal_,
+                 AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
+                                TriplesAreStr(inserted)),
+                       AD_FIELD(TriplesNormal, triplesDeleted_,
+                                TriplesAreStr(deleted)))),
+        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+                 AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
+                                TriplesAreStr(internalInserted)),
+                       AD_FIELD(TriplesInternal, triplesDeleted_,
+                                TriplesAreStr(internalDeleted)))));
   };
 
   EXPECT_THAT(deltaTriples, StateIs(0, 0, 0, 0, 0, {}, {}, {}, {}));

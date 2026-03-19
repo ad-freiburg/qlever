@@ -410,27 +410,6 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   }
 }
 
-std::vector<std::vector<LocatedTriple>> split_into_categories(
-    std::vector<LocatedTriple> lts) {
-  std::vector<std::vector<LocatedTriple>> categories;
-  if (lts.empty()) return categories;
-
-  auto start = lts.begin();
-  auto prev_cat = start->blockIndex_;
-  for (auto it = std::next(start); it != lts.end(); ++it) {
-    auto curr_cat = it->blockIndex_;
-    if (curr_cat != prev_cat) {
-      categories.emplace_back(std::make_move_iterator(start),
-                              std::make_move_iterator(it));
-      start = it;
-      prev_cat = curr_cat;
-    }
-  }
-  categories.emplace_back(std::make_move_iterator(start),
-                          std::make_move_iterator(lts.end()));
-  return categories;
-}
-
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::add(std::vector<LocatedTriple> locatedTriples,
                                  ad_utility::timer::TimeTracer& tracer) {
@@ -442,7 +421,7 @@ void LocatedTriplesPerBlock::add(std::vector<LocatedTriple> locatedTriples,
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::erase(size_t blockIndex, LocatedTriple lt) {
+void LocatedTriplesPerBlock::erase(size_t blockIndex, const LocatedTriple& lt) {
   auto blockIter = map_.find(blockIndex);
   AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                     " is not contained.");
