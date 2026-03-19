@@ -10,7 +10,8 @@
 ExternallySpecifiedValues::ExternallySpecifiedValues(
     QueryExecutionContext* qec, parsedQuery::SparqlValues parsedValues,
     std::string identifier)
-    : Values(qec, std::move(parsedValues)),
+    : Operation(qec),
+      Values(qec, std::move(parsedValues)),
       identifier_(std::move(identifier)) {}
 
 // ____________________________________________________________________________

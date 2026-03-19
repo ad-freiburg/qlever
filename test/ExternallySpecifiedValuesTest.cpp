@@ -165,7 +165,7 @@ TEST(ExternallySpecifiedValues, getExternalValues) {
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "collect-test");
 
   std::vector<ExternallySpecifiedValues*> collected;
-  externalValuesOp.getExternalValues(collected);
+  externalValuesOp.getExternallySpecifiedValues(collected);
 
   ASSERT_EQ(collected.size(), 1u);
   EXPECT_EQ(collected[0], &externalValuesOp);

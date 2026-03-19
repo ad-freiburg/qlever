@@ -1,13 +1,17 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
+// Copyright 2020-2026 The QLever Authors, in particular:
+//
+// 2020 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Operation.h"
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
-#include "engine/ExternallySpecifiedValues.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -777,17 +781,14 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-void Operation::getExternalValues(
+void Operation::getExternallySpecifiedValues(
     std::vector<ExternallySpecifiedValues*>& externalValues) {
-  // Check if this operation itself is an ExternallySpecifiedValues
-  if (auto* externalValuesOp = dynamic_cast<ExternallySpecifiedValues*>(this)) {
-    externalValues.push_back(externalValuesOp);
-  }
-
-  // Recursively process all children
+  // Recursively process all children. This is the correct behavior for all
+  // classes except `ExternallySpecifiedValues` itself, which overrides this
+  // method.
   for (auto* child : getChildren()) {
     if (child != nullptr) {
-      child->getRootOperation()->getExternalValues(externalValues);
+      child->getRootOperation()->getExternallySpecifiedValues(externalValues);
     }
   }
 }

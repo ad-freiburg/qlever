@@ -10,7 +10,7 @@
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
-class Values : public Operation {
+class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:

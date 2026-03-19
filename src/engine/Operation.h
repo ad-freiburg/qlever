@@ -351,9 +351,9 @@ class Operation {
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
 
-  // Recursively collect all ExternallySpecifiedValues operations in this
+  // Recursively collect all `ExternallySpecifiedValues` operations in this
   // operation tree. This allows external modification of the values.
-  void getExternalValues(
+  virtual void getExternallySpecifiedValues(
       std::vector<ExternallySpecifiedValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
