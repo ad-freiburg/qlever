@@ -291,9 +291,24 @@ class EncodedIriManagerImpl {
 };
 
 // The default encoder for IRIs in QLever: 60 bits are used for the complete
-// encodingr, 8 bits are used for the prefixes (which allows up to 256
+// encoding, 8 bits are used for the prefixes (which allows up to 256
 // prefixes). This leaves 52 bits for the digits, so up to 13 digits can be
-// encoded.
-using EncodedIriManager = EncodedIriManagerImpl<Id::numDataBits, 8>;
+// encoded. Additionally the prefix for newly created graphs is always set.
+class EncodedIriManager : public EncodedIriManagerImpl<Id::numDataBits, 8> {
+ public:
+  // By default, only the fixed prefixes are used.
+  EncodedIriManager()
+      : EncodedIriManagerImpl({std::string(QLEVER_NEW_GRAPH_PREFIX)}) {}
+
+  // Construct from the list of specified prefixes plus the fixed prefixes. The
+  // prefixes have to be specified without any brackes, so e.g.
+  // "http://example.org/" if IRIs of the form `<http://example.org/1234>`
+  // should be encoded.
+  explicit EncodedIriManager(
+      std::vector<std::string> prefixesWithoutAngleBrackets)
+      : EncodedIriManagerImpl(
+            (prefixesWithoutAngleBrackets.emplace_back(QLEVER_NEW_GRAPH_PREFIX),
+             std::move(prefixesWithoutAngleBrackets))) {}
+};
 
 #endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H

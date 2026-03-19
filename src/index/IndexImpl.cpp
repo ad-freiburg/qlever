@@ -1928,7 +1928,6 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
-  prefixesWithoutAngleBrackets.push_back(std::string(QLEVER_NEW_GRAPH_PREFIX));
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }

@@ -123,8 +123,7 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
-  EncodedIriManager encodedIriManager_ =
-      EncodedIriManager({std::string(QLEVER_NEW_GRAPH_PREFIX)});
+  EncodedIriManager encodedIriManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
