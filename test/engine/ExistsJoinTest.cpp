@@ -334,7 +334,8 @@ TEST(ExistsJoin, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
   existsJoin.computeResultOnlyForTesting(true);
   const auto& runtimeInfo =
       existsJoin.getChildren().at(0)->getRootOperation()->runtimeInfo();
-  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_EQ(runtimeInfo.status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
   EXPECT_GT(runtimeInfo.numRows_, 0);
 }
 
@@ -359,7 +360,8 @@ TEST(ExistsJoin,
   existsJoin.computeResultOnlyForTesting(true);
   const auto& runtimeInfo =
       existsJoin.getChildren().at(0)->getRootOperation()->runtimeInfo();
-  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_EQ(runtimeInfo.status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
   EXPECT_GT(runtimeInfo.numRows_, 0);
 }
 
@@ -384,7 +386,8 @@ TEST(ExistsJoin, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
   existsJoin.computeResultOnlyForTesting(false);
   const auto& runtimeInfo =
       existsJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
-  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_EQ(runtimeInfo.status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
   EXPECT_GT(runtimeInfo.numRows_, 0);
 }
 
