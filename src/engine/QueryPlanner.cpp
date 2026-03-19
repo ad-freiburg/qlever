@@ -3331,22 +3331,8 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
-  // Check that all variables are unique
-  ad_utility::HashSet<Variable> uniqueVars(
-      externalValuesQuery.variables_.begin(),
-      externalValuesQuery.variables_.end());
-  AD_CONTRACT_CHECK(uniqueVars.size() == externalValuesQuery.variables_.size(),
-                    "Variables in external values query must be unique");
-
-  // Create an ExternallySpecifiedValues operation with empty values initially
-  parsedQuery::SparqlValues emptyValues;
-  emptyValues._variables = externalValuesQuery.variables_;
-  // Start with empty values - they will be filled externally
-  emptyValues._values = {};
-
-  auto externalValues = std::make_shared<ExternallySpecifiedValues>(
-      qec_, std::move(emptyValues), externalValuesQuery.identifier_);
-
+  auto externalValues =
+      std::make_shared<ExternallySpecifiedValues>(qec_, externalValuesQuery);
   auto candidate =
       makeSubtreePlan<ExternallySpecifiedValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});

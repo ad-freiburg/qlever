@@ -1,10 +1,16 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Generated with Claude Code
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ExternallySpecifiedValues.h"
 
 #include "absl/strings/str_cat.h"
+#include "util/HashSet.h"
 
 // ____________________________________________________________________________
 ExternallySpecifiedValues::ExternallySpecifiedValues(
@@ -13,6 +19,24 @@ ExternallySpecifiedValues::ExternallySpecifiedValues(
     : Operation(qec),
       Values(qec, std::move(parsedValues)),
       identifier_(std::move(identifier)) {}
+
+// ____________________________________________________________________________
+ExternallySpecifiedValues::ExternallySpecifiedValues(
+    QueryExecutionContext* qec, const parsedQuery::ExternalValuesQuery& query)
+    : ExternallySpecifiedValues(
+          qec,
+          [&query]() {
+            // Check that all variables are unique.
+            ad_utility::HashSet<Variable> uniqueVars(query.variables_.begin(),
+                                                     query.variables_.end());
+            AD_CONTRACT_CHECK(
+                uniqueVars.size() == query.variables_.size(),
+                "Variables in external values query must be unique");
+            parsedQuery::SparqlValues values;
+            values._variables = query.variables_;
+            return values;
+          }(),
+          query.identifier_) {}
 
 // ____________________________________________________________________________
 std::string ExternallySpecifiedValues::getCacheKeyImpl() const {

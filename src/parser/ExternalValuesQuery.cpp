@@ -8,7 +8,6 @@
 
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
-#include "util/StringUtils.h"
 
 namespace parsedQuery {
 
@@ -18,20 +17,29 @@ void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;
 
-  // For external values, we expect a predicate like <variables>
-  // and the object should be a variable
-  // We use a generic IRI as the magic service base since the actual IRI
-  // includes the identifier
-  std::string_view magicIri = "<https://qlever.cs.uni-freiburg.de>";
-  auto predString = extractParameterName(predicate, magicIri);
+  auto predString = extractParameterName(predicate, EXTERNAL_VALUES_IRI);
 
-  if (predString == "variables" || predString == "<variables>") {
-    // The object should be a variable
+  if (predString == "variables") {
     if (!object.isVariable()) {
       throw ExternalValuesException(
           "The parameter <variables> expects a variable");
     }
     variables_.push_back(object.getVariable());
+  } else if (predString == "identifier") {
+    if (!identifier_.empty()) {
+      throw ExternalValuesException(
+          "The parameter <identifier> must not be set more than once");
+    }
+    if (!object.isLiteral()) {
+      throw ExternalValuesException(
+          "The parameter <identifier> expects a string literal");
+    }
+    identifier_ =
+        std::string{asStringViewUnsafe(object.getLiteral().getContent())};
+    if (identifier_.empty()) {
+      throw ExternalValuesException(
+          "The parameter <identifier> must be a non-empty string literal");
+    }
   } else {
     throw ExternalValuesException(absl::StrCat(
         "Unknown parameter for external values query: <", predString, ">"));
@@ -39,36 +47,15 @@ void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
-std::string ExternalValuesQuery::extractIdentifier(
-    const std::string& serviceIri) {
-  // Extract identifier from IRI like
-  // <https://qlever.cs.uni-freiburg.de/external-values-myid>
-  constexpr std::string_view prefix =
-      "<https://qlever.cs.uni-freiburg.de/external-values-";
-  constexpr std::string_view suffix = ">";
-
-  if (!ql::starts_with(serviceIri, prefix)) {
+void ExternalValuesQuery::validate() const {
+  if (identifier_.empty()) {
     throw ExternalValuesException(
-        absl::StrCat("External values service IRI must start with '", prefix,
-                     "' but got: ", serviceIri));
+        "An external values query requires an <identifier> parameter");
   }
-
-  if (!ql::ends_with(serviceIri, suffix)) {
+  if (variables_.empty()) {
     throw ExternalValuesException(
-        absl::StrCat("External values service IRI must end with '", suffix,
-                     "' but got: ", serviceIri));
+        "An external values query requires at least one <variables> parameter");
   }
-
-  // Extract the identifier between prefix and suffix
-  std::string identifier = serviceIri.substr(
-      prefix.size(), serviceIri.size() - prefix.size() - suffix.size());
-
-  if (identifier.empty()) {
-    throw ExternalValuesException(
-        "External values service IRI must contain a non-empty identifier");
-  }
-
-  return identifier;
 }
 
 }  // namespace parsedQuery

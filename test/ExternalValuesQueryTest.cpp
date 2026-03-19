@@ -6,81 +6,70 @@
 
 #include "parser/ExternalValuesQuery.h"
 #include "parser/SparqlTriple.h"
-#include "util/Exception.h"
 
 using parsedQuery::ExternalValuesException;
 using parsedQuery::ExternalValuesQuery;
 
-// Test extracting identifier from valid IRI
-TEST(ExternalValuesQuery, extractIdentifierValid) {
-  std::string iri = "<https://qlever.cs.uni-freiburg.de/external-values-myid>";
-  std::string identifier = ExternalValuesQuery::extractIdentifier(iri);
-  EXPECT_EQ(identifier, "myid");
-}
-
-// Test extracting identifier with complex identifier
-TEST(ExternalValuesQuery, extractIdentifierComplex) {
-  std::string iri =
-      "<https://qlever.cs.uni-freiburg.de/external-values-test-123-abc>";
-  std::string identifier = ExternalValuesQuery::extractIdentifier(iri);
-  EXPECT_EQ(identifier, "test-123-abc");
-}
-
-// Test that empty identifier throws exception
-TEST(ExternalValuesQuery, extractIdentifierEmpty) {
-  std::string iri = "<https://qlever.cs.uni-freiburg.de/external-values->";
-  EXPECT_THROW(ExternalValuesQuery::extractIdentifier(iri),
-               ExternalValuesException);
-}
-
-// Test that wrong prefix throws exception
-TEST(ExternalValuesQuery, extractIdentifierWrongPrefix) {
-  std::string iri = "<https://example.com/external-values-myid>";
-  EXPECT_THROW(ExternalValuesQuery::extractIdentifier(iri),
-               ExternalValuesException);
-}
-
-// Test that missing closing bracket throws exception
-TEST(ExternalValuesQuery, extractIdentifierMissingBracket) {
-  std::string iri = "<https://qlever.cs.uni-freiburg.de/external-values-myid";
-  EXPECT_THROW(ExternalValuesQuery::extractIdentifier(iri),
-               ExternalValuesException);
-}
-
-// Test addParameter with variables
-TEST(ExternalValuesQuery, addParameterVariables) {
-  ExternalValuesQuery query;
-  query.identifier_ = "test";
-
-  // Create a triple with <variables> predicate and a variable as object
+// Helper to create a triple with an IRI predicate.
+static SparqlTriple makeTriple(std::string_view predIri,
+                               TripleComponent object) {
   TripleComponent subject = TripleComponent::UNDEF{};
   auto predicate =
-      PropertyPath::fromIri(TripleComponent::Iri::fromIriref("<variables>"));
-  TripleComponent object = Variable{"?x"};
+      PropertyPath::fromIri(TripleComponent::Iri::fromIriref(predIri));
+  return {subject, predicate, std::move(object)};
+}
 
-  SparqlTriple triple{subject, predicate, object};
+// Test addParameter with <identifier>.
+TEST(ExternalValuesQuery, addParameterIdentifier) {
+  ExternalValuesQuery query;
+  auto triple = makeTriple(
+      "<identifier>",
+      TripleComponent::Literal::fromStringRepresentation("\"myId\""));
   query.addParameter(triple);
+  EXPECT_EQ(query.identifier_, "myId");
+}
+
+// Test that setting <identifier> twice throws.
+TEST(ExternalValuesQuery, addParameterIdentifierTwice) {
+  ExternalValuesQuery query;
+  auto triple = makeTriple(
+      "<identifier>",
+      TripleComponent::Literal::fromStringRepresentation("\"myId\""));
+  query.addParameter(triple);
+  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+}
+
+// Test that <identifier> with a non-literal throws.
+TEST(ExternalValuesQuery, addParameterIdentifierNonLiteral) {
+  ExternalValuesQuery query;
+  auto triple = makeTriple("<identifier>", Variable{"?x"});
+  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+}
+
+// Test that <identifier> with an empty string throws.
+TEST(ExternalValuesQuery, addParameterIdentifierEmpty) {
+  ExternalValuesQuery query;
+  auto triple =
+      makeTriple("<identifier>",
+                 TripleComponent::Literal::fromStringRepresentation("\"\""));
+  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+}
+
+// Test addParameter with <variables>.
+TEST(ExternalValuesQuery, addParameterVariables) {
+  ExternalValuesQuery query;
+  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
 
   ASSERT_EQ(query.variables_.size(), 1u);
   EXPECT_EQ(query.variables_[0], Variable{"?x"});
 }
 
-// Test addParameter with multiple variables
+// Test addParameter with multiple variables.
 TEST(ExternalValuesQuery, addParameterMultipleVariables) {
   ExternalValuesQuery query;
-  query.identifier_ = "test";
-
-  TripleComponent subject = TripleComponent::UNDEF{};
-  auto predicate =
-      PropertyPath::fromIri(TripleComponent::Iri::fromIriref("<variables>"));
-
-  SparqlTriple triple1{subject, predicate, Variable{"?x"}};
-  SparqlTriple triple2{subject, predicate, Variable{"?y"}};
-  SparqlTriple triple3{subject, predicate, Variable{"?z"}};
-
-  query.addParameter(triple1);
-  query.addParameter(triple2);
-  query.addParameter(triple3);
+  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
+  query.addParameter(makeTriple("<variables>", Variable{"?y"}));
+  query.addParameter(makeTriple("<variables>", Variable{"?z"}));
 
   ASSERT_EQ(query.variables_.size(), 3u);
   EXPECT_EQ(query.variables_[0], Variable{"?x"});
@@ -88,33 +77,43 @@ TEST(ExternalValuesQuery, addParameterMultipleVariables) {
   EXPECT_EQ(query.variables_[2], Variable{"?z"});
 }
 
-// Test addParameter with non-variable object throws exception
-TEST(ExternalValuesQuery, addParameterNonVariable) {
+// Test addParameter with non-variable object for <variables> throws.
+TEST(ExternalValuesQuery, addParameterVariablesNonVariable) {
   ExternalValuesQuery query;
-  query.identifier_ = "test";
-
-  TripleComponent subject = TripleComponent::UNDEF{};
-  auto predicate =
-      PropertyPath::fromIri(TripleComponent::Iri::fromIriref("<variables>"));
-  TripleComponent object =
-      TripleComponent::Iri::fromIriref("<http://example.com>");
-
-  SparqlTriple triple{subject, predicate, object};
-
+  auto triple = makeTriple(
+      "<variables>", TripleComponent::Iri::fromIriref("<http://example.com>"));
   EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
 }
 
-// Test addParameter with unknown predicate throws exception
+// Test addParameter with unknown predicate throws.
 TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
   ExternalValuesQuery query;
-  query.identifier_ = "test";
-
-  TripleComponent subject = TripleComponent::UNDEF{};
-  auto predicate =
-      PropertyPath::fromIri(TripleComponent::Iri::fromIriref("<unknowwn>"));
-  TripleComponent object = Variable{"?x"};
-
-  SparqlTriple triple{subject, predicate, object};
-
+  auto triple = makeTriple("<unknown>", Variable{"?x"});
   EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+}
+
+// Test validate succeeds with identifier and variables set.
+TEST(ExternalValuesQuery, validateSuccess) {
+  ExternalValuesQuery query;
+  query.addParameter(makeTriple(
+      "<identifier>",
+      TripleComponent::Literal::fromStringRepresentation("\"myId\"")));
+  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
+  EXPECT_NO_THROW(query.validate());
+}
+
+// Test validate fails without identifier.
+TEST(ExternalValuesQuery, validateMissingIdentifier) {
+  ExternalValuesQuery query;
+  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
+  EXPECT_THROW(query.validate(), ExternalValuesException);
+}
+
+// Test validate fails without variables.
+TEST(ExternalValuesQuery, validateMissingVariables) {
+  ExternalValuesQuery query;
+  query.addParameter(makeTriple(
+      "<identifier>",
+      TripleComponent::Literal::fromStringRepresentation("\"myId\"")));
+  EXPECT_THROW(query.validate(), ExternalValuesException);
 }

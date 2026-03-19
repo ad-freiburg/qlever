@@ -1,11 +1,20 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Generated with Claude Code
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_EXTERNALLYSPECIFIEDVALUES_H
 #define QLEVER_SRC_ENGINE_EXTERNALLYSPECIFIEDVALUES_H
 
 #include "engine/Values.h"
+
+namespace parsedQuery {
+struct ExternalValuesQuery;
+}
 
 class ExternallySpecifiedValues : private Values, virtual public Operation {
  private:
@@ -25,6 +34,11 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
   ExternallySpecifiedValues(QueryExecutionContext* qec,
                             parsedQuery::SparqlValues parsedValues,
                             std::string identifier);
+
+  // Create operation from an `ExternalValuesQuery`. The variables are taken
+  // from the query, and the values start empty.
+  ExternallySpecifiedValues(QueryExecutionContext* qec,
+                            const parsedQuery::ExternalValuesQuery& query);
 
   // Get the identifier of this external values operation.
   const std::string& getIdentifier() const { return identifier_; }

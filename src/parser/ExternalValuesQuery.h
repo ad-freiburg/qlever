@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Generated with Claude Code
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_PARSER_EXTERNALVALUESQUERY_H
 #define QLEVER_SRC_PARSER_EXTERNALVALUESQUERY_H
@@ -17,27 +22,21 @@ class ExternalValuesException : public std::runtime_error {
 };
 
 // The ExternalValuesQuery object holds information for external values
-// specification via the SERVICE ql:external-values-#identifier# syntax.
-// It stores the identifier extracted from the service IRI and the variables
-// that should be bound by the external values.
+// specification via the SERVICE <ql:external-values/> syntax.
+// The identifier and variables are specified as configuration triples:
+//   [] <identifier> "myId"
+//   [] <variables> ?x
+//   [] <variables> ?y
 struct ExternalValuesQuery : MagicServiceQuery {
   std::string identifier_;
   std::vector<Variable> variables_;
 
-  ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
-      : identifier_(extractIdentifier(serviceIri.toStringRepresentation())) {}
-  ExternalValuesQuery(ExternalValuesQuery&& other) noexcept = default;
-  ExternalValuesQuery(const ExternalValuesQuery& other) = default;
-  ExternalValuesQuery& operator=(const ExternalValuesQuery& other) = default;
-  ExternalValuesQuery& operator=(ExternalValuesQuery&& a) noexcept = default;
-  ~ExternalValuesQuery() noexcept override = default;
-
-  // See MagicServiceQuery - processes configuration triples
+  // See MagicServiceQuery - processes configuration triples.
   void addParameter(const SparqlTriple& triple) override;
 
-  // Extract identifier from service IRI like
-  // <https://qlever.cs.uni-freiburg.de/external-values-myid>
-  static std::string extractIdentifier(const std::string& serviceIri);
+  // Validate that the identifier and variables are set.
+  void validate() const override;
+
   std::string_view name() const override { return "external values query"; }
 };
 

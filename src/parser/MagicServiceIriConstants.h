@@ -24,8 +24,8 @@ constexpr inline std::string_view SPATIAL_SEARCH_IRI =
 constexpr inline std::string_view TEXT_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/textSearch/>";
 
-constexpr inline std::string_view EXTERNAL_VALUES_IRI_PREFIX =
-    "<https://qlever.cs.uni-freiburg.de/external-values-";
+constexpr inline std::string_view EXTERNAL_VALUES_IRI =
+    "<https://qlever.cs.uni-freiburg/external-values/>";
 
 namespace string_constants::detail {
 constexpr inline std::string_view OPENING_BRACKET = "<";
