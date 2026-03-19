@@ -163,6 +163,10 @@ class TaskQueue {
     finishedFinishing_.test_and_set();
     finishedFinishing_.notify_all();
   }
+
+  // Only used by unit tests.
+  friend std::pair<size_t, size_t> getThreadCountAndTaskSize(
+      const TaskQueue<false>&);
 };
 }  // namespace ad_utility
 
