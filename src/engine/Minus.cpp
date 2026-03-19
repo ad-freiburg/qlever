@@ -237,25 +237,21 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 
 // _____________________________________________________________________________
 bool Minus::rightIndexNestedLoopJoinIsPossible() const {
-  auto sort = std::dynamic_pointer_cast<Sort>(_left->getRootOperation());
-  return sort && _left->getSizeEstimate() >= _right->getSizeEstimate() &&
-         qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
-                                                          _left, _right);
+  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(
+      _left, _right, _matchedColumns);
 }
 
 // _____________________________________________________________________________
 std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
-  // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side. It currently doesn't support undef.
-  auto sort = std::dynamic_pointer_cast<Sort>(_right->getRootOperation());
-  if (!sort || _left->getSizeEstimate() > _right->getSizeEstimate()) {
+  auto optionalResults =
+      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(_left,
+                                                                   _right);
+  if (!optionalResults.has_value()) {
     return std::nullopt;
   }
 
-  auto leftRes = _left->getResult(false);
+  auto [leftRes, rightRes] = std::move(optionalResults).value();
   const IdTable& leftTable = leftRes->idTable();
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort, true);
-
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};

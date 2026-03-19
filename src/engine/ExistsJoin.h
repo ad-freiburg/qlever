@@ -116,6 +116,10 @@ class ExistsJoin : public Operation {
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
 
+  // Helper function to modify the `IdTable` such that it gains a column
+  // signaling if the values exist or not.
+  void addExistsColumn(IdTable& idTable, auto&& range) const;
+
   FRIEND_TEST(ExistsJoin,
               addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };

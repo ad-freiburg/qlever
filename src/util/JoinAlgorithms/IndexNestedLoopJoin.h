@@ -218,6 +218,13 @@ class OptionalJoinRange
     return Result::IdTableVocabPair{std::move(resultTable), leftVocab_.clone()};
   }
 };
+
+// Helper function for common pattern.
+template <size_t JOIN_COLUMNS>
+IdTableView<JOIN_COLUMNS> toStaticView(
+    const IdTable& idTable, const std::vector<ColumnIndex>& joinColumns) {
+  return idTable.asColumnSubsetView(joinColumns).asStaticView<JOIN_COLUMNS>();
+}
 }  // namespace detail
 
 // This class implements an index nested loop join using binary search to match
@@ -286,10 +293,8 @@ class IndexNestedLoopJoin {
         [this, leftColumns = std::move(leftColumns), &rightColumns,
          transformationFunc =
              std::move(transformationFunc)](auto JOIN_COLUMNS) {
-          IdTableView<JOIN_COLUMNS> rightTable =
-              rightResult_->idTable()
-                  .asColumnSubsetView(rightColumns)
-                  .template asStaticView<JOIN_COLUMNS>();
+          auto rightTable = detail::toStaticView<JOIN_COLUMNS>(
+              rightResult_->idTable(), rightColumns);
           auto matchHelper =
               [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
                transformationFunc = std::move(transformationFunc)](
@@ -298,8 +303,7 @@ class IndexNestedLoopJoin {
             detail::RightFiller matchTracker{
                 idTable.size(), idTable.getAllocator().template as<bool>()};
             matchLeft(matchTracker, rightTable,
-                      idTable.asColumnSubsetView(leftColumns)
-                          .template asStaticView<JOIN_COLUMNS>());
+                      detail::toStaticView<JOIN_COLUMNS>(idTable, leftColumns));
             return transformationFunc(AD_FWD(idTable), std::move(localVocab),
                                       matchTracker.matchTracker_);
           };
@@ -336,15 +340,13 @@ class IndexNestedLoopJoin {
          &rightColumns](auto JOIN_COLUMNS_PAR) {
           static constexpr size_t JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          IdTableView<JOIN_COLUMNS> leftTable =
-              leftResult_->idTable()
-                  .asColumnSubsetView(leftColumns)
-                  .template asStaticView<JOIN_COLUMNS>();
+          auto leftTable = detail::toStaticView<JOIN_COLUMNS>(
+              leftResult_->idTable(), leftColumns);
           auto matchHelper = [&matchTracker, &leftTable,
                               &rightColumns](const IdTable& idTable) {
-            matchLeft(matchTracker, leftTable,
-                      idTable.asColumnSubsetView(rightColumns)
-                          .template asStaticView<JOIN_COLUMNS>());
+            matchLeft(
+                matchTracker, leftTable,
+                detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
           };
           if (rightResult_->isFullyMaterialized()) {
             matchHelper(rightResult_->idTable());
@@ -378,15 +380,14 @@ class IndexNestedLoopJoin {
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
               joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
-          IdTableView<JOIN_COLUMNS> leftTableView =
-              leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
-                  .template asStaticView<JOIN_COLUMNS>();
+          auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
+              leftTable, joinColumnData.jcsLeft());
           auto matchHelper = [&matchTracker, &leftTableView,
                               rightColumns = joinColumnData.jcsRight()](
                                  const IdTable& idTable) {
-            matchLeft(matchTracker, leftTableView,
-                      idTable.asColumnSubsetView(rightColumns)
-                          .template asStaticView<JOIN_COLUMNS>());
+            matchLeft(
+                matchTracker, leftTableView,
+                detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
           };
           IdTable resultTable{resultWidth, leftTable.getAllocator()};
           LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
@@ -427,8 +428,8 @@ class IndexNestedLoopJoin {
                  rightColumns = std::move(rightColumns)](
                     detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
-                            rightTable.asColumnSubsetView(rightColumns)
-                                .template asStaticView<JOIN_COLUMNS>());
+                            detail::toStaticView<JOIN_COLUMNS>(rightTable,
+                                                               rightColumns));
                 }}};
           }
           resultTable.setColumnSubset(joinColumnData.permutationResult());

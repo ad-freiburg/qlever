@@ -276,35 +276,27 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 
 // _____________________________________________________________________________
 bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
-  auto sort = std::dynamic_pointer_cast<Sort>(left_->getRootOperation());
-  return sort && left_->getSizeEstimate() >= right_->getSizeEstimate() &&
-         qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                          right_);
+  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
+                                                                 joinColumns_);
 }
 
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
-  // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side. It currently doesn't support undef.
-  auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
-  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate()) {
+  auto optionalResults =
+      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_,
+                                                                   right_);
+  if (!optionalResults.has_value()) {
     return std::nullopt;
   }
 
-  auto leftRes = left_->getResult(false);
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort, true);
+  auto [leftRes, rightRes] = std::move(optionalResults).value();
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
-  result.addEmptyColumn();
-  ad_utility::chunkedCopy(
-      ql::views::transform(
-          ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()},
-          [](char tracker) { return Id::makeFromBool(tracker != 0); }),
-      result.getColumn(result.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+  addExistsColumn(
+      result, ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()});
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
 }
@@ -330,14 +322,8 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
       [this](auto&& idTable, LocalVocab localVocab,
              const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
                  matchingTracker) {
-        IdTable resultTable = idTable.moveOrClone();
-        resultTable.addEmptyColumn();
-        ad_utility::chunkedCopy(
-            ql::views::transform(
-                matchingTracker,
-                [](bool tracker) { return Id::makeFromBool(tracker); }),
-            resultTable.getColumn(resultTable.numColumns() - 1).begin(),
-            qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+        IdTable resultTable = AD_FWD(idTable).moveOrClone();
+        addExistsColumn(resultTable, matchingTracker);
         return Result::IdTableVocabPair{std::move(resultTable),
                                         std::move(localVocab)};
       });
@@ -560,4 +546,17 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
              ? Result{std::move(generator), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(generator)),
                       resultSortedOn()};
+}
+
+// _____________________________________________________________________________
+void ExistsJoin::addExistsColumn(IdTable& idTable, auto&& range) const {
+  idTable.addEmptyColumn();
+  ad_utility::chunkedCopy(
+      ql::views::transform(AD_FWD(range),
+                           [](auto tracker) {
+                             return Id::makeFromBool(
+                                 static_cast<bool>(tracker));
+                           }),
+      idTable.getColumn(idTable.numColumns() - 1).begin(),
+      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
 }
