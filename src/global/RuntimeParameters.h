@@ -142,6 +142,11 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
+  // RAM budget for the partitioned join optimization. Each partition's
+  // decompressed IndexScan data should fit within this budget.
+  MemorySizeParameter partitionedJoinRamBudget_{
+      ad_utility::MemorySize::gigabytes(2), "partitioned-join-ram-budget"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

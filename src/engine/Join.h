@@ -152,6 +152,14 @@ class Join : public Operation {
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
 
+  // Partitioned join: when the right child is an IndexScan and the left child
+  // is a Sort wrapping unsorted input, partition the unsorted input using the
+  // IndexScan's block metadata into RAM-sized buckets, then sort and
+  // merge-join each bucket against its corresponding IndexScan blocks.
+  Result computeResultForPartitionedJoin(
+      bool requestLaziness, std::shared_ptr<IndexScan> scan,
+      std::shared_ptr<Operation> sortOp) const;
+
   // Default case where both inputs are fully materialized.
   Result computeResultForTwoMaterializedInputs(
       std::shared_ptr<const Result> leftRes,

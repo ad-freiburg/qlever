@@ -267,13 +267,15 @@ class IndexScan final : public Operation {
   // `Permutation` class.
   ScanSpecAndBlocks getScanSpecAndBlocks() const;
 
-  // Helper functions for the public `getLazyScanFor...` methods and
-  // `chunkedIndexScan` (see above).
+ public:
+  // These are used by the partitioned join to load specific block ranges and
+  // get block metadata for partition boundary computation.
   CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
+ private:
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that
   // has to be applied to the "full" result (without any columns stripped) to

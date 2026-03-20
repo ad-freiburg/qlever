@@ -18,7 +18,10 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/PartitionBucket.h"
+#include "engine/PartitionedJoinHelpers.h"
 #include "engine/Service.h"
+#include "engine/Sort.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
@@ -145,6 +148,23 @@ Result Join::computeResult(bool requestLaziness) {
 
     } else if (!leftResIfCached) {
       return computeResultForTwoIndexScans(requestLaziness);
+    }
+  }
+
+  // Partitioned join: right child is IndexScan, left child is Sort wrapping
+  // unsorted input. Skip the sort, partition the unsorted input, and join
+  // per-partition.
+  if (!leftIndexScan) {
+    auto rightIndexScan =
+        std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+    if (rightIndexScan && !rightResIfCached && !leftResIfCached) {
+      auto leftSort =
+          std::dynamic_pointer_cast<Sort>(_left->getRootOperation());
+      if (leftSort && joinColumnsAreAlwaysDefined(
+                          {{_leftJoinCol, _rightJoinCol}}, _left, _right)) {
+        return computeResultForPartitionedJoin(requestLaziness, rightIndexScan,
+                                               leftSort);
+      }
     }
   }
 
@@ -695,6 +715,143 @@ Result Join::computeResultForIndexScanAndLazyOperation(
       },
       resultSortedOn(), std::move(resultPermutation));
 }
+
+// _____________________________________________________________________________
+Result Join::computeResultForPartitionedJoin(
+    bool requestLaziness, std::shared_ptr<IndexScan> scan,
+    std::shared_ptr<Operation> sortOp) const {
+  using namespace qlever::partitionedJoin;
+
+  // Get block metadata from the IndexScan.
+  auto metaBlocksOpt = scan->getMetadataForScan();
+  if (!metaBlocksOpt.has_value()) {
+    sortOp->updateRuntimeInformationWhenOptimizedOut();
+    return createEmptyResult();
+  }
+  auto& metaBlocks = metaBlocksOpt.value();
+
+  // Compute partition boundaries.
+  auto ramBudget =
+      getRuntimeParameter<&RuntimeParameters::partitionedJoinRamBudget_>();
+  auto partitions =
+      computePartitionBoundaries(metaBlocks, ramBudget, scan->getResultWidth());
+
+  // If there's only a single partition, fall through to existing paths.
+  if (partitions.size() <= 1) {
+    auto unsortedResult = computeResultSkipChild(sortOp);
+    if (unsortedResult->isFullyMaterialized()) {
+      if (unsortedResult->idTable().empty()) {
+        scan->updateRuntimeInformationWhenOptimizedOut();
+        return createEmptyResult();
+      }
+      return computeResultForIndexScanAndIdTable<false>(
+          requestLaziness, std::move(unsortedResult), scan);
+    }
+    return computeResultForIndexScanAndLazyOperation(
+        requestLaziness, std::move(unsortedResult), scan);
+  }
+
+  // Collect block metadata into a vector for indexed access.
+  std::vector<CompressedBlockMetadata> blockVec(
+      metaBlocks.getBlockMetadataView().begin(),
+      metaBlocks.getBlockMetadataView().end());
+
+  ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
+  auto resultPermutation = joinColMap.permutationResult();
+
+  return createResultFromAction(
+      requestLaziness,
+      [this, scan = std::move(scan), sortOp = std::move(sortOp),
+       partitions = std::move(partitions), blockVec = std::move(blockVec),
+       joinColMap = std::move(joinColMap)](
+          std::function<void(IdTable&, LocalVocab&)> yieldTable) mutable {
+        auto rowAdder = makeRowAdder(std::move(yieldTable));
+
+        // Step 1: Get the unsorted input (bypass the Sort).
+        auto unsortedResult = computeResultSkipChild(sortOp);
+
+        // Step 2: Create partition buckets.
+        size_t leftWidth = _left->getResultWidth();
+        std::vector<PartitionBucket> buckets;
+        buckets.reserve(partitions.size());
+        for (size_t i = 0; i < partitions.size(); ++i) {
+          buckets.emplace_back(leftWidth, allocator());
+        }
+
+        // Step 3: Distribute unsorted input rows into partition buckets.
+        LocalVocab mergedLocalVocab;
+        if (unsortedResult->isFullyMaterialized()) {
+          const auto& table = unsortedResult->idTable();
+          for (size_t r = 0; r < table.size(); ++r) {
+            Id joinVal = table(r, _leftJoinCol);
+            auto partIdx = findPartition(joinVal, partitions);
+            if (partIdx.has_value()) {
+              buckets[partIdx.value()].append(table[r]);
+            }
+          }
+          mergedLocalVocab = unsortedResult->getCopyOfLocalVocab();
+        } else {
+          for (auto& [table, vocab] : unsortedResult->idTables()) {
+            mergedLocalVocab.mergeWith(std::move(vocab));
+            for (size_t r = 0; r < table.size(); ++r) {
+              Id joinVal = table(r, _leftJoinCol);
+              auto partIdx = findPartition(joinVal, partitions);
+              if (partIdx.has_value()) {
+                buckets[partIdx.value()].append(table[r]);
+              }
+            }
+            checkCancellation();
+          }
+        }
+        // Release the unsorted result to free memory.
+        unsortedResult.reset();
+
+        // Step 4: For each partition with non-empty bucket, sort bucket and
+        // merge-join against the corresponding IndexScan blocks.
+        for (size_t i = 0; i < partitions.size(); ++i) {
+          if (buckets[i].empty()) {
+            continue;
+          }
+          checkCancellation();
+
+          // Materialize and sort the bucket by join column.
+          IdTable sortedBucket = buckets[i].materializeAndSort(_leftJoinCol);
+          checkCancellation();
+
+          // Extract the block subset for this partition.
+          std::vector<CompressedBlockMetadata> partitionBlocks(
+              blockVec.begin() + partitions[i].beginBlockIdx,
+              blockVec.begin() + partitions[i].endBlockIdxWithOverlap);
+
+          // Load scan blocks for this partition.
+          auto scanBlocks = scan->getLazyScan(std::move(partitionBlocks));
+          auto scanRange =
+              convertGeneratorFromScan(std::move(scanBlocks), *scan);
+
+          // Wrap the sorted bucket as a single-element range for the zipper
+          // join. Apply the left permutation to put join column first.
+          auto leftPermuted =
+              sortedBucket.asColumnSubsetView(joinColMap.permutationLeft());
+          auto leftBlock = std::array{ad_utility::makeIdTableAndFirstCols<1>(
+              std::move(leftPermuted), LocalVocab{})};
+
+          // Merge-join this partition. The scan output already has the
+          // join column as its first column, so no permutation needed.
+          ad_utility::zipperJoinForBlocksWithoutUndef(leftBlock, scanRange,
+                                                      std::less{}, rowAdder);
+
+          checkCancellation();
+        }
+
+        setScanStatusToLazilyCompleted(*scan);
+        auto localVocab = std::move(rowAdder.localVocab());
+        localVocab.mergeWith(std::move(mergedLocalVocab));
+        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                        std::move(localVocab)};
+      },
+      resultSortedOn(), std::move(resultPermutation));
+}
+
 // _____________________________________________________________________________
 Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
