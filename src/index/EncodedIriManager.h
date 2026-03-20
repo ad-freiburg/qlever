@@ -211,6 +211,24 @@ class EncodedIriManagerImpl {
     return std::make_pair(prefixIdx, digitEncoding);
   }
 
+  // The same as `splitIntoPrefixIdxAndPayload` except that the payload is
+  // returned decoded.
+  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndDecodedPayload(
+      Id id) {
+    auto [prefix, payload] = splitIntoPrefixIdxAndPayload(id);
+    return {prefix, decodeDecimalFrom64Bit(payload)};
+  }
+
+  std::optional<uint64_t> getIndexOfPrefix(
+      std::string_view prefixWithoutAngleBrackets) {
+    auto it = ql::ranges::find(prefixes_,
+                               absl::StrCat("<", prefixWithoutAngleBrackets));
+    if (it == prefixes_.end()) {
+      return std::nullopt;
+    }
+    return static_cast<size_t>(it - prefixes_.begin());
+  }
+
   // Conversion to and from JSON.
   static constexpr const char* jsonKey_ =
       "prefixes-with-leading-angle-brackets";
@@ -254,6 +272,8 @@ class EncodedIriManagerImpl {
     return result;
   }
 
+  // Helper for decoding numbers. Calls `F` for every digit (from low to high)
+  // in the decoded representation of `encoded`.
   template <typename F>
   static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
     size_t shift = NumBitsEncoding - NibbleSize;

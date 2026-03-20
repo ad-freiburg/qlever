@@ -17,31 +17,20 @@ GraphNamespaceManager::GraphNamespaceManager(std::string prefixWithoutBraces,
 
 // _____________________________________________________________________________
 ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
-  auto graphId = nextUnallocatedGraph_.withWriteLock(
-      [](auto& allocatedGraphs) { return allocatedGraphs++; });
-  return ad_utility::triple_component::Iri::fromIriref(
-      absl::StrCat("<", prefixWithoutBraces_, std::to_string(graphId), ">"));
+  return ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
+      "<", prefixWithoutBraces_, std::to_string(nextUnallocatedGraph_++), ">"));
 }
 
 // _____________________________________________________________________________
 void to_json(nlohmann::json& j, const GraphNamespaceManager& namespaceManager) {
   j["prefix"] = namespaceManager.prefixWithoutBraces_;
-  j["allocatedGraphs"] = *namespaceManager.nextUnallocatedGraph_.rlock();
+  j["allocatedGraphs"] = namespaceManager.nextUnallocatedGraph_.load();
 }
 
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j,
                GraphNamespaceManager& namespaceManager) {
   j.at("prefix").get_to(namespaceManager.prefixWithoutBraces_);
-  *namespaceManager.nextUnallocatedGraph_.wlock() =
+  namespaceManager.nextUnallocatedGraph_ =
       j.at("allocatedGraphs").get<uint64_t>();
-}
-
-// _____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os,
-                         const GraphNamespaceManager& namespaceManager) {
-  os << "GraphNamespaceManager(prefix=\""
-     << namespaceManager.prefixWithoutBraces_ << "\", allocatedGraphs="
-     << *namespaceManager.nextUnallocatedGraph_.rlock() << ")";
-  return os;
 }

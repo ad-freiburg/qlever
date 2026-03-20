@@ -52,7 +52,7 @@ TEST(GraphNamespaceManager, storeAndRestoreData) {
     serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
                 testing::StrEq("http://example.org/g/"));
-    EXPECT_EQ(*nsm.nextUnallocatedGraph_.rlock(), 13);
+    EXPECT_EQ(nsm.nextUnallocatedGraph_.load(), 13);
   }
 }
 

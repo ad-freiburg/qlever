@@ -225,7 +225,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
   GraphNamespaceManager graphNamespaceManager_ = GraphNamespaceManager();
-  std::optional<std::string> persistGraphNamespaceManager_ = std::nullopt;
+  std::optional<std::filesystem::path> graphNamespaceManagerStateFile_ =
+      std::nullopt;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
@@ -307,8 +308,9 @@ class IndexImpl {
   const GraphNamespaceManager& graphNamespaceManager() const {
     return graphNamespaceManager_;
   }
-  const std::optional<std::string>& getPersistedGraphNamespaceManager() const {
-    return persistGraphNamespaceManager_;
+  const std::optional<std::filesystem::path>&
+  getPersistedGraphNamespaceManager() const {
+    return graphNamespaceManagerStateFile_;
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }

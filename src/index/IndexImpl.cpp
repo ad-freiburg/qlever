@@ -1071,7 +1071,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    persistGraphNamespaceManager_ = onDiskBase + ".allocated-graphs-state";
+    graphNamespaceManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
   }
 }
 
@@ -1785,29 +1785,24 @@ CPP_template_def(typename... NextSorter)(requires(
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 0;
-  auto it = ql::ranges::find(encodedIriManager_.prefixes_,
-                             absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX));
-  AD_CORRECTNESS_CHECK(it != encodedIriManager_.prefixes_.end());
-  auto newGraphPrefixId =
-      static_cast<size_t>(it - encodedIriManager_.prefixes_.begin());
-  auto determineNextAvailableInternalGraph = [&nextAvailableIndex,
-                                              newGraphPrefixId](
-                                                 const auto& triple) mutable {
-    const auto& graph = triple[3];
-    if (graph.getDatatype() != Datatype::EncodedVal) {
-      return;
-    }
-    auto [prefix, payload] =
-        EncodedIriManagerWithAlwaysOnPrefixes::splitIntoPrefixIdxAndPayload(
-            graph);
-    if (prefix != newGraphPrefixId) {
-      return;
-    }
-    nextAvailableIndex = std::max(
-        nextAvailableIndex,
-        EncodedIriManagerWithAlwaysOnPrefixes::decodeDecimalFrom64Bit(payload) +
-            1);
-  };
+  auto newGraphPrefixIdx = [this]() {
+    auto prefix = encodedIriManager_.getIndexOfPrefix(QLEVER_NEW_GRAPH_PREFIX);
+    AD_CORRECTNESS_CHECK(prefix.has_value());
+    return std::move(prefix).value();
+  }();
+  auto determineNextAvailableInternalGraph =
+      [&nextAvailableIndex, newGraphPrefixIdx](const auto& triple) mutable {
+        const auto& graph = triple[3];
+        if (graph.getDatatype() != Datatype::EncodedVal) {
+          return;
+        }
+        auto [prefix, payload] = EncodedIriManagerWithAlwaysOnPrefixes::
+            splitIntoPrefixIdxAndDecodedPayload(graph);
+        if (prefix != newGraphPrefixIdx) {
+          return;
+        }
+        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+      };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
                             nextSorter.makePushCallback()..., countTriples,

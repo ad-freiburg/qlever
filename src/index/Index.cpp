@@ -306,7 +306,7 @@ const GraphNamespaceManager& Index::graphNamespaceManager() const {
 }
 
 // ____________________________________________________________________________
-const std::optional<std::string>& Index::getPersistGraphNamespaceManager()
-    const {
+const std::optional<std::filesystem::path>&
+Index::getPersistGraphNamespaceManager() const {
   return pimpl_->getPersistedGraphNamespaceManager();
 }

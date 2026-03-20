@@ -13,8 +13,9 @@
 #include "global/Constants.h"
 #include "gtest/gtest_prod.h"
 #include "rdfTypes/Iri.h"
+#include "util/CopyableSynchronization.h"
+#include "util/Serializer/SerializeAtomic.h"
 #include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeSynchronized.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 #include "util/json.h"
@@ -26,8 +27,7 @@ class GraphNamespaceManager {
   // The smallest number such that the graph for this number and all after it
   // are not used. Graphs that are generated are not necessarily all used so
   // there may be "gaps" in the actually used graphs.
-  ad_utility::Synchronized<uint64_t> nextUnallocatedGraph_ =
-      ad_utility::Synchronized<uint64_t>(0ul);
+  ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 0;
 
   FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
   FRIEND_TEST(IndexImpl, graphNamespaceManagerIntegration);
@@ -47,7 +47,12 @@ class GraphNamespaceManager {
                         GraphNamespaceManager& namespaceManager);
 
   friend std::ostream& operator<<(
-      std::ostream& os, const GraphNamespaceManager& namespaceManager);
+      std::ostream& os, const GraphNamespaceManager& namespaceManager) {
+    os << "GraphNamespaceManager(prefix=\""
+       << namespaceManager.prefixWithoutBraces_ << "\", allocatedGraphs="
+       << namespaceManager.nextUnallocatedGraph_.load() << ")";
+    return os;
+  }
 
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNamespaceManager) {
     serializer | arg.prefixWithoutBraces_;
