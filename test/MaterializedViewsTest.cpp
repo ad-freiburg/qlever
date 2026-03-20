@@ -36,6 +36,7 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -390,6 +391,62 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?o\n\"abc\"\n");
   }
+
+  // Test that the column `UndefStatus` is set correctly in the view's
+  // `VariableToColumnMap`. Also test the `UndefStatus` stored in the
+  // `Permutation` object and in an `IndexScan`'s `VariableToColumnMap`.
+  {
+    // In this view, ?s and ?o are always defined, but ?u is undefined for one
+    // of the two rows in the view.
+    manager.writeViewToDisk("testView6", qlv().parseAndPlanQuery(R"(
+      SELECT ?s ?o ?u {
+        ?s <p1> ?o .
+        OPTIONAL {
+          ?s <p2> ?u .
+        }
+      }
+    )"));
+    auto view = manager.getView("testView6");
+
+    // `UndefStatus` in `VariableToColumnMap`.
+    auto map = view->variableToColumnMap();
+    VariableToColumnMap expected{{V{"?s"}, makeAlwaysDefinedColumn(0)},
+                                 {V{"?o"}, makeAlwaysDefinedColumn(1)},
+                                 {V{"?u"}, makePossiblyUndefinedColumn(2)}};
+    EXPECT_THAT(map, ::testing::UnorderedElementsAreArray(expected));
+
+    // `UndefStatus` is stored correctly in `Permutation`.
+    auto permutation = view->permutation();
+    EXPECT_EQ(permutation->getColumnUndefStatus(0),
+              ColumnIndexAndTypeInfo::AlwaysDefined);
+    EXPECT_EQ(permutation->getColumnUndefStatus(1),
+              ColumnIndexAndTypeInfo::AlwaysDefined);
+    EXPECT_EQ(permutation->getColumnUndefStatus(2),
+              ColumnIndexAndTypeInfo::PossiblyUndefined);
+
+    // `UndefStatus` in `IndexScan`.
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView6 {
+          _:config view:column-s ?s ;
+                   view:column-o ?o ;
+                   view:column-u ?u .
+        }
+      }
+    )");
+    auto scanMap = qet->getVariableColumns();
+    // When all columns are requested, the `IndexScan`'s `VariableToColumnMap`
+    // should be equal to that of the `MaterializedView` itself.
+    EXPECT_THAT(scanMap, ::testing::UnorderedElementsAreArray(expected));
+
+    // Check that `columnOriginatesFromGraphOrUndef` of `IndexScan` is disabled
+    // for the materialized view.
+    for (const auto& var : expected | ql::views::keys) {
+      EXPECT_FALSE(
+          qet->getRootOperation()->columnOriginatesFromGraphOrUndef(var));
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -421,6 +478,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
   EXPECT_EQ(view->permutation()->readableName(), "testView1");
   EXPECT_NE(view->locatedTriplesState(), nullptr);
+  EXPECT_EQ(view->permutation()->permutationType(),
+            Permutation::Type::MATERIALIZED_VIEW);
   EXPECT_TRUE(manager.isViewLoaded("testView1"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
 
@@ -628,6 +687,31 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_FALSE(view->parsedQuery().has_value());
   }
 
+  // Backward compatibility: View with columns saved without `UndefStatus`.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView7", plan);
+    {
+      // Store only the column names in the `columns` array of the metadata JSON
+      // file, in particular, no `UndefStatus`.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView7.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("columns");
+      viewInfo["columns"] = std::vector<std::string>{"?s", "?p", "?o", "?g"};
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: The view can be loaded correctly, but all columns are
+    // possibly undefined because the information is missing.
+    auto view = manager.getView("testView7");
+    for (size_t i = 0; i < 4; ++i) {
+      EXPECT_EQ(view->permutation()->getColumnUndefStatus(i),
+                ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
+    }
+  }
+
   // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
   {
     qlv().writeMaterializedView("testView7", simpleWriteQuery_);
@@ -635,6 +719,23 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     view->parsedQuery_ = std::nullopt;
     materializedViewsQueryAnalysis::QueryPatternCache c;
     EXPECT_FALSE(c.analyzeView(view));
+  }
+
+  // Test assertions on `Permutation::Type`.
+  {
+    Permutation testPermutation{Permutation::Enum::SPO,
+                                ad_utility::makeUnlimitedAllocator<Id>()};
+    const std::string testView1Filename =
+        "_materializedViewsTestIndex.view.testView1";
+    // A materialized view permutation does not have a corresponding internal
+    // permutation.
+    EXPECT_ANY_THROW(testPermutation.loadFromDisk(
+        testView1Filename, true, Permutation::Type::MATERIALIZED_VIEW));
+    // If a permutation is loaded as `Type::NORMAL`, no reference to an owning
+    // materialized view can be set.
+    EXPECT_NO_THROW(testPermutation.loadFromDisk(testView1Filename, false,
+                                                 Permutation::Type::NORMAL));
+    EXPECT_ANY_THROW(testPermutation.setMaterializedView(view));
   }
 }
 
