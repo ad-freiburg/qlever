@@ -504,3 +504,5 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
+addLinkAndDiscoverTest(StorageBufferManagerTest storage)
+
