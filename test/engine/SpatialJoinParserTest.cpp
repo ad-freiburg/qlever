@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
@@ -46,9 +51,10 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   WKTParser parser1{&sweeper, 5, true, prefilterBox, index};
   EXPECT_EQ(parser1.getParseCounter(), 0);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
-  parser1.addValueIdToQueue(idxUni, 0, false);
-  parser1.addValueIdToQueue(idxUni, 1, false);
-  parser1.addValueIdToQueue(idxLondon, 2, false);
+  // TODO bounding box test
+  parser1.addValueIdToQueue(idxUni, 0, false, std::nullopt);
+  parser1.addValueIdToQueue(idxUni, 1, false, std::nullopt);
+  parser1.addValueIdToQueue(idxLondon, 2, false, std::nullopt);
   parser1.done();
   EXPECT_EQ(parser1.getParseCounter(), 3);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
@@ -66,10 +72,11 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   WKTParser parser2{&sweeper, 5, true, newYorkUtilBox, index};
   EXPECT_EQ(parser2.getParseCounter(), 0);
   EXPECT_EQ(parser2.getPrefilterCounter(), 0);
-  parser2.addValueIdToQueue(idxUni, 0, true);
-  parser2.addValueIdToQueue(idxUni, 1, true);
-  parser2.addValueIdToQueue(idxLondon, 2, true);
-  parser2.addValueIdToQueue(idxNewYork, 3, true);
+  // TODO bounding box test
+  parser2.addValueIdToQueue(idxUni, 0, true, std::nullopt);
+  parser2.addValueIdToQueue(idxUni, 1, true, std::nullopt);
+  parser2.addValueIdToQueue(idxLondon, 2, true, std::nullopt);
+  parser2.addValueIdToQueue(idxNewYork, 3, true, std::nullopt);
   parser2.done();
 
   // New York is parsed, 2x Uni and 1x London get filtered out
@@ -83,11 +90,12 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   WKTParser parser3{&sweeper, 5, true, boundingBoxUniAndLondon, index};
   EXPECT_EQ(parser3.getParseCounter(), 0);
   EXPECT_EQ(parser3.getPrefilterCounter(), 0);
+  // TODO bounding box test
   for (size_t i = 0; i < 25'000; ++i) {
-    parser3.addValueIdToQueue(idxNewYork, i, true);
+    parser3.addValueIdToQueue(idxNewYork, i, true, std::nullopt);
   }
-  parser3.addValueIdToQueue(idxLondon, 25'000, true);
-  parser3.addValueIdToQueue(idxUni, 25'001, true);
+  parser3.addValueIdToQueue(idxLondon, 25'000, true, std::nullopt);
+  parser3.addValueIdToQueue(idxUni, 25'001, true, std::nullopt);
   parser3.done();
 
   // Uni and London get parsed, 25'000x New York gets filtered out
@@ -110,11 +118,12 @@ TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
   auto point = ValueId::makeFromGeoPoint({1, 1});
   auto undef = ValueId::makeUndefined();
 
-  SpatialJoinParseJob job1{point, 5, true, ""};
+  // TODO bounding box test
+  SpatialJoinParseJob job1{point, 5, true, "", std::nullopt};
   SpatialJoinParseJob job1Copy = job1;
-  SpatialJoinParseJob job2{point, 7, true, ""};
-  SpatialJoinParseJob job3{point, 5, false, ""};
-  SpatialJoinParseJob job4{undef, 5, true, ""};
+  SpatialJoinParseJob job2{point, 7, true, "", std::nullopt};
+  SpatialJoinParseJob job3{point, 5, false, "", std::nullopt};
+  SpatialJoinParseJob job4{undef, 5, true, "", std::nullopt};
 
   EXPECT_EQ(job1, job1);
   EXPECT_EQ(job2, job2);

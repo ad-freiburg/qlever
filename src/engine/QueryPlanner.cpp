@@ -57,6 +57,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
@@ -2384,8 +2385,12 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
-
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
+  // Try to push down `BIND`s to retrieve bounding box columns from new child.
+  auto optCloneWithBoundingBox = newSpatialJoin->cloneWithBoundingBoxColumns();
+  SubtreePlan plan =
+      optCloneWithBoundingBox.has_value()
+          ? makeSubtreePlan<SpatialJoin>(optCloneWithBoundingBox.value())
+          : makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
@@ -3319,6 +3324,10 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       }
       auto spatialJoin =
           std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+      // Note that we don't need to try `BIND` push down for bounding boxes
+      // here, as the plan will be processed by `createSpatialJoin` later. The
+      // function will then add the left child and attempt `BIND` push down.
+      // This way we avoid an additional `BIND` push down process.
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };

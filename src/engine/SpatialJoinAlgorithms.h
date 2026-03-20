@@ -1,8 +1,13 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
@@ -176,7 +181,11 @@ class SpatialJoinAlgorithms {
   // added geometries, which may be used as a prefilter at next call and the
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
-  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  struct LibSpatialJoinParseInput {
+    const IdTable* idTable_;
+    ColumnIndex geomsCol_;
+    SpatialJoinBoundingBoxColumns boundingBoxCols_;
+  };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
     util::geo::I32Box aggBoundingBox_;
@@ -189,18 +198,21 @@ class SpatialJoinAlgorithms {
     size_t numThreadsUsed_;
   };
   LibSpatialJoinParseMetadata libspatialjoinParse(
-      bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+      bool leftOrRightSide, LibSpatialJoinParseInput input,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
-  // by the bounding box. Should only be applied if the index is known to be
-  // built on a `GeoVocabulary`.
+  // by the bounding box. If the bounding box is already loaded (for example
+  // from a materialized view), it can prefilter in memory. Otherwise on-disk
+  // `GeometryInfo` will be used. Then this should only be applied if the index
+  // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
-      const Index& index, VocabIndex vocabIndex);
+      const Index& index, VocabIndex vocabIndex,
+      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
