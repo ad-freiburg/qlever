@@ -3,12 +3,17 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "engine/PartitionBucket.h"
 #include "engine/PartitionedJoinHelpers.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
+#include "storage/buffer/buffer_pool.h"
+#include "storage/compat/duckdb_config.h"
+#include "storage/standard_buffer_manager.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::testing::makeAllocator;
@@ -185,7 +190,10 @@ TEST(PartitionedJoinHelpers, FindPartitionEmpty) {
 // Test: PartitionBucket basic operations.
 TEST(PartitionBucketTest, BasicOperations) {
   auto alloc = makeAllocator();
-  PartitionBucket bucket(3, alloc, 10);  // 3 columns, page capacity 10.
+  duckdb::BufferPool pool(1ULL << 25, false);  // 32 MB.
+  duckdb::StorageConfig config;
+  duckdb::StandardBufferManager manager(pool, config);
+  PartitionBucket bucket(3, alloc, manager);
 
   EXPECT_TRUE(bucket.empty());
   EXPECT_EQ(bucket.numRows(), 0u);
@@ -217,7 +225,10 @@ TEST(PartitionBucketTest, BasicOperations) {
 // Test: PartitionBucket with multiple pages.
 TEST(PartitionBucketTest, MultiplePages) {
   auto alloc = makeAllocator();
-  PartitionBucket bucket(2, alloc, 3);  // 2 columns, page capacity 3.
+  duckdb::BufferPool pool(1ULL << 25, false);  // 32 MB.
+  duckdb::StorageConfig config;
+  duckdb::StandardBufferManager manager(pool, config);
+  PartitionBucket bucket(2, alloc, manager);
 
   // Insert 10 rows (should create ~3-4 pages).
   for (int i = 10; i >= 1; --i) {
@@ -235,4 +246,46 @@ TEST(PartitionBucketTest, MultiplePages) {
   for (size_t i = 0; i < result.size(); ++i) {
     EXPECT_EQ(result(i, 0), Id::makeFromInt(static_cast<int>(i + 1)));
   }
+}
+
+// Test: PartitionBucket eviction round-trip. A small pool forces blocks to be
+// evicted to disk; verify data survives the round-trip.
+TEST(PartitionBucketTest, EvictionRoundTrip) {
+  auto alloc = makeAllocator();
+  // Use a small pool (3 blocks worth) to force eviction. With 2 columns at
+  // 16 bytes/row and ~16383 rows per block, 50000 rows need ~4 blocks total.
+  // The actual block allocation is 266240 bytes (256KB + 4KB header).
+  constexpr size_t blockAllocActual = 266240;
+  duckdb::BufferPool pool(3 * blockAllocActual, false);
+  duckdb::StorageConfig config;
+  std::string tempDir = "PartitionBucketTest_eviction_tmp";
+  config.temporary_directory = tempDir;
+  std::filesystem::create_directories(tempDir);
+  duckdb::StandardBufferManager manager(pool, config);
+
+  // 2 columns, 16 bytes per row. Each block holds ~16383 rows.
+  // Insert enough rows to fill many blocks and trigger eviction.
+  constexpr size_t numRows = 50000;
+  PartitionBucket bucket(2, alloc, manager);
+
+  for (size_t i = numRows; i >= 1; --i) {
+    IdTable row(2, alloc);
+    row.push_back({Id::makeFromInt(static_cast<int>(i)),
+                   Id::makeFromInt(static_cast<int>(i * 10))});
+    bucket.append(row[0]);
+  }
+
+  EXPECT_EQ(bucket.numRows(), numRows);
+
+  IdTable result = bucket.materializeAndSort(0);
+  ASSERT_EQ(result.size(), numRows);
+
+  // Verify all data survived the eviction round-trip, sorted by column 0.
+  for (size_t i = 0; i < numRows; ++i) {
+    EXPECT_EQ(result(i, 0), Id::makeFromInt(static_cast<int>(i + 1)));
+    EXPECT_EQ(result(i, 1), Id::makeFromInt(static_cast<int>((i + 1) * 10)));
+  }
+
+  // Clean up temp directory.
+  std::filesystem::remove_all(tempDir);
 }

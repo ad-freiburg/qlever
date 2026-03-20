@@ -8,6 +8,7 @@
 
 #include "engine/Join.h"
 
+#include <filesystem>
 #include <sstream>
 #include <vector>
 
@@ -25,6 +26,9 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "storage/buffer/buffer_pool.h"
+#include "storage/compat/duckdb_config.h"
+#include "storage/standard_buffer_manager.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
@@ -763,19 +767,28 @@ Result Join::computeResultForPartitionedJoin(
       requestLaziness,
       [this, scan = std::move(scan), sortOp = std::move(sortOp),
        partitions = std::move(partitions), blockVec = std::move(blockVec),
-       joinColMap = std::move(joinColMap)](
+       joinColMap = std::move(joinColMap), ramBudget](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) mutable {
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         // Step 1: Get the unsorted input (bypass the Sort).
         auto unsortedResult = computeResultSkipChild(sortOp);
 
-        // Step 2: Create partition buckets.
+        // Step 2: Create a per-join buffer pool for spilling partition
+        // buckets to disk.
+        duckdb::StorageConfig storageConfig;
+        storageConfig.temporary_directory =
+            getExecutionContext()->getIndex().getOnDiskBase() + ".buffer-tmp";
+        std::filesystem::create_directories(storageConfig.temporary_directory);
+        auto ramBudgetBytes = ramBudget.getBytes();
+        duckdb::BufferPool bufferPool(ramBudgetBytes, false);
+        duckdb::StandardBufferManager bufferManager(bufferPool, storageConfig);
+
         size_t leftWidth = _left->getResultWidth();
         std::vector<PartitionBucket> buckets;
         buckets.reserve(partitions.size());
         for (size_t i = 0; i < partitions.size(); ++i) {
-          buckets.emplace_back(leftWidth, allocator());
+          buckets.emplace_back(leftWidth, allocator(), bufferManager);
         }
 
         // Step 3: Distribute unsorted input rows into partition buckets.

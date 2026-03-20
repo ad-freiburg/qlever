@@ -504,8 +504,10 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
     return {{}};
   }
+  AD_LOG_INFO << "Starting getBlocksForJoin" << std::endl;
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
+  AD_LOG_INFO << "Finished getBlocksForJoin" << std::endl;
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;

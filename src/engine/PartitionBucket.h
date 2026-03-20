@@ -4,67 +4,88 @@
 #ifndef QLEVER_SRC_ENGINE_PARTITIONBUCKET_H
 #define QLEVER_SRC_ENGINE_PARTITIONBUCKET_H
 
+#include <cstring>
 #include <vector>
 
 #include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "storage/buffer/block_handle.h"
+#include "storage/buffer/buffer_handle.h"
+#include "storage/memory_tag.h"
+#include "storage/standard_buffer_manager.h"
 
 namespace qlever::partitionedJoin {
 
 // A bucket that accumulates rows for a single partition during the
-// partitioning pass of a partitioned join. Rows are stored in fixed-size
-// IdTable pages. When a page fills up it is moved to a completed-pages list
-// and a new page is allocated.
-//
-// TODO: Once the QLever wrapper around DuckDB's StandardBufferManager is
-// available, the completed pages should be stored as unpinned buffer blocks
-// so they can auto-evict to disk under memory pressure.
+// partitioning pass of a partitioned join. Rows are stored as flat row-major
+// bytes in buffer-managed blocks. Completed blocks are unpinned and eligible
+// for eviction to disk under memory pressure.
 class PartitionBucket {
  public:
-  // `numColumns` is the width of each row. `pageCapacity` is the number of
-  // rows per page (default chosen to give ~256KB pages).
+  // `numColumns` is the width of each row.
   explicit PartitionBucket(size_t numColumns,
                            ad_utility::AllocatorWithLimit<Id> allocator,
-                           size_t pageCapacity = 0)
+                           duckdb::StandardBufferManager& bufferManager)
       : numColumns_(numColumns),
         allocator_(std::move(allocator)),
-        pageCapacity_(pageCapacity > 0 ? pageCapacity
-                                       : defaultPageCapacity(numColumns)),
-        currentPage_(numColumns, allocator_) {
-    currentPage_.reserve(pageCapacity_);
-  }
+        bufferManager_(bufferManager),
+        rowBytes_(numColumns * sizeof(Id)),
+        currentHandle_(
+            bufferManager_.Allocate(duckdb::MemoryTag::ORDER_BY,
+                                    bufferManager_.GetBlockAllocSize(), false)),
+        pageCapacity_(currentHandle_.GetFileBuffer().size / rowBytes_) {}
 
   // Append a single row to this bucket.
   template <typename Row>
   void append(const Row& row) {
-    if (currentPage_.size() >= pageCapacity_) {
+    if (currentPageRows_ >= pageCapacity_) {
       flushCurrentPage();
     }
-    currentPage_.push_back(row);
+    duckdb::data_ptr_t dst =
+        currentHandle_.Ptr() + currentPageRows_ * rowBytes_;
+    for (size_t c = 0; c < numColumns_; ++c) {
+      std::memcpy(dst + c * sizeof(Id), &row[c], sizeof(Id));
+    }
+    ++currentPageRows_;
     ++numRows_;
   }
 
   // Materialize all pages into a single IdTable sorted by `joinCol`.
   IdTable materializeAndSort(ColumnIndex joinCol) {
     IdTable result(numColumns_, allocator_);
-    result.reserve(numRows_);
+    result.resize(numRows_);
+    size_t resultRow = 0;
 
-    for (auto& page : completedPages_) {
-      for (size_t i = 0; i < page.size(); ++i) {
-        result.push_back(page[i]);
+    // Copy from completed (possibly evicted) blocks.
+    for (size_t b = 0; b < completedBlocks_.size(); ++b) {
+      auto handle = bufferManager_.Pin(completedBlocks_[b]);
+      const Id* src = reinterpret_cast<const Id*>(handle.Ptr());
+      size_t rows = completedBlockRowCounts_[b];
+      for (size_t r = 0; r < rows; ++r) {
+        for (size_t c = 0; c < numColumns_; ++c) {
+          result(resultRow, c) = src[r * numColumns_ + c];
+        }
+        ++resultRow;
       }
     }
-    for (size_t i = 0; i < currentPage_.size(); ++i) {
-      result.push_back(currentPage_[i]);
+
+    // Copy from current (still pinned) page.
+    const Id* src = reinterpret_cast<const Id*>(currentHandle_.Ptr());
+    for (size_t r = 0; r < currentPageRows_; ++r) {
+      for (size_t c = 0; c < numColumns_; ++c) {
+        result(resultRow, c) = src[r * numColumns_ + c];
+      }
+      ++resultRow;
     }
 
     // Sort by join column using the engine's parallel sort.
     Engine::sort(result, std::vector<ColumnIndex>{joinCol});
 
-    // Free page memory.
-    completedPages_.clear();
-    currentPage_ = IdTable(numColumns_, allocator_);
+    // Release all blocks.
+    completedBlocks_.clear();
+    completedBlockRowCounts_.clear();
+    currentHandle_ = duckdb::BufferHandle{};
 
     return result;
   }
@@ -73,25 +94,27 @@ class PartitionBucket {
   size_t numRows() const { return numRows_; }
 
  private:
-  static size_t defaultPageCapacity(size_t numColumns) {
-    // Target ~256KB per page.
-    constexpr size_t TARGET_PAGE_BYTES = 256 * 1024;
-    size_t rowSize = numColumns * sizeof(Id);
-    return rowSize > 0 ? std::max(size_t{1}, TARGET_PAGE_BYTES / rowSize)
-                       : 1024;
-  }
-
   void flushCurrentPage() {
-    completedPages_.push_back(std::move(currentPage_));
-    currentPage_ = IdTable(numColumns_, allocator_);
-    currentPage_.reserve(pageCapacity_);
+    completedBlocks_.push_back(currentHandle_.GetBlockHandle());
+    completedBlockRowCounts_.push_back(currentPageRows_);
+    // Unpin the current block by replacing the handle.
+    currentHandle_ = duckdb::BufferHandle{};
+    currentHandle_ = bufferManager_.Allocate(
+        duckdb::MemoryTag::ORDER_BY, bufferManager_.GetBlockAllocSize(), false);
+    currentPageRows_ = 0;
   }
 
   size_t numColumns_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
+  duckdb::StandardBufferManager& bufferManager_;
+  size_t rowBytes_;
+  // Current page: pinned for active writes.
+  duckdb::BufferHandle currentHandle_;
   size_t pageCapacity_;
-  std::vector<IdTable> completedPages_;
-  IdTable currentPage_;
+  // Completed pages: unpinned block handles eligible for eviction.
+  std::vector<duckdb::shared_ptr<duckdb::BlockHandle>> completedBlocks_;
+  std::vector<size_t> completedBlockRowCounts_;
+  size_t currentPageRows_ = 0;
   size_t numRows_ = 0;
 };
 
