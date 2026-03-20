@@ -1526,7 +1526,7 @@ TEST(ParserTest, BaseDeclaration) {
             "{s: ?s, p: <http://example.org/p>, o: <http://example.org/test>}");
   // Relative and absolute IRIs mixed
   auto query2 = parseQuery(
-      "BASE <http://example.org/something> "
+      "BASE <http://example.org/something/> "
       "SELECT * WHERE { </root> <p> <http://other.example.org/p> }");
   EXPECT_EQ(getFirstTriple(query2),
             "{s: <http://example.org/root>,"

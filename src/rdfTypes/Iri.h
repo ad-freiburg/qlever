@@ -12,6 +12,8 @@
 #ifndef QLEVER_SRC_PARSER_IRI_H
 #define QLEVER_SRC_PARSER_IRI_H
 
+#include <uriparser/Uri.h>
+
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -111,14 +113,10 @@ class Iri : public BasicIri<true> {
   // without a scheme, prepend the base prefix for relative IRIs (like
   // `<UPI001AF4585D>`) or for absolute IRIs (like `</prosite/PS51927>`).
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const Iri& basePrefixForRelativeIris,
-                                    const Iri& basePrefixForAbsoluteIris);
+                                    const UriUriA& baseUri);
 
-  // Get the base IRI from this `Iri` object. The returned `Iri`
-  // always has a `/` at the end. If `domainOnly` is true, remove the path
-  // part, for example, for `<http://purl.uniprot.org/uniprot/>` the method
-  // returns `<http://purl.uniprot.org/>`.
-  Iri getBaseIri(bool domainOnly) const;
+  // Create an `Iri` object given from the given `UriUriA` object.
+  static Iri fromUri(const UriUriA& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).

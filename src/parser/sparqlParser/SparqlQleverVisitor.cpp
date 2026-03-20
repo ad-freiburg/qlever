@@ -1444,14 +1444,11 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visit(Parser::IrirefContext* ctx) const {
-  if (baseIri_.empty()) {
+  if (!baseIri_.has_value()) {
     return ctx->getText();
   }
-  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
-  // Handle IRIs with base IRI.
   return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.getBaseIri(false),
-             baseIri_.getBaseIri(true))
+             ctx->getText(), baseIri_.value().get())
       .toStringRepresentation();
 }
 
@@ -1533,7 +1530,9 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
         ctx,
         "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
   }
-  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
+  auto iri =
+      TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
+  baseIri_ = UriParserUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________
@@ -2659,8 +2658,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
-    return makeIriOrUriExpression(std::move(argList[0]),
-                                  std::make_unique<IriExpression>(baseIri_));
+    return makeIriOrUriExpression(
+        std::move(argList[0]),
+        std::make_unique<IriExpression>(
+            baseIri_.has_value()
+                ? TripleComponent::Iri::fromUri(baseIri_.value().get())
+                : TripleComponent::Iri{}));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {

@@ -29,6 +29,7 @@
 #include "util/ParseException.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
+#include "util/UriParserUri.h"
 
 enum class TurtleParserIntegerOverflowBehavior {
   Error,
@@ -159,21 +160,20 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
-  // The keys for storing the base prefix (for relative and absolute IRIs) in
-  // the prefix map. The only thing that is important about these keys is that
-  // they are different from each other and from any valid prefix name.
-  static constexpr const char* baseForRelativeIriKey_ = "@";
-  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
-
   // Helper function to raise an exception in response to BASE or PREFIX
   // mismatches during parallel parsing.
   [[noreturn]] void raiseDisallowedPrefixOrBaseError() const;
 
-  // Set the prefix or base IRI for the given key. If `prefixAndBaseDisabled_`
+  // Set the prefix IRI for the given key. If `prefixAndBaseDisabled_`
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
   void setPrefixOrThrow(const std::string& key,
                         const ad_utility::triple_component::Iri& prefix);
+
+  // Set the base IRI for the given key. If `prefixAndBaseDisabled_`
+  // is true, throw an error if this would change the mapping, which is illegal
+  // during parallel parsing.
+  void setBaseIriOrThrow(const ad_utility::triple_component::Iri& iri);
 
  protected:
   // Data members.
@@ -193,23 +193,8 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Map that maps prefix names to their IRI. For our tests, it is important
-  // that without any BASE declaration, the two base prefixes are mapped to the
-  // empty IRI.
-  static const inline ad_utility::HashMap<std::string, TripleComponent::Iri>
-      prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
-                        {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_ =
-      prefixMapDefault_;
-
-  // Getters for the two base prefixes. Without BASE declaration, these will
-  // both return the empty IRI.
-  const TripleComponent::Iri& baseForRelativeIri() const {
-    return prefixMap_.at(baseForRelativeIriKey_);
-  }
-  const TripleComponent::Iri& baseForAbsoluteIri() const {
-    return prefixMap_.at(baseForAbsoluteIriKey_);
-  }
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+  std::optional<UriParserUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -427,6 +412,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                               Parser, RdfParserBase>) class RdfStringParser
     : public Parser {
  public:
+  using Parser::baseIri_;
   using Parser::getLine;
   using Parser::prefixMap_;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
@@ -509,6 +495,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   }
 
   const auto& getPrefixMap() const { return prefixMap_; }
+
+  const auto& getBaseIri() const { return baseIri_; }
 
   // __________________________________________________________
   void setInputStream(ParallelBuffer::BufferType&& toParse) {
