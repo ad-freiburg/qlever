@@ -4,12 +4,15 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
 
@@ -1327,6 +1330,52 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
         << "Failed with blocksize " << blocksize.getBytes();
+  }
+}
+
+namespace ad_utility {
+std::pair<size_t, size_t> getThreadCountAndTaskSize(
+    const TaskQueue<false>& taskQueue) {
+  return {taskQueue.threads_.size(), taskQueue.queueMaxSize_};
+}
+}  // namespace ad_utility
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
+  auto threads = std::thread::hardware_concurrency();
+  if (threads == 1) {
+    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
+  }
+  {
+    // Check if is is limited to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1337);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if is is expanded to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if minimum of 4 tasks is honored.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
 }
 
