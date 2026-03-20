@@ -133,7 +133,7 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
         ad_utility::TensorData::parseFromPair(optionalStringAndType);
     if (!tensorData.has_value() && optionalStringAndType.has_value()) {
       AD_LOG_WARN << "Could not parse tensor of "
-                  << optionalStringAndType.value().first << " at row " << row
+                  << optionalStringAndType.value().first << " at row " << i
                   << ". This item will be ignored for indexing.";
       continue;
     }

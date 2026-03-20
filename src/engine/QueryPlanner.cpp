@@ -114,18 +114,16 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
 }
 
-
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 // _____________________________________________________________________________________________________________________
 // Helper that returns `true` for each of the subtree plans `a` and `b` iff
 // the subtree plan is an operation and it is not yet fully constructed
 // (it does not have both children set)
 template <typename JoinType>
-std::pair<bool, bool> checkJoin(const SubtreePlan& a,
-                                                      const SubtreePlan& b) {
+std::pair<bool, bool> checkJoin(const SubtreePlan& a, const SubtreePlan& b) {
   auto isIncompleteJoin = [](const SubtreePlan& ts) {
-    auto tsCasted = std::dynamic_pointer_cast<const JoinType>(
-        ts._qet->getRootOperation());
+    auto tsCasted =
+        std::dynamic_pointer_cast<const JoinType>(ts._qet->getRootOperation());
     return tsCasted != nullptr && !tsCasted->isConstructed();
   };
   return {isIncompleteJoin(a), isIncompleteJoin(b)};
@@ -134,8 +132,7 @@ std::pair<bool, bool> checkJoin(const SubtreePlan& a,
 // _____________________________________________________________________________
 template <typename JoinType>
 auto createJoin(const SubtreePlan& a, const SubtreePlan& b,
-                                     const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+                const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto [aIs, bIs] = checkJoin<JoinType>(a, b);
 
   // Exactly one of the inputs must be a SpatialJoin.
@@ -3353,7 +3350,8 @@ void QueryPlanner::GraphPatternPlanner::visitTensorSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the TensorSearch outside of the SERVICE. This is only allowed for implicit joins.
+    // of the TensorSearch outside of the SERVICE. This is only allowed for
+    // implicit joins.
     auto addCandidateTensorSearch = [this, &sub, &config,
                                      &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;

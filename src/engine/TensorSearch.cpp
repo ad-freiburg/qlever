@@ -258,9 +258,9 @@ float TensorSearch::getMultiplicity(size_t col) {
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
     size_t column = col;
-    if (config_.distanceVariable_.has_value() &&
-        col == getResultWidth() - 1) {
-      // as each max results value is very likely to be unique, no multiplicities are assumed
+    if (config_.distanceVariable_.has_value() && col == getResultWidth() - 1) {
+      // as each max results value is very likely to be unique, no
+      // multiplicities are assumed
       return 1;
     } else if (col < childLeft_->getResultWidth()) {
       child = childLeft_;

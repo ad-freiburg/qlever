@@ -57,9 +57,10 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
-    throwIf(!object.isIri(),
-            "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-            "to employ. Currently supported are `<default>` and `<annoy>`");
+    throwIf(
+        !object.isIri(),
+        "The parameter `<algorithm>` needs an IRI that selects the algorithm "
+        "to employ. Currently supported are `<default>` and `<annoy>`");
     auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
     if (type == "naive") {
       algo_ = TensorSearchAlgorithm::NAIVE;
@@ -68,7 +69,8 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     } else {
       throw TensorSearchException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
-          "supported tensor search algorithm. Currently supported are `<default>` and "
+          "supported tensor search algorithm. Currently supported are "
+          "`<default>` and "
           "`<annoy>`"};
     }
   } else if (predString == "distance") {
@@ -76,12 +78,13 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     // want to throw a more precise error description
     throwIf(!object.isIri(),
             "The parameter `<distance>` needs an IRI that selects the distance "
-            "metric to employ. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
+            "metric to employ. Currently supported are `<angular>`, "
+            "`<cosine>`, `<dot>`, "
             "`<euclidean>`, `<manhattan>`, or  `<hamming>` ");
     auto dist = extractParameterName(object, TENSOR_SEARCH_IRI);
     if (dist == "angular") {
       dist_ = TensorDistanceAlgorithm::ANGULAR_DISTANCE;
-    } else if(dist == "cosine") {
+    } else if (dist == "cosine") {
       dist_ = TensorDistanceAlgorithm::COSINE_SIMILARITY;
     } else if (dist == "dot") {
       dist_ = TensorDistanceAlgorithm::DOT_PRODUCT;
@@ -94,8 +97,9 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     } else {
       throw TensorSearchException{
           "The IRI given for the parameter `<distance>` does not refer to a "
-          "supported distance metric. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
-            "`<euclidean>`, `<manhattan>`, or  `<hamming>`"};
+          "supported distance metric. Currently supported are `<angular>`, "
+          "`<cosine>`, `<dot>`, "
+          "`<euclidean>`, `<manhattan>`, or  `<hamming>`"};
     }
   } else if (predString == "payload") {
     if (object.isVariable()) {
@@ -123,8 +127,10 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw TensorSearchException(absl::StrCat(
         "Unsupported argument ", predString,
-        " in tensor search; supported arguments are: `<left>`, `<right>`, `<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
-        "`<algo>`, `<distance>`, `<payload>`, and `<experimentalRightCacheName>`"));
+        " in tensor search; supported arguments are: `<left>`, `<right>`, "
+        "`<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
+        "`<algo>`, `<distance>`, `<payload>`, and "
+        "`<experimentalRightCacheName>`"));
   }
 }
 
@@ -138,8 +144,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
   }
 
   throwIf(!left_.has_value(), "Missing parameter `<left>` in tensor search.");
-  throwIf(!right_.has_value(),
-          "Missing parameter `<right>` in tensor search.");
+  throwIf(!right_.has_value(), "Missing parameter `<right>` in tensor search.");
 
   throwIf(
       rightCacheName_.has_value() && algo != TensorSearchAlgorithm::ANNOY,
@@ -148,12 +153,13 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
   // the cache parameter is automatically imputed for annoy
   // if (algo == TensorSearchAlgorithm::ANNOY) {
   //   throwIf(!rightCacheName_.has_value(),
-  //           "The parameter `<experimentalRightCacheName>` is mandatory for the "
+  //           "The parameter `<experimentalRightCacheName>` is mandatory for
+  //           the "
   //           "`<annoy>` algorithm.");
   //   throwIf(childGraphPattern_.has_value(),
   //           "The parameter `<annoy>` algorithm uses a cached "
-  //           "query result as its right child. Therefore a group graph pattern "
-  //           "for the right side may not be specified in the `SERVICE`.");
+  //           "query result as its right child. Therefore a group graph pattern
+  //           " "for the right side may not be specified in the `SERVICE`.");
   // }
 
   // Only if the number of results is limited, it is mandatory that the right
@@ -182,16 +188,17 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
     pv = payloadVariables_;
   }
 
-  return TensorSearchConfiguration{left_.value(),
-                                   right_.value(),
-                                   distanceVariable_,
-                                   pv,
-                                   algo,
-                                   dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
-                                   maxResults_.value_or((ssize_t)100),
-                                   searchK_.value_or((ssize_t)-1),
-                                   nTrees_.value_or((ssize_t)-1),
-                                   rightCacheName_};
+  return TensorSearchConfiguration{
+      left_.value(),
+      right_.value(),
+      distanceVariable_,
+      pv,
+      algo,
+      dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
+      maxResults_.value_or((ssize_t)100),
+      searchK_.value_or((ssize_t)-1),
+      nTrees_.value_or((ssize_t)-1),
+      rightCacheName_};
 }
 
 // ____________________________________________________________________________
@@ -245,9 +252,9 @@ void TensorSearchQuery::throwIf(bool throwCondition,
 
 // _____________________________________________________________________________
 void TensorSearchQuery::validate() const {
-  // We convert the tensor search query to a tensor search configuration and discard
-  // its result here to detect errors early and report them to the user with
-  // highlighting. It's only a small struct so not much is wasted.
+  // We convert the tensor search query to a tensor search configuration and
+  // discard its result here to detect errors early and report them to the user
+  // with highlighting. It's only a small struct so not much is wasted.
   [[maybe_unused]] auto&& _ = toTensorSearchConfiguration();
 }
 

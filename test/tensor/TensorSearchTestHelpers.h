@@ -17,23 +17,27 @@
 #include "util/GeoSparqlHelpers.h"
 
 namespace TensorSearchTestHelpers {
-
-// constexpr inline auto makeLineLiteral = [](std::string_view coordinateList) {
-//   return absl::StrCat("\"LINESTRING(", coordinateList, ")\"^^<",
-//                       GEO_WKT_LITERAL, ">");
-// };
-
-// const std::string approximatedAreaGermany = makeLineLiteral(
-//     "7.20369317867016 53.62121249029073, "
-//     "9.335040870259194 54.77156944262062, 13.97127141588071 53.7058383745324,
-//     " "14.77327338230339 51.01654754091759, 11.916828022441791 "
-//     "50.36932046223437, "
-//     "13.674640551587391 48.68663848319227, 12.773761630400273 "
-//     "47.74969625921073, "
-//     "7.58917 47.59002, 8.03916 49.01783, "
-//     "6.50056816701192 49.535220384133375, 6.0391423781112 51.804566644690524,
-//     " "7.20369317867016 53.62121249029073");
-
+// Helper to build a small deterministic dataset of vectors. The returned
+// Turtle contains subjects <s0> .. <sN-1> with predicate <p1> and a
+// tensor literal as required by the tensor datatype.
+std::string makeVectorKg(size_t n, size_t dim = 3) {
+  std::string out;
+  for (size_t i = 0; i < n; ++i) {
+    std::vector<double> vec(dim, 0.0);
+    vec[i % dim] = 1.0;
+    std::string data = R"({\"data\":[)";
+    for (size_t d = 0; d < dim; ++d) {
+      data += absl::StrCat(vec[d]);
+      if (d + 1 < dim) data += ",";
+    }
+    data +=
+        R"(],\"shape\":[)" + std::to_string(dim) + R"(],\"type\":\"float64\"})";
+    out += absl::StrCat(
+        "<s", i, "> <p1> \"", data,
+        "\"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .\n");
+  }
+  return out;
+}
 // helper function to create a vector of strings from a result table
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                            const Result* table) {
@@ -53,9 +57,9 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
 
 // this helper function reorders an input vector according to the variable to
 // column map to make the string array match the order of the result, which
-// should be tested (it uses a vector of vectors (the first vector is containing
-// each column of the result, each column consist of a vector, where each entry
-// is a row of this column))
+// should be tested (it uses a vector of vectors (the first vector is
+// containing each column of the result, each column consist of a vector,
+// where each entry is a row of this column))
 inline std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
     VariableToColumnMap varColMaps,
     std::vector<std::vector<std::string>> columns,
@@ -119,15 +123,14 @@ inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
           subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
 }
 
-inline std::shared_ptr<QueryExecutionTree> buildTensorSearch(
+inline std::shared_ptr<QueryExecutionTree> buildJoin(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> tree1,
     std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
   auto varCol1 = tree1->getVariableColumns();
   auto varCol2 = tree2->getVariableColumns();
   size_t col1 = varCol1[joinVariable].columnIndex_;
   size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<TensorSearch>(qec, tree1, tree2, col1,
-                                                     col2);
+  return ad_utility::makeExecutionTree<Join>(qec, tree1, tree2, col1, col2);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
@@ -139,8 +142,8 @@ inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
   auto scan1 = buildIndexScan(qec, triple1);
   auto scan2 = buildIndexScan(qec, triple2);
   auto scan3 = buildIndexScan(qec, triple3);
-  auto tensorSearch = buildTensorSearch(qec, scan1, scan2, joinVariable1);
-  return buildTensorSearch(qec, tensorSearch, scan3, joinVariable2);
+  auto tensorSearch = buildJoin(qec, scan1, scan2, joinVariable1);
+  return buildJoin(qec, tensorSearch, scan3, joinVariable2);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
@@ -149,7 +152,7 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
   Variable joinVariable{joinVariable_};
   auto scan1 = buildIndexScan(qec, triple1);
   auto scan2 = buildIndexScan(qec, triple2);
-  return buildTensorSearch(qec, scan1, scan2, joinVariable);
+  return buildJoin(qec, scan1, scan2, joinVariable);
 }
 }  // namespace TensorSearchTestHelpers
 

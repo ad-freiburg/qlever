@@ -40,9 +40,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -54,9 +54,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::NAIVE,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -68,9 +68,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::ANNOY,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -82,9 +82,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, -1, -1, TensorSearchAlgorithm::ANNOY,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -96,9 +96,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, 20, -1, TensorSearchAlgorithm::ANNOY,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -110,9 +110,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, -1, 20, TensorSearchAlgorithm::ANNOY,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
-                      V{"?b"}, std::nullopt, emptyPayload,
-                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
       "SELECT * WHERE {"
@@ -138,7 +138,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
+                      TensorDistanceAlgorithm::ANGULAR_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -279,49 +279,53 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
 }
 // _____________________________________________________________________________
 TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
-    auto scan = h::IndexScanFromStrings;
-    using V = Variable;
-    using PV = PayloadVariables;
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  using PV = PayloadVariables;
 
-    // Two SERVICE tensorSearch blocks that both declare the same left variable
-    h::expect(
-            "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
-            "SELECT * WHERE {"
-            "?x <p> ?y ."
-            "SERVICE tensorSearch: {"
-            "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
-            "    tensorSearch:left ?y ;"
-            "    tensorSearch:right ?b ;"
-            "    tensorSearch:numNN 5 ;"
-            "    tensorSearch:bindDistance ?db ."
-            "  { ?ab <p1> ?b }"
-            "}"
-            "SERVICE tensorSearch: {"
-            "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
-            "    tensorSearch:left ?y ;"
-            "    tensorSearch:right ?c ;"
-            "    tensorSearch:numNN 3 ;"
-            "    tensorSearch:payload ?ac ;"
-            "    tensorSearch:bindDistance ?dc ."
-            "  { ?ac <p2> ?c }"
-            " }"
-            "}",
-            // Both orders of assembling the two tensor-search children are allowed
-            ::testing::AnyOf(
-                    h::tensorSearch( 3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                                                     TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"}, V{"?dc"},
-                                                     PV{std::vector<V>{V{"?ac"}}},
-                                                     h::tensorSearch(5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                                                                                     TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
-                                                                                     scan("?x", "<p>", "?y"), scan("?ab", "<p1>", "?b")),
-                                                     scan("?ac", "<p2>", "?c")),
-                    h::tensorSearch(5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                                                    TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
-                                                    h::tensorSearch(3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                                                                                    TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"}, V{"?dc"},
-                                                                                    PV{std::vector<V>{V{"?ac"}}}, scan("?x", "<p>", "?y"),
-                                                                                    scan("?ac", "<p2>", "?c")),
-                                                    scan("?ab", "<p1>", "?b"))));
+  // Two SERVICE tensorSearch blocks that both declare the same left variable
+  h::expect(
+      "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y ."
+      "SERVICE tensorSearch: {"
+      "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "    tensorSearch:left ?y ;"
+      "    tensorSearch:right ?b ;"
+      "    tensorSearch:numNN 5 ;"
+      "    tensorSearch:bindDistance ?db ."
+      "  { ?ab <p1> ?b }"
+      "}"
+      "SERVICE tensorSearch: {"
+      "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "    tensorSearch:left ?y ;"
+      "    tensorSearch:right ?c ;"
+      "    tensorSearch:numNN 3 ;"
+      "    tensorSearch:payload ?ac ;"
+      "    tensorSearch:bindDistance ?dc ."
+      "  { ?ac <p2> ?c }"
+      " }"
+      "}",
+      // Both orders of assembling the two tensor-search children are allowed
+      ::testing::AnyOf(
+          h::tensorSearch(
+              3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"}, V{"?dc"},
+              PV{std::vector<V>{V{"?ac"}}},
+              h::tensorSearch(5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+                              TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                              V{"?db"}, PV{}, scan("?x", "<p>", "?y"),
+                              scan("?ab", "<p1>", "?b")),
+              scan("?ac", "<p2>", "?c")),
+          h::tensorSearch(
+              5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
+              h::tensorSearch(3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+                              TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"},
+                              V{"?dc"}, PV{std::vector<V>{V{"?ac"}}},
+                              scan("?x", "<p>", "?y"),
+                              scan("?ac", "<p2>", "?c")),
+              scan("?ab", "<p1>", "?b"))));
 }
 //
 // _____________________________________________________________________________
@@ -595,7 +599,6 @@ TEST(QueryTensorSearchPlanner, TensorSearchLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
 
-
   // Test that the nearest neighbors special predicate is still accepted but
   // produces a warning
   h::expect(
@@ -606,9 +609,9 @@ TEST(QueryTensorSearchPlanner, TensorSearchLegacyPredicateSupport) {
       h::QetWithWarnings(
           {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
           h::tensorSearch(500, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                         TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
-                         V{"?b"}, std::nullopt, PayloadVariables::all(),
-                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+                          TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                          std::nullopt, PayloadVariables::all(),
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
@@ -617,24 +620,26 @@ TEST(QueryTensorSearchPlanner, TensorSearchLegacyPredicateSupport) {
       h::QetWithWarnings(
           {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
           h::tensorSearch(20, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                         TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
-                         V{"?b"}, std::nullopt, PayloadVariables::all(),
-                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+                          TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                          std::nullopt, PayloadVariables::all(),
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <tensor-nearest-neighbors:1:-200> ?b. "
-                                         "}",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:1:-200> ?b. "
+                "}",
+                ::testing::_),
+      ::testing::ContainsRegex("unknown triple"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <tensor-nearest-neighbors:0:-1> ?b .}",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:0:-1> ?b .}",
+                ::testing::_),
+      ::testing::ContainsRegex("unknown triple"));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"

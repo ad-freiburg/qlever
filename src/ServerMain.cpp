@@ -165,18 +165,18 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::spatialJoinMaxNumThreads_>(),
       "The maximum number of threads to be used for spatial join processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
-      add("spatial-join-prefilter-max-size",
-        optionFactory
-        .getProgramOption<&RuntimeParameters::spatialJoinPrefilterMaxSize_>(),
-        "The maximum size in square coordinates of the aggregated bounding box "
-        "of the smaller join partner in a spatial join, such that prefiltering "
-        "will be employed. To disable prefiltering for non-point geometries, set "
-        "this option to 0.");
-        add("tensor-search-max-num-threads",
-            optionFactory
-                .getProgramOption<&RuntimeParameters::tensorSearchMaxNumThreads_>(),
-            "The maximum number of threads to be used for tensor search processing. "
-            "If this option is set to `0`, the number of CPU threads will be used.");
+  add("spatial-join-prefilter-max-size",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::spatialJoinPrefilterMaxSize_>(),
+      "The maximum size in square coordinates of the aggregated bounding box "
+      "of the smaller join partner in a spatial join, such that prefiltering "
+      "will be employed. To disable prefiltering for non-point geometries, set "
+      "this option to 0.");
+  add("tensor-search-max-num-threads",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::tensorSearchMaxNumThreads_>(),
+      "The maximum number of threads to be used for tensor search processing. "
+      "If this option is set to `0`, the number of CPU threads will be used.");
   add("materialized-view-writer-memory",
       optionFactory.getProgramOption<
           &RuntimeParameters::materializedViewWriterMemory_>(),

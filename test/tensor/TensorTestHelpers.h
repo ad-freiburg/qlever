@@ -15,7 +15,7 @@
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
-namespace tensorTestHelpers {
+namespace TensorTestHelpers {
 
 static constexpr std::string_view dummyTurtle = R"(
   <s3> <p1> "{\"data\":[1.0,1.0,-2.0],\"shape\":[3],\"type\":\"float64\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
@@ -118,5 +118,5 @@ class TensorQueryTest : public ::testing::Test {
     return idTable;
   }
 };
-}  // namespace tensorTestHelpers
+}  // namespace TensorTestHelpers
 #endif  // QLEVER_TEST_TENSORTESTHELPERS_H_

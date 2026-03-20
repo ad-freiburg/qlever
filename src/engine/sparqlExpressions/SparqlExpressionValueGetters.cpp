@@ -468,7 +468,8 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     return ad_utility::TensorData::parseFromPair(optionalStringAndType);
 
   } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id << " with string representation "
+    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id
+                 << " with string representation "
                  << (optionalStringAndType.has_value()
                          ? optionalStringAndType.value().first
                          : "N/A")

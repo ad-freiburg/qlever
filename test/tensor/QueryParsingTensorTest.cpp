@@ -13,7 +13,7 @@
 namespace {
 using namespace ad_utility;
 using namespace sparqlExpression;
-using namespace tensorTestHelpers;
+using namespace TensorTestHelpers;
 using namespace sparqlParserHelpers;
 using namespace sparqlParserTestHelpers;
 namespace m = matchers;
@@ -43,7 +43,7 @@ TEST(TensorQueryCall, TensorCall) {
 }
 // _____________________________________________________________________________
 TEST_F(TensorQueryTest, TensorEnd2EndConstruction) {
-  std::string full_query=R"(
+  std::string full_query = R"(
 PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
 PREFIX dtf: <https://w3id.org/rdf-tensor/functions#>
 PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
@@ -62,8 +62,8 @@ PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
   auto parsed_results = nlohmann::json::parse(results_query);
 
   EXPECT_TRUE(parsed_results.contains("results"));
-  auto val=parsed_results["results"]["bindings"][0]["sim"]["value"].get<std::string>();
+  auto val = parsed_results["results"]["bindings"][0]["sim"]["value"]
+                 .get<std::string>();
   EXPECT_FLOAT_EQ(std::stof(val), 1.0f);
-
 }
 }  // namespace

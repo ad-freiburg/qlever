@@ -284,7 +284,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(TENSOR_FUNCTION_PREFIX)) {
     if (ad_utility::contains(tensorUnaryFuncs, functionName)) {
       return createUnary(tensorUnaryFuncs.at(functionName));
-    }else if (ad_utility::contains(tensorBinaryFuncs, functionName)) {
+    } else if (ad_utility::contains(tensorBinaryFuncs, functionName)) {
       return createBinary(tensorBinaryFuncs.at(functionName));
     }
   }

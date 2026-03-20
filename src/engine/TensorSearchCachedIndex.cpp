@@ -120,13 +120,18 @@ AnnoyIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
       tensorIndexToRow.emplace(row, id);
     }
   }
-  // By default, the annoy indices are constructed lazily on the first query,
-  // which then is slow.
-  std::visit(
-      [&](auto&& idx) {
-        idx.build(config_.nTrees_, TensorSearchImpl::getNumThreads());
-      },
-      *index_.value());
+  if(index_.has_value()) {
+    AD_LOG_INFO << "Building index with " << tensorIndexToRow.size() << " items.";
+    // By default, the annoy indices are constructed lazily on the first query,
+    // which then is slow.
+    std::visit(
+        [&](auto&& idx) {
+          idx.build(config_.nTrees_, TensorSearchImpl::getNumThreads());
+        },
+        *index_.value());
+  } else {
+    AD_LOG_INFO << "No valid tensors found to build index.";
+  }
   return tensorIndexToRow;
 }
 
@@ -157,6 +162,9 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
   }
   std::vector<size_t> nnIndices;
   std::vector<float> nnDistances;
+  if(!index_.has_value()) {
+    return result;
+  }
   std::visit(
       [&](auto&& idx) {
         idx.get_nns_by_vector(query.tensorData().data(), n,

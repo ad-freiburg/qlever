@@ -3,8 +3,7 @@ conda activate qlever
 
 conda install -y -c conda-forge python=3.8
 conda install -y -c conda-forge cmake
-conda install -y -c conda-forge gcc=14.3.0
-conda install -y -c conda-forge gxx=14.3.0
+conda install -y -c conda-forge gcc=13 # 13 is twice as fast as 14?? source (?) https://www.reddit.com/r/cpp/comments/1cfzydb/gcc_14_twice_as_slow_as_gcc_13/
 conda install -y -c conda-forge gdb
 conda install -y -c conda-forge ninja
 conda install -y -c conda-forge libcxx
@@ -12,6 +11,7 @@ conda install -y -c conda-forge glib
 conda install -y -c conda-forge gxx_linux-64
 conda install -y -c conda-forge ninja
 conda install -y -c anaconda zlib
+conda install -y -c anaconda clang-format
 conda install -y -c conda-forge jemalloc
 conda install -y -c conda-forge ld_impl_linux-64
 # conda install -y -c conda-forge boost==1.83.0

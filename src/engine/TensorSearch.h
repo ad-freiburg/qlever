@@ -12,8 +12,8 @@
 #include "engine/Operation.h"
 #include "engine/TensorSearchConfig.h"
 #include "global/Id.h"
-#include "rdfTypes/Variable.h"
 #include "rdfTypes/TensorData.h"
+#include "rdfTypes/Variable.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedTensorSearchParams {
@@ -40,8 +40,10 @@ class TensorSearchImpl {
                         const ad_utility::TensorData& tensorRight) const;
   Result computeTensorSearchResultAnnoy();
   Result computeTensorSearchResultNaive();
+
  public:
-  TensorSearchImpl(PreparedTensorSearchParams& params, QueryExecutionContext* qec)
+  TensorSearchImpl(PreparedTensorSearchParams& params,
+                   QueryExecutionContext* qec)
       : params_(std::move(params)), qec_(qec) {};
   static size_t getNumThreads();
   Result computeTensorSearchResult();
@@ -69,8 +71,9 @@ class TensorSearch : public Operation {
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  // get the boolean flag if this tensor search operation is used to substitute a filter operation. 
-  // This can be used in the future and ensure compatibility with the existing spatial join implementation
+  // get the boolean flag if this tensor search operation is used to substitute
+  // a filter operation. This can be used in the future and ensure compatibility
+  // with the existing spatial join implementation
   bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
 
   // this function assumes, that the complete cross product is build and
@@ -118,9 +121,7 @@ class TensorSearch : public Operation {
   TensorSearchAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // retrieve the currently selected spatial join type
-  TensorDistanceAlgorithm getDistanceFunction() const {
-    return config_.dist_;
-  }
+  TensorDistanceAlgorithm getDistanceFunction() const { return config_.dist_; }
 
   // retrieve the variables the spatial join is joining on
   std::pair<Variable, Variable> getTensorSearchVariables() const {
@@ -130,16 +131,10 @@ class TensorSearch : public Operation {
   const TensorSearchConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
-  ssize_t onlyForTestingGetSearchK() const {
-    return config_.searchK_;
-  }
-  ssize_t onlyForTestingGetNTrees() const {
-    return config_.nTrees_;
-  }
-  ssize_t onlyForTestingGetMaxResults() const {
-    return config_.maxResults_;
-  }
-  std::optional<Variable> onlyForTestingGetDistanceVariable_() const {
+  ssize_t onlyForTestingGetSearchK() const { return config_.searchK_; }
+  ssize_t onlyForTestingGetNTrees() const { return config_.nTrees_; }
+  ssize_t onlyForTestingGetMaxResults() const { return config_.maxResults_; }
+  std::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_.distanceVariable_;
   }
   TensorDistanceAlgorithm onlyForTestingGetDistanceFunction() const {

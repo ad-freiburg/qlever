@@ -18,7 +18,7 @@ NARY_EXPRESSION(TensorFromListExpression, 1,
 
 struct TensorFromStringValueGetter {
   IdOrLiteralOrIri operator()(std::optional<std::string> str) const {
-    if(str.has_value()){
+    if (str.has_value()) {
       return TensorData::parseFromString(str.value()).toLiteral();
     }
     return Id::makeUndefined();
@@ -40,13 +40,13 @@ struct BinaryFloatTensorFunctionImpl {
 };
 template <auto BinaryTensorFunction>
 struct BinaryTensorFunctionImpl {
-  IdOrLiteralOrIri operator()(
-      std::optional<TensorData> tensor1,
-      std::optional<TensorData> tensor2) const {
+  IdOrLiteralOrIri operator()(std::optional<TensorData> tensor1,
+                              std::optional<TensorData> tensor2) const {
     if (!tensor1.has_value() || !tensor2.has_value()) {
       return Id::makeUndefined();
     }
-    return std::invoke(BinaryTensorFunction, tensor1.value(), tensor2.value()).toLiteral();
+    return std::invoke(BinaryTensorFunction, tensor1.value(), tensor2.value())
+        .toLiteral();
   }
 };
 
@@ -70,14 +70,14 @@ NARY_EXPRESSION(
 
 struct NormTensorFunctionImpl {
   float operator()(std::optional<TensorData> tensor1) const {
-    return tensor1.has_value() ? TensorData::norm(tensor1.value()) : std::numeric_limits<float>::quiet_NaN();
+    return tensor1.has_value() ? TensorData::norm(tensor1.value())
+                               : std::numeric_limits<float>::quiet_NaN();
   }
 };
 
 NARY_EXPRESSION(
     TensorNormExpression, 1,
-    FV<NumericIdWrapper<NormTensorFunctionImpl, true>,
-       TensorValueGetter>);
+    FV<NumericIdWrapper<NormTensorFunctionImpl, true>, TensorValueGetter>);
 
 }  // namespace detail
 
@@ -110,7 +110,7 @@ Expr makeTensorDotProductExpression(Expr child1, Expr child2) {
 }
 Expr makeTensorCosineSimilarityExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorCosineSimilarityExpression>(std::move(child1),
-                                                      std::move(child2));
+                                                            std::move(child2));
 }
 Expr makeTensorNormExpression(Expr child) {
   return std::make_unique<TensorNormExpression>(std::move(child));
