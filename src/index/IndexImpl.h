@@ -25,6 +25,7 @@
 #include "index/DocsDB.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GraphNamespaceManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -207,6 +208,10 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  GraphNamespaceManager graphNamespaceManager_ = GraphNamespaceManager();
+  std::optional<std::filesystem::path> graphNamespaceManagerStateFile_ =
+      std::nullopt;
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
                      bool registerSingleton = true);
@@ -279,6 +284,17 @@ class IndexImpl {
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
+  }
+
+  GraphNamespaceManager& graphNamespaceManager() {
+    return graphNamespaceManager_;
+  }
+  const GraphNamespaceManager& graphNamespaceManager() const {
+    return graphNamespaceManager_;
+  }
+  const std::optional<std::filesystem::path>&
+  getPersistedGraphNamespaceManager() const {
+    return graphNamespaceManagerStateFile_;
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }

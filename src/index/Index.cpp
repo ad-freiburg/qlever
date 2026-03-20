@@ -295,3 +295,18 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
 }
+// ____________________________________________________________________________
+GraphNamespaceManager& Index::graphNamespaceManager() {
+  return pimpl_->graphNamespaceManager();
+}
+
+// ____________________________________________________________________________
+const GraphNamespaceManager& Index::graphNamespaceManager() const {
+  return pimpl_->graphNamespaceManager();
+}
+
+// ____________________________________________________________________________
+const std::optional<std::filesystem::path>&
+Index::getPersistGraphNamespaceManager() const {
+  return pimpl_->getPersistedGraphNamespaceManager();
+}

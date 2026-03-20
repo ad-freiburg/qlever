@@ -1071,6 +1071,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
+    graphNamespaceManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
   }
 }
 
@@ -1306,6 +1307,9 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+  loadDataMember(
+      "graphNamespaceManager", graphNamespaceManager_,
+      GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
 
   // Compute unique ID for this index.
   //
@@ -1780,13 +1784,36 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
+  uint64_t nextAvailableIndex = 0;
+  auto newGraphPrefixIdx = [this]() {
+    auto prefix = encodedIriManager_.getIndexOfPrefix(QLEVER_NEW_GRAPH_PREFIX);
+    AD_CORRECTNESS_CHECK(prefix.has_value());
+    return std::move(prefix).value();
+  }();
+  auto determineNextAvailableInternalGraph =
+      [&nextAvailableIndex, newGraphPrefixIdx](const auto& triple) mutable {
+        const auto& graph = triple[3];
+        if (graph.getDatatype() != Datatype::EncodedVal) {
+          return;
+        }
+        auto [prefix, payload] =
+            EncodedIriManager::splitIntoPrefixIdxAndDecodedPayload(graph);
+        if (prefix != newGraphPrefixIdx) {
+          return;
+        }
+        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+      };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples);
+                            nextSorter.makePushCallback()..., countTriples,
+                            determineNextAvailableInternalGraph);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
+  graphNamespaceManager_ = GraphNamespaceManager(
+      std::string(QLEVER_NEW_GRAPH_PREFIX), nextAvailableIndex);
+  configurationJson_["graphNamespaceManager"] = graphNamespaceManager_;
   if (doWriteConfiguration) {
     writeConfiguration();
   }

@@ -489,21 +489,15 @@ ReturnType DeltaTriplesManager::modify(
   });
 }
 // Explicit instantiations
-template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
-    bool updateMetadataAfterRequest, ad_utility::timer::TimeTracer&);
-template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
-    const std::function<UpdateMetadata(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
-    ad_utility::timer::TimeTracer&);
-template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
-    ad_utility::timer::TimeTracer&);
-template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
-    ad_utility::timer::TimeTracer&);
+#define INSTANTIATE_MODIFY(T)                             \
+  template T DeltaTriplesManager::modify<T>(              \
+      const std::function<T(DeltaTriples&)>&, bool, bool, \
+      ad_utility::timer::TimeTracer&)
+INSTANTIATE_MODIFY(void);
+INSTANTIATE_MODIFY(UpdateMetadata);
+INSTANTIATE_MODIFY(DeltaTriplesCount);
+INSTANTIATE_MODIFY(nlohmann::json);
+#undef INSTANTIATE_MODIFY
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

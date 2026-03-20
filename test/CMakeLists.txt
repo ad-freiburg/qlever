@@ -276,7 +276,7 @@ addLinkAndDiscoverTestNoLibs(StringBatcherTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest parser)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
