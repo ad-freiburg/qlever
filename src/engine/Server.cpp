@@ -465,10 +465,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "vacuum (remove redundant) delta triples");
 
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    auto defaultTimeout =
-        getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
-    cancelAfterDeadline(handle, std::chrono::duration_cast<TimeLimit>(
-                                    std::chrono::seconds{defaultTimeout}));
+    std::optional<TimeLimit> timeLimit =
+        co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send);
+    if (!timeLimit.has_value()) {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
+    auto cancelTimeoutOnDestruction =
+        cancelAfterDeadline(handle, timeLimit.value());
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
