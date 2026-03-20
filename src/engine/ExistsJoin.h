@@ -82,9 +82,30 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // Return true if the size estimate for the right side is smaller or equal
+  // than the estimate of the right side, a sort on the left can be skipped and
+  // all join columns are statically guaranteed to not contain undef values.
+  bool rightIndexNestedLoopJoinIsPossible() const;
+
+  // Specialized algorithm that performs a join when the left side is fully
+  // materialized and sorted, and the right side is unsorted. Only returns a
+  // result when the size estimate for the left side is smaller or equal than
+  // the estimate of the right side and a sort on the left can be skipped.
+  std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
+
+  // Specialized algorithm that performs a join when the right side is fully
+  // materialized and sorted, and the left side is unsorted. Only returns a
+  // result when `rightIndexNestedLoopJoinIsPossible()` returns true, in this
+  // case the result is also unsorted.
+  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable(
+      bool requestLaziness);
+
   // Nested loop join optimization than can apply when a memory intensive sort
-  // can be avoided this way.
-  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
+  // can be avoided this way. This currently only works when we can statically
+  // guarantee that no undef values are found in the join columns. The
+  // implementation first tries `tryRightIndexNestedLoopJoinIfSuitable` and then
+  // `tryLeftIndexNestedLoopJoinIfSuitable`.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
 
   Result computeResult(bool requestLaziness) override;
 
@@ -95,7 +116,17 @@ class ExistsJoin : public Operation {
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
 
-  FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
+  // Helper function to modify the `IdTable` such that it gains a column
+  // signaling if the values exist on the right or not.
+  CPP_template(typename Range)(
+      requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
+          ql::concepts::convertible_to<
+              ql::ranges::range_value_t<Range>,
+              bool>) void addExistsColumn(IdTable& idTable,
+                                          Range&& range) const;
+
+  FRIEND_TEST(ExistsJoin,
+              addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

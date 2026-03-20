@@ -71,6 +71,9 @@ size_t ExistsJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+  if (rightIndexNestedLoopJoinIsPossible()) {
+    return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
+  }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }
@@ -105,7 +108,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
 
   if (!noJoinNecessary) {
-    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
       return std::move(res).value();
     }
   }
@@ -272,35 +275,76 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
-  auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                            right_);
-  };
-  // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side. It currently doesn't support undef.
-  auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
-  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate() ||
-      !alwaysDefined()) {
+bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
+  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
+                                                                 joinColumns_);
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
+  auto optionalResults =
+      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_,
+                                                                   right_);
+  if (!optionalResults.has_value()) {
     return std::nullopt;
   }
 
-  auto leftRes = left_->getResult(false);
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
+  auto [leftRes, rightRes] = std::move(optionalResults).value();
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
-  result.addEmptyColumn();
-  ad_utility::chunkedCopy(
-      ql::views::transform(
-          ad_utility::OwningView{nestedLoopJoin.computeExistance()},
-          [](char tracker) { return Id::makeFromBool(tracker != 0); }),
-      result.getColumn(result.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+  addExistsColumn(
+      result, ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()});
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  // This algorithm only works well if the right side is smaller and we can
+  // avoid sorting the left side. It currently doesn't support undef.
+  if (!rightIndexNestedLoopJoinIsPossible()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+      std::dynamic_pointer_cast<Sort>(left_->getRootOperation()),
+      requestLaziness);
+  bool isLazy = !leftRes->isFullyMaterialized();
+  auto rightRes = right_->getResult(false);
+
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
+  auto result = nestedLoopJoin.computeRightExistance(
+      [this](auto&& idTable, LocalVocab localVocab,
+             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
+                 matchingTracker) {
+        IdTable resultTable = AD_FWD(idTable).moveOrClone();
+        addExistsColumn(resultTable, matchingTracker);
+        return Result::IdTableVocabPair{std::move(resultTable),
+                                        std::move(localVocab)};
+      });
+  return std::optional{
+      isLazy ? Result{std::move(result), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(result)),
+                      resultSortedOn()}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                        right_)) {
+    return std::nullopt;
+  }
+  if (auto leftResult =
+          tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return leftResult;
+  }
+  return tryLeftIndexNestedLoopJoinIfSuitable();
 }
 
 // _____________________________________________________________________________
@@ -502,4 +546,22 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
              ? Result{std::move(generator), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(generator)),
                       resultSortedOn()};
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename Range)(
+    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
+        ql::concepts::convertible_to<
+            ql::ranges::range_value_t<Range>,
+            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
+                                                    Range&& range) const {
+  idTable.addEmptyColumn();
+  ad_utility::chunkedCopy(
+      ql::views::transform(AD_FWD(range),
+                           [](auto tracker) {
+                             return Id::makeFromBool(
+                                 static_cast<bool>(tracker));
+                           }),
+      idTable.getColumn(idTable.numColumns() - 1).begin(),
+      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
 }
