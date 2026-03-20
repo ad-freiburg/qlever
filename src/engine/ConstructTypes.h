@@ -1,14 +1,17 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project
 
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
-#include <optional>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -55,6 +58,11 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
+
+// Result of evaluating a term (`Iri`, `Literal`, `Variable` or `BlankNode`) to
+// its string representation.
+using EvaluatedTerm = std::shared_ptr<const std::string>;
+
 }  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
