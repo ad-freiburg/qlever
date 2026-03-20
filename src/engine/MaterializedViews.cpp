@@ -288,14 +288,19 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file.
+  const auto& varToCol = qet_->getVariableColumns();
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
-      {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
-                     return v.name();
-                   }) |
-                   ::ranges::to<std::vector<std::string>>())},
-      {"query", parsedQuery_._originalString},
-  };
+      {"columns",
+       (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
+          return nlohmann::json{
+              {"name", v.name()},
+              {"always_defined",
+               varToCol.at(v).mightContainUndef_ ==
+                   ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}};
+        }) |
+        ::ranges::to<std::vector<nlohmann::json>>())},
+      {"query", parsedQuery_._originalString}};
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
@@ -368,13 +373,32 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         ". Please re-write the materialized view.")};
   }
 
-  // Make variable to column map
-  auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  for (const auto& [index, columnName] :
-       ::ranges::views::enumerate(columnNames)) {
-    varToColMap_.insert({Variable{columnName},
-                         {static_cast<ColumnIndex>(index),
-                          ColumnIndexAndTypeInfo::PossiblyUndefined}});
+  // Make variable to column map.
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns;
+  for (const auto& [index, columnEntry] :
+       ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
+    std::string columnName;
+    ColumnIndexAndTypeInfo::UndefStatus undefStatus =
+        ColumnIndexAndTypeInfo::PossiblyUndefined;
+
+    // For backward compatibility, also accept columns as strings not
+    // object.
+    if (columnEntry.is_string()) {
+      columnName = columnEntry.get<std::string>();
+    } else {
+      // Restore column name and undef status.
+      AD_CORRECTNESS_CHECK(columnEntry.is_object());
+      columnName = columnEntry.at("name").get<std::string>();
+      undefStatus = columnEntry.at("always_defined").get<bool>()
+                        ? ColumnIndexAndTypeInfo::AlwaysDefined
+                        : ColumnIndexAndTypeInfo::PossiblyUndefined;
+    }
+
+    varToColMap_.insert({Variable{std::move(columnName)},
+                         {static_cast<ColumnIndex>(index), undefStatus}});
+    if (undefStatus == ColumnIndexAndTypeInfo::PossiblyUndefined) {
+      possiblyUndefinedColumns.insert(index);
+    }
   }
 
   // Restore original query string and parse it for query analysis.
@@ -393,10 +417,14 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         parsedQuery_.value(), varToColMap_);
   }
 
-  // Read permutation, and deactivate the graph post-processing of
-  // `CompressedRelationReader`, including row deduplication, which is not the
-  // intended behavior for materialized views.
-  permutation_->loadFromDisk(filename, false, false);
+  // Read the permutation and set its type to `MATERIALIZED_VIEW`. This
+  // deactivates the graph post-processing of `CompressedRelationReader`,
+  // including row deduplication, which is not the intended behavior for
+  // materialized views. Also provide the `Permutation` with the set of columns
+  // potentially containing undef values.
+  permutation_->loadFromDisk(filename, false,
+                             Permutation::Type::MATERIALIZED_VIEW,
+                             std::move(possiblyUndefinedColumns));
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
