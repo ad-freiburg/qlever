@@ -45,7 +45,17 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
  public:
+  // We propagate part of the `LimitOffsetClause` to the child operation to
+  // potentially speed it up and save memory, but `OptionalJoin` does not
+  // actually apply its own `LimitOffsetClause` to itself, this still needs to
+  // be done by the `Operation` base class.
+  LimitOffsetSupport supportsLimitOffset() const override {
+    return LimitOffsetSupport::PARTIAL;
+  }
+
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
