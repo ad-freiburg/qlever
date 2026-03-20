@@ -1179,9 +1179,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
             viewScanWithBind));
   }
 
-  // TODO<ullingerc> Tests for automatic push down of `ql:envelopeLowerLeft` and
-  // `ql:envelopeUpperRight` by `SpatialJoin`.
-
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
