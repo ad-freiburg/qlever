@@ -1492,22 +1492,32 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
         FILTER geof:sfIntersects(?geometry1, ?geometry2)
     }
   )";
-  qpExpect(qlv, spatialJoinQuery,
-           h::spatialJoin(
-               -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
-               PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
-               SpatialJoinType::INTERSECTS,
-               // Push down of automatic `BIND`s through a `Join`.
-               h::Join(viewScan(viewName, "?osm_id1",
-                                "?_ql_materialized_view_p", "?geometry1", 4,
-                                {{3, V{"?_ql_sj_ll_geometry1"}},
-                                 {4, V{"?_ql_sj_ur_geometry1"}}}),
-                       h::IndexScanFromStrings("?osm_id1", "<is>", "<demo>")),
-               // Push down of automatic `BIND`s into direct child.
-               viewScan(viewName, "?osm_id2", "?_ql_materialized_view_p",
-                        "?geometry2", 4,
-                        {{3, V{"?_ql_sj_ll_geometry2"}},
-                         {4, V{"?_ql_sj_ur_geometry2"}}})));
+  {
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(spatialJoinQuery);
+    auto sjMatcher = h::spatialJoin(
+        -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
+        PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+        SpatialJoinType::INTERSECTS,
+        // Push down of automatic `BIND`s through a `Join`.
+        h::Join(viewScan(viewName, "?osm_id1", "?_ql_materialized_view_p",
+                         "?geometry1", 4,
+                         {{3, V{"?_ql_sj_ll_geometry1"}},
+                          {4, V{"?_ql_sj_ur_geometry1"}}}),
+                h::IndexScanFromStrings("?osm_id1", "<is>", "<demo>")),
+        // Push down of automatic `BIND`s into direct child.
+        viewScan(
+            viewName, "?osm_id2", "?_ql_materialized_view_p", "?geometry2", 4,
+            {{3, V{"?_ql_sj_ll_geometry2"}}, {4, V{"?_ql_sj_ur_geometry2"}}}));
+    // The query plan contains the pushed down columns.
+    EXPECT_THAT(*qet, sjMatcher);
+
+    // Prefiltering using the pushed down columns is actually applied on
+    // evaluation of the query plan.
+    auto res = qet->getResult();
+    const auto& runtimeInfo = qet->getRootOperation()->runtimeInfo().details_;
+    ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
+    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 2);
+  }
 }
 
 // Example queries for testing query rewriting.
