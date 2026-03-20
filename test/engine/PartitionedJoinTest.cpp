@@ -289,3 +289,107 @@ TEST(PartitionBucketTest, EvictionRoundTrip) {
   // Clean up temp directory.
   std::filesystem::remove_all(tempDir);
 }
+
+// Test: forEachBlock yields correct rows block by block.
+TEST(PartitionBucketTest, ForEachBlockBasic) {
+  auto alloc = makeAllocator();
+  duckdb::BufferPool pool(1ULL << 25, false);  // 32 MB.
+  duckdb::StorageConfig config;
+  duckdb::StandardBufferManager manager(pool, config);
+  PartitionBucket bucket(2, alloc, manager);
+
+  // Insert 5 rows.
+  for (int i = 1; i <= 5; ++i) {
+    IdTable row(2, alloc);
+    row.push_back({Id::makeFromInt(i), Id::makeFromInt(i * 10)});
+    bucket.append(row[0]);
+  }
+
+  EXPECT_EQ(bucket.numRows(), 5u);
+
+  // Collect all rows via forEachBlock.
+  std::vector<std::pair<int64_t, int64_t>> collected;
+  bucket.forEachBlock([&](IdTable& block) {
+    for (size_t r = 0; r < block.size(); ++r) {
+      collected.emplace_back(block(r, 0).getInt(), block(r, 1).getInt());
+    }
+  });
+
+  ASSERT_EQ(collected.size(), 5u);
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_EQ(collected[i].first, i + 1);
+    EXPECT_EQ(collected[i].second, (i + 1) * 10);
+  }
+}
+
+// Test: forEachBlock with multiple pages.
+TEST(PartitionBucketTest, ForEachBlockMultiplePages) {
+  auto alloc = makeAllocator();
+  duckdb::BufferPool pool(1ULL << 25, false);  // 32 MB.
+  duckdb::StorageConfig config;
+  duckdb::StandardBufferManager manager(pool, config);
+  PartitionBucket bucket(2, alloc, manager);
+
+  constexpr size_t numRows = 50000;
+  for (size_t i = 1; i <= numRows; ++i) {
+    IdTable row(2, alloc);
+    row.push_back({Id::makeFromInt(static_cast<int>(i)),
+                   Id::makeFromInt(static_cast<int>(i * 10))});
+    bucket.append(row[0]);
+  }
+
+  EXPECT_EQ(bucket.numRows(), numRows);
+
+  // Collect all rows and count blocks.
+  size_t totalRows = 0;
+  size_t numBlocks = 0;
+  bucket.forEachBlock([&](IdTable& block) {
+    ++numBlocks;
+    for (size_t r = 0; r < block.size(); ++r) {
+      ++totalRows;
+      size_t expected = totalRows;
+      EXPECT_EQ(block(r, 0), Id::makeFromInt(static_cast<int>(expected)));
+      EXPECT_EQ(block(r, 1), Id::makeFromInt(static_cast<int>(expected * 10)));
+    }
+  });
+
+  EXPECT_EQ(totalRows, numRows);
+  // With 2 columns at 16 bytes/row and ~16383 rows per block, we expect
+  // multiple blocks.
+  EXPECT_GT(numBlocks, 1u);
+}
+
+// Test: forEachBlock with eviction round-trip.
+TEST(PartitionBucketTest, ForEachBlockEviction) {
+  auto alloc = makeAllocator();
+  constexpr size_t blockAllocActual = 266240;
+  duckdb::BufferPool pool(3 * blockAllocActual, false);
+  duckdb::StorageConfig config;
+  std::string tempDir = "PartitionBucketTest_forEachBlock_eviction_tmp";
+  config.temporary_directory = tempDir;
+  std::filesystem::create_directories(tempDir);
+  duckdb::StandardBufferManager manager(pool, config);
+
+  constexpr size_t numRows = 50000;
+  PartitionBucket bucket(2, alloc, manager);
+
+  for (size_t i = 1; i <= numRows; ++i) {
+    IdTable row(2, alloc);
+    row.push_back({Id::makeFromInt(static_cast<int>(i)),
+                   Id::makeFromInt(static_cast<int>(i * 10))});
+    bucket.append(row[0]);
+  }
+
+  // Collect all rows via forEachBlock (blocks may be evicted and re-pinned).
+  size_t totalRows = 0;
+  bucket.forEachBlock([&](IdTable& block) {
+    for (size_t r = 0; r < block.size(); ++r) {
+      ++totalRows;
+      EXPECT_EQ(block(r, 0), Id::makeFromInt(static_cast<int>(totalRows)));
+      EXPECT_EQ(block(r, 1), Id::makeFromInt(static_cast<int>(totalRows * 10)));
+    }
+  });
+
+  EXPECT_EQ(totalRows, numRows);
+  std::filesystem::remove_all(tempDir);
+}

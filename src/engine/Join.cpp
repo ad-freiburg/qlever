@@ -220,11 +220,16 @@ size_t Join::getResultWidth() const {
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> Join::resultSortedOn() const {
-  if (keepJoinColumn_) {
-    return {_leftJoinCol};
-  } else {
+  if (!keepJoinColumn_) {
     return {};
   }
+  // If either child is a Sort, the partitioned join path might be used,
+  // which does not produce sorted output.
+  if (std::dynamic_pointer_cast<Sort>(_left->getRootOperation()) ||
+      std::dynamic_pointer_cast<Sort>(_right->getRootOperation())) {
+    return {};
+  }
+  return {_leftJoinCol};
 }
 
 // _____________________________________________________________________________
@@ -819,16 +824,12 @@ Result Join::computeResultForPartitionedJoin(
         // Release the unsorted result to free memory.
         unsortedResult.reset();
 
-        // Step 4: For each partition with non-empty bucket, sort bucket and
-        // merge-join against the corresponding IndexScan blocks.
+        // Step 4: For each partition with non-empty bucket, materialize the
+        // scan blocks and binary-search join against the bucket blocks.
         for (size_t i = 0; i < partitions.size(); ++i) {
           if (buckets[i].empty()) {
             continue;
           }
-          checkCancellation();
-
-          // Materialize and sort the bucket by join column.
-          IdTable sortedBucket = buckets[i].materializeAndSort(_leftJoinCol);
           checkCancellation();
 
           // Extract the block subset for this partition.
@@ -836,22 +837,40 @@ Result Join::computeResultForPartitionedJoin(
               blockVec.begin() + partitions[i].beginBlockIdx,
               blockVec.begin() + partitions[i].endBlockIdxWithOverlap);
 
-          // Load scan blocks for this partition.
+          // Load and materialize scan blocks into one sorted IdTable.
           auto scanBlocks = scan->getLazyScan(std::move(partitionBlocks));
-          auto scanRange =
-              convertGeneratorFromScan(std::move(scanBlocks), *scan);
+          IdTable scanTable(scan->getResultWidth(), allocator());
+          for (auto& block : scanBlocks) {
+            size_t oldSize = scanTable.size();
+            size_t blockRows = block.size();
+            scanTable.resize(oldSize + blockRows);
+            for (size_t c = 0; c < block.numColumns(); ++c) {
+              std::memcpy(scanTable.getColumn(c).data() + oldSize,
+                          block.getColumn(c).data(), blockRows * sizeof(Id));
+            }
+          }
+          checkCancellation();
+          if (scanTable.empty()) continue;
 
-          // Wrap the sorted bucket as a single-element range for the zipper
-          // join. Apply the left permutation to put join column first.
-          auto leftPermuted =
-              sortedBucket.asColumnSubsetView(joinColMap.permutationLeft());
-          auto leftBlock = std::array{ad_utility::makeIdTableAndFirstCols<1>(
-              std::move(leftPermuted), LocalVocab{})};
+          // The scan's join column is column 0 and already sorted.
+          auto scanJoinCol = scanTable.getColumn(0);
 
-          // Merge-join this partition. The scan output already has the
-          // join column as its first column, so no permutation needed.
-          ad_utility::zipperJoinForBlocksWithoutUndef(leftBlock, scanRange,
-                                                      std::less{}, rowAdder);
+          // Stream through bucket blocks one at a time via binary search.
+          buckets[i].forEachBlock([&](IdTable& bucketBlock) {
+            auto bucketPermuted =
+                bucketBlock.asColumnSubsetView(joinColMap.permutationLeft());
+            rowAdder.setInput(bucketPermuted, scanTable);
+
+            for (size_t bIdx = 0; bIdx < bucketPermuted.size(); ++bIdx) {
+              Id joinVal = bucketPermuted(bIdx, 0);
+              auto [lower, upper] = std::equal_range(
+                  scanJoinCol.begin(), scanJoinCol.end(), joinVal);
+              for (auto it = lower; it != upper; ++it) {
+                size_t sIdx = static_cast<size_t>(it - scanJoinCol.begin());
+                rowAdder.addRow(bIdx, sIdx);
+              }
+            }
+          });
 
           checkCancellation();
         }

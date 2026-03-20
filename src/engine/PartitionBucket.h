@@ -90,6 +90,41 @@ class PartitionBucket {
     return result;
   }
 
+  // Call `callback(IdTable&)` for each block's worth of rows, one block at a
+  // time. Only one block is pinned at a time, keeping RAM usage constant. After
+  // iteration, all blocks are released.
+  template <typename Callback>
+  void forEachBlock(Callback callback) {
+    for (size_t b = 0; b < completedBlocks_.size(); ++b) {
+      auto handle = bufferManager_.Pin(completedBlocks_[b]);
+      const Id* src = reinterpret_cast<const Id*>(handle.Ptr());
+      IdTable table(numColumns_, allocator_);
+      table.resize(completedBlockRowCounts_[b]);
+      for (size_t r = 0; r < completedBlockRowCounts_[b]; ++r) {
+        for (size_t c = 0; c < numColumns_; ++c) {
+          table(r, c) = src[r * numColumns_ + c];
+        }
+      }
+      callback(table);
+    }
+    // Current (still pinned) page.
+    if (currentPageRows_ > 0) {
+      const Id* src = reinterpret_cast<const Id*>(currentHandle_.Ptr());
+      IdTable table(numColumns_, allocator_);
+      table.resize(currentPageRows_);
+      for (size_t r = 0; r < currentPageRows_; ++r) {
+        for (size_t c = 0; c < numColumns_; ++c) {
+          table(r, c) = src[r * numColumns_ + c];
+        }
+      }
+      callback(table);
+    }
+    // Release all blocks.
+    completedBlocks_.clear();
+    completedBlockRowCounts_.clear();
+    currentHandle_ = duckdb::BufferHandle{};
+  }
+
   bool empty() const { return numRows_ == 0; }
   size_t numRows() const { return numRows_; }
 
