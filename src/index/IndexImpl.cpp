@@ -1306,7 +1306,7 @@ void IndexImpl::readConfiguration() {
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
-                 EncodedIriManagerWithAlwaysOnPrefixes{});
+                 EncodedIriManager{});
   loadDataMember(
       "graphNamespaceManager", graphNamespaceManager_,
       GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
@@ -1796,8 +1796,8 @@ CPP_template_def(typename... NextSorter)(requires(
         if (graph.getDatatype() != Datatype::EncodedVal) {
           return;
         }
-        auto [prefix, payload] = EncodedIriManagerWithAlwaysOnPrefixes::
-            splitIntoPrefixIdxAndDecodedPayload(graph);
+        auto [prefix, payload] =
+            EncodedIriManager::splitIntoPrefixIdxAndDecodedPayload(graph);
         if (prefix != newGraphPrefixIdx) {
           return;
         }
@@ -1926,8 +1926,8 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ = EncodedIriManagerWithAlwaysOnPrefixes{
-      std::move(prefixesWithoutAngleBrackets)};
+  encodedIriManager_ =
+      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {

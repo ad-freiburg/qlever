@@ -173,4 +173,43 @@ TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
     testNumber(intGenerator());
   }
 }
+// _____________________________________________________________________________
+struct TestHardcodedPrefixes {
+  static constexpr std::array<std::string_view, 1> value = {
+      "http://example.org/always/"};
+};
+
+TEST(EncodedIriManager, HardcodedPrefixes) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  // Default constructor includes hardcoded prefix.
+  Manager em;
+  auto id = em.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em.toString(id.value()), "<http://example.org/always/42>");
+
+  // Constructor with additional prefixes also includes hardcoded.
+  Manager em2{{"http://other.org/"}};
+  auto id2 = em2.encode("<http://example.org/always/99>");
+  ASSERT_TRUE(id2.has_value());
+  auto id3 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id3.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, HardcodedPrefixesJson) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  Manager em{{"http://other.org/"}};
+  nlohmann::json j = em;
+  Manager em2 = j.get<Manager>();
+  auto id = em2.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");
+  auto id2 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id2.has_value());
+}
+
 }  // namespace

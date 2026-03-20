@@ -55,9 +55,18 @@ constexpr ctll::fixed_string digitsCaptureGroup = "digits";
 // if 4 times the number of digits is larger than `NumBitsTotal - NumBitsTags`,
 // the IRI will not be encoded (but stored as a regular IRI). See the bottom of
 // the file for the default values of `NumBitsTotal` and `NumBitsTags`.
-//
-template <size_t NumBitsTotal, size_t NumBitsTags>
+struct NoHardcodedPrefixes {
+  // The fixed prefixes have to be wrapped into a struct because
+  // `std::array<std::string_view>` cannot be passed as a template parameter
+  // before C++20.
+  static constexpr std::array<std::string_view, 0> value = {};
+};
+
+template <size_t NumBitsTotal, size_t NumBitsTags,
+          typename HardcodedPrefixesT = NoHardcodedPrefixes>
 class EncodedIriManagerImpl {
+  static constexpr const auto& HardcodedPrefixes = HardcodedPrefixesT::value;
+
  public:
   static constexpr size_t NumBitsEncoding = NumBitsTotal - NumBitsTags;
 
@@ -76,13 +85,17 @@ class EncodedIriManagerImpl {
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
   // By default, `prefixes_` is empty, so no IRI will be encoded.
-  EncodedIriManagerImpl() = default;
+  EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
   // Construct from the list of prefixes. The prefixes have to be specified
   // without any brackes, so e.g. "http://example.org/" if IRIs of the form
   // `<http://example.org/1234>` should be encoded.
   explicit EncodedIriManagerImpl(
       std::vector<std::string> prefixesWithoutAngleBrackets) {
+    // Add hardcoded prefixes.
+    for (const auto& prefix : HardcodedPrefixes) {
+      prefixesWithoutAngleBrackets.emplace_back(prefix);
+    }
     if (prefixesWithoutAngleBrackets.empty()) {
       return;
     }
@@ -240,6 +253,11 @@ class EncodedIriManagerImpl {
                         EncodedIriManagerImpl& encodedIriManager) {
     encodedIriManager.prefixes_ =
         static_cast<std::vector<std::string>>(j[jsonKey_]);
+    for (const auto& hardcoded : HardcodedPrefixes) {
+      AD_CORRECTNESS_CHECK(ql::ranges::find(encodedIriManager.prefixes_,
+                                            absl::StrCat("<", hardcoded)) !=
+                           encodedIriManager.prefixes_.end());
+    }
   }
 
   // Hash support for use in `TestIndexConfig`.
@@ -314,6 +332,11 @@ class EncodedIriManagerImpl {
 // encoding, 8 bits are used for the prefixes (which allows up to 256
 // prefixes). This leaves 52 bits for the digits, so up to 13 digits can be
 // encoded. Additionally the prefix for newly created graphs is always set.
-using EncodedIriManager = EncodedIriManagerImpl<Id::numDataBits, 8>;
+struct AlwaysOnPrefixes {
+  static constexpr std::array<std::string_view, 1> value = {
+      QLEVER_NEW_GRAPH_PREFIX};
+};
+using EncodedIriManager =
+    EncodedIriManagerImpl<Id::numDataBits, 8, AlwaysOnPrefixes>;
 
 #endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H
