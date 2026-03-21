@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
+#include <gtest/gtest_prod.h>
+
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -303,7 +305,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+  ad_utility::TaskQueue<false> blockWriteQueue_ = makeBlockWriteQueue();
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -330,7 +332,7 @@ class CompressedRelationWriter {
       std::function<void(ql::span<const CompressedRelationMetadata>)>;
 
   struct WriterAndCallback {
-    CompressedRelationWriter& writer_;
+    std::unique_ptr<CompressedRelationWriter> writer_;
     MetadataCallback callback_;
   };
 
@@ -521,6 +523,13 @@ class CompressedRelationWriter {
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
       T inputs, std::string filename, ad_utility::MemorySize blocksize);
+
+  // Create a `TaskQueue` for the compression and writing of blocks. The number
+  // of threads is determined by the runtime parameter
+  // "permutation-writer-num-threads".
+  static ad_utility::TaskQueue<false> makeBlockWriteQueue();
+  FRIEND_TEST(CompressedRelationWriter,
+              isInitializedWithCorrectNumberOfThreads);
 };
 
 using namespace std::string_view_literals;
@@ -558,6 +567,9 @@ class CompressedRelationReader {
     // triples from `desiredGraphs_` and therefore doesn't have to be read from
     // disk, and if this fact can be determined by `blockMetadata` alone.
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
+
+    // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
+    void deleteGraphColumnIfNecessary(IdTable& block) const;
 
    private:
     // Return a lambda that returns true if `desiredGraphs_` allows the given
@@ -697,9 +709,17 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  // This setting controls whether filtering on the graph column and
+  // deduplication of rows is performed during scanning. Deactivating this is
+  // used for materialized views where repeated rows are meaningful.
+  bool useGraphPostProcessing_;
+
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
-      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing = true)
+      : allocator_{std::move(allocator)},
+        file_{std::move(file)},
+        useGraphPostProcessing_{useGraphPostProcessing} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of

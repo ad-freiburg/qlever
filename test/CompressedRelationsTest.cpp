@@ -4,12 +4,15 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
 
@@ -168,16 +171,17 @@ compressedRelationTestWriteCompressedRelations(
   };
 
   // First create the on-disk permutation.
-  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
-                                  blocksize};
+  auto writer = std::make_unique<CompressedRelationWriter>(
+      numColumns, ad_utility::File{filename, "w"}, blocksize);
   std::vector<CompressedRelationMetadata> metaData;
   CompressedRelationWriter::WriterAndCallback wc1{
-      writer, [&](ql::span<const CompressedRelationMetadata> metadata) {
+      std::move(writer),
+      [&](ql::span<const CompressedRelationMetadata> metadata) {
         metaData.insert(metaData.end(), metadata.begin(), metadata.end());
       }};
 
   auto res = CompressedRelationWriter::createPermutation(
-      wc1, ad_utility::InputRangeTypeErased{generator(5)},
+      std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
@@ -1156,6 +1160,38 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
+  // Regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2632
+  auto* qec = ad_utility::testing::getQec();
+  auto& index = qec->getIndex();
+  auto sharedLocatedTriplesSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto permutationEnum = Permutation::Enum::PSO;
+  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+
+  ScanSpecification scanSpecification{std::nullopt, std::nullopt, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
+      std::move(scanSpecification),
+      permutation.getAugmentedMetadataForPermutation(
+          *sharedLocatedTriplesSnapshot)};
+
+  std::vector<ColumnIndex> additionalColumns{
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto blocks =
+      index.getImpl()
+          .getPermutation(permutationEnum)
+          .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
+                    cancellationHandle, *sharedLocatedTriplesSnapshot);
+  for (const IdTable& block : blocks) {
+    EXPECT_EQ(block.numColumns(), 4);
+  }
+}
+
 // Test the correct setting of the metadata for the contained graphs.
 TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   std::vector<RelationInput> inputs;
@@ -1294,6 +1330,52 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
         << "Failed with blocksize " << blocksize.getBytes();
+  }
+}
+
+namespace ad_utility {
+std::pair<size_t, size_t> getThreadCountAndTaskSize(
+    const TaskQueue<false>& taskQueue) {
+  return {taskQueue.threads_.size(), taskQueue.queueMaxSize_};
+}
+}  // namespace ad_utility
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
+  auto threads = std::thread::hardware_concurrency();
+  if (threads == 1) {
+    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
+  }
+  {
+    // Check if is is limited to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1337);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if is is expanded to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if minimum of 4 tasks is honored.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
 }
 

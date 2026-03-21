@@ -14,6 +14,7 @@
 
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -143,6 +144,11 @@ struct IndexBuilderConfig : CommonConfig {
   float bScoringParam_ = 0.75;
   float kScoringParam_ = 1.75;
 
+  // Materialized views to be written after normal index build is complete.
+  using WriteMaterializedViews =
+      std::vector<std::pair<std::string, std::string>>;
+  WriteMaterializedViews writeMaterializedViews_;
+
   // Assert that the given configuration is valid.
   void validate() const;
 
@@ -169,6 +175,23 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions, or query
+  // that only rely on the `NamedQueryCache` which can be populated
+  // separately).
+  bool doNotLoadPermutations_ = false;
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  std::vector<std::string> serviceAllowedIriPrefixes_;
+
+  // If set to true, caching is disabled for all operations. Default is
+  // to for each operation query the corresponding runtime parameter.
+  QueryExecutionContext::DisableCaching disableCaching_ =
+      QueryExecutionContext::DisableCaching::FromRuntimeParameter;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -183,6 +206,7 @@ class Qlever {
   mutable NamedResultCache namedResultCache_;
   mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
+  QueryExecutionContext::DisableCaching disableCaching_;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -239,6 +263,7 @@ class Qlever {
 
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
+  // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
 
   // Write a new materialized view with `name` to disk and store the result of
@@ -248,6 +273,25 @@ class Qlever {
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
   void loadMaterializedView(std::string name) const;
+
+  // Check if a materialized view with the given name is currently loaded.
+  bool isMaterializedViewLoaded(const std::string& name) const;
+
+  // Write the contents of the `NamedResultCache` to disk.
+  template <typename Serializer>
+  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
+    namedResultCache_.writeToSerializer(serializer);
+  }
+
+  // Read the contents of the `NamedResultCache` from disk.
+  template <typename Serializer>
+  void readNamedResultCacheFromDisk(Serializer& serializer) {
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         *index_.getBlankNodeManager());
+  }
+
+  // Low-level access to the QLever API, use with care.
+  Index& index() { return index_; }
 };
 }  // namespace qlever
 

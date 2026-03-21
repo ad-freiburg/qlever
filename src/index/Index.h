@@ -48,10 +48,8 @@ class Index {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
                                                 internal)
 
-    static NumNormalAndInternal fromNormalAndTotal(size_t normal,
-                                                   size_t total) {
-      AD_CONTRACT_CHECK(total >= normal);
-      return {normal, total - normal};
+    static NumNormalAndInternal fromNormal(size_t normal) {
+      return {normal, 0};
     }
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
@@ -112,7 +110,6 @@ class Index {
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
-  [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
@@ -189,6 +186,8 @@ class Index {
   bool& loadAllPermutations();
 
   bool& addHasWordTriples();
+
+  bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 

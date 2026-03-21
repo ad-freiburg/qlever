@@ -245,16 +245,16 @@ TEST_F(GroupByHashMapOptimizationTest,
   data.reset();
   EXPECT_EQ(getResultString(), "");
   addStringWithLangTag("a", "en");
-  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  EXPECT_EQ(getResultString(false), "\"a\"");
   addStringWithLangTag("b", "en");
-  EXPECT_EQ(getResultString(false), "\"a;b\"@en");
+  EXPECT_EQ(getResultString(false), "\"a;b\"");
   addStringWithLangTag("c", "de");
   EXPECT_EQ(getResultString(false), "\"a;b;c\"");
 
   data.reset();
   EXPECT_EQ(getResultString(), "");
   addStringWithLangTag("a", "en");
-  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  EXPECT_EQ(getResultString(false), "\"a\"");
   addString("b");
   EXPECT_EQ(getResultString(false), "\"a;b\"");
 }

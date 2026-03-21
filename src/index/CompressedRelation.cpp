@@ -6,6 +6,8 @@
 
 #include "index/CompressedRelation.h"
 
+#include <thread>
+
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -13,15 +15,12 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphComputation.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
-#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
@@ -343,13 +342,18 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 }
 
 // _____________________________________________________________________________
-bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
-    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
-  bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
+void CompressedRelationReader::FilterDuplicatesAndGraphs::
+    deleteGraphColumnIfNecessary(IdTable& block) const {
   if (deleteGraphColumn_) {
     block.deleteColumn(graphColumn_);
   }
+}
 
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
+    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+  bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
+  deleteGraphColumnIfNecessary(block);
   bool filteredByDuplicates = filterDuplicatesIfNecessary(block, blockMetadata);
   return filteredByGraph || filteredByDuplicates;
 }
@@ -818,12 +822,18 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // Set `beginIdx` and `endIdx` s.t. that they only represent the range in
   // `block` where the column with the `columnIdx` matches the `relevantId`.
 
+  // Those are the column indices from the scanned result (which might be
+  // different from the original indices, because additional columns might be
+  // missing) that will become part of the final result.
+  std::vector<ColumnIndex> indicesToCopy;
+  indicesToCopy.reserve(scanConfig.scanColumns_.size());
   // Helper lambda that narrows down the range of the block so that all values
   // in column `columnIdx` are equal to `relevantId`. If `relevantId` is
   // `std::nullopt`, the range is not narrowed down.
-  auto filterColumn = [&block, &beginIdx, &endIdx](std::optional<Id> relevantId,
-                                                   size_t columnIdx) {
+  auto filterColumn = [&block, &beginIdx, &endIdx, &indicesToCopy, &scanConfig](
+                          std::optional<Id> relevantId, ColumnIndex columnIdx) {
     if (!relevantId.has_value()) {
+      indicesToCopy.push_back(columnIdx);
       return;
     }
     const auto& column = block.getColumn(columnIdx);
@@ -831,6 +841,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
+    // The function `getFirstAndLastTripleIgnoringGraph` is the only function
+    // where the passed `scanConfig` isn't created from the passed `scanSpec`.
+    // Handle this case so that we don't drop the fixed columns in that case.
+    if (ad_utility::contains(scanConfig.scanColumns_, columnIdx)) {
+      indicesToCopy.push_back(columnIdx);
+    }
   };
 
   // Now narrow down the range of the block by first `scanSpec.col0Id()`,
@@ -840,31 +856,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   filterColumn(scanSpec.col1Id(), 1);
   filterColumn(scanSpec.col2Id(), 2);
 
-  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
-  DecompressedBlock result{scanConfig.scanColumns_.size() -
-                               static_cast<size_t>(manuallyDeleteGraphColumn),
-                           allocator_};
-  result.resize(endIdx - beginIdx);
-  size_t i = 0;
-  const auto& columnIndices = scanConfig.scanColumns_;
-
-  // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
-  // column. Additionally, it means that the graph column has already been
-  // dropped by the call to `readAndDecompressBlock` (see above), so we have to
-  // shift the column origins above the graph column down by one.
-  for (const auto& inputColIdx :
-       columnIndices | ql::views::filter([&](const auto& idx) {
-         return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
-       }) | ql::views::transform([&](const auto& idx) {
-         return manuallyDeleteGraphColumn && idx > ADDITIONAL_COLUMN_GRAPH_ID
-                    ? idx - 1
-                    : idx;
-       })) {
-    const auto& inputCol = block.getColumn(inputColIdx);
-    ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
-                     result.getColumn(i).begin());
-    ++i;
+  // Copy all additional columns as-is.
+  for (ColumnIndex i : ad_utility::integerRange(allAdditionalColumns.size())) {
+    indicesToCopy.push_back(3 + i);
   }
+
+  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
+  DecompressedBlock result{indicesToCopy.size(), allocator_};
+  result.insertAtEnd(block, beginIdx, endIdx, indicesToCopy);
 
   // Return the result.
   return result;
@@ -1176,8 +1175,15 @@ CompressedRelationReader::decompressAndPostprocessBlock(
         includeGraphColumn);
     hasUpdates = true;
   }
-  bool wasPostprocessed =
-      scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  bool wasPostprocessed = false;
+  if (useGraphPostProcessing_) {
+    wasPostprocessed =
+        scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  } else {
+    // If we do not use graph postprocessing, we might still need to remove the
+    // extra column.
+    scanConfig.graphFilter_.deleteGraphColumnIfNecessary(decompressedBlock);
+  }
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }
 
@@ -1218,45 +1224,6 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   auto offsetInFile = file->tell();
   file->write(compressedBlock.data(), compressedBlock.size());
   return {offsetInFile, compressedSize};
-};
-
-// Find out whether the sorted `block` contains duplicates and whether it
-// contains only a few distinct graphs such that we can store this information
-// in the block metadata.
-static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const IdTable& block) {
-  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
-  // Return true iff the block contains duplicates when only considering the
-  // actual triple of S, P, and O.
-  auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
-                                               ad_utility::noop);
-    return numDistinct != block.numRows();
-  };
-
-  // Return the contained graphs, or  `nullopt` if there are too many of them.
-  auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
-    std::vector<Id> graphColumn;
-    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                     std::back_inserter(graphColumn));
-    ql::ranges::sort(graphColumn);
-    auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
-    size_t numGraphs = endOfUnique - graphColumn.begin();
-    if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-      return std::nullopt;
-    }
-    // Note: we cannot simply resize `graphColumn`, as this doesn't free
-    // the memory that is not needed anymore. We can do either `resize +
-    // shrink_to_fit`, which is not guaranteed by the standard, but works in
-    // practice. We choose the alternative of simply returning a new vector
-    // with the correct capacity.
-    return std::vector<Id>(graphColumn.begin(),
-                           graphColumn.begin() + numGraphs);
-  };
-  return {hasDuplicates(), graphInfo()};
 }
 
 // _____________________________________________________________________________
@@ -1531,6 +1498,21 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
   // `finishLargeRelation` was called before a new relation was started.
   currentCol0Id_ = Id::makeUndefined();
   return md;
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
+  auto threadCount = static_cast<uint32_t>(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
+  if (threadCount == 0) {
+    threadCount = std::thread::hardware_concurrency();
+  } else {
+    threadCount =
+        std::min<uint32_t>(threadCount, std::thread::hardware_concurrency());
+  }
+  // Allow at least up to 4 tasks in the queue.
+  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
+  return ad_utility::TaskQueue<false>{queueSize, threadCount};
 }
 
 // _____________________________________________________________________________
