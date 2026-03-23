@@ -33,18 +33,17 @@ Id StringMapping::remapId(Id id) {
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by
   // different mechanism.
-  static constexpr std::array allowedDatatypes{VocabIndex, LocalVocabIndex,
-                                               TextRecordIndex, WordVocabIndex};
+  static constexpr std::array allowedDatatypes{
+      VocabIndex, LocalVocabIndex, TextRecordIndex, WordVocabIndex, EncodedVal};
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`
   // (see above), or `BlankNodeIndex` (which also requires special handling and
-  // remapping, but cannot be handled by the `StringMapping`.
+  // remapping, but cannot be handled by the `StringMapping`).
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
-             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
-             datatype == EncodedVal;
+             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex;
     };
     for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
       if (!checkType(static_cast<Datatype>(i))) {

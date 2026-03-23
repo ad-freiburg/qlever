@@ -194,7 +194,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       "application/qlever-export+octet-stream;q=0.9,application/"
       "sparql-results+json;q=0.1";
   static constexpr std::string_view acceptWithoutBinaryExport =
-      "application/sparql-results+json;q=0.1";
+      "application/sparql-results+json";
 
   const std::string_view accept =
       getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()

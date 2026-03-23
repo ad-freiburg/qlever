@@ -14,6 +14,7 @@
 #include <absl/functional/bind_front.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/Result.h"
 #include "engine/StringMapping.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
@@ -112,11 +113,23 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
                               serializer.data().size()};
   }
 
-  // Maps strings to reusable ids.
-  StringMapping stringMapping;
-
   // Iterate over the result and yield the bindings.
   uint64_t resultSize = 0;
+
+  // For zero columns, only emit the total row count.
+  if (columns.empty()) {
+    for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
+             limitAndOffset, *result, resultSize)) {
+      for ([[maybe_unused]] uint64_t i : range) {
+        cancellationHandle->throwIfCancelled();
+      }
+    }
+    co_yield raw(resultSize);
+    co_return;
+  }
+
+  // Non-zero columns: export IDs with periodic vocab flushes.
+  StringMapping stringMapping;
   uint64_t numRowsInBatch = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
            limitAndOffset, *result, resultSize)) {
@@ -138,17 +151,10 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
     }
   }
 
-  std::string trailingVocab = BinaryExportHelpers::writeVectorOfStrings(
+  // Always send the trailing vocab so the importer can finalize the last batch.
+  co_yield raw(vocabMarker);
+  co_yield BinaryExportHelpers::writeVectorOfStrings(
       stringMapping.flush(qet.getQec()->getIndex()));
-  if (!trailingVocab.empty()) {
-    co_yield raw(vocabMarker);
-    co_yield trailingVocab;
-  }
-
-  // If there are no variables, just export the total number of rows.
-  if (columns.empty()) {
-    co_yield raw(resultSize);
-  }
 }
 
 // _____________________________________________________________________________
@@ -231,14 +237,11 @@ ad_utility::HashMap<uint8_t, uint8_t> BinaryExportHelpers::getPrefixMapping(
   return prefixMapping;
 }
 
-// _____________________________________________________________________________
-Result importBinaryHttpResponse(bool requestLaziness,
-                                HttpOrHttpsResponse response,
-                                const QueryExecutionContext& qec,
-                                std::vector<ColumnIndex> resultSortedOn) {
-  // TODO<RobinTF> honor laziness setting.
-  (void)requestLaziness;
-
+// Core coroutine that reads the binary response and yields one
+// `IdTableVocabPair` per vocab batch.
+Result::Generator importBinaryGenerator(HttpOrHttpsResponse response,
+                                        const QueryExecutionContext& qec,
+                                        bool yieldOnce = false) {
   auto bytes = response.body_ | ql::views::join;
   auto it = ql::ranges::begin(bytes);
   auto end = ql::ranges::end(bytes);
@@ -257,14 +260,13 @@ Result importBinaryHttpResponse(bool requestLaziness,
   // Done with the serializer for now, reextracting the iterator.
   it = itReader.it;
 
-  IdTable result{numColumns, qec.getAllocator()};
-
-  // Special case 0 columns. In this case just return the correct amount of
-  // columns.
+  // Special case 0 columns: yield a single pair with the correct row count.
   if (variableNames.empty()) {
     auto numRows = BinaryExportHelpers::read<uint64_t>(it, end);
+    IdTable result{0, qec.getAllocator()};
     result.resize(numRows);
-    return Result{std::move(result), std::move(resultSortedOn), LocalVocab{}};
+    co_yield Result::IdTableVocabPair{std::move(result), LocalVocab{}};
+    co_return;
   }
 
   // TODO<RobinTF> check if variable names do actually match expected names.
@@ -278,6 +280,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
                                          bits, blankNodeMapping);
   };
 
+  IdTable currentBatch{numColumns, qec.getAllocator()};
   // At which index we need to start converting values.
   size_t dirtyIndex = 0;
 
@@ -286,20 +289,46 @@ Result importBinaryHttpResponse(bool requestLaziness,
     if (firstValue == vocabMarker) {
       auto transmittedStrings =
           BinaryExportHelpers::readVectorOfStrings(it, end);
-      BinaryExportHelpers::rewriteVocabIds(result, dirtyIndex, qec, vocab,
+      BinaryExportHelpers::rewriteVocabIds(currentBatch, dirtyIndex, qec, vocab,
                                            transmittedStrings);
-      dirtyIndex = result.size();
+      if (!yieldOnce) {
+        co_yield Result::IdTableVocabPair{std::move(currentBatch),
+                                          std::move(vocab)};
+        currentBatch = IdTable{numColumns, qec.getAllocator()};
+        vocab = LocalVocab{};
+        dirtyIndex = 0;
+      }
     } else {
-      result.emplace_back();
-      result.at(result.size() - 1, 0) = toId(firstValue);
+      currentBatch.emplace_back();
+      currentBatch.at(currentBatch.size() - 1, 0) = toId(firstValue);
       for ([[maybe_unused]] auto colIndex : ql::views::iota(1u, numColumns)) {
-        result.at(result.size() - 1, colIndex) =
+        currentBatch.at(currentBatch.size() - 1, colIndex) =
             toId(BinaryExportHelpers::read<Id::T>(it, end));
       }
     }
   }
+  if (yieldOnce) {
+    co_yield Result::IdTableVocabPair{std::move(currentBatch),
+                                      std::move(vocab)};
+  }
+}
 
-  return Result{std::move(result), std::move(resultSortedOn), std::move(vocab)};
+// _____________________________________________________________________________
+Result importBinaryHttpResponse(bool requestLaziness,
+                                HttpOrHttpsResponse response,
+                                const QueryExecutionContext& qec,
+                                std::vector<ColumnIndex> resultSortedOn) {
+  auto generator =
+      importBinaryGenerator(std::move(response), qec, !requestLaziness);
+
+  if (requestLaziness) {
+    return Result{std::move(generator), std::move(resultSortedOn)};
+  } else {
+    auto [idTable, localVocab] =
+        ad_utility::getSingleElement(std::move(generator));
+    return Result{std::move(idTable), std::move(resultSortedOn),
+                  std::move(localVocab)};
+  }
 }
 }  // namespace qlever::binary_export
 
