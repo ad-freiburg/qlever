@@ -13,6 +13,7 @@
 #include "engine/SpatialJoin.h"
 
 #include <absl/container/flat_hash_set.h>
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
@@ -672,9 +673,9 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
 
   // Factory functions to construct `BIND` instances for the bounding box
   // functions.
-  auto bindLowerLeft = std::bind_front(
+  auto bindLowerLeft = absl::bind_front(
       singleBindPushDown, &sparqlExpression::makeEnvelopeLowerLeftExpression);
-  auto bindUpperRight = std::bind_front(
+  auto bindUpperRight = absl::bind_front(
       singleBindPushDown, &sparqlExpression::makeEnvelopeUpperRightExpression);
 
   // Try to push down both lower left and upper right `BIND`s into a child.
