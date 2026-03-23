@@ -90,7 +90,7 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
       1'000'000'000;
   // Only passing seconds to `DayTimeDuration`. The object itself will convert
   // the input to days, hours, minutes and seconds.
-  return DayTimeDuration(durationType, 0, 0, 0, second);
+  return DayTimeDuration{durationType, 0, 0, 0, second};
 }
 
 // _____________________________________________________________________________
@@ -107,21 +107,7 @@ std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
           std::chrono::nanoseconds(totalMilliseconds2 *
                                    1'000'000);  // milliseconds to nanoseconds
 
-  // Extract date from epoch timestamp.
-  auto days = std::chrono::floor<std::chrono::days>(date1);
-  std::chrono::year_month_day date = std::chrono::year_month_day{days};
-  int year(date.year());
-  unsigned month(date.month());
-  unsigned day(date.day());
-
-  // Extract time from remaining seconds.
-  auto seconds = std::chrono::floor<std::chrono::seconds>(date1 - days);
-  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
-  int hour = remainder.hours().count();
-  int minute = remainder.minutes().count();
-  double second = remainder.seconds().count();
-
-  return Date(year, month, day, hour, minute, second);
+  return makeFromEpoch(date1);
 }
 
 // _____________________________________________________________________________
@@ -142,6 +128,28 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
     return std::nullopt;
   }
 }
+
+// _____________________________________________________________________________
+Date Date::makeFromEpoch(Nanoseconds timestamp) const {
+  // Extract date from epoch timestamp.
+  auto days = std::chrono::floor<std::chrono::days>(timestamp);
+  std::chrono::year_month_day date = std::chrono::year_month_day{days};
+
+  // Extract time from remaining seconds.
+  auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
+  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
+  int hour = remainder.hours().count();
+  int minute = remainder.minutes().count();
+  double second = remainder.seconds().count();
+
+  return Date{(int)date.year(),
+              (unsigned)date.month(),
+              (unsigned)date.day(),
+              hour,
+              minute,
+              second};
+}
+
 #endif
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {
