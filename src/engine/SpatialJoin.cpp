@@ -37,6 +37,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
@@ -107,6 +108,17 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
                                        substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
+  }
+
+  // If the `SpatialJoin` is now fully constructed and query rewriting is
+  // allowed, try to push down `BIND`s to retrieve bounding box columns from the
+  // children.
+  if (sj->isConstructed() &&
+      getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
+      sj = sjWithBoundingBoxes.value();
+    }
   }
 
   // The new spatial join after adding a child needs to inherit the warnings of
