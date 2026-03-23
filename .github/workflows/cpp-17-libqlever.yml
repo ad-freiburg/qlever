@@ -72,6 +72,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                 -DUSE_PARALLEL=true \
+                -DUSE_PRECOMPILED_HEADERS=OFF \
                 -DREDUCED_FEATURE_SET_FOR_CPP17=ON
             "
 
