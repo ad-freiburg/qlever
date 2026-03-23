@@ -1025,5 +1025,46 @@ TEST(DateYearOrDuration, Subtraction) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     ASSERT_FALSE(date - duration);
   }
+  {
+    // Test for `LargeYear` - `LargeYear`.
+    DateYearOrDuration year1 =
+        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
+    DateYearOrDuration year2 =
+        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
+
+    std::optional<DateYearOrDuration> result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(11'000, DateYearOrDuration::Type::Year),
+              result.value());
+
+    year2 = DateYearOrDuration(42'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(-20'000, DateYearOrDuration::Type::Year),
+              result.value());
+
+    year2 = DateYearOrDuration(20'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_FALSE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(Date(2000, 1, 1)), result.value());
+
+    year2 = DateYearOrDuration(24'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_FALSE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(Date(-2000, 1, 1)), result.value());
+  }
+  {
+    // Test invalid subtractions.
+    // Invalid `Date`.
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
+    ASSERT_FALSE(date - duration);
+  }
 }
 #endif
