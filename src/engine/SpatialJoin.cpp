@@ -684,9 +684,7 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
                          std::shared_ptr<QueryExecutionTree> child,
                          const Variable& geomVar)
       -> std::optional<std::shared_ptr<QueryExecutionTree>> {
-    if (!child) {
-      return std::nullopt;
-    }
+    AD_CORRECTNESS_CHECK(child != nullptr);
 
     // Try to push down `ql:envelopeLowerLeft`.
     auto [varLowerLeft, varUpperRight] = getBoundingBoxColumnNames(geomVar);

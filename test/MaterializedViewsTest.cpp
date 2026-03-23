@@ -1377,14 +1377,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
 
     VariableToColumnMap expectedVarToColResult{
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makeAlwaysDefinedColumn(1)},
+        {V{"?b3"}, makePossiblyUndefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
     VariableToColumnMap expectedVarToColPermutation{
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makeAlwaysDefinedColumn(4)},
+        {V{"?b3"}, makePossiblyUndefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),
@@ -1433,6 +1433,8 @@ constexpr std::string_view geoTtl = R"'(
     <s2> <is> <demo> .
     <s3> <is> <demo> .
     <s3> <is> <demo2> .
+    <s4> geo:hasGeometry <m4> .
+    <m4> geo:asWKT "An Invalid Wkt Literal Does Not Throw"^^geo:wktLiteral .
 )'";
 constexpr std::string_view geoBoundingBoxesViewQuery = R"(
   PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -1473,6 +1475,22 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
                         {5, V{"?centroid"}},
                     }));
 
+  // Check for the correct `VariableToColumnMap`, in particular, the correct
+  // `UndefStatus`.
+  {
+    auto [qet, qec, parsed] =
+        qlv.parseAndPlanQuery(std::string{geoBoundingBoxesViewQuery});
+    VariableToColumnMap expected{
+        {V{"?osm_id"}, makeAlwaysDefinedColumn(0)},
+        {V{"?intermediate"}, makeAlwaysDefinedColumn(1)},
+        {V{"?geometry"}, makeAlwaysDefinedColumn(2)},
+        {V{"?lower_left"}, makePossiblyUndefinedColumn(3)},
+        {V{"?upper_right"}, makePossiblyUndefinedColumn(4)},
+        {V{"?centroid"}, makePossiblyUndefinedColumn(5)}};
+    EXPECT_THAT(qet->getVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+
   // A `SpatialJoin` adds the bounding box columns to it child `IndexScan`s
   // automatically, even if there is a `Join` operation in between.
   const std::string spatialJoinQuery = R"(
@@ -1512,7 +1530,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     auto res = qet->getResult();
     const auto& runtimeInfo = qet->getRootOperation()->runtimeInfo().details_;
     ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
-    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 2);
+    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
   }
 }
 
