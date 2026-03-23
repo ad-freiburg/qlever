@@ -253,11 +253,9 @@ class EncodedIriManagerImpl {
                         EncodedIriManagerImpl& encodedIriManager) {
     encodedIriManager.prefixes_ =
         static_cast<std::vector<std::string>>(j[jsonKey_]);
-    for (const auto& hardcoded : HardcodedPrefixes) {
-      AD_CORRECTNESS_CHECK(ql::ranges::find(encodedIriManager.prefixes_,
-                                            absl::StrCat("<", hardcoded)) !=
-                           encodedIriManager.prefixes_.end());
-    }
+    // Don't check for the existence of the hardcoded prefixes when
+    // deserializing. A new index will be built with the hardcoded prefixes but
+    // an old index can also still be loaded.
   }
 
   // Hash support for use in `TestIndexConfig`.

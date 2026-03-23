@@ -14,22 +14,17 @@
 #include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
-// TODO: finalize
 // Serialization for `ad_utility::CopyableAtomic<T>` if `T` is default
 // constructible.
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, ad_utility::CopyableAtomic>)
-        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)) {
+        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)
+            CPP_and std::is_default_constructible_v<
+                typename std::decay_t<T>::value_type>) {
   using V = typename std::decay_t<T>::value_type;
   if constexpr (ReadSerializer<S>) {
-    V target = [&arg]() -> V {
-      if constexpr (std::is_default_constructible_v<V>) {
-        return {};
-      } else {
-        return arg.load();
-      }
-    }();
+    V target;
     serializer >> target;
     arg = target;
   } else {
