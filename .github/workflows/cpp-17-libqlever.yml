@@ -59,7 +59,7 @@ jobs:
           docker pull ghcr.io/joka921/llvm-enum-rewriter:latest
 
           # Generate compile_commands.json using the container's clang-21.
-          docker run --rm \
+          docker run --user "$(id -u):$(id -g)" --rm \
             -v ${{github.workspace}}:/src \
             -w /src \
             ghcr.io/joka921/llvm-enum-rewriter:latest \
@@ -77,7 +77,7 @@ jobs:
             "
 
           # Run backport-using-enum on all src/ files containing 'using enum'.
-          docker run --rm \
+          docker run --rm --user "$(id -u):$(id -g)" \
             -v ${{github.workspace}}:/src \
             -w /src \
             ghcr.io/joka921/llvm-enum-rewriter:latest \
