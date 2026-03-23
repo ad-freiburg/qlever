@@ -38,7 +38,7 @@ class TensorSearchImpl {
   QueryExecutionContext* qec_;
   float computeDistance(const ad_utility::TensorData& tensorLeft,
                         const ad_utility::TensorData& tensorRight) const;
-  Result computeTensorSearchResultAnnoy();
+  Result computeTensorSearchResultFaiss();
   Result computeTensorSearchResultNaive();
 
  public:
@@ -131,8 +131,8 @@ class TensorSearch : public Operation {
   const TensorSearchConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
-  ssize_t onlyForTestingGetSearchK() const { return config_.searchK_; }
-  ssize_t onlyForTestingGetNTrees() const { return config_.nTrees_; }
+  std::optional<size_t> onlyForTestingGetSearchK() const { return config_.searchK_; }
+  std::optional<size_t> onlyForTestingGetNTrees() const { return config_.nTrees_; }
   ssize_t onlyForTestingGetMaxResults() const { return config_.maxResults_; }
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_.distanceVariable_;

@@ -440,8 +440,8 @@ struct TensorSearchMatcher {
   template <
       QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(ssize_t maxResults, 
-                  ssize_t searchK, 
-                  ssize_t nTrees, 
+                  std::optional<size_t> searchK, 
+                  std::optional<size_t> nTrees, 
                   TensorSearchAlgorithm algorithm,
                   TensorDistanceAlgorithm distanceAlgorithm,                  
                   Variable left,

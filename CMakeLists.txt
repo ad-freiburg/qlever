@@ -201,16 +201,35 @@ else ()
 endif ()
 
 ################################
+# Annoy (for approximate nearest neighbor search) - DISABLE, ANNOY is broken...
+################################
+# MESSAGE(STATUS "Using Annoy for the dense tensor index")
+# FetchContent_Declare(
+#         annoy
+#         GIT_REPOSITORY https://github.com/spotify/annoy
+#         GIT_TAG 379f744667aba6b40ba3db8a07678df173a88f74
+#         EXCLUDE_FROM_ALL
+# )
+# add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
+################################
 # Annoy (for approximate nearest neighbor search)
 ################################
-MESSAGE(STATUS "Using Annoy for the dense tensor index")
+MESSAGE(STATUS "Using FAISS for the dense tensor index")
 FetchContent_Declare(
-        annoy
-        GIT_REPOSITORY https://github.com/spotify/annoy
-        GIT_TAG 379f744667aba6b40ba3db8a07678df173a88f74
+        faiss
+        GIT_REPOSITORY https://github.com/facebookresearch/faiss.git
+        GIT_TAG 5622e93733b64b2e033362dbdfda019b2ab33ef0
         EXCLUDE_FROM_ALL
+
 )
-add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
+# enable C API
+set(FAISS_ENABLE_C_API ON CACHE BOOL "Enable the C API for FAISS")
+# disable everything else (for now?)
+set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support for FAISS")
+set(FAISS_ENABLE_MKL OFF CACHE BOOL "Disable MKL support for FAISS")
+set(FAISS_ENABLE_PYTHON  OFF CACHE BOOL "Disable MKL support for FAISS")
+set(FAISS_ENABLE_EXTRAS  OFF CACHE BOOL "Disable MKL support for FAISS")
+set(BUILD_TESTING  OFF CACHE BOOL "Disable testing for FAISS")
 
 #################################
 # ICU (for proper collation
@@ -428,7 +447,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin annoy)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin faiss)
 
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)

@@ -21,7 +21,7 @@ add_library(engine
         PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp ConstructTemplatePreprocessor.cpp
         MaterializedViewsQueryAnalysis.cpp)
 
-qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo  Annoy::Annoy)
+qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo  faiss faiss_c)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used

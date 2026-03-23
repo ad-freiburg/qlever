@@ -39,7 +39,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -53,7 +53,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::NAIVE,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TensorSearchAlgorithm::NAIVE,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -62,12 +62,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::ANNOY,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -76,12 +76,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
       "tensorSearch:numNN 100 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, -1, -1, TensorSearchAlgorithm::ANNOY,
+      h::tensorSearch(100, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -90,12 +90,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
       "tensorSearch:searchK 20 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, 20, -1, TensorSearchAlgorithm::ANNOY,
+      h::tensorSearch(100, 20, std::nullopt, TensorSearchAlgorithm::FAISS,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -104,12 +104,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
       "tensorSearch:nTrees 20 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, -1, 20, TensorSearchAlgorithm::ANNOY,
+      h::tensorSearch(100, std::nullopt, 20, TensorSearchAlgorithm::FAISS,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -123,7 +123,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                       TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
@@ -137,7 +137,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                       TensorDistanceAlgorithm::ANGULAR_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
@@ -151,7 +151,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                       TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -178,7 +178,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                       TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"},
                       V{"?dist"}, PV{std::vector<V>{V{"?a"}}},
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
@@ -195,7 +195,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:payload ?a , ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::tensorSearch(
-          1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
           TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
           PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
@@ -215,7 +215,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:payload ?a, ?a, ?b, ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::tensorSearch(
-          1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
           TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
           PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}},
           scan("?x", "<p>", "?y"),
@@ -235,7 +235,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:payload <all> ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::tensorSearch(
-          1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
           TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
           PayloadVariables::all(), scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
@@ -252,7 +252,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:payload tensorSearch:all ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::tensorSearch(
-          1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
           TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
           PayloadVariables::all(), scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
@@ -272,7 +272,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:payload ?a ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::tensorSearch(
-          1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          1, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
           TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
           PayloadVariables::all(), scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
@@ -289,7 +289,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
       "SELECT * WHERE {"
       "?x <p> ?y ."
       "SERVICE tensorSearch: {"
-      "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "  _:config tensorSearch:algorithm tensorSearch:faiss ;"
       "    tensorSearch:left ?y ;"
       "    tensorSearch:right ?b ;"
       "    tensorSearch:numNN 5 ;"
@@ -297,7 +297,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
       "  { ?ab <p1> ?b }"
       "}"
       "SERVICE tensorSearch: {"
-      "  _:config tensorSearch:algorithm tensorSearch:annoy ;"
+      "  _:config tensorSearch:algorithm tensorSearch:faiss ;"
       "    tensorSearch:left ?y ;"
       "    tensorSearch:right ?c ;"
       "    tensorSearch:numNN 3 ;"
@@ -309,18 +309,18 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
       // Both orders of assembling the two tensor-search children are allowed
       ::testing::AnyOf(
           h::tensorSearch(
-              3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              3, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
               TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"}, V{"?dc"},
               PV{std::vector<V>{V{"?ac"}}},
-              h::tensorSearch(5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              h::tensorSearch(5, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                               TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                               V{"?db"}, PV{}, scan("?x", "<p>", "?y"),
                               scan("?ab", "<p1>", "?b")),
               scan("?ac", "<p2>", "?c")),
           h::tensorSearch(
-              5, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              5, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
               TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
-              h::tensorSearch(3, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+              h::tensorSearch(3, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                               TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?c"},
                               V{"?dc"}, PV{std::vector<V>{V{"?ac"}}},
                               scan("?x", "<p>", "?y"),
@@ -608,7 +608,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchLegacyPredicateSupport) {
       "?y <tensor-nearest-neighbors:500> ?b }",
       h::QetWithWarnings(
           {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
-          h::tensorSearch(500, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          h::tensorSearch(500, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                           TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                           std::nullopt, PayloadVariables::all(),
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
@@ -619,7 +619,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchLegacyPredicateSupport) {
       "?y <tensor-nearest-neighbors:20> ?b }",
       h::QetWithWarnings(
           {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
-          h::tensorSearch(20, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
+          h::tensorSearch(20, std::nullopt, std::nullopt, TENSOR_SEARCH_DEFAULT_ALGORITHM,
                           TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                           std::nullopt, PayloadVariables::all(),
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));

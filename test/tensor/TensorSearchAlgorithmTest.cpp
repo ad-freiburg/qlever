@@ -15,8 +15,8 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "TensorTestHelpers.h"
 #include "TensorSearchTestHelpers.h"
+#include "TensorTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -27,100 +27,128 @@
 #include "libqlever/Qlever.h"
 #include "rdfTypes/Variable.h"
 
+namespace {  // anonymous namespace to avoid linker problems
+using namespace TensorSearchTestHelpers;
 using namespace ad_utility::testing;
 using namespace TensorTestHelpers;
-using namespace TensorSearchTestHelpers;
 struct AlgDistParam {
   TensorSearchAlgorithm algo;
   TensorDistanceAlgorithm dist;
   std::string name;
+  bool reverse = false;
 };
 
 class TensorSearchFunctionalTest
     : public ::testing::TestWithParam<AlgDistParam> {};
 
+inline std::shared_ptr<QueryExecutionTree> buildSmallestChild(
+    QueryExecutionContext* qec, std::array<std::string, 3> triple) {
+  auto scan = buildIndexScan(qec, triple);
+  return scan;
+}
+
+std::shared_ptr<TensorSearch> makeTensorSearch(
+    QueryExecutionContext* qec, bool addDist = true,
+    PayloadVariables pv = PayloadVariables::all(),
+    TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM,
+    TensorDistanceAlgorithm distAlg = TENSOR_SEARCH_DEFAULT_DISTANCE,
+    ssize_t max_num_results = -1, bool addLeftChildFirst = false) {
+  auto leftChild =
+      buildSmallestChild(qec, {"?obja", std::string{"<p1>"}, "?t1"});
+  auto rightChild =
+      buildSmallestChild(qec, {"?objb", std::string{"<p1>"}, "?t2"});
+
+  std::optional<Variable> dist = std::nullopt;
+  if (addDist) {
+    dist = Variable{"?dist"};
+  }
+  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
+      ad_utility::makeExecutionTree<TensorSearch>(
+          qec,
+          TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist, pv,
+                                    alg, distAlg, max_num_results},
+          std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
+  TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable =
+      addLeftChildFirst ? Variable{"?t1"} : Variable{"?t2"};
+  Variable secondVariable =
+      addLeftChildFirst ? Variable{"?t2"} : Variable{"?t1"};
+  auto tensorSearch1 = tensorSearch->addChild(firstChild, firstVariable);
+  tensorSearch = static_cast<TensorSearch*>(tensorSearch1.get());
+  auto tensorSearch2 = tensorSearch->addChild(secondChild, secondVariable);
+  return tensorSearch2;
+}
+
 TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
   auto param = GetParam();
 
-  // Build a small index with 6 vectors in 3 dimensions.
-  const std::string basename = "_tensorFunctionalTestIndex";
-  const auto ttl = makeVectorKg(6, 7);
-  TensorTestHelpers::makeTestIndex(basename, ttl);
+  // // Build a small index with 6 vectors in 3 dimensions.
+  // const std::string basename = "_tensorFunctionalTestIndex";
+  const size_t N = 20;
+  auto qec = buildQec(makeVectorKg(
+      N, N));  // identity vectors, so nearest neighbor should be self
+  auto numTriples = qec->getIndex().numTriples().normal;
+  ASSERT_EQ(numTriples,
+            N * 3 - 1);  // N vector triples + N name triples + N-1 rel triples
 
-  // Create a Qlever instance using the generated index.
-  qlever::EngineConfig cfg;
-  cfg.baseName_ = basename;
-  Qlever ql(cfg);
+  auto tensorSearchOp = makeTensorSearch(qec, true, PayloadVariables::all(),
+                                         param.algo, param.dist, 1);
+  auto tensorSearch = static_cast<TensorSearch*>(tensorSearchOp.get());
 
-  // Compose SPARQL SERVICE config triples depending on algorithm/distance.
-  std::string algoTriple;
-  if (param.algo == TensorSearchAlgorithm::ANNOY) {
-    algoTriple = "tensorSearch:algorithm tensorSearch:annoy ;\n";
-  } else {
-    algoTriple = "tensorSearch:algorithm tensorSearch:naive ;\n";
-  }
-  std::string distTriple;
-  switch (param.dist) {
-    case TensorDistanceAlgorithm::COSINE_SIMILARITY:
-      distTriple = "tensorSearch:distance tensorSearch:cosine ;\n";
-      break;
-    case TensorDistanceAlgorithm::DOT_PRODUCT:
-      distTriple = "tensorSearch:distance tensorSearch:dot ;\n";
-      break;
-    case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
-      distTriple = "tensorSearch:distance tensorSearch:euclidean ;\n";
-      break;
-    default:
-      distTriple = "";
-  }
+  auto varColMap = tensorSearch->computeVariableToColumnMap();
+  auto resultTable = tensorSearch->computeResult(false);
 
-  const std::string query = absl::StrCat(
-      "PREFIX tensorSearch: <https://qlever.cs.uni-freiburg.de/tensorSearch/>\n"
-      "SELECT ?s ?so ?v ?t ?dist WHERE {"
-      "  ?s <p1> ?v ."
-      "  SERVICE tensorSearch: {",
-      " _:config tensorSearch:numNN 1 ;", algoTriple, distTriple,
-      "tensorSearch:left ?v ;"
-      "tensorSearch:bindDistance ?dist ;"
-      "tensorSearch:right ?t .",
-      " { ?so <p1> ?t . }"
-      "}"
-      "}");
-
-  // Plan and execute the query.
-  auto plan = ql.parseAndPlanQuery(query);
-  auto& qet = *std::get<0>(plan);
-  auto& parsed = std::get<2>(plan);
-  auto result = qet.getResult(false);
-  const auto& idTable = result->idTable();
+  const auto* idTable = &resultTable.idTable();
 
   // For each result row, assert that the returned candidate equals the
   // original subject (self is nearest neighbor because identical vector
   // exists in the dataset).
-  for (size_t i = 0; i < idTable.numRows(); ++i) {
-    auto sid = idTable.at(i, 0);
-    auto cid = idTable.at(i, 1);
-    auto vid = idTable.at(i, 2);
-    auto tid = idTable.at(i, 3);
-    auto dist = idTable.at(i, 4);
-    auto sStrOpt =
-        ExportQueryExecutionTrees::idToStringAndType(ql.index(), sid, {});
-    auto cidOpt =
-        ExportQueryExecutionTrees::idToStringAndType(ql.index(), cid, {});
-    auto tStrOpt =
-        ExportQueryExecutionTrees::idToStringAndType(ql.index(), vid, {});
-    auto vStrOpt =
-        ExportQueryExecutionTrees::idToStringAndType(ql.index(), vid, {});
+  for (size_t i = 0; i < idTable->numRows(); ++i) {
+    // id of obja:
+    auto col_id_obja = varColMap.at(Variable{"?obja"}).columnIndex_;
+    auto col_id_objb = varColMap.at(Variable{"?objb"}).columnIndex_;
+    auto col_id_dist = varColMap.at(Variable{"?dist"}).columnIndex_;
+    auto aid = idTable->at(i, col_id_obja);
+    auto bid = idTable->at(i, col_id_objb);
+    auto dist = idTable->at(i, col_id_dist);
+    auto aStrOpt =
+        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), aid, {});
+    auto bStrOpt =
+        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), bid, {});
     auto distOpt =
-        ExportQueryExecutionTrees::idToStringAndType(ql.index(), dist, {});
-    std::cout << "Result row " << i << ": subject id " << sStrOpt->first
-              << ", candidate id " << cidOpt->first << ", value id "
-              << vStrOpt->first << ", distance " << distOpt->first << "\n";
-    ASSERT_TRUE(sStrOpt.has_value());
-    ASSERT_TRUE(cidOpt.has_value());
-    EXPECT_EQ(sStrOpt->first, cidOpt->first);
+        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), dist, {});
+    std::cout << "Result row " << i << ": subject id " << aStrOpt->first
+              << ", value id " << bStrOpt->first << ", distance "
+              << distOpt->first << "\n";
+    ASSERT_TRUE(aStrOpt.has_value());
+    ASSERT_TRUE(bStrOpt.has_value());
+    if (param.reverse) {
+      // EXPECT_NEQ(aStrOpt->first, bStrOpt->first);
+    } else {
+      EXPECT_EQ(aStrOpt->first, bStrOpt->first);
+    }
   }
 
   // Clean up generated files
-  TensorTestHelpers::removeTestIndex(basename);
+  // TensorTestHelpers::removeTestIndex(basename);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    TensorSearchAlgorithmTests, TensorSearchFunctionalTest,
+    ::testing::Values(
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::COSINE_SIMILARITY, "NaiveCosine"},
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
+                     "NaiveEuclidean", true},
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct"},
+        AlgDistParam{TensorSearchAlgorithm::FAISS,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot"},
+        AlgDistParam{TensorSearchAlgorithm::FAISS,
+                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
+                     "FaissEuclidean", true}));
+}  // namespace

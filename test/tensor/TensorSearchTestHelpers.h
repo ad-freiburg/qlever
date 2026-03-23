@@ -35,6 +35,10 @@ std::string makeVectorKg(size_t n, size_t dim = 3) {
     out += absl::StrCat(
         "<s", i, "> <p1> \"", data,
         "\"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .\n");
+    out += absl::StrCat("<s", i, "> <name> \"", "Name", i, "\" .\n");
+    if (i < n - 1) {
+      out += absl::StrCat("<s", i, "> <rel> <s", i + 1, "> .\n");
+    }
   }
   return out;
 }

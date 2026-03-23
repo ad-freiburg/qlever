@@ -42,12 +42,6 @@ TensorSearch::TensorSearch(
   if (childRight.has_value()) {
     childRight_ = std::move(childRight.value());
   }
-
-  // if (config_.algo_ == TensorSearchAlgorithm::ANNOY) {
-  //   auto key = getCacheKey();
-  //   // TODO: should be saved to the disk cache, but for now we just keep it
-  //   in memory
-  // }
 }
 
 // ____________________________________________________________________________
@@ -112,8 +106,11 @@ std::string TensorSearch::getCacheKeyImpl() const {
     os << "JoinColLeft:" << childLeft_->getVariableColumn(config_.left_);
     os << "JoinColRight:" << childRight_->getVariableColumn(config_.right_);
 
-    // Uses libTensorSearch?
-    // auto maxResults = getMaxResults();
+    auto maxResults = getMaxResults();
+
+    os << "Max Results: " << (int)maxResults.value_or(-1) << "\n";
+    os << "kTrees" << (int)config_.searchK_.value_or(-1) << "\n";
+    os << "nTrees" << (int)config_.nTrees_.value_or(-1) << "\n";
 
     os << "TensorSearch in distance: " << (int)config_.algo_ << "with algorithm"
        << (int)config_.dist_ << "\n";
@@ -150,9 +147,31 @@ std::string TensorSearch::getCacheKeyImpl() const {
 std::string TensorSearch::getDescriptor() const {
   auto left = config_.left_.name();
   auto right = config_.right_.name();
+  auto algo = getAlgorithm();
+  auto algorithmString =
+      algo == TensorSearchAlgorithm::NAIVE ? "naive" : "faiss";
+  auto distanceString = [this]() {
+    switch (config_.dist_) {
+      case TensorDistanceAlgorithm::DOT_PRODUCT:
+        return "dot product";
+      case TensorDistanceAlgorithm::COSINE_SIMILARITY:
+        return "cosine similarity";
+      case TensorDistanceAlgorithm::ANGULAR_DISTANCE:
+        return "angular distance";
+      case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
+        return "euclidean distance";
+      case TensorDistanceAlgorithm::MANHATTAN_DISTANCE:
+        return "manhattan distance";
+      case TensorDistanceAlgorithm::HAMMING_DISTANCE:
+        return "hamming distance";
+      default:
+        AD_FAIL();
+    }
+  }();
 
   return absl::StrCat("Nearest Neighbour Tensor Search of ", left, " to ",
-                      right, " of max. ", getMaxResults().value_or(0));
+                      right, " of max. ", getMaxResults().value_or(0),
+                      " using ", algorithmString, " and ", distanceString);
 }
 
 // ____________________________________________________________________________
@@ -207,10 +226,10 @@ size_t TensorSearch::getCostEstimate() {
     if (config_.algo_ == NAIVE) {
       // doing a full comparison is expectedly slow
       return n * m;
-    } else if (config_.algo_ == ANNOY) {
+    } else if (config_.algo_ == FAISS) {
       // We take the cost estimate to be `log(n) * m`, where `n` and `m` are
       // the size of the left and right table, respectively. Reasoning:
-      // When using the ANNOY index, we use tree search over log(n) results m
+      // When using the FAISS index, we use tree search over log(n) results m
       // times.
       auto logn = n > 0 ? static_cast<size_t>(std::log(static_cast<double>(n)))
                         : size_t{1};

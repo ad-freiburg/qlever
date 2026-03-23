@@ -60,18 +60,18 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     throwIf(
         !object.isIri(),
         "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<default>` and `<annoy>`");
+        "to employ. Currently supported are `<default>` and `<faiss>`");
     auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
     if (type == "naive") {
       algo_ = TensorSearchAlgorithm::NAIVE;
-    } else if (type == "annoy") {
-      algo_ = TensorSearchAlgorithm::ANNOY;
+    } else if (type == "faiss") {
+      algo_ = TensorSearchAlgorithm::FAISS;
     } else {
       throw TensorSearchException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported tensor search algorithm. Currently supported are "
           "`<default>` and "
-          "`<annoy>`"};
+          "`<faiss>`"};
     }
   } else if (predString == "distance") {
     // This case is already covered in `extractParameterName` below, but we
@@ -147,17 +147,17 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
   throwIf(!right_.has_value(), "Missing parameter `<right>` in tensor search.");
 
   throwIf(
-      rightCacheName_.has_value() && algo != TensorSearchAlgorithm::ANNOY,
+      rightCacheName_.has_value() && algo != TensorSearchAlgorithm::FAISS,
       "The parameter `<experimentalRightCacheName>` is only supported by the "
-      "`<annoy>` algorithm.");
-  // the cache parameter is automatically imputed for annoy
-  // if (algo == TensorSearchAlgorithm::ANNOY) {
+      "`<faiss>` algorithm.");
+  // the cache parameter is automatically imputed for faiss
+  // if (algo == TensorSearchAlgorithm::FAISS) {
   //   throwIf(!rightCacheName_.has_value(),
   //           "The parameter `<experimentalRightCacheName>` is mandatory for
   //           the "
-  //           "`<annoy>` algorithm.");
+  //           "`<faiss>` algorithm.");
   //   throwIf(childGraphPattern_.has_value(),
-  //           "The parameter `<annoy>` algorithm uses a cached "
+  //           "The parameter `<faiss>` algorithm uses a cached "
   //           "query result as its right child. Therefore a group graph pattern
   //           " "for the right side may not be specified in the `SERVICE`.");
   // }
@@ -196,8 +196,8 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
       algo,
       dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
       maxResults_.value_or((ssize_t)100),
-      searchK_.value_or((ssize_t)-1),
-      nTrees_.value_or((ssize_t)-1),
+      searchK_,
+      nTrees_,
       rightCacheName_};
 }
 

@@ -26,9 +26,9 @@ enum class TensorDistanceAlgorithm {
   MANHATTAN_DISTANCE,
   HAMMING_DISTANCE,
 };
-enum class TensorSearchAlgorithm { NAIVE, ANNOY };
+enum class TensorSearchAlgorithm { NAIVE, FAISS };
 const TensorSearchAlgorithm TENSOR_SEARCH_DEFAULT_ALGORITHM =
-    TensorSearchAlgorithm::ANNOY;
+    TensorSearchAlgorithm::FAISS;
 const TensorDistanceAlgorithm TENSOR_SEARCH_DEFAULT_DISTANCE =
     TensorDistanceAlgorithm::DOT_PRODUCT;
 
@@ -52,11 +52,11 @@ struct TensorSearchConfiguration {
   TensorDistanceAlgorithm dist_ = TENSOR_SEARCH_DEFAULT_DISTANCE;
 
   ssize_t maxResults_ = 100;
-  ssize_t searchK_ = -1;
-  ssize_t nTrees_ = -1;
+  std::optional<size_t> searchK_ = std::nullopt;
+  std::optional<size_t> nTrees_ = std::nullopt;
 
   // Cache name for precomputed tensor search index. This is an experimental
-  // parameter that is only used for the `annoy` algorithm and allows to specify
+  // parameter that is only used for the `faiss` algorithm and allows to specify
   // a precomputed index on the right side of the join. The index has to be
   // built beforehand and stored under the given name in the cache directory. If
   // this parameter is not given, the index will be built on the fly for each

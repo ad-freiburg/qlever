@@ -28,6 +28,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "engine/TensorSearchCachedIndex.h"
 
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {
@@ -85,11 +86,11 @@ void TensorSearchImpl::addResultTableEntry(IdTable* result,
   }
 }
 
-Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
+Result TensorSearchImpl::computeTensorSearchResultFaiss() {
   // #ifdef WITH_DENSE_TENSOR_INDEX
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
-  auto annoyIndex = TensorSearchCachedIndex::fromKeyOrBuild(
+  auto faissIndex = TensorSearchCachedIndex::fromKeyOrBuild(
       params_.cacheKey_, params_.rightJoinCol_, *params_.idTableRight_,
       qec_->getIndex(), params_.config_);
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
@@ -104,7 +105,7 @@ Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
       continue;
     }
     auto results =
-        annoyIndex->findNN(tensorData.value(), params_.config_.maxResults_);
+        faissIndex->findNN(tensorData.value(), params_.config_.maxResults_);
     for (const auto& nn : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
                           i, nn.first, Id::makeFromDouble(nn.second));
@@ -116,7 +117,7 @@ Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
   // #else
   //   throw ad_utility::Exception(
-  //       "TensorSearchImpl::computeTensorSearchResultAnnoy() called, but
+  //       "TensorSearchImpl::computeTensorSearchResultFaiss() called, but
   //       qlever " "was not compiled with the option to use the dense tensor
   //       index.");
   // #endif
@@ -190,8 +191,8 @@ float TensorSearchImpl::computeDistance(
 }
 Result TensorSearchImpl::computeTensorSearchResult() {
   switch (params_.config_.algo_) {
-    case TensorSearchAlgorithm::ANNOY:
-      return computeTensorSearchResultAnnoy();
+    case TensorSearchAlgorithm::FAISS:
+      return computeTensorSearchResultFaiss();
     default:
       return computeTensorSearchResultNaive();
   }
