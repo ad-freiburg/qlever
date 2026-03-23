@@ -42,12 +42,6 @@ struct PreparedSpatialJoinParams {
   SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
 };
 
-// Helper function IRIs for `BIND` push down.
-static constexpr std::string_view LOWER_LEFT_IRI =
-    "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeLowerLeft>";
-static constexpr std::string_view UPPER_RIGHT_IRI =
-    "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeUpperRight>";
-
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
 // search as well as search of all points within a given range.

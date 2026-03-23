@@ -656,24 +656,26 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   auto makeVariableExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
-  auto makeBind = [&makeVariableExpr](
-                      auto factory, std::string_view functionDescriptor,
-                      const Variable& geomVar, const Variable& targetVar) {
-    return parsedQuery::Bind{
+  auto singleBindPushDown = [&makeVariableExpr](
+                                auto factory,
+                                std::shared_ptr<QueryExecutionTree> child,
+                                const Variable& geomVar,
+                                const Variable& targetVar) {
+    return child->getRootOperation()->makeTreeWithBindColumn(parsedQuery::Bind{
         sparqlExpression::SparqlExpressionPimpl{
             factory(makeVariableExpr(geomVar)),
-            absl::StrCat(functionDescriptor, "(", geomVar.name(), ")")},
-        targetVar};
+            // The expression descriptor is not important as this
+            // `SparqlExpressionPimpl` is only used for `BIND` push down.
+            "Dummy descriptor for BIND push-down"},
+        targetVar});
   };
 
   // Factory functions to construct `BIND` instances for the bounding box
   // functions.
   auto bindLowerLeft = std::bind_front(
-      makeBind, &sparqlExpression::makeEnvelopeLowerLeftExpression,
-      LOWER_LEFT_IRI);
+      singleBindPushDown, &sparqlExpression::makeEnvelopeLowerLeftExpression);
   auto bindUpperRight = std::bind_front(
-      makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression,
-      UPPER_RIGHT_IRI);
+      singleBindPushDown, &sparqlExpression::makeEnvelopeUpperRightExpression);
 
   // Try to push down both lower left and upper right `BIND`s into a child.
   // Return the new child if it was successful and `nullopt` otherwise.
@@ -687,17 +689,13 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
 
     // Try to push down `ql:envelopeLowerLeft`.
     auto [varLowerLeft, varUpperRight] = getBoundingBoxColumnNames(geomVar);
-    auto pushDownLowerLeft = child->getRootOperation()->makeTreeWithBindColumn(
-        bindLowerLeft(geomVar, varLowerLeft));
+    auto pushDownLowerLeft = bindLowerLeft(child, geomVar, varLowerLeft);
     if (!pushDownLowerLeft.has_value()) {
       return std::nullopt;
     }
 
     // Try to push down `ql:envelopeUpperRight`.
-    auto pushDownUpperRight =
-        pushDownLowerLeft.value()->getRootOperation()->makeTreeWithBindColumn(
-            bindUpperRight(geomVar, varUpperRight));
-    return pushDownUpperRight;
+    return bindUpperRight(pushDownLowerLeft.value(), geomVar, varUpperRight);
   };
 
   // Try to push down both `BIND`s into each of the children. If at least one of
