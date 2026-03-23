@@ -129,6 +129,9 @@ class Join : public Operation {
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.

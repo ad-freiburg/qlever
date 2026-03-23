@@ -153,6 +153,9 @@ class SpatialJoin : public Operation {
     checkCancellation();
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
