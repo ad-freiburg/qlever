@@ -10,7 +10,7 @@
 #include <gmock/gmock.h>
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
-#include "SpatialJoinTestHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 
 // _____________________________________________________________________________
 namespace {
