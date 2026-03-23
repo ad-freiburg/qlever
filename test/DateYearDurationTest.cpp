@@ -907,22 +907,34 @@ TEST(DateYearOrDuration, Subtraction) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     std::optional<DateYearOrDuration> result = date - duration;
     ASSERT_TRUE(result);
-    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 23, 0, 0, 0)).toStringAndType(),
-              result.value().toStringAndType());
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 23, 0, 0, 0)), result.value());
 
     duration = DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Negative, 0, 3, 49, 27));
     result = date - duration;
     ASSERT_TRUE(result);
-    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 24, 0, 0, 0)).toStringAndType(),
-              result.value().toStringAndType());
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 24, 0, 0, 0)), result.value());
 
     duration = DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Positive, 30, 20, 10, 33));
     result = date - duration;
     ASSERT_TRUE(result);
-    EXPECT_EQ(DateYearOrDuration(Date(1988, 12, 24, 0, 0, 0)).toStringAndType(),
-              result.value().toStringAndType());
+    EXPECT_EQ(DateYearOrDuration(Date(1988, 12, 24, 0, 0, 0)), result.value());
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, 2));  // UTC + 2
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 10, 10, 0));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(
+        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, 2)).toStringAndType(),
+        result.value().toStringAndType());
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, -4));  // UTC - 4
+    result = date - duration;
+    EXPECT_EQ(
+        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, -4)).toStringAndType(),
+        result.value().toStringAndType());
   }
   {
     // Test for `LargeYear` - `LargeYear`.

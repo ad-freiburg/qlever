@@ -95,6 +95,7 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 
 // _____________________________________________________________________________
 std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
+  TimeZone tz = getTimeZone();
   auto epoch = toEpoch();
   if (!epoch.has_value()) {
     return std::nullopt;
@@ -106,8 +107,7 @@ std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
   date1 = date1 -
           std::chrono::nanoseconds(totalMilliseconds2 *
                                    1'000'000);  // milliseconds to nanoseconds
-
-  return makeFromEpoch(date1);
+  return makeFromEpoch(date1, tz);
 }
 
 // _____________________________________________________________________________
@@ -130,7 +130,9 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 }
 
 // _____________________________________________________________________________
-Date Date::makeFromEpoch(Nanoseconds timestamp) const {
+Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) const {
+  int8_t offset = getTimeZoneOffsetToUTCInHours();
+
   // Extract date from epoch timestamp.
   auto days = std::chrono::floor<std::chrono::days>(timestamp);
   std::chrono::year_month_day date = std::chrono::year_month_day{days};
@@ -143,11 +145,12 @@ Date Date::makeFromEpoch(Nanoseconds timestamp) const {
   double second = remainder.seconds().count();
 
   return Date{(int)date.year(),
-              (unsigned)date.month(),
-              (unsigned)date.day(),
-              hour,
+              static_cast<int>((unsigned)date.month()),
+              static_cast<int>((unsigned)date.day()),
+              hour + offset,
               minute,
-              second};
+              second,
+              tz};
 }
 
 #endif

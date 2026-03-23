@@ -354,7 +354,7 @@ class Date {
   std::optional<Nanoseconds> toEpoch() const;
 
   // From a Unix Epoch timestamp, construct the corresponding `Date`.
-  Date makeFromEpoch(Nanoseconds timestamp) const;
+  Date makeFromEpoch(Nanoseconds timestamp, TimeZone tz) const;
 #endif
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };
