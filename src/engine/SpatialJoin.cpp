@@ -648,10 +648,6 @@ SpatialJoin::getBoundingBoxColumnIndices(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<SpatialJoin>>
 SpatialJoin::cloneWithBoundingBoxColumns() const {
-  // TODO<ullingerc> Find a way to apply column stripping that doesn't break if
-  // two `SpatialJoin`s share a variable (like `?area intersects ?building` and
-  // `?area intersects ?restaurant`).
-
   // Only the `libspatialjoin` algorithm benefits from bounding box columns.
   if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
     return std::nullopt;
@@ -672,10 +668,6 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
 
   // Factory functions to construct `BIND` instances for the bounding box
   // functions.
-  static constexpr std::string_view LOWER_LEFT_IRI =
-      "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeLowerLeft>";
-  static constexpr std::string_view UPPER_RIGHT_IRI =
-      "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeUpperRight>";
   auto bindLowerLeft = std::bind_front(
       makeBind, &sparqlExpression::makeEnvelopeLowerLeftExpression,
       LOWER_LEFT_IRI);

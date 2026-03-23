@@ -214,6 +214,12 @@ class SpatialJoinAlgorithms {
       const Index& index, VocabIndex vocabIndex,
       const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
+  // Helper for `libspatialjoinParse` to get the bounding box from an
+  // `IdTable` if available.
+  static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
+      const IdTable* idTable,
+      const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
+
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();

@@ -57,20 +57,23 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const Index& index, VocabIndex vocabIndex,
     const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
+    auto hasNoIntersection =
+        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
+          return !util::geo::intersects(
+              prefilterLatLngBox.value(),
+              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
+        };
+
     // Use the `precomputedBoundingBox` for filtering if available.
     if (precomputedBoundingBox.has_value()) {
-      return !util::geo::intersects(prefilterLatLngBox.value(),
-                                    ad_utility::detail::boundingBoxToUtilBox(
-                                        precomputedBoundingBox.value()));
+      return hasNoIntersection(precomputedBoundingBox.value());
     }
 
     // Otherwise, use the `GeoVocabulary` for filtering.
     auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
     if (geoInfo.has_value()) {
       // We have a bounding box: Check intersection with prefilter box.
-      auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
-          geoInfo.value().getBoundingBox());
-      return !util::geo::intersects(prefilterLatLngBox.value(), boundingBox);
+      return hasNoIntersection(geoInfo.value().getBoundingBox());
     } else {
       // Since we know that this function is only called if we have a
       // `GeoVocabulary`, we know that a geometry without precomputed bounding
@@ -123,32 +126,16 @@ SpatialJoinAlgorithms::libspatialjoinParse(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 
-  // Helper to retrieve precomputed bounding boxes from the `IdTable` if
-  // available.
-  auto getBoundingBox =
-      [&boundingBoxes,
-       idTable](size_t row) -> std::optional<ad_utility::BoundingBox> {
-    if (!boundingBoxes.has_value()) {
-      return std::nullopt;
-    }
-    auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
-    auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
-    if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
-        idUpperRight.getDatatype() != Datatype::GeoPoint) {
-      return std::nullopt;
-    }
-    return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
-                                   idUpperRight.getGeoPoint()};
-  };
-
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser.
   const auto& geoms = idTable->getColumn(column);
   ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
       0, idTable->size(),
-      [&parser, &geoms, &leftOrRightSide, &getBoundingBox](size_t row) {
-        parser.addValueIdToQueue(geoms[row], row, leftOrRightSide,
-                                 getBoundingBox(row));
+      [&parser, &geoms, &leftOrRightSide, &idTable,
+       &boundingBoxes](size_t row) {
+        parser.addValueIdToQueue(
+            geoms[row], row, leftOrRightSide,
+            getBoundingBoxFromIdTable(idTable, boundingBoxes, row));
       },
       [this]() { throwIfCancelled(); });
 
@@ -159,6 +146,24 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
   return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::BoundingBox>
+SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
+    const IdTable* idTable, const SpatialJoinBoundingBoxColumns& boundingBoxes,
+    size_t row) {
+  if (!boundingBoxes.has_value()) {
+    return std::nullopt;
+  }
+  auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
+  auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
+  if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
+      idUpperRight.getDatatype() != Datatype::GeoPoint) {
+    return std::nullopt;
+  }
+  return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
+                                 idUpperRight.getGeoPoint()};
 }
 
 // ____________________________________________________________________________
