@@ -50,6 +50,46 @@ jobs:
         with:
           compiler: ${{env.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Rewrite C++20 'using enum' for C++17 compatibility
+        if: matrix.compiler-version == 8
+        run: |
+          # The Docker container ghcr.io/joka921/llvm-enum-rewriter contains a custom
+          # clang-21 build with the `backport-using-enum` tool at /opt/llvm/bin/.
+          # It also has cmake, boost 1.81, icu, zstd, and jemalloc installed.
+          docker pull ghcr.io/joka921/llvm-enum-rewriter:latest
+
+          # Generate compile_commands.json using the container's clang-21.
+          docker run --rm \
+            -v ${{github.workspace}}:/src \
+            -w /src \
+            ghcr.io/joka921/llvm-enum-rewriter:latest \
+            bash -c "
+              export PATH=/opt/llvm/bin:\$PATH
+              cmake -B /src/rewriter-build \
+                -DCMAKE_C_COMPILER=clang \
+                -DCMAKE_CXX_COMPILER=clang++ \
+                -DCMAKE_CXX_FLAGS='-Wno-deprecated-declarations' \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                -DUSE_PARALLEL=true \
+                -DREDUCED_FEATURE_SET_FOR_CPP17=ON
+            "
+
+          # Run backport-using-enum on all src/ files containing 'using enum'.
+          docker run --rm \
+            -v ${{github.workspace}}:/src \
+            -w /src \
+            ghcr.io/joka921/llvm-enum-rewriter:latest \
+            bash -c "
+              for f in \$(grep -rl 'using enum' ./src/ --include='*.h' --include='*.cpp'); do
+                echo \"Rewriting: \$f\"
+                /opt/llvm/bin/backport-using-enum -p /src/rewriter-build \"\$f\"
+              done
+            "
+
+          # Clean up the temporary build directory to save disk space.
+          rm -rf ${{github.workspace}}/rewriter-build
+
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
