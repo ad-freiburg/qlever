@@ -286,10 +286,8 @@ inline void runParsingAndSweeper(
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
       sjAlgo.libspatialjoinParse(
-          false,
-          // TODO bounding box
-          {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt}, sweeper,
-          1, std::nullopt);
+          false, {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+          sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -301,7 +299,6 @@ inline void runParsingAndSweeper(
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
       sjAlgo.libspatialjoinParse(
-          // TODO bounding box
           true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
           sweeper, 1, prefilterBox);
 

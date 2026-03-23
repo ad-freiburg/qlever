@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
+#include "SpatialJoinTestHelpers.h"
 
 // _____________________________________________________________________________
 namespace {
@@ -284,34 +285,52 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterRegularImplementation) {
 // Test for other utility functions related to geometry prefiltering
 
 // _____________________________________________________________________________
-TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
+enum class PrefilterTestMode { GEO_VOCAB, PRECOMPUTED };
+class SpatialJoinPrefilterGeoByBoundingBoxTest
+    : public ::testing::TestWithParam<PrefilterTestMode> {
+ protected:
+  // Get the bounding box, if precomputation is the current test mode.
+  std::optional<ad_utility::BoundingBox> getPrecomputedBoundingBox(
+      std::string_view wkt) {
+    if (GetParam() != PrefilterTestMode::PRECOMPUTED) {
+      return std::nullopt;
+    }
+    return ad_utility::GeometryInfo::getBoundingBox(wkt);
+  };
+};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinPrefilterGeoByBoundingBoxTest, Test) {
   auto kg = buildLibSJTestDataset(true, false, false, true);
-  auto qec = buildQec(kg, true);
+  auto qec = buildQec(kg, GetParam() == PrefilterTestMode::GEO_VOCAB);
   const auto& index = qec->getIndex();
 
   auto [vMap, nMap] = resolveValIdTable(qec, 8);
 
   auto idxUni = getValId(nMap, "uni").getVocabIndex();
+  auto bbUni = getPrecomputedBoundingBox(areaUniFreiburg);
   auto idxLondon = getValId(nMap, "london").getVocabIndex();
+  auto bbLondon = getPrecomputedBoundingBox(areaLondonEye);
   auto idxNewYork = getValId(nMap, "lib").getVocabIndex();
+  auto bbNewYork = getPrecomputedBoundingBox(areaStatueOfLiberty);
   auto idxInvalid = getValId(nMap, "invalid").getVocabIndex();
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxUni, std::nullopt));
+      boundingBoxGermany, index, idxUni, bbUni));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxLondon, std::nullopt));
+      boundingBoxGermany, index, idxLondon, bbLondon));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxNewYork, std::nullopt));
+      boundingBoxGermany, index, idxNewYork, bbNewYork));
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxUni, std::nullopt));
+      boundingBoxUniAndLondon, index, idxUni, bbUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxLondon, std::nullopt));
+      boundingBoxUniAndLondon, index, idxLondon, bbLondon));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxNewYork, std::nullopt));
+      boundingBoxUniAndLondon, index, idxNewYork, bbNewYork));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxOtherPlaces, index, idxUni, std::nullopt));
+      boundingBoxOtherPlaces, index, idxUni, bbUni));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
       boundingBoxUniAndLondon, index, idxInvalid, std::nullopt));
@@ -321,16 +340,19 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
       boundingBoxOtherPlaces, index, idxInvalid, std::nullopt));
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxUni, std::nullopt));
+      std::nullopt, index, idxUni, bbUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxLondon, std::nullopt));
+      std::nullopt, index, idxLondon, bbLondon));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxNewYork, std::nullopt));
+      std::nullopt, index, idxNewYork, bbNewYork));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
       std::nullopt, index, idxInvalid, std::nullopt));
 }
 
-// TODO<ullingerc> Tests for automatic push down and prefiltering using
-// `ql:envelopeLowerLeft` and `ql:envelopeUpperRight` by `SpatialJoin`.
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(SpatialJoinPrefilterGeoByBoundingBoxTest,
+                         SpatialJoinPrefilterGeoByBoundingBoxTest,
+                         ::testing::Values(PrefilterTestMode::GEO_VOCAB,
+                                           PrefilterTestMode::PRECOMPUTED));
 
 }  // namespace
