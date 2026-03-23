@@ -509,6 +509,9 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
                               GraphStoreOperation{Iri("<foo>")}));
+  EXPECT_THAT(parse(makeRequest(http::verb::head, "/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
   EXPECT_THAT(parse(makeRequest(http::verb::delete_, "/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
                               GraphStoreOperation{Iri("<foo>")}));
@@ -520,8 +523,8 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
       testing::StrEq("Request method \"PATCH\" not supported (GET, POST, TSOP, "
-                     "PUT and DELETE are supported; HEAD and PATCH for graph "
-                     "store protocol are not yet supported)"));
+                     "PUT and DELETE are supported; PATCH for graph "
+                     "store protocol is not yet supported)"));
   AD_EXPECT_THROW_WITH_MESSAGE(parse(makeGetRequest(" ")),
                                testing::StrEq("Failed to parse URL: \"/ \"."));
 }

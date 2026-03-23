@@ -9,10 +9,10 @@
 
 #include <gmock/gmock.h>
 
-#include "index/DeltaTriples.h"
+#include "engine/UpdateMetadata.h"
 
 // _____________________________________________________________________________
-TEST(DeltaTriplesCountTest, toJson) {
+TEST(UpdateMetadataTest, toJson) {
   constexpr DeltaTriplesCount count{5, 3};
   const nlohmann::json expected = {
       {"inserted", 5}, {"deleted", 3}, {"total", 8}};
@@ -22,7 +22,7 @@ TEST(DeltaTriplesCountTest, toJson) {
 }
 
 // _____________________________________________________________________________
-TEST(DeltaTriplesCountTest, subtractOperator) {
+TEST(UpdateMetadataTest, subtractOperator) {
   constexpr DeltaTriplesCount count1{10, 5};
   constexpr DeltaTriplesCount count2{3, 2};
   EXPECT_THAT(count1 - count2, testing::Eq(DeltaTriplesCount{7, 3}));

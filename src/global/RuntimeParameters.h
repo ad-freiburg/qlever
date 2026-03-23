@@ -56,6 +56,7 @@ struct RuntimeParameters {
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
+  SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
   Bool throwOnUnboundVariables_{false, "throw-on-unbound-variables"};
 
@@ -155,6 +156,13 @@ struct RuntimeParameters {
   // debug caching issues, and to get rid of the overhead of caching (in
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
+
+  // Configure the amount of threads to compress and write blocks per
+  // permutation. A value of 0 indicates that the number of threads should be
+  // determined automatically based on the number of available hardware threads.
+  // Even though this influences the logic of regular index building,
+  // `qlever-index`doesn't expose a CLI flag to set this parameter.
+  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
   // If set to `true`, then the experimental binary federation via SERVICE
   // queries is enabled between QLever ins

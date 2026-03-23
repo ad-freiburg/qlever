@@ -55,7 +55,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 }
 
 // ___________________________________________________________________________
-size_t Engine::countDistinct(IdTableView<0> input,
+size_t Engine::countDistinct(const IdTable& input,
                              const std::function<void()>& checkCancellation) {
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(input, ql::ranges::lexicographical_compare),
@@ -81,10 +81,4 @@ size_t Engine::countDistinct(IdTableView<0> input,
 
   auto numDuplicates = std::accumulate(counter.begin(), counter.end(), 0ULL);
   return input.numRows() - numDuplicates;
-}
-
-// ___________________________________________________________________________
-size_t Engine::countDistinct(const IdTable& input,
-                             const std::function<void()>& checkCancellation) {
-  return countDistinct(input.asStaticView<0>(), checkCancellation);
 }
