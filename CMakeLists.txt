@@ -26,8 +26,12 @@ endif ()
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Allow the explicit overriding of the C++ standard version, e.g. when the reduced features set for C++17 is used.
+if (NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # will not take effect without FORCE
@@ -143,17 +147,10 @@ FetchContent_Declare(
 ################################
 # Use URL to avoid downloading large repository as recommended here:
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
-if (REDUCED_FEATURE_SET_FOR_CPP17)
-    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz")
-    set(NLOHMANN_URL_HASH "SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d")
-else()
-    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz")
-    set(NLOHMANN_URL_HASH "SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1")
-endif()
 FetchContent_Declare(
         nlohmann-json
-        URL ${NLOHMANN_FETCH_URL}
-        URL_HASH ${NLOHMANN_URL_HASH}
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
         EXCLUDE_FROM_ALL
 )
 
@@ -249,9 +246,11 @@ endif ()
 # BOOST
 ######################################
 if (REDUCED_FEATURE_SET_FOR_CPP17)
- find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+  # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
+  #which is only available in Boost versions >= 1.81
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
 else()
- find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
 endif()
 include_directories(${Boost_INCLUDE_DIR})
 
