@@ -232,6 +232,9 @@ class EncodedIriManagerImpl {
     return {prefix, decodeDecimalFrom64Bit(payload)};
   }
 
+  // The index of a prefix. This is the same prefix that is used for
+  // `makeIdFromPrefixIdxAndPayload` and returned from
+  // `splitIntoPrefixIdxAndPayload`.
   std::optional<uint64_t> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) {
     auto it = ql::ranges::find(prefixes_,

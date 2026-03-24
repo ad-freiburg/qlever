@@ -17,8 +17,8 @@ GraphNamespaceManager::GraphNamespaceManager(std::string prefixWithoutBraces,
 
 // _____________________________________________________________________________
 ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
-  return ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
-      "<", prefixWithoutBraces_, std::to_string(nextUnallocatedGraph_++), ">"));
+  return ad_utility::triple_component::Iri::fromIriref(
+      absl::StrCat("<", prefixWithoutBraces_, nextUnallocatedGraph_++, ">"));
 }
 
 // _____________________________________________________________________________
