@@ -95,9 +95,6 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   qpExpect(qlv, singleTripleFromStar,
            h::IndexScanFromStrings("?s", "<p1>", "?o1"));
 
-  // TODO<ullingerc> Test star with three arms and also if an arm is missing,
-  // that the view is not used.
-
   // Test cases where star rewriting cannot be applied.
   auto noStarRewrite = [&qlv, &manager](std::string query,
                                         source_location sourceLocation =
@@ -105,53 +102,17 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
     auto l = generateLocationTrace(sourceLocation);
     expectNotSuitableForRewrite(qlv, manager, "noStarRewriteView", query);
   };
-  noStarRewrite(R"(
-    SELECT * {
-      <s1> <p1> ?o1 .
-      ?s <p2> ?o2 .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-      ?s <p1> ?o2 .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?s .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-      ?s <p2> ?o1 .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-      ?s <p2> <o2a> .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-      ?s <p2> ?o2 .
-      ?s <p3> <o2a> .
-    }
-  )");
-  noStarRewrite(R"(
-    SELECT * {
-      ?s <p1> ?o1 .
-      ?o2 ^<p2> ?s .
-    }
-  )");
+
+  noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
+  noStarRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> <o2a> }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> <o2a> }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?o2 ^<p2> ?s }");
+  noStarRewrite("SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2>* ?o2 }");
 }
 
 // _____________________________________________________________________________

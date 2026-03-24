@@ -20,6 +20,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
+#include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
 namespace materializedViewsQueryAnalysis {
@@ -287,9 +288,8 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
 // _____________________________________________________________________________
 bool QueryPatternCache::analyzeJoinStar(
     ViewPtr view, const std::vector<SparqlTriple>& triples) {
-  if (triples.size() < 2) {
-    return false;
-  }
+  AD_CORRECTNESS_CHECK(triples.size() >= 2);
+
   // All triples must have the same variable subject.
   if (!triples[0].s_.isVariable()) {
     return false;
