@@ -26,7 +26,6 @@ auto LT = [](size_t blockIndex, const IdTriple<>& triple, bool insertOrDelete) {
 };
 }  // namespace
 
-// TODO: actually finish
 TEST(SortedVectorTest, test) {
   auto lt1 = LT(0, IT(1, 2, 3), true);
   auto lt1I = LT(0, IT(1, 2, 3), false);

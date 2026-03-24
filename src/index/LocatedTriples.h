@@ -62,7 +62,7 @@ struct LocatedTriple {
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
                                               triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
@@ -146,7 +146,8 @@ class SortedLocatedTriplesVector {
   const_reverse_iterator rend() const;
 
   void erase(const LocatedTriple& elem);
-  void erase_range(std::vector<LocatedTriple> elems);
+  void erase(std::vector<LocatedTriple> toDelete);
+  void erase2(std::vector<LocatedTriple> elems);
 
   size_t size() const;
   bool empty() const;

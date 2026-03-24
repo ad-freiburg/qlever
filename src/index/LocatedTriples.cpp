@@ -171,45 +171,45 @@ SortedLocatedTriplesVector::rend() const {
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
   ensureItemsAreSorted();
-  auto iter = ql::ranges::find(triples_, elem);
-  AD_CONTRACT_CHECK(iter != triples_.end());
+  auto iter = ql::ranges::lower_bound(triples_, elem);
+  AD_CONTRACT_CHECK(iter != triples_.end() && *iter == elem);
   triples_.erase(iter);
   sortedUntil_ = triples_.size();
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::erase_range(std::vector<LocatedTriple> elems) {
+void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
   ensureItemsAreSorted();
-  ql::ranges::sort(elems, {}, &LocatedTriple::triple_);
+  ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
 
-  auto targetIt = triples_.begin();
-  auto elemIt = triples_.begin();
-  auto deletionIt = elems.begin();
+  auto out = triples_.begin();
+  auto triple = triples_.begin();
+  auto deletion = toDelete.begin();
   LocatedTripleCompare comp;
 
-  while (elemIt != triples_.end() && deletionIt != elems.end()) {
-    // elem < deletion
-    if (comp(*elemIt, *deletionIt)) {
-      if (targetIt != elemIt) {
-        *targetIt = std::move(*elemIt);
+  while (triple != triples_.end() && deletion != toDelete.end()) {
+    // triple < deletion
+    if (comp(*triple, *deletion)) {
+      if (out != triple) {
+        *out = std::move(*triple);
       }
-      ++targetIt;
-      ++elemIt;
+      ++out;
+      ++triple;
     }
-    // deletion < elem
-    else if (comp(*deletionIt, *elemIt)) {
+    // deletion < triple
+    else if (comp(*deletion, *triple)) {
       // TODO: this would mean that on element is being deleted that is not in
       // the list. see `erase` for consistency
-      ++deletionIt;
-      // elem == deletion
+      ++deletion;
+      // triple == deletion
     } else {
-      ++elemIt;
-      ++deletionIt;
+      ++triple;
+      ++deletion;
     }
   }
 
-  auto pastTheEnd = std::move(elemIt, triples_.end(), targetIt);
-  triples_.erase(pastTheEnd, triples_.end());
+  auto newEnd = std::move(triple, triples_.end(), out);
+  triples_.erase(newEnd, triples_.end());
   sortedUntil_ = triples_.size();
 }
 
