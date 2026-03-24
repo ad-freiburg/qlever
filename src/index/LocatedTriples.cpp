@@ -56,18 +56,13 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 void SortedLocatedTriplesVector::zipSort() const {
   // Sort the currently unsorted tail and only keep the last `LocatedTriple` for
   // each triple.
-  auto sortedUntilIt = triples_.begin() + sortedUntil_;
-  std::stable_sort(sortedUntilIt, triples_.end(), LocatedTripleCompare{});
-  auto rit =
-      std::unique(triples_.rbegin(), triples_.rend() - sortedUntil_,
-                  [](const LocatedTriple& lt1, const LocatedTriple& lt2) {
-                    return lt1.triple_ == lt2.triple_;
-                  });
-  triples_.erase(sortedUntilIt, rit.base());
+  auto unsorted =
+      ql::ranges::subrange(triples_.begin() + sortedUntil_, triples_.end());
+  sortAndRemoveDuplicates(triples_, unsorted);
 
   // End of the first sorted part. Re-create because it's invalidated by the
   // erase.
-  sortedUntilIt = triples_.begin() + sortedUntil_;
+  auto sortedUntilIt = triples_.begin() + sortedUntil_;
 
   // Merge the two sorted parts which contain up to one `LocatedTriple` per
   // triple.
@@ -114,13 +109,7 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::fullSort() const {
-  ql::ranges::stable_sort(triples_, LocatedTripleCompare{});
-  auto rit =
-      std::unique(triples_.rbegin(), triples_.rend(),
-                  [](const LocatedTriple& lt1, const LocatedTriple& lt2) {
-                    return lt1.triple_ == lt2.triple_;
-                  });
-  triples_.erase(triples_.begin(), rit.base());
+  sortAndRemoveDuplicates(triples_, triples_);
 }
 
 // ____________________________________________________________________________
@@ -188,6 +177,7 @@ void SortedLocatedTriplesVector::erase(const LocatedTriple& it) {
   auto iter = ql::ranges::find(triples_, it);
   AD_CONTRACT_CHECK(iter != triples_.end());
   triples_.erase(iter);
+  sortedUntil_ = triples_.size();
 }
 
 // ____________________________________________________________________________
@@ -211,6 +201,8 @@ void SortedLocatedTriplesVector::erase_range(std::vector<LocatedTriple> its) {
     }
     // deletion < elem
     else if (comp(*deletionIt, *elemIt)) {
+      // TODO: this would mean that on element is being deleted that is not in
+      // the list. see `erase` for consistency
       ++deletionIt;
       // elem == deletion
     } else {
@@ -221,6 +213,7 @@ void SortedLocatedTriplesVector::erase_range(std::vector<LocatedTriple> its) {
 
   auto pastTheEnd = std::move(elemIt, triples_.end(), targetIt);
   triples_.erase(pastTheEnd, triples_.end());
+  sortedUntil_ = triples_.size();
 }
 
 // ____________________________________________________________________________

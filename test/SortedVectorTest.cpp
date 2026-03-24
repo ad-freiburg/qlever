@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "index/LocatedTriples.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
 
 namespace {
@@ -23,6 +24,7 @@ auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
 auto LT = [](size_t blockIndex, const IdTriple<>& triple, bool insertOrDelete) {
   return LocatedTriple{blockIndex, triple, insertOrDelete};
 };
+}  // namespace
 
 // TODO: actually finish
 TEST(SortedVectorTest, test) {
@@ -162,4 +164,40 @@ TEST(SortedVectorTest, emptyVector) {
   EXPECT_EQ(sv.rbegin(), sv.rend());
 }
 
-}  // namespace
+TEST(SortedVectorTest, sortedVector) {
+  using SV = SortedLocatedTriplesVector;
+  using LT = LocatedTriple;
+  using LTs = std::vector<LT>;
+
+  // Helpers: three distinct triples, each with insert/delete variants.
+  auto LT1d = LT{0, IT(10, 1, 0), false};
+  auto LT1i = LT{0, IT(10, 1, 0), true};
+  auto LT2d = LT{0, IT(10, 2, 1), false};
+  auto LT2i = LT{0, IT(10, 2, 1), true};
+  auto LT3d = LT{0, IT(11, 3, 0), false};
+  auto LT3i = LT{0, IT(11, 3, 0), true};
+
+  auto expect = [](LTs input, const testing::Matcher<LTs>& expect,
+                   std::optional<size_t> subrangeBegin = std::nullopt,
+                   std::optional<size_t> subrangeEnd = std::nullopt,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto subrange = ql::ranges::subrange(
+        input.begin() + subrangeBegin.value_or(0),
+        input.begin() + subrangeEnd.value_or(input.size()));
+    SV::sortAndRemoveDuplicates(input, subrange);
+    EXPECT_THAT(input, expect);
+  };
+
+  expect({}, testing::IsEmpty());
+  expect({LT1i}, testing::Eq(LTs{LT1i}));
+  expect({LT1d, LT2i, LT3d}, testing::Eq(LTs{LT1d, LT2i, LT3d}));
+  expect({LT3d, LT1i, LT2d}, testing::Eq(LTs{LT1i, LT2d, LT3d}));
+  expect({LT1i, LT2d, LT3d, LT1d, LT1i, LT2i},
+         testing::Eq(LTs{LT1i, LT2i, LT3d}));
+  expect({LT1d, LT1i, LT1d, LT1i}, testing::Eq(LTs{LT1i}));
+  expect({LT1d, LT2i, LT3i, LT2d, LT3d},
+         testing::Eq(LTs{LT1d, LT2i, LT2d, LT3d}), 2);
+  expect({LT1d, LT2i, LT1i, LT2d, LT1d},
+         testing::Eq(LTs{LT1d, LT2i, LT1d, LT2d}), 2);
+}

@@ -100,7 +100,30 @@ class SortedLocatedTriplesVector {
   void zipSort() const;
   void fullSort() const;
 
+  // For the range `rangeToSort` contained in `triples` sort it by triple and
+  // keep the last `LocatedTriple` for each triple.
+  CPP_template(typename R)(
+      requires ql::ranges::range<
+          R>) static void sortAndRemoveDuplicates(std::vector<LocatedTriple>&
+                                                      triples,
+                                                  R&& rangeToSort) {
+    // Stable sort ensures that the operations for each triple are not
+    // reordered. Older `LocatedTriple`s are before newer ones.
+    ql::ranges::stable_sort(rangeToSort, {}, &LocatedTriple::triple_);
+    // We want to keep the last `LocatedTriple` for elements with the same
+    // triple. The first element on the reverse iterators is exactly this last
+    // element.
+    auto freedReverse = ql::ranges::unique(ql::views::reverse(rangeToSort), {},
+                                           &LocatedTriple::triple_);
+    // `unique` was on a reversed range so the freed range is also reversed.
+    // Reverse it again to obtain the forward range of the erase element.
+    auto toFree = ql::views::reverse(freedReverse);
+    // Delete the freed up space which is at the beginning of `rangeToSort`.
+    triples.erase(toFree.begin(), toFree.end());
+  }
+
   friend class ad_benchmark::EnsureIntegrationBenchmark;
+  FRIEND_TEST(SortedVectorTest, sortedVector);
 
  public:
   SortedLocatedTriplesVector() : triples_(), sortedUntil_(0), dirty_(false) {}
