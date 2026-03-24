@@ -164,6 +164,10 @@ struct RuntimeParameters {
   // `qlever-index`doesn't expose a CLI flag to set this parameter.
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
+  // If set to `true`, then the experimental binary federation via SERVICE
+  // queries is enabled between QLever ins
+  Bool binaryServiceEnabled_{true, "binary-service-enabled"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

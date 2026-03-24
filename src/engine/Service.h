@@ -123,6 +123,9 @@ class Service : public Operation {
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;
 
+  Result computeBinaryResult(bool requestLaziness,
+                             HttpOrHttpsResponse response);
+
   // Actually compute the result for the function above.
   Result computeResultImpl(bool requestLaziness);
 

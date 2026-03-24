@@ -32,6 +32,14 @@
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
+  // Disable the binary service export for these tests, as the test mocks
+  // expect a plain JSON accept header.
+  decltype(setRuntimeParameterForTest<
+           &RuntimeParameters::binaryServiceEnabled_>(
+      false)) disableBinaryService_ =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          false);
+
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
