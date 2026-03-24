@@ -144,8 +144,8 @@ FetchContent_Declare(
 # Use URL to avoid downloading large repository as recommended here:
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 if (REDUCED_FEATURE_SET_FOR_CPP17)
-    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.11.0/json.tar.xz")
-    set(NLOHMANN_URL_HASH "SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa")
+    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz")
+    set(NLOHMANN_URL_HASH "SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d")
 else()
     set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz")
     set(NLOHMANN_URL_HASH "SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1")
