@@ -342,7 +342,7 @@ class Date {
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Calculates `DayTimeDuration` between the two `Dates` using Epoch time.
   std::optional<DayTimeDuration> operator-(const Date& rhs) const;
 

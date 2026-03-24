@@ -86,7 +86,7 @@ Result Sort::computeResult(bool requestLaziness) {
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),
                                    std::move(input), requestLaziness);
@@ -182,7 +182,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   }
   while (it != end) {
     checkCancellation();
-    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+    if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
                                         Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
