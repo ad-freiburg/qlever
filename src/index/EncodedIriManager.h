@@ -85,11 +85,15 @@ class EncodedIriManagerImpl {
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
   // By default, `prefixes_` is empty, so no IRI will be encoded.
+  // NOTE: When loading an existing index use the deserialization from JSON. See
+  // the note in `from_json`.
   EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
   // Construct from the list of prefixes. The prefixes have to be specified
   // without any brackes, so e.g. "http://example.org/" if IRIs of the form
   // `<http://example.org/1234>` should be encoded.
+  // NOTE: When loading an existing index use the deserialization from JSON. See
+  // the note in `from_json`.
   explicit EncodedIriManagerImpl(
       std::vector<std::string> prefixesWithoutAngleBrackets) {
     // Add hardcoded prefixes.
@@ -254,11 +258,17 @@ class EncodedIriManagerImpl {
   }
   friend void from_json(const nlohmann::json& j,
                         EncodedIriManagerImpl& encodedIriManager) {
+    // When loading an existing index EncodedIriManagers must be de-serialized
+    // from json through this method. This is required so that
+    // 1. the user specified prefixes set for the index build are loaded and
+    // 2. that exactly the hardcoded prefixes that the index was built with are
+    // loaded.
+    //
+    // This keeps compatibility with already built indices. Newly built indices
+    // go through the normal constructor and use the current hardcoded
+    // prefixes.
     encodedIriManager.prefixes_ =
         static_cast<std::vector<std::string>>(j[jsonKey_]);
-    // Don't check for the existence of the hardcoded prefixes when
-    // deserializing. A new index will be built with the hardcoded prefixes but
-    // an old index can also still be loaded.
   }
 
   // Hash support for use in `TestIndexConfig`.
