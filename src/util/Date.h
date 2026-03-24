@@ -178,7 +178,7 @@ class Date {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
 #endif
   /// Construct a `Date` from values for the different components. If any of the
