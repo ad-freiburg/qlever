@@ -1958,8 +1958,9 @@ namespace {
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
     const Permutation& permutation, auto customAction) {
-  return std::packaged_task{[&counter, &permutation, &locatedTriplesSharedState,
-                             customAction = std::move(customAction)]() {
+  return std::packaged_task<void()>{[&counter, &permutation,
+                                     &locatedTriplesSharedState,
+                                     customAction = std::move(customAction)]() {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
