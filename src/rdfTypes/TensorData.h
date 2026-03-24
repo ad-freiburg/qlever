@@ -16,7 +16,7 @@ namespace ad_utility {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 class TensorData {
  public:
-  enum struct DType { FLOAT = 0, BOOL, INT };
+  enum struct DType { FLOAT = 0, DOUBLE, BOOL, INT };
 
  private:
   // only support float tensors with one dimension for now
@@ -42,7 +42,8 @@ class TensorData {
   size_t size() const { return tensorData_.size(); }
   const auto& shape() const { return shape_; }
   DType dtype() const { return dtype_; }
-    static bool isBroadCastable(const TensorData& tensor1, const TensorData& tensor2) ;
+  static bool isBroadCastable(const TensorData& tensor1,
+                              const TensorData& tensor2);
 
   static TensorData parseFromString(std::string_view dataString);
   static TensorData parseFromJSON(nlohmann::json json);

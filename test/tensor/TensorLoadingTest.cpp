@@ -15,13 +15,13 @@ TEST(TensorParse, TensorDump) {
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
   auto [tensorString, datatypeIri] = tensor.toString();
   EXPECT_THAT(tensorString,
-              R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float64"})");
+              R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float32"})");
   EXPECT_THAT(datatypeIri, "https://w3id.org/rdf-tensor/datatypes#DataTensor");
 }
 // _____________________________________________________________________________
 TEST(TensorParse, TensorConstruction) {
   auto tensor_from_string = TensorData::parseFromString(
-      R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float64"})");
+      R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float32"})");
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
   EXPECT_EQ(tensor_from_string[0], tensor[0]);
   EXPECT_EQ(tensor_from_string.size(), tensor.size());
@@ -38,7 +38,7 @@ TEST(TensorParse, TensorConstruction) {
       TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"shape":[3]})"),
       std::runtime_error);  // missing type
   EXPECT_THROW(
-      TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"type":"float64"})"),
+      TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"type":"float32"})"),
       std::runtime_error);  // missing shape
 }
 }  // namespace

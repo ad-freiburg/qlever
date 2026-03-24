@@ -162,8 +162,7 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
   nnIndices.resize(n);
   nnDistances.resize(n);
   //  If the user did not specify a search_k value, we use a default that is
-  //  based on the number of items in the index, as recommended by FAISS for
-  //  good recall while still being efficient.
+  //  based on the number of items in the index based on a simple heuristic.
   size_t search_probe = config_.searchK_.value_or(
       std::min((size_t)std::sqrt(tensorIndexToRow_.size()),
                tensorIndexToRow_.size() - 1));

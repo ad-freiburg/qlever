@@ -190,17 +190,6 @@ add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
 find_package(Threads REQUIRED)
 
 ################################
-# BZIP2 (?)
-################################
-find_package(BZip2 REQUIRED)
-if (TARGET BZip2::BZip2)
-    MESSAGE(STATUS "Use BZip2 that was installed via conan")
-    link_libraries(BZip2::BZip2)
-else ()
-    link_libraries(Bzip2)
-endif ()
-
-################################
 # Annoy (for approximate nearest neighbor search) - DISABLE, ANNOY is broken...
 ################################
 # MESSAGE(STATUS "Using Annoy for the dense tensor index")
@@ -266,7 +255,7 @@ else ()
 endif ()
 
 ### ZSTD
-find_package(zstd QUIET)
+find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)
     MESSAGE(STATUS "Use zstd that was installed via conan")
     link_libraries(zstd::libzstd_static)
@@ -278,13 +267,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.83 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
-if (TARGET Boost::iostreams OR TARGET Boost::program_options OR TARGET Boost::url OR TARGET Boost::container OR TARGET Boost‚::program_options)
-    MESSAGE(STATUS "Use Boost that was installed via conan")
-    link_libraries(Boost::iostreams Boost::program_options Boost::url Boost::container Boost::program_options)
-else ()
-    MESSAGE(STATUS "Use system Boost")
-endif ()
+find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -303,7 +286,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container Boost::url Boost::iostreams Boost::program_options)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")

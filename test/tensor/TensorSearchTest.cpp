@@ -51,12 +51,12 @@ std::shared_ptr<TensorSearch> makeTensorSearchFromValues(
       &encodedIriManager,
       R"(PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
       SELECT ?a {VALUES 
-      (?a) {("{\"data\":[1.0,0,0],\"shape\":[3],\"type\":\"float64\"}"^^dt:DataTensor)}})");
+      (?a) {("{\"data\":[1.0,0,0],\"shape\":[3],\"type\":\"float32\"}"^^dt:DataTensor)}})");
   auto pqRight = SparqlParser::parseQuery(
       &encodedIriManager,
       R"(PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
       SELECT ?b {VALUES
-      (?b) {("{\"data\":[0,1.0,0],\"shape\":[3],\"type\":\"float64\"}"^^dt:DataTensor)}})");
+      (?b) {("{\"data\":[0,1.0,0],\"shape\":[3],\"type\":\"float32\"}"^^dt:DataTensor)}})");
   QueryPlanner qp{qec, sharedHandle};
 
   auto leftChild =

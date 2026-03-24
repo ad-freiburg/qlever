@@ -47,7 +47,7 @@ TEST_F(TensorQueryTest, TensorEnd2EndConstruction) {
 PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
 PREFIX dtf: <https://w3id.org/rdf-tensor/functions#>
 PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
-      SELECT ?s (dtf:cosineSimilarity("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float64\"}"^^dt:DataTensor, ?v) AS ?sim) ?v WHERE  { 
+      SELECT ?s (dtf:cosineSimilarity("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float32\"}"^^dt:DataTensor, ?v) AS ?sim) ?v WHERE  { 
       ?s <p1> ?v.
       }
       ORDER BY DESC(?sim)      

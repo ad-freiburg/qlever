@@ -31,7 +31,7 @@ std::string makeVectorKg(size_t n, size_t dim = 3) {
       if (d + 1 < dim) data += ",";
     }
     data +=
-        R"(],\"shape\":[)" + std::to_string(dim) + R"(],\"type\":\"float64\"})";
+        R"(],\"shape\":[)" + std::to_string(dim) + R"(],\"type\":\"float32\"})";
     out += absl::StrCat(
         "<s", i, "> <p1> \"", data,
         "\"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .\n");

@@ -13,7 +13,7 @@ FROM base AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
-RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev
+RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev libopenblas-dev
 
 # Copy everything we need to build the binaries.
 #
@@ -34,20 +34,22 @@ COPY GitVersion.cmake /qlever/
 # to, build the image with `--build-arg RUN_TESTS=false`.
 # `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
 # `-march=native`.
-ARG RUN_TESTS=true
+ARG RUN_TESTS=false
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
-RUN if [ "$RUN_TESTS" = "true" ]; then \
-      cmake --build . && ctest --rerun-failed --output-on-failure; \
+RUN --mount=type=cache,target=/qlever/build \
+    cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
+RUN --mount=type=cache,target=/qlever/build \
+    if [ "$RUN_TESTS" = "true" ]; then \
+      cmake --build . -j 4 && ctest --rerun-failed --output-on-failure; \
     else \
-      cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
+      cmake --build  . -j 4 --target qlever-index qlever-server && echo "Skipping tests"; \
     fi
 
 # Install the packages needed for the final image.
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 libopenblas0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).

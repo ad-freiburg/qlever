@@ -7,7 +7,8 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
 
 const std::map<TensorData::DType, std::string> dtypeToString = {
-    {TensorData::DType::FLOAT, "float64"},
+    {TensorData::DType::DOUBLE, "float64"},
+    {TensorData::DType::FLOAT, "float32"},
     {TensorData::DType::BOOL, "bool"},
     {TensorData::DType::INT, "int64"},
 };
