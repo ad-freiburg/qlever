@@ -668,14 +668,3 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
   // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
   return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
 }
-
-// _____________________________________________________________________________
-bool MaterializedView::checkVariablesAlwaysDefined(
-    std::vector<std::reference_wrapper<Variable>> vars) const {
-  return ql::ranges::all_of(vars, [this](const Variable& var) {
-    auto it = varToColMap_.find(var);
-    return it != varToColMap_.end() &&
-           it->second.mightContainUndef_ ==
-               ColumnIndexAndTypeInfo::AlwaysDefined;
-  });
-}

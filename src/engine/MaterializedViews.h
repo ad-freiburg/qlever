@@ -237,11 +237,6 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
       const ad_utility::HashSet<Variable>& variablesSeen,
       const TripleComponent& target) const;
 
-  // Check that all the variables given are contained in the view and are always
-  // defined.
-  bool checkVariablesAlwaysDefined(
-      std::vector<std::reference_wrapper<Variable>> vars) const;
-
   // Given a `QueryExecutionContext` and the arguments for `makeScanConfig`
   // construct an `IndexScan` operation for scanning the requested columns
   // of this view. The result of this function is guaranteed to never be

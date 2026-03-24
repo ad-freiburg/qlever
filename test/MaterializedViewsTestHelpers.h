@@ -214,6 +214,19 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
                   std::move(c));
 };
 
+// _____________________________________________________________________________
+inline void expectNotSuitableForRewrite(
+    const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
+    const auto& viewName, const auto& query,
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
+  auto view = manager.getView(viewName);
+  EXPECT_FALSE(qpc.analyzeView(view));
+  manager.unloadViewIfLoaded(viewName);
+};
+
 }  // namespace materializedViewsTestHelpers
 
 #endif  // QLEVER_TEST_MATERIALIZEDVIEWSTESTHELPERS_H_
