@@ -37,13 +37,18 @@ COPY GitVersion.cmake /qlever/
 ARG RUN_TESTS=false
 WORKDIR /qlever/build/
 RUN --mount=type=cache,target=/qlever/build \
-    cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
+  cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
 RUN --mount=type=cache,target=/qlever/build \
-    if [ "$RUN_TESTS" = "true" ]; then \
-      cmake --build . -j 4 && ctest --rerun-failed --output-on-failure; \
-    else \
-      cmake --build  . -j 4 --target qlever-index qlever-server && echo "Skipping tests"; \
-    fi
+  if [ "$RUN_TESTS" = "true" ]; then \
+  cmake --build . -j 4 && ctest --rerun-failed --output-on-failure; \
+  else \
+  cmake --build . -j 4 --target qlever-index qlever-server && echo "Skipping tests"; \
+  fi \
+  && mkdir -p /qlever/bin && \
+  cp qlever-* /qlever/bin/ && \
+  if [ "$RUN_TESTS" = "true" ]; then \
+  cp test/*Main /qlever/bin/; \
+  fi
 
 # Install the packages needed for the final image.
 FROM base AS runtime
@@ -79,9 +84,9 @@ ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 # Copy the binaries and the entrypoint script.
 # qlever-server, qlever-index
-COPY --from=builder /qlever/build/qlever-* /qlever/
+COPY --from=builder /qlever/bin/qlever-* /qlever/
 # PrintIndexVersionMain, VocabularyMergerMain
-COPY --from=builder /qlever/build/*Main /qlever/
+COPY --from=builder /qlever/bin/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/
 
