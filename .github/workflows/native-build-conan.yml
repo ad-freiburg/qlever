@@ -2,9 +2,9 @@ name: Native build with conan
 
 on:
   push:
-    branches: [ masterX ]
+    branches: [ master ]
   pull_request:
-    branches: [ masterX ]
+    branches: [ master ]
   merge_group:
 
 concurrency:

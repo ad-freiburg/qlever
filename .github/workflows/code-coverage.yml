@@ -13,9 +13,9 @@ name: measure-code-coverage
 
 on:
   push:
-    branches: [ masterX ]
+    branches: [ master ]
   pull_request:
-    branches: [ masterX ]
+    branches: [ master ]
   merge_group:
 
 concurrency:

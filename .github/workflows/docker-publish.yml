@@ -2,9 +2,9 @@ name: Docker build and publish
 
 on:
   push:
-    branches: [ masterX ]
+    branches: [ master ]
   pull_request:
-    branches: [ masterX ]
+    branches: [ master ]
 
 env:
   IMAGE: adfreiburg/qlever
