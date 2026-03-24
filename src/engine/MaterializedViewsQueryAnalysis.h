@@ -74,8 +74,6 @@ class QueryPatternCache {
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
   // All star patterns extracted from materialized views.
-  // TODO<ullingerc> Could theoretically also live within view like the bind
-  // cache.
   ad_utility::HashMap<ViewPtr, StarInfo> starCache_;
 
   // NOTE: When a new data structure for caching is added here, the unloading
