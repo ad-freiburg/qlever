@@ -103,7 +103,6 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
   SortedLocatedTriplesVector vec;
   vec.sortedUntil_ = sortedTriples.size();
   vec.triples_ = std::move(sortedTriples);
-  vec.dirty_ = false;
   return vec;
 }
 
@@ -114,21 +113,19 @@ void SortedLocatedTriplesVector::fullSort() const {
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::ensureItemsAreSorted() const {
-  if (dirty_) {
+  if (sortedUntil_ != triples_.size()) {
     if (triples_.size() > 5000) {
       zipSort();
     } else {
       fullSort();
     }
     sortedUntil_ = triples_.size();
-    dirty_ = false;
   }
 }
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::insert(LocatedTriple lt) {
   triples_.push_back(std::move(lt));
-  dirty_ = true;
 }
 
 // ____________________________________________________________________________
@@ -172,25 +169,25 @@ SortedLocatedTriplesVector::rend() const {
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::erase(const LocatedTriple& it) {
+void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
   ensureItemsAreSorted();
-  auto iter = ql::ranges::find(triples_, it);
+  auto iter = ql::ranges::find(triples_, elem);
   AD_CONTRACT_CHECK(iter != triples_.end());
   triples_.erase(iter);
   sortedUntil_ = triples_.size();
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::erase_range(std::vector<LocatedTriple> its) {
+void SortedLocatedTriplesVector::erase_range(std::vector<LocatedTriple> elems) {
   ensureItemsAreSorted();
-  ql::ranges::sort(its, LocatedTripleCompare{});
+  ql::ranges::sort(elems, {}, &LocatedTriple::triple_);
 
   auto targetIt = triples_.begin();
   auto elemIt = triples_.begin();
-  auto deletionIt = its.begin();
+  auto deletionIt = elems.begin();
   LocatedTripleCompare comp;
 
-  while (elemIt != triples_.end() && deletionIt != its.end()) {
+  while (elemIt != triples_.end() && deletionIt != elems.end()) {
     // elem < deletion
     if (comp(*elemIt, *deletionIt)) {
       if (targetIt != elemIt) {

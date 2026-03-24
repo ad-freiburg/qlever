@@ -93,7 +93,6 @@ class SortedLocatedTriplesVector {
   using storage = std::vector<LocatedTriple>;
   mutable storage triples_ = {};
   mutable size_t sortedUntil_ = 0;
-  mutable bool dirty_ = false;
 
   // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
   // triple.
@@ -126,7 +125,7 @@ class SortedLocatedTriplesVector {
   FRIEND_TEST(SortedVectorTest, sortedVector);
 
  public:
-  SortedLocatedTriplesVector() : triples_(), sortedUntil_(0), dirty_(false) {}
+  SortedLocatedTriplesVector() = default;
 
   static SortedLocatedTriplesVector fromSorted(
       std::vector<LocatedTriple> sortedTriples);
@@ -146,8 +145,8 @@ class SortedLocatedTriplesVector {
   const_iterator end() const;
   const_reverse_iterator rend() const;
 
-  void erase(const LocatedTriple& it);
-  void erase_range(std::vector<LocatedTriple> its);
+  void erase(const LocatedTriple& elem);
+  void erase_range(std::vector<LocatedTriple> elems);
 
   size_t size() const;
   bool empty() const;

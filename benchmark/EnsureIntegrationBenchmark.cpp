@@ -81,12 +81,10 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
       vec.triples_.push_back(item);
     }
     vec.sortedUntil_ = sortedPrefix.size();
-    vec.dirty_ = false;
     // Insert unsorted tail
     for (const auto& item : unsortedTail) {
       vec.triples_.push_back(item);
     }
-    vec.dirty_ = true;
     return vec;
   }
 
@@ -135,7 +133,6 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
           table.addMeasurement(nIdx, 1, [&]() {
             vec.zipSort();
             vec.sortedUntil_ = vec.triples_.size();
-            vec.dirty_ = false;
           });
         }
 
@@ -145,7 +142,6 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
           table.addMeasurement(nIdx, 2, [&]() {
             vec.fullSort();
             vec.sortedUntil_ = vec.triples_.size();
-            vec.dirty_ = false;
           });
         }
       }
