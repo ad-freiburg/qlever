@@ -40,7 +40,8 @@ AD_ALWAYS_INLINE Id
 toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
   if (originalId.isTrivial() ||
-      originalId.getDatatype() == Datatype::BlankNodeIndex) {
+      originalId.getDatatype() == Datatype::BlankNodeIndex ||
+      originalId.getDatatype() == Datatype::EncodedVal) {
     return originalId;
   } else {
     return stringMapping.remapId(originalId);
@@ -160,28 +161,60 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 // _____________________________________________________________________________
 void BinaryExportHelpers::rewriteVocabIds(
     IdTable& result, const size_t dirtyIndex, const QueryExecutionContext& qec,
-    LocalVocab& vocab, const std::vector<std::string>& transmittedStrings) {
+    LocalVocab& vocab, const std::vector<std::string>& transmittedStrings,
+    const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
+    const std::vector<std::string>& prefixes,
+    ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
   for (auto col : result.getColumns()) {
-    ql::ranges::for_each(
-        col.subspan(dirtyIndex), [&qec, &vocab, &transmittedStrings](Id& id) {
-          if (id.getDatatype() == Datatype::LocalVocabIndex) {
-            // Undo the shift done during encoding.
-            auto literalOrIri = ad_utility::triple_component::LiteralOrIri::
-                fromStringRepresentation(transmittedStrings.at(
-                    reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
-                    Id::numDatatypeBits));
-            auto tc = [&]() {
-              if (literalOrIri.isIri()) {
-                return TripleComponent{std::move(literalOrIri.getIri())};
-              } else {
-                AD_CORRECTNESS_CHECK(literalOrIri.isLiteral());
-                return TripleComponent{std::move(literalOrIri.getLiteral())};
-              }
-            };
-            id = tc().toValueId(qec.getIndex().getVocab(), vocab,
-                                qec.getIndex().encodedIriManager());
+    ql::ranges::for_each(col.subspan(dirtyIndex), [&qec, &vocab,
+                                                   &transmittedStrings,
+                                                   &prefixMapping, &prefixes,
+                                                   &blankNodeMapping](Id& id) {
+      if (id.getDatatype() == Datatype::EncodedVal) {
+        auto [prefixIdx, digitEncoding] =
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
+        if (prefixMapping.contains(prefixIdx)) {
+          id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+              prefixMapping.at(prefixIdx), digitEncoding);
+        } else {
+          std::string result = EncodedIriManager::toStringWithGivenPrefix(
+              digitEncoding, prefixes.at(prefixIdx));
+          id =
+              TripleComponent{
+                  ad_utility::triple_component::Iri::fromStringRepresentation(
+                      std::move(result))}
+                  .toValueId(qec.getIndex().getVocab(), vocab,
+                             qec.getIndex().encodedIriManager());
+        }
+      } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+        auto [it, inserted] =
+            blankNodeMapping.try_emplace(id.getBits(), ValueId{});
+
+        if (inserted) {
+          it->second = Id::makeFromBlankNodeIndex(
+              vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+        }
+        id = it->second;
+      } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+        // Undo the shift done during encoding.
+        auto literalOrIri = ad_utility::triple_component::LiteralOrIri::
+            fromStringRepresentation(transmittedStrings.at(
+                reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
+                Id::numDatatypeBits));
+        auto tc = [&]() {
+          if (literalOrIri.isIri()) {
+            return TripleComponent{std::move(literalOrIri.getIri())};
+          } else {
+            AD_CORRECTNESS_CHECK(literalOrIri.isLiteral());
+            return TripleComponent{std::move(literalOrIri.getLiteral())};
           }
-        });
+        };
+        id = tc().toValueId(qec.getIndex().getVocab(), vocab,
+                            qec.getIndex().encodedIriManager());
+      } else {
+        AD_EXPENSIVE_CHECK(id.isTrivial());
+      }
+    });
   }
 }
 
@@ -274,11 +307,13 @@ Result::Generator importBinaryGenerator(HttpOrHttpsResponse response,
   LocalVocab vocab;
   ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
+  /*
   auto toId = [&qec, &prefixes, &vocab, &prefixMapping,
                &blankNodeMapping](Id::T bits) mutable {
     return BinaryExportHelpers::toIdImpl(qec, prefixes, prefixMapping, vocab,
                                          bits, blankNodeMapping);
   };
+  */
 
   IdTable currentBatch{numColumns, qec.getAllocator()};
   // At which index we need to start converting values.
@@ -290,7 +325,8 @@ Result::Generator importBinaryGenerator(HttpOrHttpsResponse response,
       auto transmittedStrings =
           BinaryExportHelpers::readVectorOfStrings(it, end);
       BinaryExportHelpers::rewriteVocabIds(currentBatch, dirtyIndex, qec, vocab,
-                                           transmittedStrings);
+                                           transmittedStrings, prefixMapping,
+                                           prefixes, blankNodeMapping);
       if (!yieldOnce) {
         co_yield Result::IdTableVocabPair{std::move(currentBatch),
                                           std::move(vocab)};
@@ -300,10 +336,10 @@ Result::Generator importBinaryGenerator(HttpOrHttpsResponse response,
       }
     } else {
       currentBatch.emplace_back();
-      currentBatch.at(currentBatch.size() - 1, 0) = toId(firstValue);
+      currentBatch.at(currentBatch.size() - 1, 0) = Id::fromBits(firstValue);
       for ([[maybe_unused]] auto colIndex : ql::views::iota(1u, numColumns)) {
         currentBatch.at(currentBatch.size() - 1, colIndex) =
-            toId(BinaryExportHelpers::read<Id::T>(it, end));
+            Id::fromBits(BinaryExportHelpers::read<Id::T>(it, end));
       }
     }
   }

@@ -518,6 +518,9 @@ endif()
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
 
+add_executable(BinaryExportPerfMain src/libqlever/BinaryExportPerfMain.cpp)
+qlever_target_link_libraries(BinaryExportPerfMain parser engine util index qlever absl::strings)
+
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 

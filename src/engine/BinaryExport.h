@@ -93,8 +93,12 @@ class BinaryExportHelpers {
 
   // Rewrite vocab IDs in result table using transmitted strings.
   static void rewriteVocabIds(
-      IdTable& result, size_t dirtyIndex, const QueryExecutionContext& qec,
-      LocalVocab& vocab, const std::vector<std::string>& transmittedStrings);
+      IdTable& result, const size_t dirtyIndex,
+      const QueryExecutionContext& qec, LocalVocab& vocab,
+      const std::vector<std::string>& transmittedStrings,
+      const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
+      const std::vector<std::string>& prefixes,
+      ad_utility::HashMap<Id::T, Id>& blankNodeMapping);
 
   // Convert raw ID bits to a proper Id, handling encoded values.
   static Id toIdImpl(const QueryExecutionContext& qec,

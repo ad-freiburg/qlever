@@ -129,8 +129,9 @@ TEST(BinaryExportHelpers, rewriteVocabIds) {
                                                  "\"literal\""};
 
   // Rewrite vocab IDs starting from index 0
-  BinaryExportHelpers::rewriteVocabIds(table, 0, *qec, vocab,
-                                       transmittedStrings);
+  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
+  BinaryExportHelpers::rewriteVocabIds(
+      table, 0, *qec, vocab, transmittedStrings, {}, {}, blankNodeMapping);
 
   // Check that local vocab indices were rewritten
   // The first column should remain unchanged (integers)
