@@ -143,10 +143,17 @@ FetchContent_Declare(
 ################################
 # Use URL to avoid downloading large repository as recommended here:
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.11.0/json.tar.xz")
+    set(NLOHMANN_URL_HASH "SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa")
+else()
+    set(NLOHMANN_FETCH_URL "https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz")
+    set(NLOHMANN_URL_HASH "SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1")
+endif()
 FetchContent_Declare(
         nlohmann-json
-        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
-        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        URL ${NLOHMANN_FETCH_URL}
+        URL_HASH ${NLOHMANN_URL_HASH}
         EXCLUDE_FROM_ALL
 )
 
@@ -241,7 +248,11 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+ find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+else()
+ find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+endif()
 include_directories(${Boost_INCLUDE_DIR})
 
 

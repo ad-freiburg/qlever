@@ -84,7 +84,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
-  using enum WKTType;
+  using enum ::util::geo::WKTType;
   try {
     switch (type) {
       case POINT:
