@@ -200,3 +200,36 @@ TEST(SortedVectorTest, sortedVector) {
   expect({LT1d, LT2i, LT1i, LT2d, LT1d},
          testing::Eq(LTs{LT1d, LT2i, LT1d, LT2d}), 2);
 }
+
+TEST(SortedVectorTest, eraseSortedSubRange) {
+  using SV = SortedLocatedTriplesVector;
+  using LTs = std::vector<LocatedTriple>;
+
+  auto lt0 = LT(0, IT(0, 0, 0), true);  // smaller than all others
+  auto lt1 = LT(0, IT(1, 2, 3), true);
+  auto lt2 = LT(0, IT(2, 3, 4), true);
+  auto lt3 = LT(0, IT(3, 4, 5), true);
+  auto lt4 = LT(0, IT(9, 9, 9), true);  // larger than all others
+
+  auto test = [](LTs triples, LTs toDelete, const LTs& expected,
+                 ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    SV::eraseSortedSubRange(triples, toDelete);
+    EXPECT_EQ(triples, expected);
+  };
+
+  test({}, {}, {});
+  test({}, {lt1}, {});
+  test({lt1, lt2, lt3}, {}, {lt1, lt2, lt3});
+  test({lt1}, {lt1}, {});
+  test({lt1}, {lt2}, {lt1});
+  test({lt1, lt2, lt3}, {lt1}, {lt2, lt3});
+  test({lt1, lt2, lt3}, {lt2}, {lt1, lt3});
+  test({lt1, lt2, lt3}, {lt3}, {lt1, lt2});
+  test({lt1, lt2, lt3}, {lt1, lt2, lt3}, {});
+  test({lt1, lt2, lt3}, {lt1, lt3}, {lt2});
+  test({lt1, lt2}, {lt0, lt2}, {lt1});
+  test({lt1, lt2}, {lt1, lt4}, {lt2});
+  test({lt1, lt2, lt3}, {lt0, lt2, lt4}, {lt1, lt3});
+  test({lt1, lt2, lt3}, {lt0, lt4}, {lt1, lt2, lt3});
+}

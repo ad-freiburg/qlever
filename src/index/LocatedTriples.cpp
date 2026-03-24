@@ -181,35 +181,7 @@ void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
 void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
   ensureItemsAreSorted();
   ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
-
-  auto out = triples_.begin();
-  auto triple = triples_.begin();
-  auto deletion = toDelete.begin();
-  LocatedTripleCompare comp;
-
-  while (triple != triples_.end() && deletion != toDelete.end()) {
-    // triple < deletion
-    if (comp(*triple, *deletion)) {
-      if (out != triple) {
-        *out = std::move(*triple);
-      }
-      ++out;
-      ++triple;
-    }
-    // deletion < triple
-    else if (comp(*deletion, *triple)) {
-      // TODO: this would mean that on element is being deleted that is not in
-      // the list. see `erase` for consistency
-      ++deletion;
-      // triple == deletion
-    } else {
-      ++triple;
-      ++deletion;
-    }
-  }
-
-  auto newEnd = std::move(triple, triples_.end(), out);
-  triples_.erase(newEnd, triples_.end());
+  eraseSortedSubRange(triples_, toDelete);
   sortedUntil_ = triples_.size();
 }
 

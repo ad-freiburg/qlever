@@ -147,7 +147,40 @@ class SortedLocatedTriplesVector {
 
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
-  void erase2(std::vector<LocatedTriple> elems);
+  CPP_template(typename R)(
+      requires ql::ranges::range<
+          R>) static void eraseSortedSubRange(std::vector<LocatedTriple>&
+                                                  triples,
+                                              R&& toDelete) {
+    auto out = triples.begin();
+    auto triple = triples.begin();
+    auto deletion = toDelete.begin();
+    LocatedTripleCompare comp;
+
+    while (triple != triples.end() && deletion != toDelete.end()) {
+      // triple < deletion
+      if (comp(*triple, *deletion)) {
+        if (out != triple) {
+          *out = std::move(*triple);
+        }
+        ++out;
+        ++triple;
+      }
+      // deletion < triple
+      else if (comp(*deletion, *triple)) {
+        // TODO: this would mean that on element is being deleted that is not in
+        // the list. see `erase` for consistency
+        ++deletion;
+        // triple == deletion
+      } else {
+        ++triple;
+        ++deletion;
+      }
+    }
+
+    auto newEnd = std::move(triple, triples.end(), out);
+    triples.erase(newEnd, triples.end());
+  }
 
   size_t size() const;
   bool empty() const;
