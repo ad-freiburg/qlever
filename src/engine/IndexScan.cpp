@@ -164,7 +164,8 @@ bool IndexScan::canResultBeCachedImpl() const {
 string IndexScan::getDescriptor() const {
   auto additionalVars = absl::StrJoin(
       additionalVariables_ |
-          ql::views::transform([](const auto& var) { return var.name(); }),
+          ql::views::transform(
+              [](const auto& var) -> decltype(auto) { return var.name(); }),
       " ");
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
                       subject_.toString(), " ", predicate_.toString(), " ",
