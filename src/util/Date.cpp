@@ -173,6 +173,5 @@ int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
 }
 
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {
-  TimeZone tz = getTimeZone();
-  return Date::getTimeZoneOffsetToUTCInHours(tz);
+  return Date::getTimeZoneOffsetToUTCInHours(getTimeZone());
 }
