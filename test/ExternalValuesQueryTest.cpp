@@ -1,6 +1,11 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Generated with Claude Code
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -10,8 +15,14 @@
 #include "parser/SparqlTriple.h"
 #include "util/GTestHelpers.h"
 
+namespace {
 using parsedQuery::ExternalValuesException;
 using parsedQuery::ExternalValuesQuery;
+using namespace ::testing;
+using V = Variable;
+
+auto lit = ad_utility::testing::tripleComponentLiteral;
+auto iri = ad_utility::testing::iri;
 
 // Helper to create a triple with an IRI predicate.
 static SparqlTriple makeTriple(std::string_view predIri,
@@ -22,70 +33,64 @@ static SparqlTriple makeTriple(std::string_view predIri,
   return {subject, predicate, std::move(object)};
 }
 
-// Test addParameter with <identifier>.
-TEST(ExternalValuesQuery, addParameterIdentifier) {
+// Create a triple with the predicate `<identifier>`.
+static SparqlTriple idTriple(TripleComponent object) {
+  return makeTriple("<identifier>", std::move(object));
+}
+
+// Create a triple with the predicate `<variables>`.
+static SparqlTriple varTriple(TripleComponent object) {
+  return makeTriple("<variables>", std::move(object));
+}
+
+struct ExternalValuesQueryTest : public ::testing::Test {
+ protected:
   ExternalValuesQuery query;
-  auto triple = makeTriple(
-      "<identifier>",
-      TripleComponent::Literal::fromStringRepresentation("\"myId\""));
-  query.addParameter(triple);
+  SparqlTriple defaultIdTriple = idTriple(lit("myId"));
+  SparqlTriple defaultVarTriple = varTriple(V{"?x"});
+};
+
+// Test addParameter with <identifier>.
+TEST_F(ExternalValuesQueryTest, addParameterIdentifier) {
+  query.addParameter(defaultIdTriple);
   EXPECT_EQ(query.identifier_, "myId");
 }
 
 // Test that setting <identifier> twice throws.
-TEST(ExternalValuesQuery, addParameterIdentifierTwice) {
-  ExternalValuesQuery query;
-  auto triple = makeTriple(
-      "<identifier>",
-      TripleComponent::Literal::fromStringRepresentation("\"myId\""));
-  query.addParameter(triple);
-  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+TEST_F(ExternalValuesQueryTest, addParameterIdentifierTwice) {
+  query.addParameter(defaultIdTriple);
+  EXPECT_THROW(query.addParameter(defaultIdTriple), ExternalValuesException);
 }
 
 // Test that <identifier> with a non-literal throws.
-TEST(ExternalValuesQuery, addParameterIdentifierNonLiteral) {
-  ExternalValuesQuery query;
-  auto triple = makeTriple("<identifier>", Variable{"?x"});
-  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+TEST_F(ExternalValuesQueryTest, addParameterIdentifierNonLiteral) {
+  EXPECT_THROW(query.addParameter(makeTriple("<identifier>", V{"?x"})),
+               ExternalValuesException);
 }
 
 // Test that <identifier> with an empty string throws.
-TEST(ExternalValuesQuery, addParameterIdentifierEmpty) {
-  ExternalValuesQuery query;
-  auto triple =
-      makeTriple("<identifier>",
-                 TripleComponent::Literal::fromStringRepresentation("\"\""));
-  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+TEST_F(ExternalValuesQueryTest, addParameterIdentifierEmpty) {
+  EXPECT_THROW(query.addParameter(idTriple(lit(""))), ExternalValuesException);
 }
 
 // Test addParameter with <variables>.
-TEST(ExternalValuesQuery, addParameterVariables) {
-  ExternalValuesQuery query;
-  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
-
-  ASSERT_EQ(query.variables_.size(), 1u);
-  EXPECT_EQ(query.variables_[0], Variable{"?x"});
+TEST_F(ExternalValuesQueryTest, addParameterVariables) {
+  query.addParameter(defaultVarTriple);
+  EXPECT_THAT(query.variables_, ElementsAre(V{"?x"}));
 }
 
 // Test addParameter with multiple variables.
-TEST(ExternalValuesQuery, addParameterMultipleVariables) {
-  ExternalValuesQuery query;
-  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
-  query.addParameter(makeTriple("<variables>", Variable{"?y"}));
-  query.addParameter(makeTriple("<variables>", Variable{"?z"}));
-
-  ASSERT_EQ(query.variables_.size(), 3u);
-  EXPECT_EQ(query.variables_[0], Variable{"?x"});
-  EXPECT_EQ(query.variables_[1], Variable{"?y"});
-  EXPECT_EQ(query.variables_[2], Variable{"?z"});
+TEST_F(ExternalValuesQueryTest, addParameterMultipleVariables) {
+  query.addParameter(varTriple(V{"?x"}));
+  query.addParameter(varTriple(V{"?y"}));
+  query.addParameter(varTriple(V{"?z"}));
+  EXPECT_THAT(query.variables_, ElementsAre(V{"?x"}, V{"?y"}, V{"?z"}));
 }
 
 // Test addParameter with non-variable object for <variables> throws.
-TEST(ExternalValuesQuery, addParameterVariablesNonVariable) {
-  ExternalValuesQuery query;
-  auto triple = makeTriple(
-      "<variables>", TripleComponent::Iri::fromIriref("<http://example.com>"));
-  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+TEST_F(ExternalValuesQueryTest, addParameterVariablesNonVariable) {
+  EXPECT_THROW(query.addParameter(varTriple(iri("<http://example.com>"))),
+               ExternalValuesException);
 }
 
 // Test addParameter with unknown predicate throws.
@@ -96,35 +101,27 @@ TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
 }
 
 // Test validate succeeds with identifier and variables set.
-TEST(ExternalValuesQuery, validateSuccess) {
-  ExternalValuesQuery query;
-  query.addParameter(makeTriple(
-      "<identifier>",
-      TripleComponent::Literal::fromStringRepresentation("\"myId\"")));
-  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
+TEST_F(ExternalValuesQueryTest, validateSuccess) {
+  query.addParameter(defaultIdTriple);
+  query.addParameter(defaultVarTriple);
   EXPECT_NO_THROW(query.validate());
 }
 
 // Test validate fails without identifier.
-TEST(ExternalValuesQuery, validateMissingIdentifier) {
-  ExternalValuesQuery query;
-  query.addParameter(makeTriple("<variables>", Variable{"?x"}));
+TEST_F(ExternalValuesQueryTest, validateMissingIdentifier) {
+  query.addParameter(defaultVarTriple);
   EXPECT_THROW(query.validate(), ExternalValuesException);
 }
 
 // Test validate fails without variables.
-TEST(ExternalValuesQuery, validateMissingVariables) {
-  ExternalValuesQuery query;
-  query.addParameter(makeTriple(
-      "<identifier>",
-      TripleComponent::Literal::fromStringRepresentation("\"myId\"")));
+TEST_F(ExternalValuesQueryTest, validateMissingVariables) {
+  query.addParameter(defaultIdTriple);
   EXPECT_THROW(query.validate(), ExternalValuesException);
 }
 
 // Test the (deprecated) specification of the identifier via the IRI directly.
-TEST(ExternalValuesQuery, deprecatedIdentifierSpecification) {
-  using namespace ad_utility::testing;
-  ExternalValuesQuery query(iri(EXTERNAL_VALUES_IRI));
+TEST_F(ExternalValuesQueryTest, deprecatedIdentifierSpecification) {
+  query = ExternalValuesQuery{iri(EXTERNAL_VALUES_IRI)};
   EXPECT_TRUE(query.identifier_.empty());
   AD_EXPECT_THROW_WITH_MESSAGE(ExternalValuesQuery(iri("<invalidServiceIri>")),
                                ::testing::HasSubstr("unexpected SERVICE IRI"));
@@ -135,3 +132,4 @@ TEST(ExternalValuesQuery, deprecatedIdentifierSpecification) {
       iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, "blubb>")));
   EXPECT_EQ(query2.identifier_, "blubb");
 }
+}  // namespace

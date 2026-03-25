@@ -28,8 +28,9 @@ constexpr inline std::string_view EXTERNAL_VALUES_IRI =
     "<https://qlever.cs.uni-freiburg/external-values/>";
 
 // This prefix definition is used for backwards compatibility with the BMW use
-// case (they already use this syntax in some of their application, and we don't
-// wan
+// case (they already use this syntax in some of their applications which we
+// want to break. New use cases of the `ExternallySpecifiedValues` features
+// should use th
 constexpr inline std::string_view EXTERNAL_VALUES_IRI_PREFIX =
     "<https://qlever.cs.uni-freiburg.de/external-values-";
 

@@ -15,19 +15,22 @@
 class SparqlTriple;
 
 namespace parsedQuery {
-
 class ExternalValuesException : public std::runtime_error {
   // Constructors have to be explicitly inherited.
   using std::runtime_error::runtime_error;
 };
 
-// The ExternalValuesQuery object holds information for the
+// The `ExternalValuesQuery` object holds information for the
 // `ExternallySpecifiedValues`. It is specified via the SERVICE
 // <ql:external-values/> syntax. The `identifier` and `variables` are specified
 // as configuration triples:
-//   [] <identifier> "myId";
-//      <variables> ?x, ?y.
-// Alternatively, the identifier can also specified directly in the IRI as
+// SELECT * {
+//   SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
+//     [] <identifier> "myId";
+//        <variables> ?x, ?y.
+//   }
+// }
+// Alternatively, the `identifier` can also specified directly in the IRI as
 // `<ql:external-values-#identifier#>` but that syntax is deprecated as it is
 // inconsistent with the other magic service IRIs and is only kept for backward
 // compatibility with code already deployed by BMW.
@@ -35,7 +38,7 @@ struct ExternalValuesQuery : MagicServiceQuery {
   std::string identifier_;
   std::vector<Variable> variables_;
 
-  ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
+  explicit ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
       : identifier_(extractIdentifier(serviceIri.toStringRepresentation())) {}
 
   // Default constructor, mainly used for testing.

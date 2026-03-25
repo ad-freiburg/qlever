@@ -71,9 +71,8 @@ std::string ExternalValuesQuery::extractIdentifier(
   }
   // Extract identifier from IRI like
   // <https://qlever.cs.uni-freiburg.de/external-values-myid>
-  constexpr std::string_view prefix =
-      "<https://qlever.cs.uni-freiburg.de/external-values-";
-  constexpr std::string_view suffix = ">";
+  static constexpr std::string_view prefix = EXTERNAL_VALUES_IRI_PREFIX;
+  static constexpr std::string_view suffix = ">";
 
   AD_CONTRACT_CHECK(ql::starts_with(serviceIri, prefix),
                     "unexpected SERVICE IRI for `ExternalValuesQuery`");
