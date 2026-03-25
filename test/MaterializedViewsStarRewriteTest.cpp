@@ -111,6 +111,7 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   };
 
   noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . <s1> <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
   noStarRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
