@@ -96,13 +96,14 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 // _____________________________________________________________________________
 std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
   auto epochLhs = toEpoch();
-  if (!epoch.has_value()) {
+  if (!epochLhs.has_value()) {
     return std::nullopt;
   }
   auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Nanoseconds newDate = epochLhs.value() -
-          std::chrono::nanoseconds(totalMillisecondsRhs *
-                                   1'000'000);  // milliseconds to nanoseconds
+  Date::Nanoseconds newDate =
+      epochLhs.value() -
+      std::chrono::nanoseconds(totalMillisecondsRhs *
+                               1'000'000);  // milliseconds to nanoseconds
   return makeFromEpoch(newDate, getTimeZone());
 }
 
@@ -136,16 +137,13 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   // Extract time from remaining seconds.
   auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
   std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
-  int hour = remainder.hours().count();
-  int minute = remainder.minutes().count();
-  double second = remainder.seconds().count();
 
   return Date{static_cast<int>(date.year()),
               static_cast<int>(static_cast<unsigned>(date.month())),
               static_cast<int>(static_cast<unsigned>(date.day())),
-              hour + offset,
-              minute,
-              second,
+              static_cast<int>(remainder.hours().count()) + offset,
+              static_cast<int>(remainder.minutes().count()),
+              static_cast<double>(remainder.seconds().count()),
               tz};
 }
 
