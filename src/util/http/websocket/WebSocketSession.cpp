@@ -143,7 +143,7 @@ net::awaitable<void> WebSocketSession::handleSession(
 }
 // _____________________________________________________________________________
 // TODO<C++23> use std::expected<void, ErrorResponse>
-std::optional<http::response<http::string_body>>
+std::optional<http::response<httpUtils::streamable_body>>
 WebSocketSession::getErrorResponseIfPathIsInvalid(
     const http::request<http::string_body>& request) {
   auto path = request.target();
