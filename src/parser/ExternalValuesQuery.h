@@ -27,9 +27,18 @@ class ExternalValuesException : public std::runtime_error {
 // as configuration triples:
 //   [] <identifier> "myId";
 //      <variables> ?x, ?y.
+// Alternatively, the identifier can also specified directly in the IRI as
+// `<ql:external-values-#identifier#>` but that syntax is deprecated as it is
+// inconsistent with the other magic service IRIs and is only kept for ba
 struct ExternalValuesQuery : MagicServiceQuery {
   std::string identifier_;
   std::vector<Variable> variables_;
+
+  ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
+      : identifier_(extractIdentifier(serviceIri.toStringRepresentation())) {}
+
+  // Default constructor, mainly used for testing.
+  ExternalValuesQuery() = default;
 
   // See MagicServiceQuery - processes configuration triples.
   void addParameter(const SparqlTriple& triple) override;
@@ -38,6 +47,11 @@ struct ExternalValuesQuery : MagicServiceQuery {
   void validate() const override;
 
   std::string_view name() const override { return "external values query"; }
+
+  // Extract identifier from service IRI like
+  // <https://qlever.cs.uni-freiburg.de/external-values-myid>, required for the
+  // compatibility.
+  static std::string extractIdentifier(const std::string& serviceIri);
 };
 
 }  // namespace parsedQuery

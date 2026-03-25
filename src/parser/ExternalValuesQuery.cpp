@@ -63,4 +63,31 @@ void ExternalValuesQuery::validate() const {
   }
 }
 
+// ____________________________________________________________________________
+std::string ExternalValuesQuery::extractIdentifier(
+    const std::string& serviceIri) {
+  if (serviceIri == EXTERNAL_VALUES_IRI) {
+    return "";
+  }
+  // Extract identifier from IRI like
+  // <https://qlever.cs.uni-freiburg.de/external-values-myid>
+  constexpr std::string_view prefix =
+      "<https://qlever.cs.uni-freiburg.de/external-values-";
+  constexpr std::string_view suffix = ">";
+
+  AD_CONTRACT_CHECK(ql::starts_with(serviceIri, prefix),
+                    "unexpected SERVICE IRI for `Ext");
+  AD_CORRECTNESS_CHECK(ql::ends_with(serviceIri, suffix));
+
+  // Extract the identifier between prefix and suffix.
+  auto identifier = serviceIri.substr(
+      prefix.size(), serviceIri.size() - prefix.size() - suffix.size());
+
+  if (identifier.empty()) {
+    throw ExternalValuesException(
+        "The identifier of an `ExternalValuesQuery` must not be empty");
+  }
+  return identifier;
+}
+
 }  // namespace parsedQuery
