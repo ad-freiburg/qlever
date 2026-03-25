@@ -95,19 +95,15 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 
 // _____________________________________________________________________________
 std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
-  TimeZone tz = getTimeZone();
-  auto epoch = toEpoch();
+  auto epochLhs = toEpoch();
   if (!epoch.has_value()) {
     return std::nullopt;
   }
-  Date::Nanoseconds date1 = epoch.value();
-
-  auto totalMilliseconds2 = rhs.getTotalMilliseconds();
-
-  date1 = date1 -
-          std::chrono::nanoseconds(totalMilliseconds2 *
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Nanoseconds newDate = epochLhs.value() -
+          std::chrono::nanoseconds(totalMillisecondsRhs *
                                    1'000'000);  // milliseconds to nanoseconds
-  return makeFromEpoch(date1, tz);
+  return makeFromEpoch(newDate, getTimeZone());
 }
 
 // _____________________________________________________________________________
