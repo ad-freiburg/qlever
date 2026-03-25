@@ -123,6 +123,24 @@ TEST_F(MaterializedViewsTest, Basic) {
       ::testing::HasSubstr(
           "The materialized view 'doesNotExist' does not exist."));
 
+  // Test the `IndexScan` operation's descriptor when reading from columns not
+  // within the first three.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s ?s ;
+                   view:column-p ?p ;
+                   view:column-o ?o ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    EXPECT_EQ(qet->getRootOperation()->getDescriptor(),
+              "IndexScan testView1 ?s ?p ?o ?g");
+  }
+
   // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
       "testView2", "SELECT * { ?s <p1> ?o . BIND(42 AS ?g) . BIND(3 AS ?x) }");
