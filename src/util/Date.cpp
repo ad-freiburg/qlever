@@ -130,8 +130,8 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 }
 
 // _____________________________________________________________________________
-Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) const {
-  int8_t offset = getTimeZoneOffsetToUTCInHours();
+Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
+  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
 
   // Extract date from epoch timestamp.
   auto days = std::chrono::floor<std::chrono::days>(timestamp);
@@ -155,8 +155,7 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) const {
 
 #endif
 // _____________________________________________________________________________
-int8_t Date::getTimeZoneOffsetToUTCInHours() const {
-  TimeZone tz = getTimeZone();
+int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.
   return std::visit(
       [](auto& value) {
@@ -171,4 +170,9 @@ int8_t Date::getTimeZoneOffsetToUTCInHours() const {
         }
       },
       tz);
+}
+
+int8_t Date::getTimeZoneOffsetToUTCInHours() const {
+  TimeZone tz = getTimeZone();
+  return Date::getTimeZoneOffsetToUTCInHours(tz);
 }
