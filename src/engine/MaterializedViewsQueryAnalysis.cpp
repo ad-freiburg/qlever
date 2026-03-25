@@ -169,7 +169,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
       if (it == predicateInView_.end()) {
         continue;
       }
-      ql::ranges::copy((*it).second,
+      ql::ranges::copy(it->second,
                        std::inserter(candidateViews, candidateViews.end()));
     }
 
@@ -186,7 +186,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
         continue;
       }
       // Does the query contain a superset of the star arms of the view?
-      const auto& starInfo = (*it).second;
+      const auto& starInfo = it->second;
       if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;

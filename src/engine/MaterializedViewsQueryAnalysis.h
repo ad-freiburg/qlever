@@ -121,13 +121,17 @@ class QueryPatternCache {
                           const SparqlTriple& b);
 
   // Helper for `analyzeView`, that checks for a join star of arbitrary size.
-  //
-  // Given at least two triples of a view with one `BasicGraphPattern`, check if
-  // the view represents a join star. If yes, add the view to the cache for join
-  // stars. This function returns `true` iff the view contains a star.
-  //
   // A star requires all triples to share the same subject variable with
   // distinct simple IRI predicates and distinct variable objects.
+  //
+  // This function assumes that the query used for writing the `view` consists
+  // of exactly one `BasicGraphPattern` with at least two triples and optionally
+  // some invariant `BIND` statements. The argument `triples` is required to
+  // contain the parsed triples from the `BasicGraphPattern` in `view`.
+  //
+  // Using `triples`, the function checks if the view represents a join star. If
+  // yes, it adds the `view` to the cache for join stars. The function returns
+  // `true` iff the view contains a star.
   bool analyzeJoinStar(ViewPtr view, const std::vector<SparqlTriple>& triples);
 
   // Given potential left and right sides of simple chains, check for available
