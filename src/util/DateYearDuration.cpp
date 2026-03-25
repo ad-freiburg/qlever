@@ -379,7 +379,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     int64_t year1 = getYear();
     int64_t year2 = rhs.getYear();
     int64_t result = year1 - year2;
-    if (!(result < Date::minYear) && !(result > Date::maxYear)) {
+    if (result >= Date::minYear && result <= Date::maxYear) {
       // The result year can be constructed as a `Date`.
       return DateYearOrDuration{Date(result, 1, 1)};
     } else {
