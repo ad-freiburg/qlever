@@ -140,9 +140,9 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   int minute = remainder.minutes().count();
   double second = remainder.seconds().count();
 
-  return Date{(int)date.year(),
-              static_cast<int>((unsigned)date.month()),
-              static_cast<int>((unsigned)date.day()),
+  return Date{static_cast<int>(date.year()),
+              static_cast<int>(static_cast<unsigned>(date.month())),
+              static_cast<int>(static_cast<unsigned>(date.day())),
               hour + offset,
               minute,
               second,
