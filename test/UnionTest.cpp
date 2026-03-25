@@ -689,7 +689,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union2{qec, values, index};
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -697,7 +697,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union3{qec, index, values};
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -705,7 +705,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union4{qec, index, index};
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);

@@ -22,6 +22,8 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
@@ -574,4 +576,17 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
       childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {childLeft_, childRight_},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        return ad_utility::makeExecutionTree<SpatialJoin>(
+            _executionContext, config_, std::move(left), std::move(right));
+      });
 }

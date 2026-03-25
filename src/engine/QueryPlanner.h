@@ -159,6 +159,7 @@ class QueryPlanner {
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
     bool containsFilterSubstitute_ = false;
+    bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
 
     size_t getCostEstimate() const;
