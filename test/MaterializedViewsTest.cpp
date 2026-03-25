@@ -106,6 +106,8 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+    EXPECT_THAT(qet->getRootOperation()->getDescriptor(),
+                ::testing::HasSubstr("?g"));
     // For a full scan on a materialized view, the size estimate should be
     // exactly the number of rows in the view. This is also a regression test
     // for a bug introduced in #2680.
