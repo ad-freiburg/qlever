@@ -15,13 +15,18 @@ namespace serialization {
 
 using SerializationPosition = uint64_t;
 
-class FileWriteSerializer {
+// A write serializer that writes to a file. The `AlignedSerialization`
+// template parameter controls whether alignment padding is inserted for
+// trivially serializable types (see `alignForType` in `Serializer.h`).
+template <bool AlignedSerialization = false>
+class FileWriteSerializerT {
  public:
   using SerializerType = WriteSerializerTag;
+  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
-  FileWriteSerializer(File&& file) : _file{std::move(file)} {};
+  FileWriteSerializerT(File&& file) : _file{std::move(file)} {};
 
-  FileWriteSerializer(std::string filename) : _file{filename, "w"} {
+  FileWriteSerializerT(std::string filename) : _file{filename, "w"} {
     AD_CONTRACT_CHECK(_file.isOpen());
     // TODO<joka921> File should be a move-only type, should support
     // "isOpenForReading" and should automatically check for "isOpen() when
@@ -55,13 +60,18 @@ class FileWriteSerializer {
   size_t fileOffsetOnConstruction_ = _file.tell();
 };
 
-class FileReadSerializer {
+// A read serializer that reads from a file. The `AlignedSerialization`
+// template parameter controls whether alignment padding is skipped for
+// trivially serializable types (see `alignForType` in `Serializer.h`).
+template <bool AlignedSerialization = false>
+class FileReadSerializerT {
  public:
   using SerializerType = ReadSerializerTag;
+  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
-  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializerT(File&& file) : _file{std::move(file)} {};
 
-  explicit FileReadSerializer(const std::string& filename)
+  explicit FileReadSerializerT(const std::string& filename)
       : _file{filename, "r"} {
     AD_CONTRACT_CHECK(_file.isOpen());
   }
@@ -93,6 +103,14 @@ class FileReadSerializer {
   File _file;
   size_t fileOffsetOnConstruction_ = _file.tell();
 };
+
+// Backward-compatible aliases for the default (unaligned) serializers.
+using FileWriteSerializer = FileWriteSerializerT<false>;
+using FileReadSerializer = FileReadSerializerT<false>;
+
+// Aligned variants of the file serializers.
+using AlignedFileWriteSerializer = FileWriteSerializerT<true>;
+using AlignedFileReadSerializer = FileReadSerializerT<true>;
 
 /*
  * This Serializer may be copied. The copies will access the same file,

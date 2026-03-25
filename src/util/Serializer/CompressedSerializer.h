@@ -40,12 +40,14 @@ using UninitializedBuffer =
 // exceeds the block size. Then the full block is compressed and serialized as a
 // vector to the underlying serializer. The last, possibly incomplete block is
 // written on destruction or when `close()` is called.
-CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
+CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
+             bool AlignedSerialization = false)(
     requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<CompressionFunction, ql::span<const char>,
                   UninitializedBuffer&>) class CompressedWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
+  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
  private:
   std::optional<UnderlyingSerializer> underlyingSerializer_;
@@ -149,12 +151,14 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
 // Reads compressed blocks (as vectors) from the underlying serializer,
 // decompresses them, and provides the decompressed data to the caller.
 // This is the counterpart to `CompressedWriteSerializer` above.
-CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
+CPP_template(typename UnderlyingSerializer, typename DecompressionFunction,
+             bool AlignedSerialization = false)(
     requires ReadSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<DecompressionFunction, ql::span<const char>,
                   ql::span<char>>) class CompressedReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
+  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
  private:
   UnderlyingSerializer underlyingSerializer_;
@@ -260,13 +264,15 @@ inline const ad_utility::MemorySize defaultZstdBlockSize =
 }  // namespace detail
 
 // A write serializer that compresses data using `Zstd` before writing to an
-// underlying serializer.
-template <typename UnderlyingSerializer>
+// underlying serializer. The `AlignedSerialization` template parameter controls
+// whether alignment padding is inserted for trivially serializable types.
+template <typename UnderlyingSerializer, bool AlignedSerialization = false>
 class ZstdWriteSerializer
-    : public CompressedWriteSerializer<UnderlyingSerializer,
-                                       detail::ZstdCompress> {
+    : public CompressedWriteSerializer<
+          UnderlyingSerializer, detail::ZstdCompress, AlignedSerialization> {
   using Base =
-      CompressedWriteSerializer<UnderlyingSerializer, detail::ZstdCompress>;
+      CompressedWriteSerializer<UnderlyingSerializer, detail::ZstdCompress,
+                                AlignedSerialization>;
 
  public:
   explicit ZstdWriteSerializer(
@@ -277,13 +283,16 @@ class ZstdWriteSerializer
 };
 
 // A read serializer that decompresses data that was compressed using `Zstd`
-// (with the `ZstdWriteSerializer` above) from an underlying serializer.
-template <typename UnderlyingSerializer>
+// (with the `ZstdWriteSerializer` above) from an underlying serializer. The
+// `AlignedSerialization` template parameter controls whether alignment padding
+// is skipped for trivially serializable types.
+template <typename UnderlyingSerializer, bool AlignedSerialization = false>
 class ZstdReadSerializer
-    : public CompressedReadSerializer<UnderlyingSerializer,
-                                      detail::ZstdDecompress> {
+    : public CompressedReadSerializer<
+          UnderlyingSerializer, detail::ZstdDecompress, AlignedSerialization> {
   using Base =
-      CompressedReadSerializer<UnderlyingSerializer, detail::ZstdDecompress>;
+      CompressedReadSerializer<UnderlyingSerializer, detail::ZstdDecompress,
+                               AlignedSerialization>;
 
  public:
   explicit ZstdReadSerializer(UnderlyingSerializer underlyingSerializer)

@@ -25,6 +25,10 @@
 #include "util/Serializer/Serializer.h"
 
 using namespace ad_utility;
+using ad_utility::serialization::AlignedByteBufferReadSerializer;
+using ad_utility::serialization::AlignedByteBufferWriteSerializer;
+using ad_utility::serialization::AlignedFileReadSerializer;
+using ad_utility::serialization::AlignedFileWriteSerializer;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
 using ad_utility::serialization::CompressedReadSerializer;
@@ -880,5 +884,273 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     std::vector<std::string> read;
     reader >> read;
     EXPECT_EQ(original, read);
+  }
+}
+
+// _____________________________________________________________________________
+// Tests for the UsesAlignedSerialization trait and aligned serializers.
+// _____________________________________________________________________________
+
+// Test that the trait is correctly detected.
+TEST(AlignedSerializer, TraitDetection) {
+  using ad_utility::serialization::usesAlignedSerialization;
+  // Default (unaligned) serializers.
+  static_assert(!usesAlignedSerialization<ByteBufferWriteSerializer>());
+  static_assert(!usesAlignedSerialization<ByteBufferReadSerializer>());
+  static_assert(!usesAlignedSerialization<FileWriteSerializer>());
+  static_assert(!usesAlignedSerialization<FileReadSerializer>());
+  // Aligned serializers.
+  static_assert(usesAlignedSerialization<AlignedByteBufferWriteSerializer>());
+  static_assert(usesAlignedSerialization<AlignedByteBufferReadSerializer>());
+  static_assert(usesAlignedSerialization<AlignedFileWriteSerializer>());
+  static_assert(usesAlignedSerialization<AlignedFileReadSerializer>());
+  // CopyableFileReadSerializer has no trait.
+  static_assert(!usesAlignedSerialization<CopyableFileReadSerializer>());
+}
+
+// Test that the aligned serializers fulfill the Serializer concepts.
+TEST(AlignedSerializer, Concepts) {
+  static_assert(WriteSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(!ReadSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(ReadSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(!WriteSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(WriteSerializer<AlignedFileWriteSerializer>);
+  static_assert(!ReadSerializer<AlignedFileWriteSerializer>);
+  static_assert(ReadSerializer<AlignedFileReadSerializer>);
+  static_assert(!WriteSerializer<AlignedFileReadSerializer>);
+}
+
+// Test that alignment padding is correctly inserted. We write a single char
+// followed by a vector<int64_t>. The vector serialization writes a size_t (8
+// bytes) then aligns to alignof(int64_t) == 8. After writing 1 byte (char) + 8
+// bytes (size), the position is 9, so 7 bytes of padding should be inserted
+// to reach position 16 before the data.
+TEST(AlignedSerializer, AlignmentPaddingInserted) {
+  AlignedByteBufferWriteSerializer writer;
+  char c = 'X';
+  writer << c;
+  // Position is now 1.
+  EXPECT_EQ(writer.getCurrentPosition(), 1u);
+
+  std::vector<int64_t> v = {100, 200, 300};
+  writer << v;
+
+  // The total size should be: 1 (char) + 8 (size_t for vector length) + 7
+  // (padding to align to 8) + 24 (3 * int64_t) = 40.
+  EXPECT_EQ(writer.getCurrentPosition(), 40u);
+
+  // Verify round-trip.
+  AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+  char cRead;
+  reader >> cRead;
+  EXPECT_EQ(cRead, 'X');
+  std::vector<int64_t> vRead;
+  reader >> vRead;
+  EXPECT_EQ(v, vRead);
+}
+
+// Test that unaligned serializers do NOT insert padding.
+TEST(AlignedSerializer, NoPaddingWithoutAlignment) {
+  ByteBufferWriteSerializer writer;
+  char c = 'X';
+  writer << c;
+
+  std::vector<int64_t> v = {100, 200, 300};
+  writer << v;
+
+  // Without alignment: 1 (char) + 8 (size_t) + 24 (3 * int64_t) = 33.
+  EXPECT_EQ(writer.getCurrentPosition(), 33u);
+
+  // Verify round-trip.
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  char cRead;
+  reader >> cRead;
+  EXPECT_EQ(cRead, 'X');
+  std::vector<int64_t> vRead;
+  reader >> vRead;
+  EXPECT_EQ(v, vRead);
+}
+
+// Test round-trip with matching alignment specifications for byte buffers.
+TEST(AlignedSerializer, MatchingAlignmentByteBuffer) {
+  // Aligned write + aligned read.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    char c = 'A';
+    writer << c;
+    std::vector<int64_t> v = {1, 2, 3, 4, 5};
+    writer << v;
+    std::string s = "hello";
+    writer << s;
+
+    AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    std::string sRead;
+    reader >> sRead;
+    EXPECT_EQ(cRead, 'A');
+    EXPECT_EQ(v, vRead);
+    EXPECT_EQ(s, sRead);
+  }
+  // Unaligned write + unaligned read.
+  {
+    ByteBufferWriteSerializer writer;
+    char c = 'A';
+    writer << c;
+    std::vector<int64_t> v = {1, 2, 3, 4, 5};
+    writer << v;
+    std::string s = "hello";
+    writer << s;
+
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    std::string sRead;
+    reader >> sRead;
+    EXPECT_EQ(cRead, 'A');
+    EXPECT_EQ(v, vRead);
+    EXPECT_EQ(s, sRead);
+  }
+}
+
+// Test round-trip with matching alignment specifications for file serializers.
+TEST(AlignedSerializer, MatchingAlignmentFile) {
+  std::string filename = "AlignedSerializer.MatchingAlignmentFile.dat";
+  auto cleanup =
+      absl::Cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  // Aligned write + aligned read.
+  {
+    AlignedFileWriteSerializer writer{filename};
+    char c = 'B';
+    writer << c;
+    std::vector<int64_t> v = {10, 20, 30};
+    writer << v;
+    writer.close();
+
+    AlignedFileReadSerializer reader{filename};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    EXPECT_EQ(cRead, 'B');
+    EXPECT_EQ(v, vRead);
+  }
+  // Unaligned write + unaligned read.
+  {
+    FileWriteSerializer writer{filename};
+    char c = 'B';
+    writer << c;
+    std::vector<int64_t> v = {10, 20, 30};
+    writer << v;
+    writer.close();
+
+    FileReadSerializer reader{filename};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    EXPECT_EQ(cRead, 'B');
+    EXPECT_EQ(v, vRead);
+  }
+}
+
+// Test that mismatched alignment specifications produce incorrect results.
+// Writing with alignment inserts padding that the unaligned reader doesn't
+// skip, and vice versa.
+TEST(AlignedSerializer, MismatchedAlignmentProducesWrongResults) {
+  // Aligned write + unaligned read: the reader doesn't skip alignment padding,
+  // so it reads garbage.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    std::vector<int64_t> v = {100, 200, 300};
+    writer << v;
+
+    // Read the raw buffer with an unaligned reader.
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    char cRead;
+    reader >> cRead;
+    EXPECT_EQ(cRead, 'X');
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    // The unaligned reader doesn't skip the 7 padding bytes, so the data is
+    // misinterpreted.
+    EXPECT_NE(v, vRead);
+  }
+
+  // Unaligned write + aligned read: the reader tries to skip padding that
+  // doesn't exist, reading into the data region.
+  {
+    ByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    std::vector<int64_t> v = {100, 200, 300};
+    writer << v;
+
+    // Read with an aligned reader.
+    AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+    char cRead;
+    reader >> cRead;
+    EXPECT_EQ(cRead, 'X');
+    std::vector<int64_t> vRead;
+    // The aligned reader skips bytes that weren't padding, so the data is
+    // misinterpreted. This may throw or produce wrong results.
+    EXPECT_ANY_THROW(reader >> vRead);
+  }
+}
+
+// Test aligned compressed serializers.
+TEST(AlignedSerializer, CompressedSerializerAlignment) {
+  using ad_utility::serialization::ZstdReadSerializer;
+  using ad_utility::serialization::ZstdWriteSerializer;
+
+  auto blockSize = ad_utility::MemorySize::kilobytes(1);
+
+  // Aligned compressed round-trip.
+  {
+    AlignedByteBufferWriteSerializer bufferWriter;
+    ZstdWriteSerializer<AlignedByteBufferWriteSerializer, true> writer{
+        std::move(bufferWriter), blockSize};
+    char c = 'Z';
+    writer << c;
+    std::vector<int64_t> v = {42, 84, 126};
+    writer << v;
+    auto buffer = std::move(writer).underlyingSerializer();
+
+    AlignedByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+    ZstdReadSerializer<AlignedByteBufferReadSerializer, true> reader{
+        std::move(bufferReader)};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    EXPECT_EQ(cRead, 'Z');
+    EXPECT_EQ(v, vRead);
+  }
+
+  // Unaligned compressed round-trip (existing behavior).
+  {
+    ByteBufferWriteSerializer bufferWriter;
+    ZstdWriteSerializer writer{std::move(bufferWriter), blockSize};
+    char c = 'Z';
+    writer << c;
+    std::vector<int64_t> v = {42, 84, 126};
+    writer << v;
+    auto buffer = std::move(writer).underlyingSerializer();
+
+    ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+    ZstdReadSerializer reader{std::move(bufferReader)};
+    char cRead;
+    reader >> cRead;
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    EXPECT_EQ(cRead, 'Z');
+    EXPECT_EQ(v, vRead);
   }
 }

@@ -11,7 +11,6 @@
 
 #include "backports/span.h"
 #include "util/Serializer/Serializer.h"
-#include "util/Serializer/ZeroCopySerializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
