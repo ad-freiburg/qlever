@@ -76,7 +76,7 @@ std::string ExternalValuesQuery::extractIdentifier(
   constexpr std::string_view suffix = ">";
 
   AD_CONTRACT_CHECK(ql::starts_with(serviceIri, prefix),
-                    "unexpected SERVICE IRI for `Ext");
+                    "unexpected SERVICE IRI for `ExternalValuesQuery`");
   AD_CORRECTNESS_CHECK(ql::ends_with(serviceIri, suffix));
 
   // Extract the identifier between prefix and suffix.

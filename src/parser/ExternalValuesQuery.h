@@ -29,7 +29,8 @@ class ExternalValuesException : public std::runtime_error {
 //      <variables> ?x, ?y.
 // Alternatively, the identifier can also specified directly in the IRI as
 // `<ql:external-values-#identifier#>` but that syntax is deprecated as it is
-// inconsistent with the other magic service IRIs and is only kept for ba
+// inconsistent with the other magic service IRIs and is only kept for backward
+// compatibility with code already deployed by BMW.
 struct ExternalValuesQuery : MagicServiceQuery {
   std::string identifier_;
   std::vector<Variable> variables_;

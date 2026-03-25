@@ -309,7 +309,10 @@ TEST(LibQlever, externallySpecifiedValues) {
   Qlever engine{ec};
 
   // Parse a query that uses externally specified values joined with the index.
-  std::string query = R"(
+  // Use both syntaxes, the preferred one, and the deprecated one kept for
+  // BMW.
+  std::array<std::string, 2> queries = {
+      R"(
     SELECT ?s ?x WHERE {
       ?s <p> ?o .
       SERVICE <https://qlever.cs.uni-freiburg/external-values/> {
@@ -317,35 +320,45 @@ TEST(LibQlever, externallySpecifiedValues) {
         [] <variables> ?x .
       }
     }
-  )";
+  )",
+      R"(
+    SELECT ?s ?x WHERE {
+      ?s <p> ?o .
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values-myValues> {
+        [] <variables> ?x .
+      }
+    }
+  )"};
 
-  auto plan = engine.parseAndPlanQuery(query);
-  auto& [qet, qec, parsedQuery] = plan;
+  for (const auto& query : queries) {
+    auto plan = engine.parseAndPlanQuery(query);
+    auto& [qet, qec, parsedQuery] = plan;
 
-  // Collect the ExternallySpecifiedValues operations from the tree.
-  std::vector<ExternallySpecifiedValues*> externalValues;
-  qet->getRootOperation()->getExternallySpecifiedValues(externalValues);
-  ASSERT_EQ(externalValues.size(), 1u);
-  EXPECT_EQ(externalValues[0]->getIdentifier(), "myValues");
-  EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
+    // Collect the ExternallySpecifiedValues operations from the tree.
+    std::vector<ExternallySpecifiedValues*> externalValues;
+    qet->getRootOperation()->getExternallySpecifiedValues(externalValues);
+    ASSERT_EQ(externalValues.size(), 1u);
+    EXPECT_EQ(externalValues[0]->getIdentifier(), "myValues");
+    EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
 
-  // Supply values and execute the query.
-  using TC = TripleComponent;
-  parsedQuery::SparqlValues newValues;
-  newValues._variables = {Variable{"?x"}};
-  newValues._values = {{TC::Iri::fromIriref("<val1>")},
-                       {TC::Iri::fromIriref("<val2>")}};
-  externalValues[0]->updateValues(std::move(newValues));
+    // Supply values and execute the query.
+    using TC = TripleComponent;
+    parsedQuery::SparqlValues newValues;
+    newValues._variables = {Variable{"?x"}};
+    newValues._values = {{TC::Iri::fromIriref("<val1>")},
+                         {TC::Iri::fromIriref("<val2>")}};
+    externalValues[0]->updateValues(std::move(newValues));
 
-  auto res = engine.query(plan, ad_utility::MediaType::tsv);
-  // The result should be a cross product: 2 triples x 2 external values = 4
-  // rows, each containing a subject and an external value.
-  EXPECT_THAT(res, HasSubstr("?s\t?x"));
-  EXPECT_THAT(res, HasSubstr("<val1>"));
-  EXPECT_THAT(res, HasSubstr("<val2>"));
-  EXPECT_THAT(res, HasSubstr("<s1>"));
-  EXPECT_THAT(res, HasSubstr("<s2>"));
-  // Count lines: 1 header + 4 data rows = 5 lines (with trailing newline).
-  auto lineCount = std::count(res.begin(), res.end(), '\n');
-  EXPECT_EQ(lineCount, 5);
+    auto res = engine.query(plan, ad_utility::MediaType::tsv);
+    // The result should be a cross product: 2 triples x 2 external values = 4
+    // rows, each containing a subject and an external value.
+    EXPECT_THAT(res, HasSubstr("?s\t?x"));
+    EXPECT_THAT(res, HasSubstr("<val1>"));
+    EXPECT_THAT(res, HasSubstr("<val2>"));
+    EXPECT_THAT(res, HasSubstr("<s1>"));
+    EXPECT_THAT(res, HasSubstr("<s2>"));
+    // Count lines: 1 header + 4 data rows = 5 lines (with trailing newline).
+    auto lineCount = std::count(res.begin(), res.end(), '\n');
+    EXPECT_EQ(lineCount, 5);
+  }
 }

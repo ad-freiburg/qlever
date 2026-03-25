@@ -4,8 +4,11 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/TripleComponentTestHelpers.h"
 #include "parser/ExternalValuesQuery.h"
+#include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
+#include "util/GTestHelpers.h"
 
 using parsedQuery::ExternalValuesException;
 using parsedQuery::ExternalValuesQuery;
@@ -116,4 +119,19 @@ TEST(ExternalValuesQuery, validateMissingVariables) {
       "<identifier>",
       TripleComponent::Literal::fromStringRepresentation("\"myId\"")));
   EXPECT_THROW(query.validate(), ExternalValuesException);
+}
+
+// Test the (deprecated) specification of the identifier via the IRI directly.
+TEST(ExternalValuesQuery, deprecatedIdentifierSpecification) {
+  using namespace ad_utility::testing;
+  ExternalValuesQuery query(iri(EXTERNAL_VALUES_IRI));
+  EXPECT_TRUE(query.identifier_.empty());
+  AD_EXPECT_THROW_WITH_MESSAGE(ExternalValuesQuery(iri("<invalidServiceIri>")),
+                               ::testing::HasSubstr("unexpected SERVICE IRI"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ExternalValuesQuery(iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, ">"))),
+      ::testing::HasSubstr("must not be empty"));
+  ExternalValuesQuery query2(
+      iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, "blubb>")));
+  EXPECT_EQ(query2.identifier_, "blubb");
 }
