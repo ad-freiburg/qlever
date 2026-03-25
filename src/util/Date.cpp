@@ -138,6 +138,10 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
   std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
 
+  // The methods `year`, `month`, `day` return
+  // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
+  // static casts are necessary. For `month` and `day` only `operator unsigned`
+  // is supported, therefore two casts are necessary.
   return Date{static_cast<int>(date.year()),
               static_cast<int>(static_cast<unsigned>(date.month())),
               static_cast<int>(static_cast<unsigned>(date.day())),
