@@ -145,6 +145,9 @@ void QueryPatternCache::makeScansFromStarCandidates(
   };
 
   for (const auto& [subject, members] : starCandidates) {
+    // The candidates are the triples of the query grouped by subject variable.
+    // If there aren't at least two triples sharing the subject, this group
+    // can't be a star.
     if (members.size() < 2) {
       continue;
     }
@@ -170,11 +173,11 @@ void QueryPatternCache::makeScansFromStarCandidates(
       // Remember all views that have this predicate.
       const auto& it =
           predicateInView_.find(triple.getSimplePredicate().value());
-      if (it != predicateInView_.end()) {
-        for (auto view : (*it).second) {
-          candidateViews.insert(view);
-        }
+      if (it == predicateInView_.end()) {
+        continue;
       }
+      ql::ranges::copy((*it).second,
+                       std::inserter(candidateViews, candidateViews.end()));
     }
 
     // Compute a sorted vector of all the predicates in the query star.

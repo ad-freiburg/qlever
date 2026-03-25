@@ -45,6 +45,9 @@ using SimpleChainCache =
 
 // Types required to stored cached join star patterns extracted from views. That
 // is, queries of the form `?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 ...`.
+// The `StarInfo` holds the subject variable shared between all arms of the star
+// and the `StarArm` for each of them. The `StarArm` stores the predicate IRI
+// and object variable.
 using StarArm = std::pair<std::string, Variable>;
 struct StarInfo {
   Variable subject_;
@@ -102,9 +105,11 @@ class QueryPatternCache {
       std::optional<Variable> chain, Variable object) const;
 
   // Construct an `IndexScan` for a star join given the `RequestedColumns`
-  // object for the matched arms from the user's query.
+  // object that maps the columns of the materialized view to the subject and
+  // object variable names from the user query. This assumes that the `starView`
+  // represents the appropriate star join.
   std::shared_ptr<IndexScan> makeScanForStar(
-      QueryExecutionContext* qec, ViewPtr view,
+      QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 
  private:
@@ -115,9 +120,14 @@ class QueryPatternCache {
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
                           const SparqlTriple& b);
 
-  // Helper for `analyzeView`, that checks for a join star of arbitrary size. A
-  // star requires all triples to share the same subject variable with distinct
-  // simple IRI predicates and distinct variable objects.
+  // Helper for `analyzeView`, that checks for a join star of arbitrary size.
+  //
+  // Given at least two triples of a view with one `BasicGraphPattern`, check if
+  // the view represents a join star. If yes, add the view to the cache for join
+  // stars. This function returns `true` iff the view contains a star.
+  //
+  // A star requires all triples to share the same subject variable with
+  // distinct simple IRI predicates and distinct variable objects.
   bool analyzeJoinStar(ViewPtr view, const std::vector<SparqlTriple>& triples);
 
   // Given potential left and right sides of simple chains, check for available

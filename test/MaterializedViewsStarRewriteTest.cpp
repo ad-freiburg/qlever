@@ -30,6 +30,8 @@ constexpr std::string_view simpleStarPlusJoin =
     "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 }";
 constexpr std::string_view simpleStarFixedObject =
     "SELECT * { ?s <p1> ?o1 . ?s <p2> <o2a> }";
+constexpr std::string_view simpleStarDifferentPredicate =
+    "SELECT * { ?s <p1> ?o1 . ?s <p5> ?o2 }";
 constexpr std::string_view simpleStarJoinPredicateTwice =
     "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p2> ?o3 . }";
 constexpr std::string_view singleTripleFromStar = "SELECT * { ?s <p1> ?o1 }";
@@ -90,6 +92,11 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   qpExpect(qlv, simpleStarFixedObject,
            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?o1"),
                    h::IndexScanFromStrings("?s", "<p2>", "<o2a>")));
+
+  // One of the predicates does not match the view.
+  qpExpect(qlv, simpleStarDifferentPredicate,
+           h::Join(h::IndexScanFromStrings("?s", "<p1>", "?o1"),
+                   h::IndexScanFromStrings("?s", "<p5>", "?o2")));
 
   // View is not used for a single triple (arm) contained in the star.
   qpExpect(qlv, singleTripleFromStar,
