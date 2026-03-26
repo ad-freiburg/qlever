@@ -7,6 +7,8 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "engine/ExternallySpecifiedValues.h"
 #include "libqlever/Qlever.h"
@@ -295,7 +297,7 @@ TEST(LibQlever, externallySpecifiedValues) {
   std::string filename = "libQleverExternalValues.ttl";
   {
     auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s1> <p> <o1> . <s2> <p> <o2> .";
+    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
   }
 
   IndexBuilderConfig c;
@@ -313,21 +315,21 @@ TEST(LibQlever, externallySpecifiedValues) {
   // BMW.
   std::array<std::string, 2> queries = {
       R"(
-    SELECT ?s ?x WHERE {
-      ?s <p> ?o .
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
       SERVICE <https://qlever.cs.uni-freiburg/external-values/> {
         [] <identifier> "myValues" .
         [] <variables> ?x .
       }
-    }
+    } ORDER BY ?x
   )",
       R"(
-    SELECT ?s ?x WHERE {
-      ?s <p> ?o .
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
       SERVICE <https://qlever.cs.uni-freiburg.de/external-values-myValues> {
         [] <variables> ?x .
       }
-    }
+    } ORDER BY ?x
   )"};
 
   for (const auto& query : queries) {
@@ -345,20 +347,19 @@ TEST(LibQlever, externallySpecifiedValues) {
     using TC = TripleComponent;
     parsedQuery::SparqlValues newValues;
     newValues._variables = {Variable{"?x"}};
-    newValues._values = {{TC::Iri::fromIriref("<val1>")},
-                         {TC::Iri::fromIriref("<val2>")}};
+    newValues._values = {{TC::Iri::fromIriref("<s1>")},
+                         {TC::Iri::fromIriref("<s3>")}};
     externalValues[0]->updateValues(std::move(newValues));
 
-    auto res = engine.query(plan, ad_utility::MediaType::tsv);
-    // The result should be a cross product: 2 triples x 2 external values = 4
-    // rows, each containing a subject and an external value.
-    EXPECT_THAT(res, HasSubstr("?s\t?x"));
-    EXPECT_THAT(res, HasSubstr("<val1>"));
-    EXPECT_THAT(res, HasSubstr("<val2>"));
-    EXPECT_THAT(res, HasSubstr("<s1>"));
-    EXPECT_THAT(res, HasSubstr("<s2>"));
-    // Count lines: 1 header + 4 data rows = 5 lines (with trailing newline).
-    auto lineCount = std::count(res.begin(), res.end(), '\n');
-    EXPECT_EQ(lineCount, 5);
+    auto res = qet->getResult();
+    auto i = &Id::makeFromInt;
+    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    // The order of the two columns `?x` and `?o` might not be deterministic.
+    auto expected =
+        makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});
+    if (qet->getVariableColumn(Variable{"?x"}) != 0) {
+      expected.swapColumns(0, 1);
+    }
+    EXPECT_THAT(res->idTable(), matchesIdTable(expected));
   }
 }
