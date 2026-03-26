@@ -139,7 +139,7 @@ float TensorData::norm(const TensorData& tensor) {
   return snrm2_(&n, tensor.tensorData().data(), &inc);
 #else
   float norm = 0;
-  #pragma omp parallel for reduction(+ : norm)
+#pragma omp parallel for reduction(+ : norm)
   for (size_t i = 0; i < tensor.tensorData_.size(); i++) {
     norm += tensor.tensorData_[i] * tensor.tensorData_[i];
   }
@@ -158,7 +158,7 @@ float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
                &inc);
 #else
   float sum = 0;
-  #pragma omp parallel for reduction(+ : sum)
+#pragma omp parallel for reduction(+ : sum)
   for (size_t i = 0; i < tensor1.tensorData_.size(); i++) {
     sum += tensor1.tensorData_[i] * tensor2.tensorData_[i];
   }
