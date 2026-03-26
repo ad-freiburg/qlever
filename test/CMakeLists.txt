@@ -290,6 +290,8 @@ addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
+addLinkAndDiscoverTestNoLibs(MergeInputRangeTest)
+
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
