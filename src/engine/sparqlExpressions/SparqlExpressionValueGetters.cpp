@@ -451,8 +451,8 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
       } catch (const std::exception& e) {
         AD_LOG_ERROR << "Failed to parse tensor from literal: "
                      << asStringViewUnsafe(litOrIri.getLiteral().getContent())
-                     << " with datatype " << type
-                     << ". Error message: " << e.what();
+                     << " with datatype " << type << "\n";
+        AD_LOG_ERROR << "Error message: " << e.what() << "\n";
         return std::nullopt;
       }
     }
@@ -473,7 +473,8 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
                  << (optionalStringAndType.has_value()
                          ? optionalStringAndType.value().first
                          : "N/A")
-                 << ". Error message: " << e.what();
+                 << "\n";
+    AD_LOG_ERROR << "Error message: " << e.what() << "\n";
     return std::nullopt;
   }
 }

@@ -17,6 +17,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
 #include "engine/TensorSearch.h"
+#include "engine/TensorSearchCachedIndex.h"
 #include "engine/TensorSearchConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
@@ -28,8 +29,13 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "engine/TensorSearchCachedIndex.h"
 
+#ifdef QLEVER_USE_TENSOR_BLAS
+extern "C" {
+  #include <cblas.h>
+  #include <openblas_config.h>
+}
+#endif
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
@@ -40,8 +46,24 @@ size_t TensorSearchImpl::getNumThreads() {
   }
   return userPreference;
 }
+void TensorSearchImpl::initializeGlobalRuntimeParameters() {
+  // This function is called at the beginning of the server execution to set the
+  // global runtime parameters related to tensor search. This is necessary to
+  // ensure that the number of threads used for tensor search is set correctly
+  // before any tensor search operations are executed.
 
-// ____________________________________________________________________________
+#ifdef QLEVER_USE_TENSOR_BLAS
+  AD_LOG_INFO << "Using OpenBLAS for tensor operations." << std::endl;
+  size_t maxNumThreads = getNumThreads();
+  AD_LOG_INFO << "Setting the number of threads for BLAS to " << maxNumThreads
+              << " (as specified by the "
+              << "tensorSearchMaxNumThreads runtime parameter)" << std::endl;
+  openblas_set_num_threads(maxNumThreads);
+#else
+  AD_LOG_INFO << "Using internal implementation for tensor operations."
+              << std::endl;
+#endif
+}
 
 // ____________________________________________________________________________
 void TensorSearchImpl::addResultTableEntry(IdTable* result,

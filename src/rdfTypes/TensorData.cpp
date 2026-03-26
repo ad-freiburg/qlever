@@ -3,8 +3,14 @@
 #include <cmath>
 #include <numeric>
 #include <sstream>
+
+#include "rapidjson/document.h"
+#include "rapidjson/error/en.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
+using namespace rapidjson;
 
 #ifdef QLEVER_USE_TENSOR_BLAS
 #ifndef FINTEGER
@@ -33,12 +39,31 @@ std::pair<std::string, std::string> TensorData::toString() const {
   // to the json string representation of the tensor data, we can use
   // nlohmann::json's dump function, which will add the necessary brackets and
   // commas.
+  // Convert to rapidjson format
+  Document document;
+  document.SetObject();
+  auto& allocator = document.GetAllocator();
 
-  nlohmann::json json;
-  json["data"] = tensorData_;
-  json["shape"] = shape_;
-  json["type"] = dtypeToString.at(dtype_);
-  return {json.dump(), TENSOR_LITERAL};
+  Value dataArray(kArrayType);
+  for (float value : tensorData_) {
+    dataArray.PushBack(value, allocator);
+  }
+  document.AddMember("data", dataArray, allocator);
+
+  Value shapeArray(kArrayType);
+  for (size_t dim : shape_) {
+    shapeArray.PushBack(static_cast<uint64_t>(dim), allocator);
+  }
+  document.AddMember("shape", shapeArray, allocator);
+
+  document.AddMember("type", Value(dtypeToString.at(dtype_).c_str(), allocator),
+                     allocator);
+
+  StringBuffer buffer;
+  Writer<StringBuffer> writer(buffer);
+  document.Accept(writer);
+
+  return {std::string(buffer.GetString()), TENSOR_LITERAL};
 }
 
 LiteralOrIri TensorData::toLiteral() const {
@@ -46,61 +71,101 @@ LiteralOrIri TensorData::toLiteral() const {
   return LiteralOrIri::literalWithoutQuotes(str_repr.first, str_repr.second);
 }
 
-TensorData TensorData::parseFromString(std::string_view dataString) {
-  // we can use nlohmann::json's parse function to parse the string
-  // representation of the tensor data.
-  try {
-    auto json = nlohmann::json::parse(dataString);
-    return parseFromJSON(json);
-  } catch (const nlohmann::json::parse_error& e) {
-    throw std::runtime_error{
-        absl::StrCat("Failed to parse tensor data from string: ", dataString,
-                     " - ", std::string(e.what()))};
-  }
-  auto json = nlohmann::json::parse(dataString);
-  return parseFromJSON(json);
-}
+TensorData TensorData::parseFromString(const std::string_view& dataString) {
+  // add the kParseStopWhenDoneFlag be a bit more robust in parsing
 
-TensorData TensorData::parseFromJSON(nlohmann::json json) {
-  if (json.find("data") == json.end() || json.find("shape") == json.end() ||
-      json.find("type") == json.end()) {
+
+  Document document;
+  document.Parse<kParseStopWhenDoneFlag>(dataString.data(), dataString.size());
+  if (document.HasParseError()) {
+    ssize_t offset = document.GetErrorOffset();
+    size_t contextLowerBound = std::max(static_cast<ssize_t>(0), offset - 10);
+    size_t contextUpperBound =
+        std::min(static_cast<ssize_t>(dataString.size()),
+                 offset + 10);  // Get a snippet around the error
+    std::string data = std::string(
+        dataString);  // Convert to std::string for easier manipulation
+    std::string errorContext = data.substr(
+        contextLowerBound,
+        contextUpperBound -
+            contextLowerBound);  // Get a snippet of the error context
+    throw std::runtime_error{
+        absl::StrCat("Failed to parse tensor data from string: ", data, " - ",
+                     GetParseError_En(document.GetParseError()), " at offset ",
+                     offset, " (context: '", errorContext, "')")};
+  }
+  return parseFromJSON(document, dataString);
+}
+TensorData TensorData::parseFromJSON(Document& json,
+                                     const std::string_view& dataString) {
+  if (!json.HasMember("data") || !json.HasMember("shape") ||
+      !json.HasMember("type")) {
     throw std::runtime_error{"Missing required fields in JSON"};
   }
+
   std::vector<float> data;
   std::vector<size_t> shape;
   TensorData::DType dtype;
+
   try {
-    data = json["data"].get<std::vector<float>>();
-    shape = json["shape"].get<std::vector<size_t>>();
+    // Parse data array
+    const auto& dataArray = json["data"];
+    if (!dataArray.IsArray()) {
+      throw std::runtime_error{
+          absl::StrCat("data field is not an array in: ", dataString)};
+    }
+    for (const auto& val : dataArray.GetArray()) {
+      data.push_back(val.GetFloat());
+    }
 
-    dtype =
-        std::find_if(dtypeToString.begin(), dtypeToString.end(),
-                     [&json](const auto& pair) {
-                       return pair.second == json["type"].get<std::string>();
-                     })
-            ->first;
+    // Parse shape array
+    const auto& shapeArray = json["shape"];
+    if (!shapeArray.IsArray()) {
+      throw std::runtime_error{
+          absl::StrCat("shape field is not an array in: ", dataString)};
+    }
+    for (const auto& val : shapeArray.GetArray()) {
+      shape.push_back(val.GetUint64());
+    }
+
+    // Parse type
+    if (!json["type"].IsString()) {
+      throw std::runtime_error{
+          absl::StrCat("Type field is not a string in: ", dataString)};
+    }
+    std::string typeStr = json["type"].GetString();
+
+    auto it = std::find_if(
+        dtypeToString.begin(), dtypeToString.end(),
+        [&typeStr](const auto& pair) { return pair.second == typeStr; });
+    if (it == dtypeToString.end()) {
+      throw std::runtime_error{absl::StrCat("Unknown dtype in JSON: ", typeStr,
+                                            " in: ", dataString)};
+    }
+    dtype = it->first;
+
   } catch (const std::exception& e) {
-    throw std::runtime_error{"Unknown type in JSON" + std::string(e.what())};
+    throw std::runtime_error{
+        absl::StrCat("Failed to parse tensor JSON: ", std::string(e.what()),
+                     " in: ", dataString)};
   }
 
-  if (dtype == dtypeToString.end()->first) {
-    throw std::runtime_error{"Unknown dtype in JSON: " +
-                             json["type"].get<std::string>()};
-  }
   if (shape.empty()) {
-    throw std::runtime_error{"Shape cannot be empty"};
+    throw std::runtime_error{
+        absl::StrCat("Shape cannot be empty in: ", dataString)};
   }
   if (std::accumulate(shape.begin(), shape.end(), (size_t)1,
                       std::multiplies<>()) != data.size()) {
-    throw std::runtime_error{
-        "The number of elements in data does not match the shape"};
+    throw std::runtime_error{absl::StrCat(
+        "The number of elements in data does not match the shape in: ",
+        dataString)};
   }
 
   return TensorData(std::move(data), std::move(shape), dtype);
 }
 
 std::optional<TensorData> TensorData::parseFromPair(
-    std::optional<std::pair<std::string, const char*>> pair) {
+    const std::optional<std::pair<std::string, const char*>>& pair) {
   if (pair.has_value()) {
     auto type = pair.value().second;
     if (type == nullptr) {
@@ -148,9 +213,10 @@ float TensorData::norm(const TensorData& tensor) {
 }
 
 float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
-  if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
-  }
+  // if (!isBroadCastable(tensor1, tensor2)) {
+  //   throw std::runtime_error{"Tensors are not broadcastable for
+  //   subtraction"};
+  // }
 #ifdef QLEVER_USE_TENSOR_BLAS
   FINTEGER n = (FINTEGER)tensor1.tensorData_.size();
   FINTEGER inc = 1;

@@ -31,14 +31,30 @@ TEST(TensorParse, TensorConstruction) {
   // also test that parsing an invalid string throws an error
   EXPECT_THROW(TensorData::parseFromString("invalid string"),
                std::runtime_error);
-  EXPECT_THROW(TensorData::parseFromString(
-                   R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})"),
+  std::string_view wrongType =
+      R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"invalid_type"})";
+  EXPECT_THROW(TensorData::parseFromString(wrongType),
                std::runtime_error);  // invalid type
-  EXPECT_THROW(
-      TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"shape":[3]})"),
-      std::runtime_error);  // missing type
-  EXPECT_THROW(
-      TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"type":"float32"})"),
-      std::runtime_error);  // missing shape
+  std::string_view missingType = R"({"data":[1.0,2.0,3.0],"shape":[3]})";
+  EXPECT_THROW(TensorData::parseFromString(missingType),
+               std::runtime_error);  // missing type
+  std::string_view missingShape = R"({"data":[1.0,2.0,3.0],"type":"float32"})";
+  EXPECT_THROW(TensorData::parseFromString(missingShape),
+               std::runtime_error);  // missing shape
+}
+TEST(TensorParse, BigTensorConstruction) {
+  std::vector<float> data(1000);
+  for (size_t i = 0; i < data.size(); i++) {
+    data[i] = static_cast<float>(i);
+  }
+  std::string long_str = R"({"data":[)";
+  for (size_t i = 0; i < data.size(); i++) {
+    long_str += std::to_string(data[i]);
+    if (i != data.size() - 1) {
+      long_str += ",";
+    }
+  }
+  long_str += R"(],"shape":[1000],"type":"float32"})";
+  auto tensor_from_string = TensorData::parseFromString(long_str);
 }
 }  // namespace
