@@ -37,16 +37,20 @@ TEST(ExternallySpecifiedValues, basicMethods) {
       testQec, {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values},
       "test-id");
 
-  // Check identifier
+  // Check identifier.
   EXPECT_EQ(externalValuesOp.getIdentifier(), "test-id");
 
-  // Check that knownEmptyResult always returns false (even with empty values)
+  // Check that `knownEmptyResult` always returns false (even with empty
+  // values).
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
 
-  // Check that the operation is uncachable
+  // Check that the operation is uncachable.
   EXPECT_FALSE(externalValuesOp.canResultBeCached());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      externalValuesOp.getCacheKey(),
+      ::testing::HasSubstr("Caching must be disabled"));
 
-  // Check other basic methods inherited from Values
+  // Check other basic methods inherited from `Values`.
   EXPECT_EQ(externalValuesOp.getSizeEstimate(), 3u);
   EXPECT_EQ(externalValuesOp.getCostEstimate(), 3u);
   EXPECT_EQ(externalValuesOp.getDescriptor(), "EXTERNAL VALUES 'test-id'");
@@ -54,20 +58,20 @@ TEST(ExternallySpecifiedValues, basicMethods) {
   EXPECT_EQ(externalValuesOp.getResultWidth(), 3u);
 }
 
-// Check that knownEmptyResult returns false even with empty values
+// Check that `knownEmptyResult` returns `false` even with empty values.
 TEST(ExternallySpecifiedValues, knownEmptyResultWithEmptyValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents emptyValues{};
   ExternallySpecifiedValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, emptyValues}, "empty-id");
 
-  // Should return false even though values are empty
+  // Should return false even though values are empty.
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
 }
 
-// Check that `computeResult` works correctly
+// Check that `computeResult` works correctly.
 TEST(ExternallySpecifiedValues, computeResult) {
-  // `ExternallySpecifiedValues` only work with caching disabled.
+  // `ExternallySpecifiedValues` only works with caching disabled.
   auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
   auto testQecCopy = *testQecOrig;
   testQecCopy.setDisableCachingOnlyForTesting(true);
@@ -91,30 +95,49 @@ TEST(ExternallySpecifiedValues, computeResult) {
                 {{I(12), x}, {U, Id::makeFromLocalVocabIndex(l.value())}}));
 }
 
-// Test the updateValues method
+// Test the `updateValues` method.
 TEST(ExternallySpecifiedValues, updateValues) {
-  auto testQec = ad_utility::testing::getQec();
-  ValuesComponents initialValues{{TC{1}, TC{2}}, {TC{3}, TC{4}}};
-  ExternallySpecifiedValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
-      "update-test");
+  auto runTest = [](bool cachingDisabled) {
+    auto testQec = ad_utility::testing::getQec();
+    auto qecCopy = *testQec;
+    if (cachingDisabled) {
+      qecCopy.setDisableCachingOnlyForTesting(true);
+      testQec = &qecCopy;
+    }
+    ValuesComponents initialValues{{TC{1}, TC{2}}, {TC{3}, TC{4}}};
+    ExternallySpecifiedValues externalValuesOp(
+        testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
+        "update-test");
 
-  // Check initial size
-  EXPECT_EQ(externalValuesOp.getSizeEstimate(), 2u);
+    // Check initial size.
+    EXPECT_EQ(externalValuesOp.getSizeEstimate(), 2u);
 
-  // Update with new values (same variables)
-  ValuesComponents newValues{
-      {TC{10}, TC{20}}, {TC{30}, TC{40}}, {TC{50}, TC{60}}};
-  parsedQuery::SparqlValues updatedSparqlValues{
-      {Variable{"?x"}, Variable{"?y"}}, newValues};
+    // Update with new values (same variables).
+    ValuesComponents newValues{
+        {TC{10}, TC{20}}, {TC{30}, TC{40}}, {TC{50}, TC{60}}};
+    parsedQuery::SparqlValues updatedSparqlValues{
+        {Variable{"?x"}, Variable{"?y"}}, newValues};
 
-  externalValuesOp.updateValues(std::move(updatedSparqlValues));
+    externalValuesOp.updateValues(std::move(updatedSparqlValues));
 
-  // Check that the size changed
-  EXPECT_EQ(externalValuesOp.getSizeEstimate(), 3u);
+    // Check that the size changed.
+    EXPECT_EQ(externalValuesOp.getSizeEstimate(), 3u);
+    if (cachingDisabled) {
+      auto res = externalValuesOp.computeResultOnlyForTesting();
+      EXPECT_THAT(res.idTable(),
+                  matchesIdTableFromVector({{10, 20}, {30, 40}, {50, 60}},
+                                           &Id::makeFromInt));
+    } else {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          externalValuesOp.computeResultOnlyForTesting(),
+          ::testing::HasSubstr("caching is disabled"));
+    }
+  };
+  runTest(false);
+  runTest(true);
 }
 
-// Test that updateValues fails with different variables
+// Test that `updateValues` fails with different variables.
 TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentVariables) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
@@ -122,7 +145,7 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentVariables) {
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
       "mismatch-test");
 
-  // Try to update with different variables - should fail
+  // Try to update with different variables - should fail.
   ValuesComponents newValues{{TC{10}, TC{20}, TC{30}}};
   parsedQuery::SparqlValues wrongSparqlValues{
       {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, newValues};
@@ -130,14 +153,14 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentVariables) {
   EXPECT_ANY_THROW(externalValuesOp.updateValues(std::move(wrongSparqlValues)));
 }
 
-// Test that updateValues fails with same variables but different order
+// Test that `updateValues` fails with same variables but different order.
 TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentOrder) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
   ExternallySpecifiedValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues}, "order-test");
 
-  // Try to update with variables in different order - should fail
+  // Try to update with variables in different order - should fail.
   ValuesComponents newValues{{TC{10}, TC{20}}};
   parsedQuery::SparqlValues wrongOrderSparqlValues{
       {Variable{"?y"}, Variable{"?x"}}, newValues};
@@ -146,7 +169,7 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentOrder) {
       externalValuesOp.updateValues(std::move(wrongOrderSparqlValues)));
 }
 
-// Test clone functionality
+// Test `clone` functionality.
 TEST(ExternallySpecifiedValues, clone) {
   // `ExternallySpecifiedValues` only work with caching disabled.
   auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
@@ -169,7 +192,7 @@ TEST(ExternallySpecifiedValues, clone) {
   EXPECT_EQ(clonedExternal->getIdentifier(), "clone-test");
 }
 
-// Test getExternalValues functionality
+// Test `getExternalValues` functionality.
 TEST(ExternallySpecifiedValues, getExternalValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{1}, TC{2}}};

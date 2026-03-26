@@ -23,6 +23,7 @@ using V = Variable;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
+using ::testing::HasSubstr;
 
 // Helper to create a triple with an IRI predicate.
 static SparqlTriple makeTriple(std::string_view predIri,
@@ -49,6 +50,11 @@ struct ExternalValuesQueryTest : public ::testing::Test {
   SparqlTriple defaultIdTriple = idTriple(lit("myId"));
   SparqlTriple defaultVarTriple = varTriple(V{"?x"});
 };
+
+// _____________________________________________________________________________
+TEST_F(ExternalValuesQueryTest, name) {
+  EXPECT_EQ(query.name(), "external values query");
+}
 
 // Test addParameter with <identifier>.
 TEST_F(ExternalValuesQueryTest, addParameterIdentifier) {
@@ -89,15 +95,17 @@ TEST_F(ExternalValuesQueryTest, addParameterMultipleVariables) {
 
 // Test addParameter with non-variable object for <variables> throws.
 TEST_F(ExternalValuesQueryTest, addParameterVariablesNonVariable) {
-  EXPECT_THROW(query.addParameter(varTriple(iri("<http://example.com>"))),
-               ExternalValuesException);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      query.addParameter(varTriple(iri("<http://example.com>"))),
+      HasSubstr("expects a variable"));
 }
 
 // Test addParameter with unknown predicate throws.
-TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
+TEST(ExternalValuesQuery, addParameterUnknownPredicatemeter) {
   ExternalValuesQuery query;
   auto triple = makeTriple("<unknown>", Variable{"?x"});
-  EXPECT_THROW(query.addParameter(triple), ExternalValuesException);
+  AD_EXPECT_THROW_WITH_MESSAGE(query.addParameter(triple),
+                               HasSubstr("Unknown parameter"));
 }
 
 // Test validate succeeds with identifier and variables set.
@@ -110,13 +118,16 @@ TEST_F(ExternalValuesQueryTest, validateSuccess) {
 // Test validate fails without identifier.
 TEST_F(ExternalValuesQueryTest, validateMissingIdentifier) {
   query.addParameter(defaultVarTriple);
-  EXPECT_THROW(query.validate(), ExternalValuesException);
+  AD_EXPECT_THROW_WITH_MESSAGE(query.validate(),
+                               HasSubstr("requires an <identifier>"));
 }
 
 // Test validate fails without variables.
 TEST_F(ExternalValuesQueryTest, validateMissingVariables) {
   query.addParameter(defaultIdTriple);
-  EXPECT_THROW(query.validate(), ExternalValuesException);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      query.validate(),
+      HasSubstr("requires at least one <variables> parameter"));
 }
 
 // Test the (deprecated) specification of the identifier via the IRI directly.

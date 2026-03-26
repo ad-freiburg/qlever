@@ -19,7 +19,6 @@ class Values : virtual public Operation {
 
  protected:
   // Accessors for the parsed values.
-  const SparqlValues& parsedValues() const { return parsedValues_; }
   SparqlValues& parsedValues() { return parsedValues_; }
 
  public:

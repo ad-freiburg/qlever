@@ -790,9 +790,8 @@ void Operation::getExternallySpecifiedValues(
   // classes except `ExternallySpecifiedValues` itself, which overrides this
   // method.
   for (auto* child : getChildren()) {
-    if (child != nullptr) {
-      child->getRootOperation()->getExternallySpecifiedValues(externalValues);
-    }
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    child->getRootOperation()->getExternallySpecifiedValues(externalValues);
   }
 }
 
