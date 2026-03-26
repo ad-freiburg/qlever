@@ -133,8 +133,10 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
+Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
+// The inlining has been removed as it was not building in the Release mode
+// TODO: fix this?
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
