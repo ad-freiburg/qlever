@@ -359,10 +359,9 @@ class Operation {
   // Recursively collect all `ExternallySpecifiedValues` operations in this
   // operation tree. This allows the following pattern:
   // 1. Parse and plan a query that contains an `ExternallySpecifiedValues`
-  // clause.
+  //    clause.
   // 2. Modify the contents of the `ExternallySpecifiedValues` after obtaining
-  // them
-  //    from the planned `QueryExecutionTree` via this function.
+  //    them from the planned `QueryExecutionTree` via this function.
   // 3. Execute the query.
   // 4. Repeat steps 2 and 3 with different values. This does not require
   //    running the parser and query planner again (which is the point of the
