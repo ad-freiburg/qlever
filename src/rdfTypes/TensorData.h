@@ -11,6 +11,7 @@
 #include "util/Duration.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
+#include "rapidjson/document.h"
 
 namespace ad_utility {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -45,10 +46,10 @@ class TensorData {
   static bool isBroadCastable(const TensorData& tensor1,
                               const TensorData& tensor2);
 
-  static TensorData parseFromString(std::string_view dataString);
-  static TensorData parseFromJSON(nlohmann::json json);
+  static TensorData parseFromString(const std::string_view& dataString);
+  static TensorData parseFromJSON(rapidjson::Document& json, const std::string_view& dataString);
   static std::optional<TensorData> parseFromPair(
-      std::optional<std::pair<std::string, const char*>> pair);
+      const std::optional<std::pair<std::string, const char*>>& pair);
 
   static float cosineSimilarity(const TensorData& tensor1,
                                 const TensorData& tensor2);

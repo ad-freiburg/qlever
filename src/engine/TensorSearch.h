@@ -47,6 +47,7 @@ class TensorSearchImpl {
       : params_(std::move(params)), qec_(qec) {};
   static size_t getNumThreads();
   Result computeTensorSearchResult();
+  static void initializeGlobalRuntimeParameters();
 };
 
 // This class is implementing a Tensor Search operation. This operations

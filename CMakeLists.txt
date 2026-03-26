@@ -201,7 +201,7 @@ find_package(Threads REQUIRED)
 # )
 # add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
 ################################
-# Annoy (for approximate nearest neighbor search)
+# FAISS (for approximate nearest neighbor search)
 ################################
 MESSAGE(STATUS "Using FAISS for the dense tensor index")
 FetchContent_Declare(
@@ -220,6 +220,18 @@ set(FAISS_ENABLE_PYTHON  OFF CACHE BOOL "Disable MKL support for FAISS")
 set(FAISS_ENABLE_EXTRAS  OFF CACHE BOOL "Disable MKL support for FAISS")
 set(BUILD_TESTING  OFF CACHE BOOL "Disable testing for FAISS")
 
+################################
+# RapidJSON (for fast JSON parsing in the tensor loading code)
+# Use own fork as the upstream has cmake issues
+################################
+MESSAGE(STATUS "Using RapidJSON for very fast JSON parsing in the tensor loading code.")
+FetchContent_Declare(
+        rapidjson
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG 24b5e7a8b27f42fa16b96fc70aade9106cf7102f
+        EXCLUDE_FROM_ALL
+)
+set(RAPIDJSON_BUILD_TESTS OFF)
 #################################
 # ICU (for proper collation
 ################################
@@ -364,6 +376,17 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
+if (QLEVER_USE_TENSOR_BLAS)
+    set(BLA_VENDOR "OpenBLAS")
+    find_package(BLAS REQUIRED)
+    find_package(LAPACK REQUIRED)
+    set(LINK_BLAS_LIBRARIES ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    add_compile_definitions(QLEVER_USE_TENSOR_BLAS)
+    message(STATUS "QLEVER_USE_TENSOR_BLAS is enabled")
+else ()
+    set(LINK_BLAS_LIBRARIES "")
+endif ()
+
 
 if (USE_PARALLEL)
     include(FindOpenMP)
@@ -373,17 +396,9 @@ if (USE_PARALLEL)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
         add_compile_definitions(_PARALLEL_SORT)
         add_compile_definitions(_TENSOR_PARALLEL)
-
-        find_package(BLAS REQUIRED)
-        find_package(LAPACK REQUIRED)
-        set(LINK_BLAS_LIBRARIES ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
-    endif ()
+        endif ()
 endif ()
 if (OPENMP_FOUND)
-    if (QLEVER_USE_TENSOR_BLAS)
-        add_compile_definitions(QLEVER_USE_TENSOR_BLAS)
-        message(STATUS "QLEVER_USE_TENSOR_BLAS is enabled")
-    endif ()
     message(STATUS "OpenMP found, enabling parallel features")
 else ()
     set(LINK_BLAS_LIBRARIES "")
@@ -445,7 +460,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin faiss)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin faiss RapidJSON)
 
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
@@ -454,6 +469,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
 include_directories(${ctre_SOURCE_DIR}/single-header)
+include_directories(${RapidJSON_SOURCE_DIR}/include)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
