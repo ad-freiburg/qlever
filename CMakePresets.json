@@ -21,7 +21,8 @@
                 "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_AR": "x86_64-conda-linux-gnu-ar",
                 "DONT_UPDATE_COMPILATION_INFO": "true",
-                "USE_PARALLEL": "true"
+                "USE_PARALLEL": "true",
+                "QLEVER_USE_TENSOR_BLAS": "true"
             }
         }
     ],
