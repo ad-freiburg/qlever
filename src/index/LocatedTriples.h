@@ -91,13 +91,13 @@ struct LocatedTripleCompare {
 // for a triple is retained, so the last operation for a triple is retained.
 class SortedLocatedTriplesVector {
   using storage = std::vector<LocatedTriple>;
-  mutable storage triples_ = {};
-  mutable size_t sortedUntil_ = 0;
+  storage triples_ = {};
+  size_t sortedUntil_ = 0;
 
   // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
   // triple.
-  void zipSort() const;
-  void fullSort() const;
+  void zipSort();
+  void fullSort();
 
   // For the range `rangeToSort` contained in `triples` sort it by triple and
   // keep the last `LocatedTriple` for each triple.
@@ -121,6 +121,10 @@ class SortedLocatedTriplesVector {
     triples.erase(toFree.begin(), toFree.end());
   }
 
+  // Whether the items are all sorted and deduplicated. Items can only be read
+  // if `isClean` is true.
+  bool isClean() const { return sortedUntil_ == triples_.size(); }
+
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   FRIEND_TEST(SortedVectorTest, sortedVector);
 
@@ -130,7 +134,10 @@ class SortedLocatedTriplesVector {
   static SortedLocatedTriplesVector fromSorted(
       std::vector<LocatedTriple> sortedTriples);
 
-  void ensureItemsAreSorted() const;
+  // Consolidates the stored items after inserts. `consolidate` must be called
+  // before any access after inserting new items. After calling `consolidate`
+  // `isClean` will be true.
+  void consolidate();
 
   void insert(LocatedTriple lt);
 
@@ -186,8 +193,8 @@ class SortedLocatedTriplesVector {
   bool empty() const;
 
   bool operator==(const SortedLocatedTriplesVector& other) const {
-    ensureItemsAreSorted();
-    other.ensureItemsAreSorted();
+    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(other.isClean());
     return triples_ == other.triples_;
   }
 };
@@ -290,6 +297,10 @@ class LocatedTriplesPerBlock {
 
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
+
+  // Sort the located triples in all blocks. Must be called before any sorted
+  // access (begin/end/size/mergeTriples/updateAugmentedMetadata).
+  void consolidateAllBlocks();
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated

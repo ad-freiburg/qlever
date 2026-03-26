@@ -501,6 +501,15 @@ void DeltaTriples::setOriginalMetadata(
 }
 
 // _____________________________________________________________________________
+void DeltaTriples::consolidateAll() {
+  auto consolidate = [](auto& lt) {
+    ql::ranges::for_each(lt, &LocatedTriplesPerBlock::consolidateAllBlocks);
+  };
+  consolidate(locatedTriples_->getLocatedTriples<false>());
+  consolidate(locatedTriples_->getLocatedTriples<true>());
+}
+
+// _____________________________________________________________________________
 void DeltaTriples::updateAugmentedMetadata() {
   auto update = [](auto& lt) {
     ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
@@ -563,6 +572,7 @@ void DeltaTriples::readFromDisk() {
       std::make_shared<CancellationHandle::element_type>();
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  consolidateAll();
   AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
               << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
 }

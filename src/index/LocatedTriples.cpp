@@ -53,7 +53,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::zipSort() const {
+void SortedLocatedTriplesVector::zipSort() {
   // Sort the currently unsorted tail and only keep the last `LocatedTriple` for
   // each triple.
   auto unsorted =
@@ -107,12 +107,12 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::fullSort() const {
+void SortedLocatedTriplesVector::fullSort() {
   sortAndRemoveDuplicates(triples_, triples_);
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::ensureItemsAreSorted() const {
+void SortedLocatedTriplesVector::consolidate() {
   if (sortedUntil_ != triples_.size()) {
     if (triples_.size() > 5000) {
       zipSort();
@@ -130,47 +130,47 @@ void SortedLocatedTriplesVector::insert(LocatedTriple lt) {
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::begin() {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.begin();
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::begin()
     const {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.begin();
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::const_reverse_iterator
 SortedLocatedTriplesVector::rbegin() const {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.rbegin();
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::end() {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.end();
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::end()
     const {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.end();
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::const_reverse_iterator
 SortedLocatedTriplesVector::rend() const {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.rend();
 }
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   auto iter = ql::ranges::lower_bound(triples_, elem);
   AD_CONTRACT_CHECK(iter != triples_.end() && *iter == elem);
   triples_.erase(iter);
@@ -179,7 +179,7 @@ void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
   eraseSortedSubRange(triples_, toDelete);
   sortedUntil_ = triples_.size();
@@ -187,7 +187,7 @@ void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
 
 // ____________________________________________________________________________
 size_t SortedLocatedTriplesVector::size() const {
-  ensureItemsAreSorted();
+  AD_CONTRACT_CHECK(isClean());
   return triples_.size();
 }
 
@@ -207,6 +207,13 @@ LocatedTriplesPerBlock::getUpdatesIfPresent(size_t blockIndex) const {
     return boost::optional<const LocatedTriples&>{};
   }
   return boost::optional<const LocatedTriples&>{it->second};
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::consolidateAllBlocks() {
+  for (auto& locatedTriples : map_ | std::views::values) {
+    locatedTriples.consolidate();
+  }
 }
 
 // ____________________________________________________________________________
@@ -407,7 +414,7 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
   auto sizes =
       map_ | ql::views::values |
       ql::views::transform([](const auto& block) { return block.size(); });
-  return std::accumulate(sizes.begin(), sizes.end(), 0);
+  return std::accumulate(sizes.begin(), sizes.end(), 0UL);
 }
 
 // ____________________________________________________________________________

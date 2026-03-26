@@ -89,6 +89,7 @@ class LocatedTriplesTest : public ::testing::Test {
       const std::vector<LocatedTriple>& locatedTriples) {
     LocatedTriplesPerBlock result;
     result.add(locatedTriples);
+    result.consolidateAllBlocks();
     return result;
   }
 };
@@ -155,6 +156,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
                                                          {3, {{LT6, LT7}}}}));
 
   locatedTriplesPerBlock.add({LT8, LT9});
+  locatedTriplesPerBlock.consolidateAllBlocks();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(4));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
@@ -752,6 +754,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // Adding no triples does no changed the augmented metadata.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
@@ -760,6 +763,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // T1 is before block 0. The beginning of block 0 changes.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
@@ -771,6 +775,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T2}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
@@ -781,6 +786,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = false;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T3}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
@@ -790,6 +796,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         Span{T4}, metadata, keyOrder, true, handle);
     locatedTriplesPerBlock.add(locatedTriples);
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
@@ -856,6 +863,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Delete the located triples {T1 ... T4}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
@@ -878,6 +886,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Add the located triples {T1 ... T5}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] =
@@ -932,6 +941,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
         handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
@@ -940,6 +950,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1), metadata,
         keyOrder, true, handle));
+    locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
@@ -953,6 +964,7 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     LocatedTriples lts;
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
     lts.insert(LT(0, IT(1, 1, 1, 28), true));
+    lts.consolidate();
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
                          "{ LT(0 IdTriple(V:1, V:1, V:1, V:28, ) 1) }")));
   }
@@ -962,6 +974,7 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     ltpb.setOriginalMetadata(std::vector{CBM(PT(1, 1, 1), PT(1, 10, 15))});
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
     ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
+    ltpb.consolidateAllBlocks();
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq(
                           "LTs in Block #0: { LT(0 IdTriple(V:1, "
                           "V:1, V:1, V:123948, ) 1) }\n")));

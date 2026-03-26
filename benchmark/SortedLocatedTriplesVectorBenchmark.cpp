@@ -148,7 +148,7 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
         });
 
         // Column 2: Vector Integration (measure only ensureIntegration)
-        table.addMeasurement(nIdx, 2, [&]() { vec.ensureItemsAreSorted(); });
+        table.addMeasurement(nIdx, 2, [&]() { vec.consolidate(); });
 
         // Column 3: Set Insertion (insert M items one-by-one)
         std::set<LocatedTriple, LocatedTripleCompare> s(preExisting.begin(),

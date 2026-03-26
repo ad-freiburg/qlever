@@ -722,6 +722,7 @@ TEST(IndexImpl, recomputeStatistics) {
     deltaTriples.insertTriples(
         cancellationHandle, {IdTriple{{x, label, alpha, x}},
                              IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
+    deltaTriples.consolidateAll();
   });
 
   for (bool loadAllPermutations : {true, false}) {

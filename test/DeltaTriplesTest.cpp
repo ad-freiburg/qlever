@@ -116,6 +116,7 @@ TEST_F(DeltaTriplesTest, clear) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
+  deltaTriples.consolidateAll();
 
   EXPECT_THAT(deltaTriples, NumTriples(1, 0, 1, 1, 0));
 
@@ -130,6 +131,7 @@ TEST_F(DeltaTriplesTest, clear) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-low> <internal-a>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples, NumTriples(0, 1, 1, 0, 1));
 
   deltaTriples.insertTriples(
@@ -138,6 +140,7 @@ TEST_F(DeltaTriplesTest, clear) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
+  deltaTriples.consolidateAll();
 
   EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2, 1, 1));
 
@@ -196,6 +199,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(2, 0, 2, 0, 0, {"<A> <B> <C>", "<A> <B> <D>"}, {}, {}, {}));
@@ -204,6 +208,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Inserting triples that exist in the index works normally.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(3, 0, 3, 0, 0, {"<A> <B> <C>", "<A> <B> <D>", "<A> <low> <a>"},
@@ -213,6 +218,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<B> <C> <D>", "<B> <D> <C>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 0, 5, 0, 0,
                       {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
@@ -222,6 +228,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Inserting already inserted triples has no effect.
   deltaTriples.insertTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <C>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 0, 5, 0, 0,
                       {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
@@ -232,6 +239,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // triples and adds it to the deleted ones.
   deltaTriples.deleteTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <D>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples, StateIs(4, 1, 5, 0, 0,
                                     {"<A> <B> <C>", "<B> <C> <D>",
                                      "<A> <low> <a>", "<B> <D> <C>"},
@@ -241,6 +249,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <next> <B>", "<B> <next> <C>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(4, 3, 7, 0, 0,
@@ -250,6 +259,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Deleting non-existent triples.
   deltaTriples.deleteTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <F>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(
@@ -276,6 +286,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<B> <prev> <A>", "<C> <prev> <B>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(4, 6, 10, 0, 0,
@@ -287,6 +298,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Deleting previously deleted triples.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <next> <B>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       StateIs(4, 6, 10, 0, 0,
@@ -298,6 +310,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Inserting previously deleted triple.
   deltaTriples.insertTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <F>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 0, 0,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -311,6 +324,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 1, 0,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -324,6 +338,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 1, 1,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -338,6 +353,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 0, 2,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -353,6 +369,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 0, 2,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -368,6 +385,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(deltaTriples,
               StateIs(5, 5, 10, 1, 1,
                       {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
@@ -425,6 +443,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      "<a> <b> \"abc\"^^<http://example.com/datatype>",
                      "<a> <b> <abc>", "<a> <other> \"def\"@de",
                      "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
+  deltaTriples.consolidateAll();
   auto a = iri("<a>");
   auto b = iri("<b>");
   auto lp = iri(LANGUAGE_PREDICATE);
@@ -461,6 +480,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      "<a> <b> \"abc\"^^<http://example.com/datatype>",
                      "<a> <b> <abc>", "<a> <other> \"def\"@de",
                      "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
+  deltaTriples.consolidateAll();
   EXPECT_THAT(
       deltaTriples,
       TriplesAre({},
@@ -592,6 +612,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       // Insert the `triplesToInsert`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+        deltaTriples.consolidateAll();
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
@@ -600,6 +621,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       // Delete the `triplesToDelete`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+        deltaTriples.consolidateAll();
       });
 
       // Make some checks in the middle of these updates (while the other
@@ -698,6 +720,7 @@ TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   LocalVocab localVocab;
   auto triplesToInsert = makeIdTriples(vocab, localVocab, {"<A> <B> <C>"});
   deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
+  deltaTriples.consolidateAll();
 
   // Another transparent and copied snapshot.
   LocatedTriplesSharedState transparentSnapshotAfterUpdate =
@@ -959,6 +982,7 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         deltaTriples.insertTriples(cancellationHandle, {triple1});
         deltaTriples.deleteTriples(cancellationHandle, {triple2});
+        deltaTriples.consolidateAll();
       });
 
   auto [sharedState, indices, ownedBlocks] =

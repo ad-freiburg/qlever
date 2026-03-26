@@ -36,18 +36,21 @@ TEST(SortedVectorTest, test) {
   EXPECT_EQ(sv.size(), 0);
 
   sv.insert(lt1);
+  sv.consolidate();
 
   EXPECT_FALSE(sv.empty());
   EXPECT_EQ(sv.size(), 1);
   EXPECT_EQ(*sv.begin(), lt1);
 
   sv.insert(lt1);
+  sv.consolidate();
 
   EXPECT_FALSE(sv.empty());
   EXPECT_EQ(sv.size(), 1);
 
   sv.insert(lt1I);
   sv.insert(lt1);
+  sv.consolidate();
 
   EXPECT_FALSE(sv.empty());
   EXPECT_EQ(sv.size(), 1);
@@ -62,10 +65,13 @@ TEST(SortedVectorTest, insertAndIterate) {
   sv.insert(LT(0, IT(1, 2, 3), true));
   sv.insert(LT(0, IT(2, 2, 2), true));
 
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.begin(), testing::_);
+
+  sv.consolidate();
+
   EXPECT_FALSE(sv.empty());
   EXPECT_EQ(sv.size(), 3);
 
-  // After iteration, elements should be sorted by triple.
   std::vector<LocatedTriple> result(sv.begin(), sv.end());
   ASSERT_EQ(result.size(), 3);
   EXPECT_EQ(result[0].triple_, IT(1, 2, 3));
@@ -80,6 +86,7 @@ TEST(SortedVectorTest, duplicatesRemoved) {
   // Insert same triple twice with different insertOrDelete values.
   sv.insert(LT(0, IT(1, 2, 3), true));
   sv.insert(LT(0, IT(1, 2, 3), false));
+  sv.consolidate();
 
   EXPECT_EQ(sv.size(), 1);
 
@@ -100,9 +107,12 @@ TEST(SortedVectorTest, erase) {
   sv.insert(lt1);
   sv.insert(lt2);
   sv.insert(lt3);
+  sv.consolidate();
 
   EXPECT_EQ(sv.size(), 3);
 
+  // erase requires sorted data (AD_CONTRACT_CHECK inside); after erase the
+  // vector stays sorted since sortedUntil_ is updated.
   sv.erase(lt2);
 
   EXPECT_EQ(sv.size(), 2);
@@ -113,21 +123,21 @@ TEST(SortedVectorTest, erase) {
   EXPECT_EQ(result[1].triple_, IT(3, 4, 5));
 }
 
-// Test that sorting is deferred until access.
-TEST(SortedVectorTest, lazySorting) {
+// Test that sorting must be done explicitly.
+TEST(SortedVectorTest, explicitSorting) {
   SortedLocatedTriplesVector sv;
 
   sv.insert(LT(0, IT(3, 0, 0), true));
   sv.insert(LT(0, IT(1, 0, 0), true));
 
-  // Internal state should be dirty, but we can't directly test that.
-  // Access triggers sorting.
+  // Must call ensureItemsAreSorted before accessing size or iterators.
+  sv.consolidate();
   EXPECT_EQ(sv.size(), 2);
 
-  // Insert more after sorting.
+  // Insert more; must sort again before access.
   sv.insert(LT(0, IT(2, 0, 0), true));
+  sv.consolidate();
 
-  // Should re-sort on next access.
   std::vector result(sv.begin(), sv.end());
   ASSERT_EQ(result.size(), 3);
   EXPECT_EQ(result[0].triple_, IT(1, 0, 0));
@@ -146,9 +156,9 @@ TEST(SortedVectorTest, equality) {
   sv2.insert(LT(0, IT(2, 3, 4), true));
   sv2.insert(LT(0, IT(1, 2, 3), true));
 
-  // Force sorting.
-  sv1.ensureItemsAreSorted();
-  sv2.ensureItemsAreSorted();
+  // Must sort before comparing.
+  sv1.consolidate();
+  sv2.consolidate();
 
   EXPECT_EQ(sv1, sv2);
 }
@@ -157,6 +167,8 @@ TEST(SortedVectorTest, equality) {
 TEST(SortedVectorTest, emptyVector) {
   SortedLocatedTriplesVector sv;
 
+  // A freshly constructed vector satisfies sortedUntil_ == size() == 0,
+  // so all contract checks pass without an explicit ensureItemsAreSorted call.
   EXPECT_TRUE(sv.empty());
   EXPECT_EQ(sv.size(), 0);
   EXPECT_EQ(sv.begin(), sv.end());
