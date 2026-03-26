@@ -85,15 +85,19 @@ class EncodedIriManagerImpl {
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
   // By default, `prefixes_` is empty, so no IRI will be encoded.
-  // NOTE: When loading an existing index use the deserialization from JSON. See
-  // the note in `from_json`.
+  // NOTE: When loading an existing index, in particular one from an older
+  // QLever version with different hardcoded prefixes, it is crucial to use the
+  // deserialization from JSON to initialize the EncodedIriManager See the note
+  // in `from_json`.
   EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
   // Construct from the list of prefixes. The prefixes have to be specified
   // without any brackes, so e.g. "http://example.org/" if IRIs of the form
   // `<http://example.org/1234>` should be encoded.
-  // NOTE: When loading an existing index use the deserialization from JSON. See
-  // the note in `from_json`.
+  // NOTE: When loading an existing index, in particular one from an older
+  // QLever version with different hardcoded prefixes, it is crucial to use the
+  // deserialization from JSON to initialize the EncodedIriManager See the note
+  // in `from_json`.
   explicit EncodedIriManagerImpl(
       std::vector<std::string> prefixesWithoutAngleBrackets) {
     // Add hardcoded prefixes.
