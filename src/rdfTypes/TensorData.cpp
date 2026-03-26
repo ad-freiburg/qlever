@@ -6,7 +6,7 @@
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
 
-#ifdef QLEVER_USE_BLAS_LAPACK
+#ifdef QLEVER_USE_TENSOR_BLAS
 #ifndef FINTEGER
 #define FINTEGER int
 #endif
@@ -133,15 +133,17 @@ float TensorData::cosineSimilarity(const TensorData& tensor1,
 }
 
 float TensorData::norm(const TensorData& tensor) {
-#ifdef QLEVER_USE_BLAS_LAPACK
+#ifdef QLEVER_USE_TENSOR_BLAS
   FINTEGER n = (FINTEGER)tensor.tensorData_.size();
   FINTEGER inc = 1;
   return snrm2_(&n, tensor.tensorData().data(), &inc);
 #else
-  float sum =
-      std::inner_product(tensor.tensorData_.begin(), tensor.tensorData_.end(),
-                         tensor.tensorData_.begin(), 0.0f);
-  return std::sqrt(sum);
+  float norm = 0;
+  #pragma omp parallel for reduction(+ : norm)
+  for (size_t i = 0; i < tensor.tensorData_.size(); i++) {
+    norm += tensor.tensorData_[i] * tensor.tensorData_[i];
+  }
+  return std::sqrt(norm);
 #endif
 }
 
@@ -149,15 +151,18 @@ float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
   if (!isBroadCastable(tensor1, tensor2)) {
     throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
   }
-#ifdef QLEVER_USE_BLAS_LAPACK
+#ifdef QLEVER_USE_TENSOR_BLAS
   FINTEGER n = (FINTEGER)tensor1.tensorData_.size();
   FINTEGER inc = 1;
   return sdot_(&n, tensor1.tensorData_.data(), &inc, tensor2.tensorData_.data(),
                &inc);
 #else
-  return std::inner_product(tensor1.tensorData_.begin(),
-                            tensor1.tensorData_.end(),
-                            tensor2.tensorData_.begin(), 0.0f);
+  float sum = 0;
+  #pragma omp parallel for reduction(+ : sum)
+  for (size_t i = 0; i < tensor1.tensorData_.size(); i++) {
+    sum += tensor1.tensorData_[i] * tensor2.tensorData_[i];
+  }
+  return sum;
 #endif
 }
 
