@@ -4,3 +4,4 @@ addLinkAndDiscoverTest(QueryPlannerTensorSearchTest qlever engine parser sparqlE
 addLinkAndDiscoverTest(TensorSearchAlgorithmTest qlever engine parser sparqlExpressions)
 addLinkAndDiscoverTest(TensorSearchTest qlever engine parser sparqlExpressions)
 addLinkAndDiscoverTestNoLibs(TensorLoadingTest engine sparqlExpressions)
+addLinkAndDiscoverTestNoLibs(TensorFunctionTest parser sparqlExpressions rdfTypes)

@@ -21,7 +21,8 @@
                 "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_AR": "x86_64-conda-linux-gnu-ar",
                 "DONT_UPDATE_COMPILATION_INFO": "true",
-                "USE_DENSE_TENSOR_INDEX": "true"
+                "USE_DENSE_TENSOR_INDEX": "true",
+                "USE_PARALLEL": "true"
             }
         }
     ],

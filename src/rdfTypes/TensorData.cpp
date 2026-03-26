@@ -6,6 +6,23 @@
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
 
+#ifdef QLEVER_USE_BLAS_LAPACK
+#ifndef FINTEGER
+#define FINTEGER int
+#endif
+// define the BLAS functions for the dot product and norm calculations
+extern "C" {
+
+/* declare BLAS functions, see http://www.netlib.org/clapack/cblas/ */
+int sgemm_(const char* transa, const char* transb, FINTEGER* m, FINTEGER* n,
+           FINTEGER* k, const float* alpha, const float* a, FINTEGER* lda,
+           const float* b, FINTEGER* ldb, float* beta, float* c, FINTEGER* ldc);
+float sdot_(FINTEGER* n, const float* x, FINTEGER* incx, const float* y,
+            FINTEGER* incy);
+float snrm2_(FINTEGER* n, const float* x, FINTEGER* incx);
+}
+#endif
+
 const std::map<TensorData::DType, std::string> dtypeToString = {
     {TensorData::DType::DOUBLE, "float64"},
     {TensorData::DType::FLOAT, "float32"},
@@ -116,19 +133,32 @@ float TensorData::cosineSimilarity(const TensorData& tensor1,
 }
 
 float TensorData::norm(const TensorData& tensor) {
+#ifdef QLEVER_USE_BLAS_LAPACK
+  FINTEGER n = (FINTEGER)tensor.tensorData_.size();
+  FINTEGER inc = 1;
+  return snrm2_(&n, tensor.tensorData().data(), &inc);
+#else
   float sum =
       std::inner_product(tensor.tensorData_.begin(), tensor.tensorData_.end(),
                          tensor.tensorData_.begin(), 0.0f);
   return std::sqrt(sum);
+#endif
 }
 
 float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
   if (!isBroadCastable(tensor1, tensor2)) {
     throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
   }
+#ifdef QLEVER_USE_BLAS_LAPACK
+  FINTEGER n = (FINTEGER)tensor1.tensorData_.size();
+  FINTEGER inc = 1;
+  return sdot_(&n, tensor1.tensorData_.data(), &inc, tensor2.tensorData_.data(),
+               &inc);
+#else
   return std::inner_product(tensor1.tensorData_.begin(),
                             tensor1.tensorData_.end(),
                             tensor2.tensorData_.begin(), 0.0f);
+#endif
 }
 
 TensorData TensorData::add(const TensorData& tensor1,
