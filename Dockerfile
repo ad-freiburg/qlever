@@ -13,7 +13,7 @@ FROM base AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
-RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev libopenblas-dev libopenmp-dev
+RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev libopenblas-dev libblas-dev liblapack-dev
 
 # Copy everything we need to build the binaries.
 #
@@ -34,7 +34,7 @@ COPY GitVersion.cmake /qlever/
 # to, build the image with `--build-arg RUN_TESTS=false`.
 # `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
 # `-march=native`.
-ARG RUN_TESTS=false
+ARG RUN_TESTS=true
 WORKDIR /qlever/build/
 RUN --mount=type=cache,target=/qlever/build \
   cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_DENSE_TENSOR_INDEX=true -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
