@@ -217,6 +217,8 @@ class DateYearOrDuration {
   // For undefined subtractions `std::nullopt` is returned.
   [[nodiscard]] std::optional<DateYearOrDuration> operator-(
       const DateYearOrDuration& rhs) const;
+  [[nodiscard]] std::optional<DateYearOrDuration> operator+(
+      const DateYearOrDuration& rhs) const;
 #endif
 };
 #ifdef QLEVER_CPP_17
