@@ -40,9 +40,9 @@ RUN --mount=type=cache,target=/qlever/build \
   cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_DENSE_TENSOR_INDEX=true -DQLEVER_USE_TENSOR_BLAS=true -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
 RUN --mount=type=cache,target=/qlever/build \
   if [ "$RUN_TESTS" = "true" ]; then \
-  cmake --build . -j 4 && ctest --rerun-failed --output-on-failure; \
+  cmake --build . -j && ctest --rerun-failed --output-on-failure; \
   else \
-  cmake --build . -j 4 --target qlever-index qlever-server && echo "Skipping tests"; \
+  cmake --build . -j --target qlever-index qlever-server && echo "Skipping tests"; \
   fi \
   && mkdir -p /qlever/bin && \
   cp qlever-* /qlever/bin/ && \
