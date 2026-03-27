@@ -232,6 +232,7 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 set(RAPIDJSON_BUILD_TESTS OFF)
+set(RAPIDJSON_BUILD_EXAMPLES OFF)
 #################################
 # ICU (for proper collation
 ################################
