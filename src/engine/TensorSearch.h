@@ -15,6 +15,7 @@
 #include "rdfTypes/TensorData.h"
 #include "rdfTypes/Variable.h"
 
+class TensorSearchCachedIndex;
 // helper struct to improve readability in prepareJoin()
 struct PreparedTensorSearchParams {
   const IdTable* const idTableLeft_;
@@ -60,10 +61,11 @@ class TensorSearch : public Operation {
   // The substitutesFilterOp parameter indicates whether the spatial join
   // was explicitly requested by the user (false) or has been created to
   // implicitly rewrite a cartesian product with a geo filter (true).
-  TensorSearch(QueryExecutionContext* qec, TensorSearchConfiguration config,
-               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-               std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
-               bool substitutesFilterOp = false);
+  TensorSearch(
+      QueryExecutionContext* qec, TensorSearchConfiguration config,
+      std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
+      std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+      bool substitutesFilterOp = false);
 
   std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
@@ -132,8 +134,12 @@ class TensorSearch : public Operation {
   const TensorSearchConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
-  std::optional<size_t> onlyForTestingGetSearchK() const { return config_.searchK_; }
-  std::optional<size_t> onlyForTestingGetNTrees() const { return config_.nTrees_; }
+  std::optional<size_t> onlyForTestingGetSearchK() const {
+    return config_.searchK_;
+  }
+  std::optional<size_t> onlyForTestingGetNTrees() const {
+    return config_.nTrees_;
+  }
   ssize_t onlyForTestingGetMaxResults() const { return config_.maxResults_; }
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_.distanceVariable_;

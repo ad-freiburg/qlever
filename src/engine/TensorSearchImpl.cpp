@@ -36,6 +36,9 @@ extern "C" {
   #include <openblas_config.h>
 }
 #endif
+#ifdef QLEVER_USE_TENSOR_PARALLEL
+#include <omp.h>
+#endif
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
@@ -60,8 +63,19 @@ void TensorSearchImpl::initializeGlobalRuntimeParameters() {
               << "tensorSearchMaxNumThreads runtime parameter)" << std::endl;
   openblas_set_num_threads(maxNumThreads);
 #else
+#ifdef QLEVER_TENSOR_PARALLEL
+  AD_LOG_INFO << "Using OpenP implementation for tensor operations."
+              << std::endl;
+  size_t maxNumThreads = getNumThreads();
+  AD_LOG_INFO << "Setting the number of threads for OpenMP to " << maxNumThreads
+              << " (as specified by the "
+              << "tensorSearchMaxNumThreads runtime parameter)" << std::endl;
+  omp_set_num_threads(maxNumThreads);
+#else
   AD_LOG_INFO << "Using internal implementation for tensor operations."
               << std::endl;
+#endif
+
 #endif
 }
 

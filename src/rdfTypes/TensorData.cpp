@@ -73,8 +73,6 @@ LiteralOrIri TensorData::toLiteral() const {
 
 TensorData TensorData::parseFromString(const std::string_view& dataString) {
   // add the kParseStopWhenDoneFlag be a bit more robust in parsing
-
-
   Document document;
   document.Parse<kParseStopWhenDoneFlag>(dataString.data(), dataString.size());
   if (document.HasParseError()) {

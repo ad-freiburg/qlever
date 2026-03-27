@@ -16,6 +16,7 @@ conda install -y -c conda-forge jemalloc
 conda install -y -c conda-forge llvm-openmp
 conda install -y -c conda-forge ld_impl_linux-64
 conda install -y -c conda-forge openblas
+conda install -y -c conda-forge linux-perf
 # conda install -y -c conda-forge boost==1.83.0
 pip install conan
 

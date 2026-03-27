@@ -54,6 +54,8 @@ class TensorSearchCachedIndex {
   static std::shared_ptr<const TensorSearchCachedIndex> fromKeyOrBuild(
       const std::string& key, ColumnIndex col, const IdTable& restable,
       const Index& index, TensorSearchConfiguration config);
+  static std::shared_ptr<const TensorSearchCachedIndex> fromKey(
+      const std::string& key);
 
   std::shared_ptr<const faiss::IndexIVFFlat> getIndex() const;
 
@@ -64,6 +66,7 @@ class TensorSearchCachedIndex {
   ValueId getRow(size_t faissIdx) const {
     return tensorIndexToRow_.at(faissIdx);
   }
+  const TensorSearchConfiguration& getConfig() const {return config_;}
 
  private:
   FaissIndexToRow buildIndex(ColumnIndex col, const IdTable& restable,

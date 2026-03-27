@@ -224,6 +224,8 @@ set(BUILD_TESTING  OFF CACHE BOOL "Disable testing for FAISS")
 # RapidJSON (for fast JSON parsing in the tensor loading code)
 # Use own fork as the upstream has cmake issues
 ################################
+set(RAPIDJSON_BUILD_TESTS OFF)
+set(RAPIDJSON_BUILD_EXAMPLES OFF)
 MESSAGE(STATUS "Using RapidJSON for very fast JSON parsing in the tensor loading code.")
 FetchContent_Declare(
         rapidjson
@@ -231,7 +233,6 @@ FetchContent_Declare(
         GIT_TAG 24b5e7a8b27f42fa16b96fc70aade9106cf7102f
         EXCLUDE_FROM_ALL
 )
-set(RAPIDJSON_BUILD_TESTS OFF)
 #################################
 # ICU (for proper collation
 ################################
@@ -395,10 +396,11 @@ if (USE_PARALLEL)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
         add_compile_definitions(_PARALLEL_SORT)
-        add_compile_definitions(_TENSOR_PARALLEL)
+        add_compile_definitions(QLEVER_TENSOR_PARALLEL)
         endif ()
 endif ()
 if (OPENMP_FOUND)
+
     message(STATUS "OpenMP found, enabling parallel features")
 else ()
     set(LINK_BLAS_LIBRARIES "")

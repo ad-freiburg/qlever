@@ -367,6 +367,8 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
+
+
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
@@ -376,10 +378,12 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
+
+  auto cacheKey=config_.rightCacheName_.value_or(getCacheKey());
   return PreparedTensorSearchParams{idTableLeft,       std::move(resultLeft),
                                     idTableRight,      std::move(resultRight),
                                     leftJoinCol,       rightJoinCol,
-                                    rightSelectedCols, getCacheKey(),
+                                    rightSelectedCols, cacheKey,
                                     numColumns,        config_};
 }
 

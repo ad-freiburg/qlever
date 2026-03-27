@@ -142,6 +142,18 @@ TensorSearchCachedIndex::fromKeyOrBuild(const std::string& key, ColumnIndex col,
   return (*lock)[key];
 }
 
+std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKey(
+    const std::string& key) {
+  auto lock = cache_.wlock();
+  if (!lock->contains(key)) {
+    for (auto &k : lock->getAllNonpinnedKeys()) {
+      AD_LOG_INFO << "We have key " << k << " though... \n";
+    }
+    throw std::runtime_error({absl::StrCat("Cannot find key \"", key, "\"")});
+  }
+  return (*lock)[key];
+}
+
 std::vector<TensorSearchCachedIndex::FaissResult>
 TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
                                 size_t n) const {
@@ -172,7 +184,7 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
 
   AD_CORRECTNESS_CHECK(nnIndices.size() == nnDistances.size());
   for (size_t i = 0; i < nnIndices.size(); i++) {
-    if(nnIndices[i] < 0) {
+    if (nnIndices[i] < 0) {
       // FAISS returns -1 for empty slots in the index, which can happen if the
       // number of indexed items is smaller than `n`. We ignore these results.
       continue;
