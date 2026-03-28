@@ -165,7 +165,7 @@ struct RuntimeParameters {
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
-  SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};
+  SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

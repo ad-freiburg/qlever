@@ -194,7 +194,7 @@ class DeltaTriples {
 
   // Remove redundant insertions (triples already in the index) and redundant
   // deletions (triples not in the index). The triples to be removed are taken
-  // from the blocks in PSO that have more than `vacuum-minimum-block-size`
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
   // triples. Returns aggregated statistics.
   nlohmann::json vacuum(
       ad_utility::SharedCancellationHandle cancellationHandle);

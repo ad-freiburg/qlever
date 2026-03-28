@@ -251,11 +251,11 @@ class LocatedTriplesPerBlock {
     augmentedMetadata_.reset();
   }
 
-  // Identify, for all blocks in `perm` whose number of located triples exceeds
-  // `vacuum-minimum-block-size`, the redundant insertions (triple already in
-  // index) and invalid deletions (triple not in index). The redundant triples
-  // are then returned as `SPO`. Depending on the updates different permutations
-  // may be more or less effective.
+  // Identify, for all blocks in `perm` whose number of located triples is at
+  // least `vacuum-minimum-block-size`, the redundant insertions (triple already
+  // in index) and invalid deletions (triple not in index). The redundant
+  // triples are then returned as `SPO`. Depending on the updates different
+  // permutations may be more or less effective.
   TriplesToVacuum identifyTriplesToVacuum(
       const Permutation& perm,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
