@@ -1491,7 +1491,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
                 ::testing::UnorderedElementsAreArray(expected));
   }
 
-  // A `SpatialJoin` adds the bounding box columns to it child `IndexScan`s
+  // A `SpatialJoin` adds the bounding box columns to its child `IndexScan`s
   // automatically, even if there is a `Join` operation in between.
   const std::string spatialJoinQuery = R"(
     PREFIX geo: <http://www.opengis.net/ont/geosparql#>

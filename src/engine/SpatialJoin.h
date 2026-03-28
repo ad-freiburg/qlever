@@ -176,7 +176,7 @@ class SpatialJoin : public Operation {
       std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
 
   // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
-  // the geometries from an underlying `MaterializedViews` if possible.
+  // the geometries from an underlying `MaterializedView` if possible.
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
