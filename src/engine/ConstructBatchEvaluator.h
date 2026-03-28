@@ -22,7 +22,7 @@
 
 namespace qlever::constructExport {
 
-// `EvaluatedVariablesValues` is used to store the evaluation results
+// `EvaluatedVariableValues` is used to store the evaluation results
 // (`EvaluatedTerm`s) for the values of a single variable across all rows in a
 // batch. The i-th element corresponds to the i-th row in the batch, and is
 // `nullopt` iff the variable was unbound for that row.
@@ -66,7 +66,7 @@ struct BatchEvaluationContext {
 };
 
 // Resolves `Id` values in variable columns to their string representations
-// (IRI, literal, etc.) via `ExportQueryExecutionTrees::idToStringAndType`.
+// (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
 //
 // The evaluation is column-oriented: for each variable (identified by their
 // `IdTable` column), all rows in the batch are evaluated before moving to the
