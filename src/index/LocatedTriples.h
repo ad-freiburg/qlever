@@ -19,6 +19,7 @@
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/MergeInputRange.h"
 #include "util/TimeTracer.h"
 
 class Permutation;
@@ -92,12 +93,13 @@ struct LocatedTripleCompare {
 class SortedLocatedTriplesVector {
   using storage = std::vector<LocatedTriple>;
   storage triples_ = {};
-  size_t sortedUntil_ = 0;
+  size_t numItemsLargePart_ = 0;
+  bool smallPartIsSorted_ = true;
 
   // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
   // triple.
-  void zipSort();
-  void fullSort();
+  void sortAndMergeParts();
+  void sortSmallPart();
 
   // For the range `rangeToSort` contained in `triples` sort it by triple and
   // keep the last `LocatedTriple` for each triple.
@@ -123,7 +125,7 @@ class SortedLocatedTriplesVector {
 
   // Whether the items are all sorted and deduplicated. Items can only be read
   // if `isClean` is true.
-  bool isClean() const { return sortedUntil_ == triples_.size(); }
+  bool isClean() const { return smallPartIsSorted_; }
 
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   FRIEND_TEST(SortedVectorTest, sortedVector);
@@ -141,8 +143,10 @@ class SortedLocatedTriplesVector {
 
   void insert(LocatedTriple lt);
 
-  using iterator = storage::iterator;
-  using const_iterator = storage::const_iterator;
+  using iterator = ad_utility::detail::ZipMergeIteratorImpl<
+      storage::iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
+  using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
+      storage::const_iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
   using const_reverse_iterator = storage::const_reverse_iterator;
 
   iterator begin();
@@ -198,6 +202,7 @@ class SortedLocatedTriplesVector {
     return triples_ == other.triples_;
   }
 };
+static_assert(std::ranges::range<SortedLocatedTriplesVector>);
 
 using LocatedTriples = SortedLocatedTriplesVector;
 

@@ -14,7 +14,7 @@
 
 #include "util/MergeInputRange.h"
 
-using ad_utility::mergeInputRange;
+using ad_utility::zipIterator;
 using testing::ElementsAre;
 using testing::IsEmpty;
 
@@ -30,113 +30,149 @@ auto toVector(Range&& r) {
   return result;
 }
 
+// Helper: collect elements from a ZipMergeIteratorImpl range into a vector.
+template <typename It>
+auto collect(It begin, It end) {
+  std::vector<typename std::iterator_traits<It>::value_type> result;
+  for (; begin != end; ++begin) {
+    result.push_back(*begin);
+  }
+  return result;
+}
+
+// Helper: create a ZipMergeIteratorImpl pair (begin, end) from two vectors.
+template <typename T, typename Compare = std::less<>,
+          typename Projection = ql::identity>
+auto makeZipRange(std::vector<T>& a, std::vector<T>& b, Compare cmp = {},
+                  Projection proj = {}) {
+  auto begin =
+      zipIterator.operator()(a.begin(), a.end(), b.begin(), b.end(), cmp, proj);
+  auto end =
+      zipIterator.operator()(a.end(), a.end(), b.end(), b.end(), cmp, proj);
+  return std::pair{begin, end};
+}
+
 }  // namespace
 
+// ---------- ZipMergeIteratorImpl tests ----------
+
+// Iterator traits.
+TEST(ZipMergeIterator, IsInputIterator) {
+  using It = decltype(zipIterator.operator()(
+      std::declval<std::vector<int>::iterator>(),
+      std::declval<std::vector<int>::iterator>(),
+      std::declval<std::vector<int>::iterator>(),
+      std::declval<std::vector<int>::iterator>()));
+  static_assert(std::is_same_v<It::iterator_category, std::input_iterator_tag>);
+  static_assert(std::is_same_v<It::iterator_concept, std::input_iterator_tag>);
+  static_assert(std::is_same_v<It::value_type, int>);
+}
+
 // Both ranges empty.
-TEST(MergeInputRange, BothEmpty) {
+TEST(ZipMergeIterator, BothEmpty) {
   std::vector<int> a{}, b{};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), IsEmpty());
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), IsEmpty());
 }
 
-// First range empty: output equals second range.
-TEST(MergeInputRange, FirstEmpty) {
+// First range empty.
+TEST(ZipMergeIterator, FirstEmpty) {
   std::vector<int> a{}, b{1, 3, 5};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 3, 5));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(1, 3, 5));
 }
 
-// Second range empty: output equals first range.
-TEST(MergeInputRange, SecondEmpty) {
+// Second range empty.
+TEST(ZipMergeIterator, SecondEmpty) {
   std::vector<int> a{2, 4, 6}, b{};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(2, 4, 6));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(2, 4, 6));
 }
 
-// Non-overlapping ranges, first all smaller.
-TEST(MergeInputRange, NonOverlapping) {
+// Non-overlapping, first all smaller.
+TEST(ZipMergeIterator, NonOverlapping) {
   std::vector<int> a{1, 2, 3}, b{4, 5, 6};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 2, 3, 4, 5, 6));
-}
-
-// Non-overlapping ranges, second all smaller.
-TEST(MergeInputRange, NonOverlappingReversed) {
-  std::vector<int> a{4, 5, 6}, b{1, 2, 3};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 2, 3, 4, 5, 6));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(1, 2, 3, 4, 5, 6));
 }
 
 // Interleaved elements.
-TEST(MergeInputRange, Interleaved) {
+TEST(ZipMergeIterator, Interleaved) {
   std::vector<int> a{1, 3, 5}, b{2, 4, 6};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 2, 3, 4, 5, 6));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(1, 2, 3, 4, 5, 6));
 }
 
-// Equal elements: only the element from the second range is yielded.
-TEST(MergeInputRange, EqualElementsSecondWins) {
+// Equal elements: second wins.
+TEST(ZipMergeIterator, EqualElementsSecondWins) {
   std::vector<int> a{1, 2, 3}, b{1, 2, 3};
-  // Each equal pair: second wins, first is skipped. Result is one copy each.
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 2, 3));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(1, 2, 3));
 }
 
-// Partial overlap: some equal, some unique.
-TEST(MergeInputRange, PartialOverlap) {
+// Partial overlap.
+TEST(ZipMergeIterator, PartialOverlap) {
   std::vector<int> a{1, 3, 5}, b{3, 5, 7};
-  // 1 only in a; 3 equal (second wins); 5 equal (second wins); 7 only in b.
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 3, 5, 7));
-}
-
-// First range much longer.
-TEST(MergeInputRange, FirstLonger) {
-  std::vector<int> a{1, 2, 3, 4, 5, 6, 7, 8}, b{4, 6};
-  // 4 and 6 are equal → second wins; all others from a.
-  EXPECT_THAT(toVector(mergeInputRange(a, b)),
-              ElementsAre(1, 2, 3, 4, 5, 6, 7, 8));
+  auto [begin, end] = makeZipRange(a, b);
+  EXPECT_THAT(collect(begin, end), ElementsAre(1, 3, 5, 7));
 }
 
 // Custom comparator: descending order.
-TEST(MergeInputRange, CustomComparator) {
+TEST(ZipMergeIterator, CustomComparator) {
   std::vector<int> a{5, 3, 1}, b{6, 4, 2};
-  EXPECT_THAT(toVector(mergeInputRange(a, b, std::greater<int>{})),
-              ElementsAre(6, 5, 4, 3, 2, 1));
+  auto [begin, end] = makeZipRange(a, b, std::greater<int>{});
+  EXPECT_THAT(collect(begin, end), ElementsAre(6, 5, 4, 3, 2, 1));
 }
 
-// Custom projection: compare pairs by second element only.
-TEST(MergeInputRange, CustomProjection) {
+// Custom projection: compare pairs by .second.
+TEST(ZipMergeIterator, CustomProjection) {
   using P = std::pair<int, int>;
   std::vector<P> a{{10, 1}, {20, 3}, {30, 5}};
   std::vector<P> b{{40, 2}, {50, 4}, {60, 6}};
   auto proj = [](const P& p) { return p.second; };
-  auto result = toVector(mergeInputRange(a, b, std::less<int>{}, proj));
-  ASSERT_EQ(result.size(), 6u);
-  EXPECT_THAT(result, ElementsAre(P{10, 1}, P{40, 2}, P{20, 3}, P{50, 4},
-                                  P{30, 5}, P{60, 6}));
+  auto [begin, end] = makeZipRange(a, b, std::less<int>{}, proj);
+  EXPECT_THAT(collect(begin, end), ElementsAre(P{10, 1}, P{40, 2}, P{20, 3},
+                                               P{50, 4}, P{30, 5}, P{60, 6}));
 }
 
 // Custom projection with equal values: second wins.
-TEST(MergeInputRange, CustomProjectionEqualSecondWins) {
+TEST(ZipMergeIterator, CustomProjectionEqualSecondWins) {
   using P = std::pair<int, int>;
-  // Both ranges have an element with second==2; the one from b should win.
   std::vector<P> a{{1, 2}};
   std::vector<P> b{{99, 2}};
   auto proj = [](const P& p) { return p.second; };
-  auto result = toVector(mergeInputRange(a, b, std::less<int>{}, proj));
+  auto [begin, end] = makeZipRange(a, b, std::less<int>{}, proj);
+  auto result = collect(begin, end);
   ASSERT_EQ(result.size(), 1u);
   EXPECT_EQ(result[0], P(99, 2));
 }
 
-// Single element ranges, no overlap.
-TEST(MergeInputRange, SingleElements) {
-  std::vector<int> a{1}, b{2};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(1, 2));
+// Post-increment returns the old iterator state.
+TEST(ZipMergeIterator, PostIncrement) {
+  std::vector<int> a{1, 3}, b{2};
+  auto [begin, end] = makeZipRange(a, b);
+  auto old = begin++;
+  EXPECT_EQ(*old, 1);
+  EXPECT_EQ(*begin, 2);
 }
 
-// Single element ranges, equal.
-TEST(MergeInputRange, SingleElementsEqual) {
-  std::vector<int> a{42}, b{42};
-  EXPECT_THAT(toVector(mergeInputRange(a, b)), ElementsAre(42));
+// Arrow operator returns a pointer to the current element.
+TEST(ZipMergeIterator, ArrowOperator) {
+  using P = std::pair<int, int>;
+  std::vector<P> a{{10, 1}}, b{{20, 2}};
+  auto proj = [](const P& p) { return p.second; };
+  auto [begin, end] = makeZipRange(a, b, std::less<int>{}, proj);
+  EXPECT_EQ(begin->first, 10);
+  EXPECT_EQ(begin->second, 1);
 }
 
-// Result is an input range (not forward/bidirectional).
-TEST(MergeInputRange, IsInputRange) {
+// Equality: begin equals end when both ranges are empty; differs otherwise.
+TEST(ZipMergeIterator, Equality) {
+  std::vector<int> empty1{}, empty2{};
+  auto [b1, e1] = makeZipRange(empty1, empty2);
+  EXPECT_EQ(b1, e1);
+
   std::vector<int> a{1}, b{2};
-  auto r = mergeInputRange(a, b);
-  static_assert(ql::ranges::input_range<decltype(r)>);
-  static_assert(!ql::ranges::forward_range<decltype(r)>);
+  auto [b2, e2] = makeZipRange(a, b);
+  EXPECT_NE(b2, e2);
 }

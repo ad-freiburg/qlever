@@ -80,7 +80,7 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
     for (const auto& item : sortedPrefix) {
       vec.triples_.push_back(item);
     }
-    vec.sortedUntil_ = sortedPrefix.size();
+    vec.numItemsLargePart_ = sortedPrefix.size();
     // Insert unsorted tail
     for (const auto& item : unsortedTail) {
       vec.triples_.push_back(item);
@@ -131,8 +131,8 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
           // zipSort benchmark
           SortedLocatedTriplesVector vec = prepareVector(preExisting, newItems);
           table.addMeasurement(nIdx, 1, [&]() {
-            vec.zipSort();
-            vec.sortedUntil_ = vec.triples_.size();
+            vec.sortAndMergeParts();
+            vec.numItemsLargePart_ = vec.triples_.size();
           });
         }
 
@@ -140,8 +140,8 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
           // fullSort benchmark
           SortedLocatedTriplesVector vec = prepareVector(preExisting, newItems);
           table.addMeasurement(nIdx, 2, [&]() {
-            vec.fullSort();
-            vec.sortedUntil_ = vec.triples_.size();
+            vec.sortSmallPart();
+            vec.numItemsLargePart_ = vec.triples_.size();
           });
         }
       }
