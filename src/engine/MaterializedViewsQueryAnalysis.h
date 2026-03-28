@@ -43,7 +43,7 @@ struct ChainInfo {
 using SimpleChainCache =
     ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
 
-// Types required to stored cached join star patterns extracted from views. That
+// Types required to store cached join star patterns extracted from views. That
 // is, queries of the form `?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 ...`.
 // The `StarInfo` holds the subject variable shared between all arms of the star
 // and the `StarArm` for each of them. The `StarArm` stores the predicate IRI
