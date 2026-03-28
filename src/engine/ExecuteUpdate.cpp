@@ -5,6 +5,7 @@
 #include "engine/ExecuteUpdate.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/UpdateMetadata.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
