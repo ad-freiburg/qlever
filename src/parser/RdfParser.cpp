@@ -604,7 +604,7 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
   raise(
       "@prefix or @base directives need to be at the beginning of the file "
       "when using the parallel parser. Later redundant redefinitions are "
-      "fine. Use '--parse-parallel false' if you can't guarantee this. If "
+      "fine. Use '--parallel-parsing false' if you can't guarantee this. If "
       "the reason for this error is that the input is a concatenation of "
       "Turtle files, each of which has the prefixes at the beginning, you "
       "should feed the files to QLever separately instead of concatenated");
@@ -666,7 +666,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
         if (useSimplifiedGrammar_) {
           raise(
               "Found a multiline string literal with the parallel parser. This "
-              "is not supported. Please use `--parse-parallel false` or remove "
+              "is not supported. Please use `--parallel-parsing false` or remove "
               "the multiline string literal.");
         }
         return false;
