@@ -543,6 +543,17 @@ CompressedRelationReader::lazyScan(
 }
 
 // _____________________________________________________________________________
+IdTable CompressedRelationReader::readBlockWithoutLocatedTriples(
+    CompressedBlockMetadata block, ColumnIndices additionalColumns) const {
+  auto config = getScanConfig({std::nullopt, std::nullopt, std::nullopt},
+                              std::move(additionalColumns), {});
+  CompressedBlock compressedColumns =
+      readCompressedBlockFromFile(block, config.scanColumns_);
+  auto decompressedBlock = decompressBlock(compressedColumns, block.numRows_);
+  return decompressedBlock;
+}
+
+// _____________________________________________________________________________
 Id CompressedRelationReader::getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
