@@ -172,7 +172,7 @@ TEST(SortedVectorTest, emptyVector) {
   EXPECT_TRUE(sv.empty());
   EXPECT_EQ(sv.size(), 0);
   EXPECT_EQ(sv.begin(), sv.end());
-  EXPECT_EQ(sv.rbegin(), sv.rend());
+  EXPECT_EQ(sv.back(), *sv.end());
 }
 
 TEST(SortedVectorTest, sortedVector) {

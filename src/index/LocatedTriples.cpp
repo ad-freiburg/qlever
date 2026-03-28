@@ -149,13 +149,6 @@ SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::begin()
 }
 
 // ____________________________________________________________________________
-SortedLocatedTriplesVector::const_reverse_iterator
-SortedLocatedTriplesVector::rbegin() const {
-  AD_CONTRACT_CHECK(isClean());
-  return triples_.rbegin();
-}
-
-// ____________________________________________________________________________
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::end() {
   AD_CONTRACT_CHECK(isClean());
   return iterator(triples_.begin() + numItemsLargePart_,
@@ -173,10 +166,25 @@ SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::end()
 }
 
 // ____________________________________________________________________________
-SortedLocatedTriplesVector::const_reverse_iterator
-SortedLocatedTriplesVector::rend() const {
+LocatedTriple& SortedLocatedTriplesVector::back() {
+  AD_CONTRACT_CHECK(!triples_.empty());
   AD_CONTRACT_CHECK(isClean());
-  return triples_.rend();
+  if (triples_.at(0).triple_ < triples_.at(numItemsLargePart_).triple_) {
+    return triples_.at(numItemsLargePart_ - 1);
+  } else {
+    return triples_.back();
+  }
+}
+
+// ____________________________________________________________________________
+const LocatedTriple& SortedLocatedTriplesVector::back() const {
+  AD_CONTRACT_CHECK(!triples_.empty());
+  AD_CONTRACT_CHECK(isClean());
+  if (triples_.at(0).triple_ < triples_.at(numItemsLargePart_).triple_) {
+    return triples_.at(numItemsLargePart_ - 1);
+  } else {
+    return triples_.back();
+  }
 }
 
 // ____________________________________________________________________________
@@ -482,7 +490,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
                    blockUpdates->begin()->triple_.toPermutedTriple());
       blockMetadata.lastTriple_ =
           std::max(blockMetadata.lastTriple_,
-                   blockUpdates->rbegin()->triple_.toPermutedTriple());
+                   blockUpdates->back().triple_.toPermutedTriple());
       updateGraphMetadata(blockMetadata, *blockUpdates);
     }
     blockIndex++;
@@ -491,7 +499,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // than all the inserted triples.
   if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
     auto firstTriple = blockUpdates->begin()->triple_.toPermutedTriple();
-    auto lastTriple = blockUpdates->rbegin()->triple_.toPermutedTriple();
+    auto lastTriple = blockUpdates->back().triple_.toPermutedTriple();
 
     // The first `std::nullopt` means that this block contains only
     // `LocatedTriple`s.

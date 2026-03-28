@@ -151,10 +151,11 @@ class SortedLocatedTriplesVector {
 
   iterator begin();
   const_iterator begin() const;
-  const_reverse_iterator rbegin() const;
   iterator end();
   const_iterator end() const;
-  const_reverse_iterator rend() const;
+
+  LocatedTriple& back();
+  const LocatedTriple& back() const;
 
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
