@@ -29,7 +29,7 @@ template <typename K, typename V>
 class LRUCache {
  private:
   size_t capacity_;
-  // Stores keys in order of usage (MRU at front)
+  // Stores keys in order of usage (MRU at front).
   std::list<K> keys_;
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 

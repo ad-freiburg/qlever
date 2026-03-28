@@ -224,4 +224,22 @@ auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
       };
 }
 
+// Matcher that takes a range of arguments, applies the `func` to them, and
+// asserts, that the results are all unique. Is currently implemented using a
+// linear find, s.t. we don't require hashing support for the projection result,
+// but therefore has a quadratic runtime.
+MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
+  std::vector<decltype(func(*arg.begin()))> seen;
+  for (const auto& item : arg) {
+    auto val = func(item);
+    if (std::find(seen.begin(), seen.end(), val) != seen.end()) {
+      *result_listener << "duplicate value found: "
+                       << ::testing::PrintToString(val);
+      return false;
+    }
+    seen.push_back(std::move(val));
+  }
+  return true;
+}
+
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H
