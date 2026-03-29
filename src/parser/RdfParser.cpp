@@ -666,8 +666,8 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
         if (useSimplifiedGrammar_) {
           raise(
               "Found a multiline string literal with the parallel parser. This "
-              "is not supported. Please use `--parallel-parsing false` or remove "
-              "the multiline string literal.");
+              "is not supported. Please use `--parallel-parsing false` or "
+              "remove the multiline string literal.");
         }
         return false;
       }
