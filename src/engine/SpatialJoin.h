@@ -1,8 +1,13 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
 #define QLEVER_SRC_ENGINE_SPATIALJOIN_H
@@ -15,6 +20,9 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+
+using SpatialJoinBoundingBoxColumns =
+    std::optional<std::pair<ColumnIndex, ColumnIndex>>;
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
@@ -30,6 +38,8 @@ struct PreparedSpatialJoinParams {
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
   std::optional<std::string> rightCacheName_;
+  SpatialJoinBoundingBoxColumns boundingBoxColsLeft_;
+  SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -155,6 +165,20 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+
+  // Get the internal variable names of bounding box columns.
+  static std::pair<Variable, Variable> getBoundingBoxColumnNames(
+      const Variable& joinVar);
+
+  // Check if the child provides bounding boxes and if yes, return the column
+  // indices.
+  SpatialJoinBoundingBoxColumns getBoundingBoxColumnIndices(
+      std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
+
+  // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
+  // the geometries from an underlying `MaterializedView` if possible.
+  std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
+      const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
