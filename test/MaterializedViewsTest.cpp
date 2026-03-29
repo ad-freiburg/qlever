@@ -109,6 +109,8 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+    EXPECT_THAT(qet->getRootOperation()->getDescriptor(),
+                ::testing::HasSubstr("?x"));
     // For a full scan on a materialized view, the size estimate should be
     // exactly the number of rows in the view. This is also a regression test
     // for a bug introduced in #2680.
@@ -123,6 +125,24 @@ TEST_F(MaterializedViewsTest, Basic) {
       qlv().loadMaterializedView("doesNotExist"),
       ::testing::HasSubstr(
           "The materialized view 'doesNotExist' does not exist."));
+
+  // Test the `IndexScan` operation's descriptor when reading from columns not
+  // within the first three.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s ?s ;
+                   view:column-p ?p ;
+                   view:column-o ?o ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    EXPECT_EQ(qet->getRootOperation()->getDescriptor(),
+              "IndexScan testView1 ?s ?p ?o ?g");
+  }
 
   // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
