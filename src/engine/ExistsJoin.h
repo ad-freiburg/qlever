@@ -83,14 +83,14 @@ class ExistsJoin : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Return true if the size estimate for the right side is smaller or equal
-  // than the estimate of the right side, a sort on the left can be skipped and
+  // than the estimate of the left side, a sort on the left can be skipped and
   // all join columns are statically guaranteed to not contain undef values.
   bool rightIndexNestedLoopJoinIsPossible() const;
 
   // Specialized algorithm that performs a join when the left side is fully
   // materialized and sorted, and the right side is unsorted. Only returns a
   // result when the size estimate for the left side is smaller or equal than
-  // the estimate of the right side and a sort on the left can be skipped.
+  // the estimate of the right side and a sort on the right can be skipped.
   std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
 
   // Specialized algorithm that performs a join when the right side is fully

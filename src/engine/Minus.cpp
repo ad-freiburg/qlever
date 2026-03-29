@@ -300,9 +300,8 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable(
                                                         _right)) {
     return std::nullopt;
   }
-  if (auto leftResult =
-          tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
-    return leftResult;
+  if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return result;
   }
   return tryLeftIndexNestedLoopJoinIfSuitable();
 }

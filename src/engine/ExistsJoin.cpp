@@ -340,9 +340,8 @@ std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
                                                         right_)) {
     return std::nullopt;
   }
-  if (auto leftResult =
-          tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
-    return leftResult;
+  if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return result;
   }
   return tryLeftIndexNestedLoopJoinIfSuitable();
 }
