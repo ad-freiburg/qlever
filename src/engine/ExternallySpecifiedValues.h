@@ -68,7 +68,7 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
   std::string getCacheKeyImpl() const override;
 
   // Override the method that is used by the `Operation` base class to collect
-  // all `ExternallySpecifiedValues` from a `Query
+  // all `ExternallySpecifiedValues` from a `QueryExecutionTree`.
   void getExternallySpecifiedValues(
       std::vector<ExternallySpecifiedValues*>& externalValues) override {
     externalValues.push_back(this);

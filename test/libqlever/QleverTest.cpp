@@ -317,7 +317,7 @@ TEST(LibQlever, externallySpecifiedValues) {
       R"(
     SELECT ?x ?o WHERE {
       ?x <p> ?o .
-      SERVICE <https://qlever.cs.uni-freiburg/external-values/> {
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
         [] <identifier> "myValues" .
         [] <variables> ?x .
       }

@@ -101,7 +101,7 @@ TEST_F(ExternalValuesQueryTest, addParameterVariablesNonVariable) {
 }
 
 // Test addParameter with unknown predicate throws.
-TEST(ExternalValuesQuery, addParameterUnknownPredicatemeter) {
+TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
   ExternalValuesQuery query;
   auto triple = makeTriple("<unknown>", Variable{"?x"});
   AD_EXPECT_THROW_WITH_MESSAGE(query.addParameter(triple),
