@@ -357,20 +357,20 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
 }
 
 // _____________________________________________________________________________
-SparqlExpression::Ptr makeSimilarPrefixExpression(
+SparqlExpression::Ptr makePrefixMatchExpression(
     SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix) {
   const auto* variableExpression = dynamic_cast<const VariableExpression*>(
       string->isStrExpression() ? string->children()[0].get() : string.get());
   if (!variableExpression) {
     throw std::runtime_error{
-        "ql:similar-prefix does only support STR(?var) or ?var as the first "
+        "ql:prefix-match does only support STR(?var) or ?var as the first "
         "argument"};
   }
   auto stringLiteralExpression =
       dynamic_cast<const StringLiteralExpression*>(&*prefix);
   if (!stringLiteralExpression) {
     throw std::runtime_error{
-        "ql:similar-prefix does only support static string literals as the "
+        "ql:prefix-match does only support static string literals as the "
         "second argument"};
   }
   const auto& stringLiteral = stringLiteralExpression->value();

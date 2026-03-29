@@ -74,16 +74,16 @@ class PrefixRegexExpression : public SparqlExpression {
   static std::optional<std::string> getPrefixRegex(std::string regex);
 
   FRIEND_TEST(RegexExpression, getPrefixRegex);
-  FRIEND_TEST(RegexExpression, makeSimilarPrefixExpression);
+  FRIEND_TEST(RegexExpression, makePrefixMatchExpression);
 };
 
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags);
 
-// Make a custom `ql:similar-prefix` expression which allows for efficient
+// Make a custom `ql:prefix-match` expression which allows for efficient
 // prefix search.
-SparqlExpression::Ptr makeSimilarPrefixExpression(
+SparqlExpression::Ptr makePrefixMatchExpression(
     SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix);
 }  // namespace sparqlExpression
 

@@ -303,8 +303,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeIsGeoPointExpression);
     } else if (ad_utility::contains(customGeoUnaryFuncs, functionName)) {
       return createUnary(customGeoUnaryFuncs.at(functionName));
-    } else if (functionName == "similar-prefix") {
-      return createBinary(&makeSimilarPrefixExpression);
+    } else if (functionName == "prefix-match") {
+      return createBinary(&makePrefixMatchExpression);
     }
   }
 

@@ -330,10 +330,10 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeEnvelopeUpperRightExpression));
   expectFunctionCall(
       absl::StrCat(ql,
-                   "similar-prefix>(?x, \"Prefix\""
+                   "prefix-match>(?x, \"Prefix\""
                    ")"),
       matchUnary([](auto&& expression) {
-        return makeSimilarPrefixExpression(
+        return makePrefixMatchExpression(
             AD_FWD(expression),
             std::make_unique<StringLiteralExpression>(
                 TripleComponent::Literal::fromStringRepresentation(
