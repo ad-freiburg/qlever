@@ -26,7 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
-#include "engine/ExternallySpecifiedValues.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -3361,9 +3361,8 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
-      std::make_shared<ExternallySpecifiedValues>(qec_, externalValuesQuery);
-  auto candidate =
-      makeSubtreePlan<ExternallySpecifiedValues>(std::move(externalValues));
+      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+  auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 

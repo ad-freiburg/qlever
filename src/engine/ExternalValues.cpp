@@ -7,23 +7,23 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/ExternallySpecifiedValues.h"
+#include "engine/ExternalValues.h"
 
 #include "absl/strings/str_cat.h"
 #include "util/HashSet.h"
 
 // ____________________________________________________________________________
-ExternallySpecifiedValues::ExternallySpecifiedValues(
-    QueryExecutionContext* qec, parsedQuery::SparqlValues parsedValues,
-    std::string identifier)
+ExternalValues::ExternalValues(QueryExecutionContext* qec,
+                               parsedQuery::SparqlValues parsedValues,
+                               std::string name)
     : Operation(qec),
       Values(qec, std::move(parsedValues)),
-      identifier_(std::move(identifier)) {}
+      name_(std::move(name)) {}
 
 // ____________________________________________________________________________
-ExternallySpecifiedValues::ExternallySpecifiedValues(
-    QueryExecutionContext* qec, const parsedQuery::ExternalValuesQuery& query)
-    : ExternallySpecifiedValues(
+ExternalValues::ExternalValues(QueryExecutionContext* qec,
+                               const parsedQuery::ExternalValuesQuery& query)
+    : ExternalValues(
           qec,
           [&query]() {
             // Check that all variables are unique.
@@ -36,33 +36,31 @@ ExternallySpecifiedValues::ExternallySpecifiedValues(
             values._variables = query.variables_;
             return values;
           }(),
-          query.identifier_) {}
+          query.name_) {}
 
 // ____________________________________________________________________________
-std::string ExternallySpecifiedValues::getCacheKeyImpl() const {
-  // ExternallySpecifiedValues must only be used with caching disabled.
+std::string ExternalValues::getCacheKeyImpl() const {
+  // ExternalValues must only be used with caching disabled.
   throw std::runtime_error(
-      "ExternallySpecifiedValues does not support cache keys. "
+      "ExternalValues does not support cache keys. "
       "Caching must be disabled when using externally specified values.");
 }
 
 // ____________________________________________________________________________
-Result ExternallySpecifiedValues::computeResult(bool requestLaziness) {
-  AD_CONTRACT_CHECK(
-      getExecutionContext()->disableCaching(),
-      "ExternallySpecifiedValues can only be used when caching is disabled. "
-      "Set the runtime parameter `disable-caching` to true.");
+Result ExternalValues::computeResult(bool requestLaziness) {
+  AD_CONTRACT_CHECK(getExecutionContext()->disableCaching(),
+                    "ExternalValues can only be used when caching is disabled. "
+                    "Set the runtime parameter `disable-caching` to true.");
   return Values::computeResult(requestLaziness);
 }
 
 // ____________________________________________________________________________
-std::string ExternallySpecifiedValues::getDescriptor() const {
-  return absl::StrCat("EXTERNAL VALUES '", identifier_, "'");
+std::string ExternalValues::getDescriptor() const {
+  return absl::StrCat("EXTERNAL VALUES '", name_, "'");
 }
 
 // ____________________________________________________________________________
-void ExternallySpecifiedValues::updateValues(
-    parsedQuery::SparqlValues newValues) {
+void ExternalValues::updateValues(parsedQuery::SparqlValues newValues) {
   AD_CONTRACT_CHECK(
       newValues._variables == parsedValues()._variables,
       absl::StrCat(
@@ -74,6 +72,6 @@ void ExternallySpecifiedValues::updateValues(
 }
 
 // ____________________________________________________________________________
-std::unique_ptr<Operation> ExternallySpecifiedValues::cloneImpl() const {
-  return std::make_unique<ExternallySpecifiedValues>(*this);
+std::unique_ptr<Operation> ExternalValues::cloneImpl() const {
+  return std::make_unique<ExternalValues>(*this);
 }

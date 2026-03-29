@@ -10,7 +10,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "engine/ExternallySpecifiedValues.h"
+#include "engine/ExternalValues.h"
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
@@ -318,8 +318,8 @@ TEST(LibQlever, externallySpecifiedValues) {
     SELECT ?x ?o WHERE {
       ?x <p> ?o .
       SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
-        [] <identifier> "myValues" .
-        [] <variables> ?x .
+        [] <name> "myValues" .
+        [] <variable> ?x .
       }
     } ORDER BY ?x
   )",
@@ -327,7 +327,7 @@ TEST(LibQlever, externallySpecifiedValues) {
     SELECT ?x ?o WHERE {
       ?x <p> ?o .
       SERVICE <https://qlever.cs.uni-freiburg.de/external-values-myValues> {
-        [] <variables> ?x .
+        [] <variable> ?x .
       }
     } ORDER BY ?x
   )"};
@@ -336,11 +336,11 @@ TEST(LibQlever, externallySpecifiedValues) {
     auto plan = engine.parseAndPlanQuery(query);
     auto& [qet, qec, parsedQuery] = plan;
 
-    // Collect the ExternallySpecifiedValues operations from the tree.
-    std::vector<ExternallySpecifiedValues*> externalValues;
-    qet->getRootOperation()->getExternallySpecifiedValues(externalValues);
+    // Collect the ExternalValues operations from the tree.
+    std::vector<ExternalValues*> externalValues;
+    qet->getRootOperation()->getExternalValues(externalValues);
     ASSERT_EQ(externalValues.size(), 1u);
-    EXPECT_EQ(externalValues[0]->getIdentifier(), "myValues");
+    EXPECT_EQ(externalValues[0]->getName(), "myValues");
     EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
 
     // Supply values and execute the query.

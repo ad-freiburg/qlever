@@ -29,7 +29,7 @@ constexpr inline std::string_view EXTERNAL_VALUES_IRI =
 
 // This prefix definition is used for backwards compatibility with the BMW use
 // case (they already use this syntax in some of their applications which we
-// do not want to break). New use cases of the `ExternallySpecifiedValues`
+// do not want to break). New use cases of the `ExternalValues`
 // features should use the `EXTERNAL_VALUES_IRI` above, because it is consistent
 // with other magic service IRIs.
 constexpr inline std::string_view EXTERNAL_VALUES_IRI_PREFIX =

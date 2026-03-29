@@ -34,14 +34,14 @@ static SparqlTriple makeTriple(std::string_view predIri,
   return {subject, predicate, std::move(object)};
 }
 
-// Create a triple with the predicate `<identifier>`.
+// Create a triple with the predicate `<name>`.
 static SparqlTriple idTriple(TripleComponent object) {
-  return makeTriple("<identifier>", std::move(object));
+  return makeTriple("<name>", std::move(object));
 }
 
-// Create a triple with the predicate `<variables>`.
+// Create a triple with the predicate `<variable>`.
 static SparqlTriple varTriple(TripleComponent object) {
-  return makeTriple("<variables>", std::move(object));
+  return makeTriple("<variable>", std::move(object));
 }
 
 struct ExternalValuesQueryTest : public ::testing::Test {
@@ -56,31 +56,31 @@ TEST_F(ExternalValuesQueryTest, name) {
   EXPECT_EQ(query.name(), "external values query");
 }
 
-// Test addParameter with <identifier>.
-TEST_F(ExternalValuesQueryTest, addParameterIdentifier) {
+// Test addParameter with <name>.
+TEST_F(ExternalValuesQueryTest, addParameterName) {
   query.addParameter(defaultIdTriple);
-  EXPECT_EQ(query.identifier_, "myId");
+  EXPECT_EQ(query.name_, "myId");
 }
 
-// Test that setting <identifier> twice throws.
-TEST_F(ExternalValuesQueryTest, addParameterIdentifierTwice) {
+// Test that setting <name> twice throws.
+TEST_F(ExternalValuesQueryTest, addParameterNameTwice) {
   query.addParameter(defaultIdTriple);
   EXPECT_THROW(query.addParameter(defaultIdTriple), ExternalValuesException);
 }
 
-// Test that <identifier> with a non-literal throws.
-TEST_F(ExternalValuesQueryTest, addParameterIdentifierNonLiteral) {
-  EXPECT_THROW(query.addParameter(makeTriple("<identifier>", V{"?x"})),
+// Test that <name> with a non-literal throws.
+TEST_F(ExternalValuesQueryTest, addParameterNameNonLiteral) {
+  EXPECT_THROW(query.addParameter(makeTriple("<name>", V{"?x"})),
                ExternalValuesException);
 }
 
-// Test that <identifier> with an empty string throws.
-TEST_F(ExternalValuesQueryTest, addParameterIdentifierEmpty) {
+// Test that <name> with an empty string throws.
+TEST_F(ExternalValuesQueryTest, addParameterNameEmpty) {
   EXPECT_THROW(query.addParameter(idTriple(lit(""))), ExternalValuesException);
 }
 
-// Test addParameter with <variables>.
-TEST_F(ExternalValuesQueryTest, addParameterVariables) {
+// Test addParameter with <variable>.
+TEST_F(ExternalValuesQueryTest, addParameterVariable) {
   query.addParameter(defaultVarTriple);
   EXPECT_THAT(query.variables_, ElementsAre(V{"?x"}));
 }
@@ -93,8 +93,8 @@ TEST_F(ExternalValuesQueryTest, addParameterMultipleVariables) {
   EXPECT_THAT(query.variables_, ElementsAre(V{"?x"}, V{"?y"}, V{"?z"}));
 }
 
-// Test addParameter with non-variable object for <variables> throws.
-TEST_F(ExternalValuesQueryTest, addParameterVariablesNonVariable) {
+// Test addParameter with non-variable object for <variable> throws.
+TEST_F(ExternalValuesQueryTest, addParameterVariableNonVariable) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       query.addParameter(varTriple(iri("<http://example.com>"))),
       HasSubstr("expects a variable"));
@@ -108,18 +108,18 @@ TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
                                HasSubstr("Unknown parameter"));
 }
 
-// Test validate succeeds with identifier and variables set.
+// Test validate succeeds with name and variables set.
 TEST_F(ExternalValuesQueryTest, validateSuccess) {
   query.addParameter(defaultIdTriple);
   query.addParameter(defaultVarTriple);
   EXPECT_NO_THROW(query.validate());
 }
 
-// Test validate fails without identifier.
-TEST_F(ExternalValuesQueryTest, validateMissingIdentifier) {
+// Test validate fails without name.
+TEST_F(ExternalValuesQueryTest, validateMissingName) {
   query.addParameter(defaultVarTriple);
   AD_EXPECT_THROW_WITH_MESSAGE(query.validate(),
-                               HasSubstr("requires an <identifier>"));
+                               HasSubstr("requires a <name>"));
 }
 
 // Test validate fails without variables.
@@ -127,13 +127,13 @@ TEST_F(ExternalValuesQueryTest, validateMissingVariables) {
   query.addParameter(defaultIdTriple);
   AD_EXPECT_THROW_WITH_MESSAGE(
       query.validate(),
-      HasSubstr("requires at least one <variables> parameter"));
+      HasSubstr("requires at least one <variable> parameter"));
 }
 
-// Test the (deprecated) specification of the identifier via the IRI directly.
-TEST_F(ExternalValuesQueryTest, deprecatedIdentifierSpecification) {
+// Test the (deprecated) specification of the name via the IRI directly.
+TEST_F(ExternalValuesQueryTest, deprecatedNameSpecification) {
   query = ExternalValuesQuery{iri(EXTERNAL_VALUES_IRI)};
-  EXPECT_TRUE(query.identifier_.empty());
+  EXPECT_TRUE(query.name_.empty());
   AD_EXPECT_THROW_WITH_MESSAGE(ExternalValuesQuery(iri("<invalidServiceIri>")),
                                ::testing::HasSubstr("unexpected SERVICE IRI"));
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -141,6 +141,6 @@ TEST_F(ExternalValuesQueryTest, deprecatedIdentifierSpecification) {
       ::testing::HasSubstr("must not be empty"));
   ExternalValuesQuery query2(
       iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, "blubb>")));
-  EXPECT_EQ(query2.identifier_, "blubb");
+  EXPECT_EQ(query2.name_, "blubb");
 }
 }  // namespace

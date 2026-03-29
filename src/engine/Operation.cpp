@@ -784,14 +784,14 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-void Operation::getExternallySpecifiedValues(
-    std::vector<ExternallySpecifiedValues*>& externalValues) {
+void Operation::getExternalValues(
+    std::vector<ExternalValues*>& externalValues) {
   // Recursively process all children. This is the correct behavior for all
-  // classes except `ExternallySpecifiedValues` itself, which overrides this
+  // classes except `ExternalValues` itself, which overrides this
   // method.
   for (auto* child : getChildren()) {
     AD_CORRECTNESS_CHECK(child != nullptr);
-    child->getRootOperation()->getExternallySpecifiedValues(externalValues);
+    child->getRootOperation()->getExternalValues(externalValues);
   }
 }
 

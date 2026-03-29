@@ -21,25 +21,25 @@ class ExternalValuesException : public std::runtime_error {
 };
 
 // The `ExternalValuesQuery` object holds information for the
-// `ExternallySpecifiedValues`. It is specified via the SERVICE
-// <ql:external-values/> syntax. The `identifier` and `variables` are specified
+// `ExternalValues`. It is specified via the SERVICE
+// <ql:external-values/> syntax. The `name` and `variable` are specified
 // as configuration triples:
 // SELECT * {
 //   SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
-//     [] <identifier> "myId";
-//        <variables> ?x, ?y.
+//     [] <name> "myId";
+//        <variable> ?x, ?y.
 //   }
 // }
-// Alternatively, the `identifier` can also specified directly in the IRI as
-// `<ql:external-values-#identifier#>` but that syntax is deprecated as it is
+// Alternatively, the `name` can also be specified directly in the IRI as
+// `<ql:external-values-#name#>` but that syntax is deprecated as it is
 // inconsistent with the other magic service IRIs and is only kept for backward
 // compatibility with code already deployed by BMW.
 struct ExternalValuesQuery : MagicServiceQuery {
-  std::string identifier_;
+  std::string name_;
   std::vector<Variable> variables_;
 
   explicit ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
-      : identifier_(extractIdentifier(serviceIri.toStringRepresentation())) {}
+      : name_(extractName(serviceIri.toStringRepresentation())) {}
 
   // Default constructor, mainly used for testing.
   ExternalValuesQuery() = default;
@@ -47,15 +47,15 @@ struct ExternalValuesQuery : MagicServiceQuery {
   // See MagicServiceQuery - processes configuration triples.
   void addParameter(const SparqlTriple& triple) override;
 
-  // Validate that the identifier and variables are set.
+  // Validate that the name and variables are set.
   void validate() const override;
 
   std::string_view name() const override { return "external values query"; }
 
-  // Extract identifier from service IRI like
-  // <https://qlever.cs.uni-freiburg.de/external-values-myid>, required for the
-  // compatibility.
-  static std::string extractIdentifier(const std::string& serviceIri);
+  // Extract name from service IRI like
+  // <https://qlever.cs.uni-freiburg.de/external-values-myid>, required for
+  // backward compatibility.
+  static std::string extractName(const std::string& serviceIri);
 };
 
 }  // namespace parsedQuery

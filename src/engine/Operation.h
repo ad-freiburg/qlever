@@ -25,7 +25,7 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
-class ExternallySpecifiedValues;
+class ExternalValues;
 namespace parsedQuery {
 struct Bind;
 }
@@ -356,19 +356,18 @@ class Operation {
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
 
-  // Recursively collect all `ExternallySpecifiedValues` operations in this
+  // Recursively collect all `ExternalValues` operations in this
   // operation tree. This allows the following pattern:
-  // 1. Parse and plan a query that contains an `ExternallySpecifiedValues`
+  // 1. Parse and plan a query that contains an `ExternalValues`
   //    clause.
-  // 2. Modify the contents of the `ExternallySpecifiedValues` after obtaining
+  // 2. Modify the contents of the `ExternalValues` after obtaining
   //    them from the planned `QueryExecutionTree` via this function.
   // 3. Execute the query.
   // 4. Repeat steps 2 and 3 with different values. This does not require
   //    running the parser and query planner again (which is the point of the
-  //    whole `ExternallySpecifiedValues` feature). For a complete E2E example,
+  //    whole `ExternalValues` feature). For a complete E2E example,
   //    see QleverTest.cpp.
-  virtual void getExternallySpecifiedValues(
-      std::vector<ExternallySpecifiedValues*>& externalValues);
+  virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.

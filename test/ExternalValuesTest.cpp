@@ -14,7 +14,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/ExternallySpecifiedValues.h"
+#include "engine/ExternalValues.h"
 #include "engine/Operation.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
@@ -28,17 +28,17 @@ namespace {
 auto iri = ad_utility::testing::iri;
 }
 
-// Check the basic methods of the `ExternallySpecifiedValues` operation.
-TEST(ExternallySpecifiedValues, basicMethods) {
+// Check the basic methods of the `ExternalValues` operation.
+TEST(ExternalValues, basicMethods) {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ValuesComponents values{
       {TC{1}, TC{2}, TC{3}}, {TC{5}, TC{2}, TC{3}}, {TC{7}, TC{42}, TC{3}}};
-  ExternallySpecifiedValues externalValuesOp(
+  ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values},
       "test-id");
 
-  // Check identifier.
-  EXPECT_EQ(externalValuesOp.getIdentifier(), "test-id");
+  // Check name.
+  EXPECT_EQ(externalValuesOp.getName(), "test-id");
 
   // Check that `knownEmptyResult` always returns false (even with empty
   // values).
@@ -59,10 +59,10 @@ TEST(ExternallySpecifiedValues, basicMethods) {
 }
 
 // Check that `knownEmptyResult` returns `false` even with empty values.
-TEST(ExternallySpecifiedValues, knownEmptyResultWithEmptyValues) {
+TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents emptyValues{};
-  ExternallySpecifiedValues externalValuesOp(
+  ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, emptyValues}, "empty-id");
 
   // Should return false even though values are empty.
@@ -70,8 +70,8 @@ TEST(ExternallySpecifiedValues, knownEmptyResultWithEmptyValues) {
 }
 
 // Check that `computeResult` works correctly.
-TEST(ExternallySpecifiedValues, computeResult) {
-  // `ExternallySpecifiedValues` only works with caching disabled.
+TEST(ExternalValues, computeResult) {
+  // `ExternalValues` only works with caching disabled.
   auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
   auto testQecCopy = *testQecOrig;
   testQecCopy.setDisableCachingOnlyForTesting(true);
@@ -79,7 +79,7 @@ TEST(ExternallySpecifiedValues, computeResult) {
 
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
-  ExternallySpecifiedValues valuesOperation(
+  ExternalValues valuesOperation(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "result-test");
 
   auto result = valuesOperation.getResult();
@@ -96,7 +96,7 @@ TEST(ExternallySpecifiedValues, computeResult) {
 }
 
 // Test the `updateValues` method.
-TEST(ExternallySpecifiedValues, updateValues) {
+TEST(ExternalValues, updateValues) {
   auto runTest = [](bool cachingDisabled) {
     auto testQec = ad_utility::testing::getQec();
     auto qecCopy = *testQec;
@@ -105,7 +105,7 @@ TEST(ExternallySpecifiedValues, updateValues) {
       testQec = &qecCopy;
     }
     ValuesComponents initialValues{{TC{1}, TC{2}}, {TC{3}, TC{4}}};
-    ExternallySpecifiedValues externalValuesOp(
+    ExternalValues externalValuesOp(
         testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
         "update-test");
 
@@ -138,10 +138,10 @@ TEST(ExternallySpecifiedValues, updateValues) {
 }
 
 // Test that `updateValues` fails with different variables.
-TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentVariables) {
+TEST(ExternalValues, updateValuesFailsWithDifferentVariables) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
-  ExternallySpecifiedValues externalValuesOp(
+  ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
       "mismatch-test");
 
@@ -154,10 +154,10 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentVariables) {
 }
 
 // Test that `updateValues` fails with same variables but different order.
-TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentOrder) {
+TEST(ExternalValues, updateValuesFailsWithDifferentOrder) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
-  ExternallySpecifiedValues externalValuesOp(
+  ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues}, "order-test");
 
   // Try to update with variables in different order - should fail.
@@ -170,15 +170,15 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentOrder) {
 }
 
 // Test `clone` functionality.
-TEST(ExternallySpecifiedValues, clone) {
-  // `ExternallySpecifiedValues` only work with caching disabled.
+TEST(ExternalValues, clone) {
+  // `ExternalValues` only work with caching disabled.
   auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
   auto testQecCopy = *testQecOrig;
   testQecCopy.setDisableCachingOnlyForTesting(true);
   auto* testQec = &testQecCopy;
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
-  ExternallySpecifiedValues valuesOperation(
+  ExternalValues valuesOperation(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "clone-test");
 
   auto clone = valuesOperation.clone();
@@ -186,23 +186,23 @@ TEST(ExternallySpecifiedValues, clone) {
   EXPECT_THAT(valuesOperation, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), valuesOperation.getDescriptor());
 
-  // Check that the cloned operation is also an ExternallySpecifiedValues
-  auto* clonedExternal = dynamic_cast<ExternallySpecifiedValues*>(clone.get());
+  // Check that the cloned operation is also an ExternalValues
+  auto* clonedExternal = dynamic_cast<ExternalValues*>(clone.get());
   ASSERT_NE(clonedExternal, nullptr);
-  EXPECT_EQ(clonedExternal->getIdentifier(), "clone-test");
+  EXPECT_EQ(clonedExternal->getName(), "clone-test");
 }
 
 // Test `getExternalValues` functionality.
-TEST(ExternallySpecifiedValues, getExternalValues) {
+TEST(ExternalValues, getExternalValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{1}, TC{2}}};
-  ExternallySpecifiedValues externalValuesOp(
+  ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "collect-test");
 
-  std::vector<ExternallySpecifiedValues*> collected;
-  externalValuesOp.getExternallySpecifiedValues(collected);
+  std::vector<ExternalValues*> collected;
+  externalValuesOp.getExternalValues(collected);
 
   ASSERT_EQ(collected.size(), 1u);
   EXPECT_EQ(collected[0], &externalValuesOp);
-  EXPECT_EQ(collected[0]->getIdentifier(), "collect-test");
+  EXPECT_EQ(collected[0]->getName(), "collect-test");
 }

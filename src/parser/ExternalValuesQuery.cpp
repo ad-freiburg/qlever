@@ -24,26 +24,25 @@ void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
 
   auto predString = extractParameterName(predicate, EXTERNAL_VALUES_IRI);
 
-  if (predString == "variables") {
+  if (predString == "variable") {
     if (!object.isVariable()) {
       throw ExternalValuesException(
-          "The parameter <variables> expects a variable");
+          "The parameter <variable> expects a variable");
     }
     variables_.push_back(object.getVariable());
-  } else if (predString == "identifier") {
-    if (!identifier_.empty()) {
+  } else if (predString == "name") {
+    if (!name_.empty()) {
       throw ExternalValuesException(
-          "The parameter <identifier> must not be set more than once");
+          "The parameter <name> must not be set more than once");
     }
     if (!object.isLiteral()) {
       throw ExternalValuesException(
-          "The parameter <identifier> expects a string literal");
+          "The parameter <name> expects a string literal");
     }
-    identifier_ =
-        std::string{asStringViewUnsafe(object.getLiteral().getContent())};
-    if (identifier_.empty()) {
+    name_ = std::string{asStringViewUnsafe(object.getLiteral().getContent())};
+    if (name_.empty()) {
       throw ExternalValuesException(
-          "The parameter <identifier> must be a non-empty string literal");
+          "The parameter <name> must be a non-empty string literal");
     }
   } else {
     throw ExternalValuesException(absl::StrCat(
@@ -53,23 +52,22 @@ void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 void ExternalValuesQuery::validate() const {
-  if (identifier_.empty()) {
+  if (name_.empty()) {
     throw ExternalValuesException(
-        "An external values query requires an <identifier> parameter");
+        "An external values query requires a <name> parameter");
   }
   if (variables_.empty()) {
     throw ExternalValuesException(
-        "An external values query requires at least one <variables> parameter");
+        "An external values query requires at least one <variable> parameter");
   }
 }
 
 // ____________________________________________________________________________
-std::string ExternalValuesQuery::extractIdentifier(
-    const std::string& serviceIri) {
+std::string ExternalValuesQuery::extractName(const std::string& serviceIri) {
   if (serviceIri == EXTERNAL_VALUES_IRI) {
     return "";
   }
-  // Extract identifier from IRI like
+  // Extract name from IRI like
   // <https://qlever.cs.uni-freiburg.de/external-values-myid>
   static constexpr std::string_view prefix = EXTERNAL_VALUES_IRI_PREFIX;
   static constexpr std::string_view suffix = ">";
@@ -78,15 +76,15 @@ std::string ExternalValuesQuery::extractIdentifier(
                     "unexpected SERVICE IRI for `ExternalValuesQuery`");
   AD_CORRECTNESS_CHECK(ql::ends_with(serviceIri, suffix));
 
-  // Extract the identifier between prefix and suffix.
-  auto identifier = serviceIri.substr(
+  // Extract the name between prefix and suffix.
+  auto name = serviceIri.substr(
       prefix.size(), serviceIri.size() - prefix.size() - suffix.size());
 
-  if (identifier.empty()) {
+  if (name.empty()) {
     throw ExternalValuesException(
-        "The identifier of an `ExternalValuesQuery` must not be empty");
+        "The name of an `ExternalValuesQuery` must not be empty");
   }
-  return identifier;
+  return name;
 }
 
 }  // namespace parsedQuery
