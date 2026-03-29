@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
-#define QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
+#ifndef QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
+#define QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 
 #include "global/Constants.h"
 #include "gtest/gtest_prod.h"
@@ -22,42 +22,42 @@
 
 // Generates new graphs with a fixed prefix that don't exist yet. Currently,
 // the graphs are of the form `{prefix}/{ascending number}`.
-class GraphNamespaceManager {
+class GraphNameManager {
   std::string prefixWithoutBraces_ = std::string(QLEVER_NEW_GRAPH_PREFIX);
   // The smallest number such that the graph for this number and all after it
   // are not used. Graphs that are generated are not necessarily all used so
   // there may be "gaps" in the actually used graphs.
-  ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 0;
+  ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 1;
 
-  FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
-  FRIEND_TEST(IndexImpl, graphNamespaceManagerIntegration);
+  FRIEND_TEST(GraphNameManager, storeAndRestoreData);
+  FRIEND_TEST(IndexImpl, graphNameManagerIntegration);
 
  public:
-  GraphNamespaceManager() = default;
+  GraphNameManager() = default;
   // `nextUnallocatedGraph` is the smallest number for which the graph does not
   // exist for it and any larger number.
-  GraphNamespaceManager(std::string prefix, uint64_t nextUnallocatedGraph);
+  GraphNameManager(std::string prefix, uint64_t nextUnallocatedGraph);
 
   // Return a new graph IRI that has not been allocated previously.
   ad_utility::triple_component::Iri allocateNewGraph();
 
   friend void to_json(nlohmann::json& j,
-                      const GraphNamespaceManager& namespaceManager);
+                      const GraphNameManager& namespaceManager);
   friend void from_json(const nlohmann::json& j,
-                        GraphNamespaceManager& namespaceManager);
+                        GraphNameManager& namespaceManager);
 
-  friend std::ostream& operator<<(
-      std::ostream& os, const GraphNamespaceManager& namespaceManager) {
-    os << "GraphNamespaceManager(prefix=\""
-       << namespaceManager.prefixWithoutBraces_ << "\", allocatedGraphs="
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const GraphNameManager& namespaceManager) {
+    os << "GraphNameManager(prefix=\"" << namespaceManager.prefixWithoutBraces_
+       << "\", allocatedGraphs="
        << namespaceManager.nextUnallocatedGraph_.load() << ")";
     return os;
   }
 
-  AD_SERIALIZE_FRIEND_FUNCTION(GraphNamespaceManager) {
+  AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;
     serializer | arg.nextUnallocatedGraph_;
   }
 };
 
-#endif  // QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
+#endif  // QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H

@@ -112,7 +112,7 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
 // The prefix of the new graph IRIs that are generated when a Graph Store
 // Protocol PUT is made without specifying a graph.
 namespace string_constants::detail {
-constexpr inline std::string_view new_graph_prefix = "graphs/";
+constexpr inline std::string_view new_graph_prefix = "graph/";
 }  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_NEW_GRAPH_PREFIX =
     ad_utility::constexprStrCat<QLEVER_INTERNAL_PREFIX_URL,

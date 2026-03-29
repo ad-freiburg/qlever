@@ -13,14 +13,14 @@
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
-#include "index/GraphNamespaceManager.h"
+#include "index/GraphNameManager.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/Serializer.h"
 
 // _____________________________________________________________________________
-TEST(GraphNamespaceManager, allocateNewGraph) {
+TEST(GraphNameManager, allocateNewGraph) {
   {
-    GraphNamespaceManager nsm("http://example.org/g/", 0);
+    GraphNameManager nsm("http://example.org/g/", 0);
 
     EXPECT_EQ(nsm.allocateNewGraph().toStringRepresentation(),
               "<http://example.org/g/0>");
@@ -30,24 +30,24 @@ TEST(GraphNamespaceManager, allocateNewGraph) {
               "<http://example.org/g/2>");
   }
   {
-    GraphNamespaceManager nsm("http://example.org/g/", 12);
+    GraphNameManager nsm("http://example.org/g/", 12);
     EXPECT_EQ(nsm.allocateNewGraph().toStringRepresentation(),
               "<http://example.org/g/12>");
   }
 }
 
 // _____________________________________________________________________________
-TEST(GraphNamespaceManager, storeAndRestoreData) {
+TEST(GraphNameManager, storeAndRestoreData) {
   auto [tmpFile, cleanup] = ad_utility::testing::filenameForTesting();
 
   {
     auto allocatedGraphs = 13;
-    auto nsm = GraphNamespaceManager("http://example.org/g/", allocatedGraphs);
+    auto nsm = GraphNameManager("http://example.org/g/", allocatedGraphs);
     ad_utility::serialization::FileWriteSerializer serializer{tmpFile.c_str()};
     serializer << nsm;
   }
   {
-    auto nsm = GraphNamespaceManager();
+    auto nsm = GraphNameManager();
     ad_utility::serialization::FileReadSerializer serializer{tmpFile.c_str()};
     serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
@@ -57,13 +57,13 @@ TEST(GraphNamespaceManager, storeAndRestoreData) {
 }
 
 // _____________________________________________________________________________
-TEST(GraphNamespaceManager, json) {
-  GraphNamespaceManager original("http://example.org/ns/", 42);
+TEST(GraphNameManager, json) {
+  GraphNameManager original("http://example.org/ns/", 42);
 
   nlohmann::json j;
   to_json(j, original);
 
-  GraphNamespaceManager restored;
+  GraphNameManager restored;
   from_json(j, restored);
 
   auto iri = restored.allocateNewGraph();
@@ -71,9 +71,9 @@ TEST(GraphNamespaceManager, json) {
 }
 
 // _____________________________________________________________________________
-TEST(GraphNamespaceManager, toString) {
-  EXPECT_THAT(GraphNamespaceManager("http://example.org/ns/", 42),
+TEST(GraphNameManager, toString) {
+  EXPECT_THAT(GraphNameManager("http://example.org/ns/", 42),
               InsertIntoStream(
-                  testing::StrEq("GraphNamespaceManager(prefix=\"http://"
+                  testing::StrEq("GraphNameManager(prefix=\"http://"
                                  "example.org/ns/\", allocatedGraphs=42)")));
 }

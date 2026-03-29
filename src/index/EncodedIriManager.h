@@ -87,17 +87,17 @@ class EncodedIriManagerImpl {
   // By default, `prefixes_` is empty, so no IRI will be encoded.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
-  // deserialization from JSON to initialize the EncodedIriManager See the note
-  // in `from_json`.
+  // deserialization from JSON to initialize the EncodedIriManager. See the
+  // note in `from_json`.
   EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
   // Construct from the list of prefixes. The prefixes have to be specified
-  // without any brackes, so e.g. "http://example.org/" if IRIs of the form
+  // without any brackets, so e.g. "http://example.org/" if IRIs of the form
   // `<http://example.org/1234>` should be encoded.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
-  // deserialization from JSON to initialize the EncodedIriManager See the note
-  // in `from_json`.
+  // deserialization from JSON to initialize the EncodedIriManager. See the
+  // note in `from_json`.
   explicit EncodedIriManagerImpl(
       std::vector<std::string> prefixesWithoutAngleBrackets) {
     // Add hardcoded prefixes.
@@ -244,7 +244,7 @@ class EncodedIriManagerImpl {
   // `makeIdFromPrefixIdxAndPayload` and returned from
   // `splitIntoPrefixIdxAndPayload`.
   std::optional<uint64_t> getIndexOfPrefix(
-      std::string_view prefixWithoutAngleBrackets) {
+      std::string_view prefixWithoutAngleBrackets) const {
     auto it = ql::ranges::find(prefixes_,
                                absl::StrCat("<", prefixWithoutAngleBrackets));
     if (it == prefixes_.end()) {
@@ -262,7 +262,7 @@ class EncodedIriManagerImpl {
   }
   friend void from_json(const nlohmann::json& j,
                         EncodedIriManagerImpl& encodedIriManager) {
-    // When loading an existing index EncodedIriManagers must be de-serialized
+    // When loading an existing index, EncodedIriManagers must be de-serialized
     // from json through this method. This is required so that
     // 1. the user specified prefixes set for the index build are loaded and
     // 2. that exactly the hardcoded prefixes that the index was built with are
@@ -305,7 +305,7 @@ class EncodedIriManagerImpl {
     return result;
   }
 
-  // Helper for decoding numbers. Calls `F` for every digit (from low to high)
+  // Helper for decoding numbers. Calls `F` for every digit (from high to low)
   // in the decoded representation of `encoded`.
   template <typename F>
   static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
@@ -336,7 +336,7 @@ class EncodedIriManagerImpl {
     decodeDecimalFrom64BitHelper(
         [&result](auto digit) {
           result *= 10;
-          result += static_cast<char>(digit);
+          result += digit;
         },
         encoded);
     return result;

@@ -12,7 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "index/GraphNamespaceManager.h"
+#include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
@@ -119,10 +119,10 @@ class Index {
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
 
-  // Get a reference to the GraphNamespaceManager of this Index.
-  GraphNamespaceManager& graphNamespaceManager();
-  const GraphNamespaceManager& graphNamespaceManager() const;
-  const std::optional<std::filesystem::path>& getPersistGraphNamespaceManager()
+  // Get a reference to the GraphNameManager of this Index.
+  GraphNameManager& graphNameManager();
+  const GraphNameManager& graphNameManager() const;
+  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
       const;
 
   // --------------------------------------------------------------------------

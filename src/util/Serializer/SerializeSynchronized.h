@@ -14,7 +14,7 @@
 #include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
-// Serialization for `ad_utility::synchronized<T>`
+// Serialization for `ad_utility::Synchronized<T>`
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, ad_utility::Synchronized>)

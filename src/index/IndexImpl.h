@@ -25,7 +25,7 @@
 #include "index/DocsDB.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
-#include "index/GraphNamespaceManager.h"
+#include "index/GraphNameManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -208,8 +208,8 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
-  GraphNamespaceManager graphNamespaceManager_ = GraphNamespaceManager();
-  std::optional<std::filesystem::path> graphNamespaceManagerStateFile_ =
+  GraphNameManager graphNameManager_ = GraphNameManager();
+  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
       std::nullopt;
 
  public:
@@ -286,15 +286,11 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
-  GraphNamespaceManager& graphNamespaceManager() {
-    return graphNamespaceManager_;
-  }
-  const GraphNamespaceManager& graphNamespaceManager() const {
-    return graphNamespaceManager_;
-  }
-  const std::optional<std::filesystem::path>&
-  getPersistedGraphNamespaceManager() const {
-    return graphNamespaceManagerStateFile_;
+  GraphNameManager& graphNameManager() { return graphNameManager_; }
+  const GraphNameManager& graphNameManager() const { return graphNameManager_; }
+  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
+      const {
+    return graphNameManagerStateFile_;
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }

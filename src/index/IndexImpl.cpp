@@ -333,7 +333,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
   std::string pleaseUseParallelParsingOption =
-      "please use the command-line option --parse-parallel or -p";
+      "please use the command-line option --parallel-parsing or -p";
   // Parallel parsing specified in the `settings.json` file. This is deprecated
   // for a single input stream and forbidden for multiple input streams.
   if (parallelParsingSpecifiedViaJson.has_value()) {
@@ -1071,7 +1071,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    graphNamespaceManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
+    graphNameManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
   }
 }
 
@@ -1307,9 +1307,8 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
-  loadDataMember(
-      "graphNamespaceManager", graphNamespaceManager_,
-      GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
+  loadDataMember("graphNameManager", graphNameManager_,
+                 GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
 
   // Compute unique ID for this index.
   //
@@ -1784,7 +1783,7 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
-  uint64_t nextAvailableIndex = 0;
+  uint64_t nextAvailableIndex = 1;
   auto newGraphPrefixIdx = [this]() {
     auto prefix = encodedIriManager_.getIndexOfPrefix(QLEVER_NEW_GRAPH_PREFIX);
     AD_CORRECTNESS_CHECK(prefix.has_value());
@@ -1811,9 +1810,9 @@ CPP_template_def(typename... NextSorter)(requires(
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
-  graphNamespaceManager_ = GraphNamespaceManager(
-      std::string(QLEVER_NEW_GRAPH_PREFIX), nextAvailableIndex);
-  configurationJson_["graphNamespaceManager"] = graphNamespaceManager_;
+  graphNameManager_ = GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
+                                       nextAvailableIndex);
+  configurationJson_["graphNameManager"] = graphNameManager_;
   if (doWriteConfiguration) {
     writeConfiguration();
   }

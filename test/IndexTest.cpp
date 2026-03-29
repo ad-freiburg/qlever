@@ -147,7 +147,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const auto& [index, qec] = getIndex();
       const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -238,7 +238,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const IndexImpl& index = qec.getIndex().getImpl();
       const auto& deltaTriples = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id zero = getId("<0>");
       Id one = getId("<1>");
       Id two = getId("<2>");
@@ -295,7 +295,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   const IndexImpl& index = qec.getIndex().getImpl();
   const auto& deltaTriples = qec.locatedTriplesState();
 
-  auto getId = makeGetId(getQec(kb)->getIndex());
+  auto getId = makeGetId(qec.getIndex());
   Id b = getId("<b>");
   Id b2 = getId("<b2>");
   Id a = getId("<a>");
@@ -335,19 +335,18 @@ TEST(IndexTest, indexIdAndGitHash) {
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;
-    std::string kb =
-        "<a>  <b>  <c>  . \n"
-        "<a>  <b>  <c2> . \n"
-        "<a>  <b2> <c>  . \n"
-        "<a2> <b2> <c2> .   ";
-    auto& index = makeQecWithOrWithoutCompression(kb, useCompression)
-                      ->getIndex()
-                      .getImpl();
     {
+      std::string kb =
+          "<a>  <b>  <c>  . \n"
+          "<a>  <b>  <c2> . \n"
+          "<a>  <b2> <c>  . \n"
+          "<a2> <b2> <c2> .   ";
+      auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
+      auto& index = qec.getIndex().getImpl();
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
-      const auto& qec = *getQec(kb);
       auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id c = getId("<c>");
@@ -369,21 +368,21 @@ TEST(IndexTest, scanTest) {
       testOne(iri("<b2>"), iri("<c2>"), POS, {{a2}});
       testOne(iri("<notExisting>"), iri("<a>"), PSO, {});
     }
-    kb = "<a> <is-a> <1> . \n"
-         "<a> <is-a> <2> . \n"
-         "<a> <is-a> <0> . \n"
-         "<b> <is-a> <3> . \n"
-         "<b> <is-a> <0> . \n"
-         "<c> <is-a> <1> . \n"
-         "<c> <is-a> <2> . \n";
 
     {
-      TestIndexConfig config{kb};
-      config.usePrefixCompression = useCompression;
-      const auto& qec = *getQec(std::move(config));
+      std::string kb =
+          "<a> <is-a> <1> . \n"
+          "<a> <is-a> <2> . \n"
+          "<a> <is-a> <0> . \n"
+          "<b> <is-a> <3> . \n"
+          "<b> <is-a> <0> . \n"
+          "<c> <is-a> <1> . \n"
+          "<c> <is-a> <2> . \n";
+      const auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
       const IndexImpl& index = qec.getIndex().getImpl();
 
-      auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -914,14 +913,14 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexImpl, graphNamespaceManagerIntegration) {
+TEST(IndexImpl, graphNameManagerIntegration) {
   TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
-                                 "0> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
-                                 "1> .")};
+                                 "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "2> .")};
   c.indexType = qlever::Filetype::NQuad;
   auto qec = getQec(c);
-  const auto graphManager = qec->getIndex().graphNamespaceManager();
-  EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 2);
+  const auto graphManager = qec->getIndex().graphNameManager();
+  EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }
