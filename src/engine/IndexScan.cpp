@@ -162,9 +162,15 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
+  auto additionalVars = absl::StrJoin(
+      additionalVariables_ |
+          ql::views::transform(
+              [](const auto& var) -> decltype(auto) { return var.name(); }),
+      " ");
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
                       subject_.toString(), " ", predicate_.toString(), " ",
-                      object_.toString());
+                      object_.toString(), additionalVars.empty() ? "" : " ",
+                      additionalVars);
 }
 
 // _____________________________________________________________________________
@@ -250,13 +256,14 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   };
   auto addCol = [&isContained, &variableToColumnMap,
                  nextColIdx = ColumnIndex{0},
+                 permutationColIdx = ColumnIndex{0},
                  this](const Variable& var) mutable {
-    if (!isContained(var)) {
-      return;
+    if (isContained(var)) {
+      variableToColumnMap[var] = {
+          nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
+      ++nextColIdx;
     }
-    variableToColumnMap[var] = {nextColIdx,
-                                permutation().getColumnUndefStatus(nextColIdx)};
-    ++nextColIdx;
+    ++permutationColIdx;
   };
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {

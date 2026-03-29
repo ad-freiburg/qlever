@@ -10,9 +10,9 @@
 #include <iomanip>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/IdTableUtils.h"
 #include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/Random.h"
@@ -50,7 +50,7 @@ auto SortPerformanceEstimator::measureSortingTime(
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
   ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
-    Engine::sort<numCols>(&randomTable, 0ull);
+    IdTableUtils::sort<numCols>(&randomTable, 0ull);
   });
   return timer.value();
 }

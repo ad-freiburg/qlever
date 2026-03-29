@@ -5,8 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_IDTESTHELPERS_H
 #define QLEVER_TEST_UTIL_IDTESTHELPERS_H
 
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/Synchronized.h"
 
 // Lambdas to simply create an `Id` with a given value and type during unit
