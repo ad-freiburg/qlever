@@ -182,7 +182,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
 // all datatypes are removed, language tags are preserved,
-// see `ExportQueryExecutionTrees::idToLiteral` for details.
+// see `ql::exportIds::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
   using Value = std::optional<ad_utility::triple_component::Literal>;

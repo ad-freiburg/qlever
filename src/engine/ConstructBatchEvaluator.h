@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
+#include "index/LocalVocab.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"

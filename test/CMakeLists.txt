@@ -181,7 +181,7 @@ addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
-addLinkAndDiscoverTest(EngineTest engine)
+addLinkAndDiscoverTest(IdTableUtilsTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
@@ -507,3 +507,5 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
+
+addLinkAndDiscoverTest(ExportIdsTest index engine parser)
