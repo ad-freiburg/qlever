@@ -169,9 +169,11 @@ class MaterializedViewsQueryRewriteTest
   void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
 };
 
-// We make a subclass of `MaterializedViewsQueryRewriteTest` here s.t. we can
+// We make subclasses of `MaterializedViewsQueryRewriteTest` here s.t. we can
 // use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
 class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+class MaterializedViewsStarRewriteTest
     : public MaterializedViewsQueryRewriteTest {};
 
 // _____________________________________________________________________________
@@ -210,6 +212,19 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
   // Helper because `std::bind_front` does not like argument default values.
   return viewScan(std::move(viewName), std::move(a), std::move(b),
                   std::move(c));
+};
+
+// _____________________________________________________________________________
+inline void expectNotSuitableForRewrite(
+    const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
+    const auto& viewName, const auto& query,
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
+  auto view = manager.getView(viewName);
+  EXPECT_FALSE(qpc.analyzeView(view));
+  manager.unloadViewIfLoaded(viewName);
 };
 
 }  // namespace materializedViewsTestHelpers
