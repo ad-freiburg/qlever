@@ -112,6 +112,13 @@ void QueryPatternCache::makeScansFromChainCandidates(
           continue;
         }
         for (const auto& chainInfo : *(it->second)) {
+          // If the subject of the chain is fixed, but the subject is not the
+          // first column of the view, rewriting cannot be applied.
+          if (!left.s_.isVariable() && chainInfo.view_->variableToColumnMap()
+                                               .at(chainInfo.subject_)
+                                               .columnIndex_ != 0) {
+            continue;
+          }
           // We have found a materialized view for this chain. Construct an
           // `IndexScan`.
           result.push_back(

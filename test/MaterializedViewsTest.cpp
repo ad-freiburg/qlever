@@ -1564,6 +1564,10 @@ constexpr std::string_view simpleChainPlusJoin =
     "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
 constexpr std::string_view simpleChainRenamedPlusBind =
     "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
+constexpr std::string_view simpleChainDifferentSort =
+    "SELECT ?m ?s ?o { ?s <p1> ?m . ?m <p2> ?o }";
+constexpr std::string_view overlappingChains =
+    "SELECT * { ?s <p1> ?m . ?m <p2> ?o1 . ?m <p2> ?o2 }";
 
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
@@ -1597,8 +1601,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
                     h::IndexScanFromStrings("?m", "<p2>", "?o")));
 
   // Write a chain structure to the materialized view.
-  MaterializedViewsManager manager{onDiskBase};
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
+  qlv.writeMaterializedView(viewName, p.writeQuery_);
   qlv.loadMaterializedView(viewName);
   auto chainView = std::bind_front(&viewScanSimple, viewName);
 
@@ -1612,7 +1615,24 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
            h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
-  // TODO<ullingerc> Test overlapping view plans.
+  // If the view is sorted such that the subject of the chain is not the first
+  // column, rewriting cannot be applied with a fixed subject.
+  qlv.writeMaterializedView(viewName, std::string{simpleChainDifferentSort});
+  qlv.loadMaterializedView(viewName);
+  qpExpect(qlv, simpleChainFixed,
+           h::Join(h::IndexScanFromStrings("<s2>", "<p1>",
+                                           "?_QLever_internal_variable_qp_0"),
+                   h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
+                                           "<p2>", "?c")));
+
+  // Test overlapping view plans: the rewriting can be applied but the remaining
+  // triple must be joined normally.
+  auto firstRewritten = h::Join(chainView("?m", "?s", "?o1"),
+                                h::IndexScanFromStrings("?m", "<p2>", "?o2"));
+  auto secondRewritten = h::Join(chainView("?m", "?s", "?o2"),
+                                 h::IndexScanFromStrings("?m", "<p2>", "?o1"));
+  qpExpect(qlv, overlappingChains,
+           ::testing::AnyOf(firstRewritten, secondRewritten));
 }
 
 // _____________________________________________________________________________
