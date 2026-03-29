@@ -32,7 +32,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
 using Literal = ad_utility::triple_component::Literal;
 
-// Convert the `id` to a `LiteralOrIri`. Datatypes are always stripped, so for
+// Convert the `id` to a `Literal`. Datatypes are always stripped, so for
 // literals (this includes IDs that directly store their value, like Doubles)
 // the datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is
 // false, IRIs are converted to literals without a datatype, which is
@@ -104,7 +104,8 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
 std::optional<std::pair<std::string, const char*>>
 idToStringAndTypeForEncodedValue(Id id);
 
-// _____________________________________________________________________________
+// Convert an `EncodedVal` ID to a `LiteralOrIri` by looking up the encoded
+// IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
 // Convert an `Id` to (string, XSD-type). The `index` is used for `VocabIndex` /
