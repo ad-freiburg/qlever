@@ -6,22 +6,21 @@
 
 #include "index/CompressedRelation.h"
 
-#include "engine/Engine.h"
+#include <thread>
+
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphComputation.h"
+#include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
-#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
@@ -541,6 +540,17 @@ CompressedRelationReader::lazyScan(
   return IdTableGeneratorInputRange{Generator{
       scanSpec, std::move(relevantBlockMetadata), additionalColumns,
       cancellationHandle, locatedTriplesPerBlock, limitOffset, this, config}};
+}
+
+// _____________________________________________________________________________
+IdTable CompressedRelationReader::readBlockWithoutLocatedTriples(
+    CompressedBlockMetadata block, ColumnIndices additionalColumns) const {
+  auto config = getScanConfig({std::nullopt, std::nullopt, std::nullopt},
+                              std::move(additionalColumns), {});
+  CompressedBlock compressedColumns =
+      readCompressedBlockFromFile(block, config.scanColumns_);
+  auto decompressedBlock = decompressBlock(compressedColumns, block.numRows_);
+  return decompressedBlock;
 }
 
 // _____________________________________________________________________________
@@ -1225,45 +1235,6 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   auto offsetInFile = file->tell();
   file->write(compressedBlock.data(), compressedBlock.size());
   return {offsetInFile, compressedSize};
-};
-
-// Find out whether the sorted `block` contains duplicates and whether it
-// contains only a few distinct graphs such that we can store this information
-// in the block metadata.
-static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const IdTable& block) {
-  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
-  // Return true iff the block contains duplicates when only considering the
-  // actual triple of S, P, and O.
-  auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
-                                               ad_utility::noop);
-    return numDistinct != block.numRows();
-  };
-
-  // Return the contained graphs, or  `nullopt` if there are too many of them.
-  auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
-    std::vector<Id> graphColumn;
-    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                     std::back_inserter(graphColumn));
-    ql::ranges::sort(graphColumn);
-    auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
-    size_t numGraphs = endOfUnique - graphColumn.begin();
-    if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-      return std::nullopt;
-    }
-    // Note: we cannot simply resize `graphColumn`, as this doesn't free
-    // the memory that is not needed anymore. We can do either `resize +
-    // shrink_to_fit`, which is not guaranteed by the standard, but works in
-    // practice. We choose the alternative of simply returning a new vector
-    // with the correct capacity.
-    return std::vector<Id>(graphColumn.begin(),
-                           graphColumn.begin() + numGraphs);
-  };
-  return {hasDuplicates(), graphInfo()};
 }
 
 // _____________________________________________________________________________
@@ -1538,6 +1509,21 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
   // `finishLargeRelation` was called before a new relation was started.
   currentCol0Id_ = Id::makeUndefined();
   return md;
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
+  auto threadCount = static_cast<uint32_t>(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
+  if (threadCount == 0) {
+    threadCount = std::thread::hardware_concurrency();
+  } else {
+    threadCount =
+        std::min<uint32_t>(threadCount, std::thread::hardware_concurrency());
+  }
+  // Allow at least up to 4 tasks in the queue.
+  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
+  return ad_utility::TaskQueue<false>{queueSize, threadCount};
 }
 
 // _____________________________________________________________________________

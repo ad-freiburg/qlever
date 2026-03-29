@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "engine/LocalVocab.h"
+#include "index/LocalVocab.h"
 
 #include "global/ValueId.h"
 #include "util/TransparentFunctors.h"

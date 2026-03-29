@@ -13,11 +13,11 @@
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
 #include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/LruCache.h"
@@ -191,6 +191,13 @@ class DeltaTriples {
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
+
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {

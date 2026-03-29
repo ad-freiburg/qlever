@@ -12,11 +12,11 @@
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -134,7 +134,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
 
-  Engine::sort(idTable, sortColumnIndices_);
+  IdTableUtils::sort(idTable, sortColumnIndices_);
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.
