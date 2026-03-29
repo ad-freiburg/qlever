@@ -250,13 +250,14 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   };
   auto addCol = [&isContained, &variableToColumnMap,
                  nextColIdx = ColumnIndex{0},
+                 permutationColIdx = ColumnIndex{0},
                  this](const Variable& var) mutable {
-    if (!isContained(var)) {
-      return;
+    if (isContained(var)) {
+      variableToColumnMap[var] = {
+          nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
+      ++nextColIdx;
     }
-    variableToColumnMap[var] = {nextColIdx,
-                                permutation().getColumnUndefStatus(nextColIdx)};
-    ++nextColIdx;
+    ++permutationColIdx;
   };
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {

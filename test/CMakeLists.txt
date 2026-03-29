@@ -496,6 +496,8 @@ addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 
 addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
+addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
@@ -507,3 +509,4 @@ addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
 addLinkAndDiscoverTest(ExternallySpecifiedValuesTest engine)
 
+addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
