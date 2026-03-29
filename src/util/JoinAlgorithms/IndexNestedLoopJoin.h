@@ -229,8 +229,8 @@ IdTableView<JOIN_COLUMNS> toStaticView(
 
 // This class implements an index nested loop join using binary search to match
 // entries. The benefit of this method over the "regular" join algorithms is
-// that it doesn't require the right side to be sorted, potentially allowing you
-// to skip an expensive sort operation entirely. The downside is that the left
+// that it doesn't require one side to be sorted, potentially allowing you
+// to skip an expensive sort operation entirely. The downside is that the other
 // side has to be fully materialized. Currently handling undef values is
 // unsupported. `matchLeft` can be used with different types to accommodate
 // different types of joins.

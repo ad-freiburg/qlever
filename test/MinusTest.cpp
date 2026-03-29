@@ -233,7 +233,7 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
 
   // From this table columns 2 and 1 will be used for the join.
   // This is deliberately not sorted to check the optimization that avoids
-  // sorting on the right if bigger
+  // sorting on the left if bigger
   IdTable a = makeIdTableFromVector({{7, 2, 1, 5},
                                      {1, 3, 3, 5},
                                      {1, 8, 1, 5},
