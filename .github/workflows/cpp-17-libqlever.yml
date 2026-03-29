@@ -56,7 +56,7 @@ jobs:
           # The Docker container ghcr.io/joka921/llvm-enum-rewriter contains a custom
           # clang-21 build with the `backport-using-enum` tool at /opt/llvm/bin/.
           # It also has cmake, boost 1.81, icu, zstd, and jemalloc installed.
-          # The docker image is build using the Dockerfile at 
+          # The docker image is built using the Dockerfile at
           # https://github.com/joka921/llvm-project/blob/2d1f59cd321c3a7efd6e47bd2e97413cafa912c9/Dockerfile
           # and will be extended and moved to a more stable location in the future.
           docker pull ghcr.io/joka921/llvm-enum-rewriter:latest

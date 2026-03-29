@@ -27,7 +27,7 @@ endif ()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Allow the explicit overriding of the C++ standard version, e.g. when the reduced features set for C++17 is used.
+# Allow the explicit overriding of the C++ standard version, e.g. when the reduced feature set for C++17 is used.
 if (NOT DEFINED CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN)
   set(CMAKE_CXX_STANDARD 20)
 else()
@@ -249,7 +249,7 @@ endif ()
 ######################################
 if (REDUCED_FEATURE_SET_FOR_CPP17)
   # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
-  #which is only available in Boost versions >= 1.81
+  # which is only available in Boost versions >= 1.81
   find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
 else()
   find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
