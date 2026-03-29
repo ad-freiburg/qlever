@@ -13,7 +13,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "global/RuntimeParameters.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -464,7 +464,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols);
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();

@@ -181,7 +181,7 @@ addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
-addLinkAndDiscoverTest(EngineTest engine)
+addLinkAndDiscoverTest(IdTableUtilsTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 

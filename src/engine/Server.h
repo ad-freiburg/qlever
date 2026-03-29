@@ -18,7 +18,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"

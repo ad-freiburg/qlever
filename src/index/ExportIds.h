@@ -10,8 +10,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_VALUEIDTOSTRING_H
-#define QLEVER_SRC_ENGINE_VALUEIDTOSTRING_H
+#ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
+#define QLEVER_SRC_INDEX_EXPORTIDS_H
 
 #include <optional>
 #include <string>
@@ -216,4 +216,4 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
 
 }  // namespace ql::exportIds
 
-#endif  // QLEVER_SRC_ENGINE_VALUEIDTOSTRING_H
+#endif  // QLEVER_SRC_INDEX_EXPORTIDS_H

@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
@@ -10,7 +10,8 @@
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
-void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
+void IdTableUtils::sort(IdTable& idTable,
+                        const std::vector<ColumnIndex>& sortCols) {
   size_t width = idTable.numColumns();
 
   // Instantiate specialized comparison lambdas for one and two sort columns
@@ -23,7 +24,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
     ad_utility::callFixedSizeVi(width, [&idTable, col = sortCols[0]](auto I) {
-      Engine::sort<I>(&idTable, col);
+      IdTableUtils::sort<I>(&idTable, col);
     });
   } else if (sortCols.size() == 2) {
     auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
@@ -36,7 +37,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
     };
     ad_utility::callFixedSizeVi(idTable.numColumns(),
                                 [&idTable, comparison](auto I) {
-                                  Engine::sort<I>(&idTable, comparison);
+                                  IdTableUtils::sort<I>(&idTable, comparison);
                                 });
   } else {
     auto comparison = [&sortCols](const auto& row1, const auto& row2) {
@@ -49,17 +50,17 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
     };
     ad_utility::callFixedSizeVi(idTable.numColumns(),
                                 [&idTable, comparison](auto I) {
-                                  Engine::sort<I>(&idTable, comparison);
+                                  IdTableUtils::sort<I>(&idTable, comparison);
                                 });
   }
 }
 
 // ___________________________________________________________________________
-size_t Engine::countDistinct(const IdTable& input,
-                             const std::function<void()>& checkCancellation) {
+size_t IdTableUtils::countDistinct(
+    const IdTable& input, const std::function<void()>& checkCancellation) {
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(input, ql::ranges::lexicographical_compare),
-      "Input to Engine::countDistinct must be sorted");
+      "Input to IdTableUtils::countDistinct must be sorted");
   if (input.empty()) {
     return 0;
   }
