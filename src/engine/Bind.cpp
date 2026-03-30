@@ -6,6 +6,8 @@
 
 #include "engine/Bind.h"
 
+#include <absl/strings/str_cat.h>
+
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -21,10 +23,9 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  // If the cache key is deterministic, this `Bind` expression can be cached.
-  isExpressionCacheable_ =
-      _bind._expression.getCacheKey(_subtree->getVariableColumns()) ==
-      _bind._expression.getCacheKey(_subtree->getVariableColumns());
+  cacheKey_ = absl::StrCat(
+      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
+      "\n", _subtree->getCacheKey());
 }
 
 // BIND adds exactly one new column
@@ -79,13 +80,7 @@ std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::string Bind::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "BIND ";
-  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->getCacheKey();
-  return std::move(os).str();
-}
+std::string Bind::getCacheKeyImpl() const { return cacheKey_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
@@ -245,5 +240,7 @@ IdTable Bind::computeExpressionBind(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+  auto clone = std::make_unique<Bind>(*this);
+  clone->_subtree = _subtree->clone();
+  return clone;
 }
