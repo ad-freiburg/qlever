@@ -212,7 +212,7 @@ class DateYearOrDuration {
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Subtraction of two `DateYearOrDuration` objects.
   // For undefined subtractions `std::nullopt` is returned.
   [[nodiscard]] std::optional<DateYearOrDuration> operator-(

@@ -59,7 +59,7 @@ struct SubtractImpl {
   ValueId operator()(double lhs, int64_t rhs) const {
     return Id::makeFromDouble(lhs - static_cast<double>(rhs));
   }
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
     // Using `operator-` implementation in `DateYearOrDuration`.
     auto difference = lhs - rhs;

@@ -459,10 +459,11 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
-      locatedTriples_->locatedTriplesPerBlock_,
-      locatedTriples_->internalLocatedTriplesPerBlock_,
-      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
+  return LocatedTriplesSharedState{
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
+          locatedTriples_->locatedTriplesPerBlock_,
+          locatedTriples_->internalLocatedTriplesPerBlock_,
+          localVocab_.getLifetimeExtender(), locatedTriples_->index_})};
 }
 
 // ____________________________________________________________________________

@@ -422,7 +422,7 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
   // pattern analyzed.
   return parsed._rootGraphPattern._graphPatterns |
          ql::views::filter([&](const auto& pattern) {
-           return !std::visit(invariantCheck, pattern);
+           return !pattern.visit(invariantCheck);
          }) |
          ::ranges::to<std::vector>();
 }

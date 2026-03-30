@@ -65,7 +65,7 @@ std::string Date::getFormattedYear() const {
                         : absl::StrFormat("%05d", getYear());
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   auto epoch1 = toEpoch();

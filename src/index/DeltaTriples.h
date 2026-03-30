@@ -103,9 +103,9 @@ class DeltaTriples {
   // `shared_ptr` so that we can easily convert them to a
   // `LocatedTriplesSnapshot`.
   std::shared_ptr<LocatedTriplesState> locatedTriples_ =
-      std::make_shared<LocatedTriplesState>(
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
           LocatedTriplesPerBlockAllPermutations<false>{},
-          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0);
+          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0});
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
