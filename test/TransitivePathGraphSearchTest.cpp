@@ -155,7 +155,7 @@ TYPED_TEST(GraphSearchTest, graphSearchWithoutTarget) {
   std::vector<std::vector<size_t>> expected = {
       {0}, {0}, {0}, {0, 1}, {0}, {0, 1, 2, 3, 4, 5, 6, 7}, {0, 1, 2}};
 
-  // Iterate over all graphs and check if binarySearch will return the right
+  // Iterate over all graphs and check if the graph search returns the right
   // values.
   for (size_t i = 0; i < expected.size(); i++) {
     GraphSearchProblem<TypeParam> gsp(this->graphs_.at(i), Id::makeFromInt(0),

@@ -17,6 +17,7 @@
 #include "util/Timer.h"
 
 using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
+
 namespace detail {
 
 // Helper struct that allows to group a read-only view of a column of a table

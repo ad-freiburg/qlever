@@ -69,9 +69,9 @@ struct GraphSearchExecutionParams {
   }
 };
 
-// Depth-first search for a given target node inside the given graph.
-// Returns a set containing the target node, if a path from the start node to
-// it was found in the graph.
+// Depth-first search inside the given graph. If `searchForTarget` is true,
+// returns a set containing only the target node (if reachable). Otherwise,
+// returns all nodes reachable from the start node.
 template <typename T, bool searchForTarget>
 Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
                      const GraphSearchExecutionParams& ep,
@@ -127,10 +127,10 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
   return connectedNodes;
 }
 
-// Depth-first search for a given target node inside the given graph,
-// respecting minimum and maximum distance constraints.
-// Returns a set containing the target node, if the graph contains a path
-// from the start node to it and which fits inside the distance constraints.
+// Depth-first search inside the given graph, respecting minimum and maximum
+// distance constraints. If `searchForTarget` is true, returns a set containing
+// only the target node (if reachable within the distance constraints).
+// Otherwise, returns all reachable nodes within the distance constraints.
 template <typename T, bool searchForTarget>
 Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                               const GraphSearchExecutionParams& ep) {
@@ -199,8 +199,8 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
 template <typename T>
 Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
                           const GraphSearchExecutionParams& ep) {
-  // Select limited versions of graph search algorithms if limits
-  // are not size limits of size_t (as used when parsing input).
+  // Use the distance-limited DFS variant if the limits differ from the
+  // defaults (minDist=0, maxDist=size_t::max).
   bool usesLimits =
       gsp.minDist_ != 0 || gsp.maxDist_ != std::numeric_limits<size_t>::max();
   bool targetHasValue = gsp.targetNode_.has_value();
@@ -218,6 +218,6 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
   }
   return depthFirstSearch<T, false>(gsp, ep, skipStartNodeInitially);
 }
-};  // namespace qlever::graphSearch
+}  // namespace qlever::graphSearch
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHGRAPHSEARCH_H
