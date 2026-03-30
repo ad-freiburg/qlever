@@ -8,9 +8,12 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -803,6 +806,17 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::coversVariables(
+    const std::vector<const Variable*>& variables) const {
+  const auto& varToCol = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
+    return varToCol.contains(*v) &&
+           varToCol.at(*v).mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  });
 }
 
 // _____________________________________________________________________________

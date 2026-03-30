@@ -7,13 +7,13 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "global/RuntimeParameters.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -484,7 +484,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols);
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -638,7 +638,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);
-  auto rightRes = computeResultSkipChild(_right->getRootOperation());
+  auto rightRes = computeResultSkipChild(_right->getRootOperation(), true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{

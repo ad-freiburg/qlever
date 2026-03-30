@@ -17,9 +17,11 @@
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -94,6 +96,60 @@ void DeltaTriples::clear() {
             locatedTriples_->getLocatedTriples<false>());
   clearImpl(triplesToHandlesInternal_,
             locatedTriples_->getLocatedTriples<true>());
+}
+
+// ____________________________________________________________________________
+nlohmann::json DeltaTriples::vacuum(
+    ad_utility::SharedCancellationHandle cancellationHandle) {
+  // When the cancellation handle stops the execution this results in the state
+  // that only a part of the triples have been vacuumed, which is valid.
+  using namespace ad_utility::use_value_identity;
+  auto identifyTriplesToVacuum = [this, &cancellationHandle](auto isInternal) {
+    auto perm = Permutation::PSO;
+    auto& basePerm = index_.getPermutation(perm);
+    const auto& actualPerm =
+        isInternal ? basePerm.internalPermutation() : basePerm;
+    const auto& ltpb =
+        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(perm);
+    return ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
+  };
+  auto removeIdentifiedTriples =
+      [this, &cancellationHandle](
+          auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
+          const std::vector<IdTriple<0>>& insertionsToRemove) {
+        auto& state = getState<isInternal>();
+        auto removeTriples = [this, &cancellationHandle, &isInternal](
+                                 const std::vector<IdTriple<0>>& triples,
+                                 auto& triplesToHandlesMap) {
+          ad_utility::chunkedForLoop<10'000>(
+              0, triples.size(),
+              [&triples, &triplesToHandlesMap, this, &isInternal](size_t i) {
+                auto it = triplesToHandlesMap.find(triples[i]);
+                AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
+                this->eraseTripleInAllPermutations<isInternal>(it->second);
+                triplesToHandlesMap.erase(it);
+              },
+              [&cancellationHandle]() {
+                cancellationHandle->throwIfCancelled();
+              });
+        };
+
+        removeTriples(deletionsToRemove, state.triplesDeleted_);
+        removeTriples(insertionsToRemove, state.triplesInserted_);
+      };
+
+  nlohmann::json result = nlohmann::json::object();
+  auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
+  removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove_,
+                          toRemoveInExternal.insertionsToRemove_);
+  result["external"] = toRemoveInExternal.stats_;
+
+  auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
+  removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove_,
+                          toRemoveInInternal.insertionsToRemove_);
+  result["internal"] = toRemoveInInternal.stats_;
+
+  return result;
 }
 
 // ____________________________________________________________________________
@@ -185,8 +241,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
-    auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
-        index_, objectId, localVocab_, true);
+    auto optionalLiteralOrIri =
+        ql::exportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
         !optionalLiteralOrIri.value().isLiteral() ||
         !optionalLiteralOrIri.value().hasLanguageTag()) {
@@ -194,7 +250,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     const auto& predicate =
         predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+          auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
