@@ -129,6 +129,8 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 // _____________________________________________________________________________
 Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
+  // Shift the timestamp according to the given `TimeZone`offset.
+  timestamp = timestamp + std::chrono::hours{offset};
 
   // Extract date from epoch timestamp.
   auto days = std::chrono::floor<std::chrono::days>(timestamp);
@@ -145,7 +147,7 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   return Date{static_cast<int>(date.year()),
               static_cast<int>(static_cast<unsigned>(date.month())),
               static_cast<int>(static_cast<unsigned>(date.day())),
-              static_cast<int>(remainder.hours().count()) + offset,
+              static_cast<int>(remainder.hours().count()),
               static_cast<int>(remainder.minutes().count()),
               static_cast<double>(remainder.seconds().count()),
               tz};

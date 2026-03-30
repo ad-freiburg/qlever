@@ -85,7 +85,7 @@ DayTimeDuration DayTimeDuration::operator-(const DayTimeDuration& rhs) const {
   // Only passing seconds to `DayTimeDuration`. The object itself will convert
   // the input to days, hours, minutes and seconds.
   return DayTimeDuration{durationType, 0, 0, 0,
-                         static_cast<double>(difference / 1000)};
+                         static_cast<double>(difference) / 1000.0};
 }
 
 //______________________________________________________________________________
