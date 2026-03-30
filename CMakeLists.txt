@@ -26,9 +26,15 @@ endif ()
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Allow the explicit overriding of the C++ standard version, e.g. when the reduced feature set for C++17 is used.
+if (NOT DEFINED CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN)
+  set(CMAKE_CXX_STANDARD 20)
+else()
+    set(CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN})
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # will not take effect without FORCE
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
@@ -116,7 +122,7 @@ endif ()
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept
 # macros from `range-v3`.
 option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)" OFF)
-if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} OR (CMAKE_CXX_STANDARD LESS 20))
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
 else ()
@@ -241,7 +247,13 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+  # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
+  # which is only available in Boost versions >= 1.81
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+else()
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+endif()
 include_directories(${Boost_INCLUDE_DIR})
 
 

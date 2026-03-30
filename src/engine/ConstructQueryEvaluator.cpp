@@ -51,7 +51,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
-  return std::visit(
+  return term.visit(
       [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
         using T = std::decay_t<decltype(arg)>;
 
@@ -66,8 +66,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
-      },
-      term);
+      });
 }
 
 // _____________________________________________________________________________
