@@ -872,7 +872,7 @@ TEST(OperationTest, disableCachingForOperation) {
 TEST(OperationTest, disableCachingGlobally) {
   auto qecPtr = getQec();
   auto qecCopy = *qecPtr;
-  qecCopy.disableCaching_ = true;
+  qecCopy.setDisableCachingOnlyForTesting(true);
   auto* qec = &qecCopy;
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};

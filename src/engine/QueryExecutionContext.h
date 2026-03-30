@@ -170,6 +170,10 @@ class QueryExecutionContext {
   // cache keys for operations.
   bool disableCaching() const { return disableCaching_; }
 
+  void setDisableCachingOnlyForTesting(bool disableCaching) {
+    disableCaching_ = disableCaching;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -245,7 +249,6 @@ class QueryExecutionContext {
   MaterializedViewsManager* materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
-  FRIEND_TEST(OperationTest, disableCachingGlobally);
   bool disableCaching_ = false;
 
   // The last point in time when a websocket update was sent. This is used for
