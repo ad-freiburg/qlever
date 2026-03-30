@@ -46,6 +46,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
  public:
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
@@ -66,6 +68,11 @@ class Sort : public Operation {
   virtual bool knownEmptyResult() override {
     return subtree_->knownEmptyResult();
   }
+
+  // The sort operation never has a semantic meaning. It's just a mean to an end
+  // to sort an input to make another operation more efficient. That's why we
+  // can propagate limits and offsets right through it.
+  bool supportsLimitOffset() const override { return true; }
 
   [[nodiscard]] size_t getResultWidth() const override;
 
