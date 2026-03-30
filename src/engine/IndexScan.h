@@ -189,7 +189,9 @@ class IndexScan final : public Operation {
   }
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
+  [[nodiscard]] LimitOffsetSupport supportsLimitOffset() const override {
+    return LimitOffsetSupport::YES;
+  }
 
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
