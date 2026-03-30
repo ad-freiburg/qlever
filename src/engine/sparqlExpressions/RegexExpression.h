@@ -26,12 +26,11 @@ class PrefixRegexExpression : public SparqlExpression {
   // If the variable is wrapped inside a `STR()` function, this is set to true.
   bool childIsStrExpression_ = false;
 
+ public:
   // The `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, otherwise an exception will be
   // thrown.
   PrefixRegexExpression(Ptr child, std::string prefixRegex, Variable variable);
-
- public:
   PrefixRegexExpression(PrefixRegexExpression&&) = default;
   PrefixRegexExpression& operator=(PrefixRegexExpression&&) = default;
   PrefixRegexExpression(const PrefixRegexExpression&) = delete;
@@ -75,11 +74,17 @@ class PrefixRegexExpression : public SparqlExpression {
   static std::optional<std::string> getPrefixRegex(std::string regex);
 
   FRIEND_TEST(RegexExpression, getPrefixRegex);
+  FRIEND_TEST(RegexExpression, makePrefixMatchExpression);
 };
 
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags);
+
+// Make a custom `ql:prefix-match` expression which allows for efficient
+// prefix search.
+SparqlExpression::Ptr makePrefixMatchExpression(
+    SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix);
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_REGEXEXPRESSION_H

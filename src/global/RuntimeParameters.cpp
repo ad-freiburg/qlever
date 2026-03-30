@@ -32,6 +32,7 @@ RuntimeParameters::RuntimeParameters() {
   add(groupByHashMapEnabled_);
   add(groupByDisableIndexScanOptimizations_);
   add(serviceMaxValueRows_);
+  add(serviceMaxRedirects_);
   add(queryPlanningBudget_);
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
@@ -51,6 +52,11 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
+  add(prefilteredOptionalJoin_);
+  add(enableMaterializedViewQueryRewrite_);
+  add(serviceAllowedIriPrefixes_);
+  add(permutationWriterNumThreads_);
+  add(vacuumMinimumBlockSize_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

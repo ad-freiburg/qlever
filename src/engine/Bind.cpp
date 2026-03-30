@@ -21,6 +21,10 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
+  // If the cache key is deterministic, this `Bind` expression can be cached.
+  isExpressionCacheable_ =
+      _bind._expression.getCacheKey(_subtree->getVariableColumns()) ==
+      _bind._expression.getCacheKey(_subtree->getVariableColumns());
 }
 
 // BIND adds exactly one new column
@@ -43,8 +47,9 @@ size_t Bind::getCostEstimate() {
 bool Bind::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
-void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
-  _subtree->applyLimit(limitOffset);
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  _subtree = _subtree->clone();
+  _subtree->applyLimitOffset(limitOffset);
 }
 
 float Bind::getMultiplicity(size_t col) {
@@ -86,13 +91,16 @@ std::string Bind::getCacheKeyImpl() const {
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
-  // expressions can produce undefined values. This might impact the
-  // performance when the result of this GROUP BY is joined on one or more of
-  // the aggregating columns. Implement an interface in the expressions that
-  // allows to check, whether an expression can never produce an undefined
-  // value.
-  res[_bind._target] = makePossiblyUndefinedColumn(getResultWidth() - 1);
+  auto columnIndex = getResultWidth() - 1;
+  // Determine whether the added column might contain UNDEF values.
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
+                               ? AlwaysDefined
+                               : PossiblyUndefined;
+
+  auto [it, wasNew] =
+      res.insert({_bind._target, {columnIndex, statusOfNewColumn}});
+  AD_CORRECTNESS_CHECK(wasNew);
   return res;
 }
 

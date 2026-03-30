@@ -15,6 +15,7 @@
 #include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -81,6 +82,13 @@ class DeltaTriplesTest : public ::testing::Test {
       const Index::Vocab& vocab, LocalVocab& localVocab,
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
+      // The RdfStringParser returns temporary internal IDs for the default
+      // graph. Detect this and overwrite with the Iri which gets looked up for
+      // the correct ID.
+      if (triple.graphIri_ == qlever::specialIds().at(DEFAULT_GRAPH_IRI)) {
+        triple.graphIri_ = TripleComponent(
+            TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
+      }
       std::array<Id, 4> ids{
           std::move(triple.subject_)
               .toValueId(vocab, localVocab, *encodedIriManager()),
@@ -398,7 +406,13 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
         vocab, localVocab, testQec->getIndex().encodedIriManager());
   };
 
-  Id graphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  Id graphId = [&vocab]() {
+    auto graphOpt =
+        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
+            .toValueId(vocab, *encodedIriManager());
+    AD_CORRECTNESS_CHECK(graphOpt.has_value());
+    return graphOpt.value();
+  }();
   auto keysMatch =
       [&toId,
        graphId](std::vector<std::array<TripleComponent, 3>> tripleComponents) {
@@ -435,14 +449,18 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   deltaTriples.insertTriples(
       cancellationHandle,
-      makeIdTriples(
-          vocab, localVocab,
-          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
-           "<a> <b> \"abc\"@en",
-           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
-           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+      makeIdTriples(vocab, localVocab,
+                    {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+                     "<a> <b> \"abc\"@en",
+                     "<a> <b> \"abc\"^^<http://example.com/datatype>",
+                     "<a> <b> <abc>", "<a> <other> \"def\"@de",
+                     "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
   auto a = iri("<a>");
   auto b = iri("<b>");
+  auto lp = iri(LANGUAGE_PREDICATE);
+  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
+  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
+  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},
@@ -451,37 +469,49 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
                           {a, b, iri("<abc>")},
                           {a, iri("<other>"), lit("\"def\"@de")},
-                          {a, iri("<other>"), lit("\"def\"@es")}},
+                          {a, iri("<other>"), lit("\"def\"@es")},
+                          {iri("<other>"), a, lit("\"def\"@es")}},
                          {},
-                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                         {{lit("\"abc\"@de"), lp, de},
+                          {lit("\"abc\"@en"), lp, en},
+                          {lit("\"def\"@de"), lp, de},
+                          {lit("\"def\"@es"), lp, es},
+                          {a, iri("@de@<b>"), lit("\"abc\"@de")},
                           {a, iri("@en@<b>"), lit("\"abc\"@en")},
                           {a, iri("@de@<other>"), lit("\"def\"@de")},
-                          {a, iri("@es@<other>"), lit("\"def\"@es")}},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")},
+                          {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}},
                          {}));
 
   deltaTriples.deleteTriples(
       cancellationHandle,
-      makeIdTriples(
-          vocab, localVocab,
-          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
-           "<a> <b> \"abc\"@en",
-           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
-           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
-  EXPECT_THAT(deltaTriples,
-              TriplesAre({},
-                         {{a, b, TripleComponent{1}},
-                          {a, b, lit("\"abc\"")},
-                          {a, b, lit("\"abc\"@de")},
-                          {a, b, lit("\"abc\"@en")},
-                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
-                          {a, b, iri("<abc>")},
-                          {a, iri("<other>"), lit("\"def\"@de")},
-                          {a, iri("<other>"), lit("\"def\"@es")}},
-                         {},
-                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
-                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
-                          {a, iri("@de@<other>"), lit("\"def\"@de")},
-                          {a, iri("@es@<other>"), lit("\"def\"@es")}}));
+      makeIdTriples(vocab, localVocab,
+                    {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+                     "<a> <b> \"abc\"@en",
+                     "<a> <b> \"abc\"^^<http://example.com/datatype>",
+                     "<a> <b> <abc>", "<a> <other> \"def\"@de",
+                     "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
+  EXPECT_THAT(
+      deltaTriples,
+      TriplesAre({},
+                 {{a, b, TripleComponent{1}},
+                  {a, b, lit("\"abc\"")},
+                  {a, b, lit("\"abc\"@de")},
+                  {a, b, lit("\"abc\"@en")},
+                  {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                  {a, b, iri("<abc>")},
+                  {a, iri("<other>"), lit("\"def\"@de")},
+                  {a, iri("<other>"), lit("\"def\"@es")},
+                  {iri("<other>"), a, lit("\"def\"@es")}},
+                 {{lit("\"abc\"@de"), lp, de},
+                  {lit("\"abc\"@en"), lp, en},
+                  {lit("\"def\"@de"), lp, de},
+                  {lit("\"def\"@es"), lp, es}},
+                 {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                  {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                  {a, iri("@de@<other>"), lit("\"def\"@de")},
+                  {a, iri("@es@<other>"), lit("\"def\"@es")},
+                  {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}}));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
@@ -897,4 +927,128 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                      .value()),
              Id::makeFromBool(false)}})));
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, copyLocalVocab) {
+  using namespace ::testing;
+  using ad_utility::triple_component::LiteralOrIri;
+  DeltaTriples deltaTriples{testQec->getIndex()};
+
+  std::string iri1 = "<test>";
+  std::string iri2 = "<other>";
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+                   Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337))}}});
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  deltaTriples.deleteTriples(
+      cancellationHandle,
+      {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+                   Id::makeFromBool(false)}}});
+
+  auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
+
+  using namespace ::testing;
+
+  EXPECT_THAT(indices,
+              UnorderedElementsAre(
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri1))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri2)))));
+
+  using OBE =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  // Blank Nodes are assigned at random, so all we can check is that there is
+  // exactly one block allocated.
+  EXPECT_THAT(ownedBlocks, ElementsAre(AD_FIELD(OBE, blockIndices_,
+                                                ElementsAre(A<uint64_t>()))));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
+  using namespace ::testing;
+  using ad_utility::triple_component::LiteralOrIri;
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+
+  std::string iri1 = "<test>";
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  IdTriple<> triple1{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+                      Id::makeFromBool(true)}};
+  std::string iri2 = "<other>";
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  IdTriple<> triple2{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+                      Id::makeFromBool(false)}};
+  deltaTriplesManager.modify<void>(
+      [&triple1, &triple2](DeltaTriples& deltaTriples) {
+        auto cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        deltaTriples.insertTriples(cancellationHandle, {triple1});
+        deltaTriples.deleteTriples(cancellationHandle, {triple2});
+      });
+
+  auto [sharedState, indices, ownedBlocks] =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedStateWithVocab();
+
+  using namespace ::testing;
+
+  const auto& locatedSPO =
+      sharedState->getLocatedTriplesForPermutation<false>(Permutation::SPO);
+  EXPECT_TRUE(locatedSPO.isLocatedTriple(triple1, true));
+  EXPECT_TRUE(locatedSPO.isLocatedTriple(triple2, false));
+
+  EXPECT_THAT(indices,
+              UnorderedElementsAre(
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri1))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri2)))));
+
+  EXPECT_THAT(ownedBlocks, ElementsAre());
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, vacuum) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  LocalVocab localVocab;
+
+  // Insertions of triples in the index.
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(vocab, localVocab, {"<a> <upp> <A>", "<b> <upp> <B>"}));
+  // Deletions of triples not in the index.
+  deltaTriples.deleteTriples(cancellationHandle,
+                             makeIdTriples(vocab, localVocab, {"<X> <Y> <Z>"}));
+  // Insertions of triples not in the index.
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(vocab, localVocab, {"<a> <upp> <newval>"}));
+  // Deletions of triples in the index.
+  deltaTriples.deleteTriples(
+      cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <next> <b>"}));
+
+  EXPECT_THAT(deltaTriples, NumTriples(3, 2, 5));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          0ul);
+
+  auto result = deltaTriples.vacuum(cancellationHandle);
+
+  EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2));
+  EXPECT_EQ(result["external"]["insertionsRemoved"], 2);
+  EXPECT_EQ(result["external"]["deletionsRemoved"], 1);
+  EXPECT_EQ(result["external"]["insertionsKept"], 1);
+  EXPECT_EQ(result["external"]["deletionsKept"], 1);
+  // Had no updates to begin with.
+  EXPECT_EQ(result["internal"]["totalRemoved"], 0);
+  EXPECT_EQ(result["internal"]["totalKept"], 0);
 }

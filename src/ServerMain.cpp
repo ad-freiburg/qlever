@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
   bool noPatterns;
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
+  std::vector<std::string> preloadMaterializedViews;
 
   ad_utility::MemorySize memoryMaxSize;
 
@@ -176,6 +177,26 @@ int main(int argc, char** argv) {
           &RuntimeParameters::materializedViewWriterMemory_>(),
       "Memory limit for sorting rows during the writing of materialized "
       "views.");
+  add("preload-materialized-views,l",
+      po::value<std::vector<std::string>>(&preloadMaterializedViews)
+          ->multitoken(),
+      "The names of materialized views to be loaded automatically on server "
+      "start (this option takes an arbitrary number of arguments).");
+  add("enable-materialized-view-query-rewrite",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(),
+      "If set to true, loaded materialized views will be considered as "
+      "alternative query plans for certain supported query patterns.");
+  add("service-allowed-iri-prefixes",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::serviceAllowedIriPrefixes_>()
+          ->multitoken(),
+      "IRI prefixes that are allowed as SERVICE endpoints (this option takes "
+      "an arbitrary number of arguments). If none are given (the default), all "
+      "IRIs are allowed. If given, SERVICE requests to IRIs not matching any "
+      "prefix are rejected. To disable all federated queries, set this option "
+      "to an invalid IRI prefix like `-`. Magic services (for example spatial "
+      "search or materialized views) are never affected.");
   po::variables_map optionsMap;
 
   try {
@@ -195,15 +216,16 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
-              << qlever::version::DatetimeOfCompilation << " using git hash "
-              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever server " << qlever::version::ProjectVersion
+              << ", compiled on " << qlever::version::DatetimeOfCompilation
+              << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
+              << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
-               persistUpdates);
+               persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

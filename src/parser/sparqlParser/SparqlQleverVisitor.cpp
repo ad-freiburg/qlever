@@ -294,9 +294,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // QLever-internal functions.
   //
   // NOTE: Predicates like `ql:has-predicate` etc. are handled elsewhere.
+  static const UnaryFuncTable customGeoUnaryFuncs{
+      {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
+      {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
+  };
   if (checkPrefix(QL_PREFIX)) {
     if (functionName == "isGeoPoint") {
       return createUnary(&makeIsGeoPointExpression);
+    } else if (ad_utility::contains(customGeoUnaryFuncs, functionName)) {
+      return createUnary(customGeoUnaryFuncs.at(functionName));
+    } else if (functionName == "prefix-match") {
+      return createBinary(&makePrefixMatchExpression);
     }
   }
 
@@ -2641,7 +2649,7 @@ ExpressionPtr Visitor::visit(Parser::BrackettedExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
+ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {

@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_ENGINE_H
-#define QLEVER_SRC_ENGINE_ENGINE_H
+#ifndef QLEVER_SRC_INDEX_IDTABLEUTILS_H
+#define QLEVER_SRC_INDEX_IDTABLEUTILS_H
 
 #include <vector>
 
@@ -12,7 +12,7 @@
 #include "global/Constants.h"
 #include "util/Log.h"
 
-class Engine {
+class IdTableUtils {
  public:
   template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
@@ -64,8 +64,6 @@ class Engine {
   // be used to implement a cancellation mechanism that throws on cancellation.
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
-  static size_t countDistinct(IdTableView<0> input,
-                              const std::function<void()>& checkCancellation);
 };
 
-#endif  // QLEVER_SRC_ENGINE_ENGINE_H
+#endif  // QLEVER_SRC_INDEX_IDTABLEUTILS_H

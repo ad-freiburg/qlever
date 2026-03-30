@@ -21,9 +21,13 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+namespace parsedQuery {
+struct Bind;
+}
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
@@ -150,16 +154,12 @@ class Operation {
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
-  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
-  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
-  // is not changed.
-  // Note: The default implementation always returns `nullopt` while this
-  // function is currently only overridden for `IndexScan`. In the future also
-  // other operations could pass on the `PrefilterExpressions` to the
-  // `IndexScan` in their subtree.
+  // `prefilters` as possible. If none of them applies, return `std::nullopt`,
+  // signaling that the `QueryExecutionTree` will not be changed. This is the
+  // default implementation.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
     return std::nullopt;
   };
@@ -203,6 +203,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
+  const SharedCancellationHandle& getCancellationHandle() const {
+    return cancellationHandle_;
+  }
+
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
@@ -225,6 +229,10 @@ class Operation {
       [[maybe_unused]] size_t target) const {
     return false;
   }
+
+  // Check whether all variables given are covered by this `Operation` and are
+  // always defined.
+  bool coversVariables(const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
@@ -296,7 +304,7 @@ class Operation {
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
     // If `supportsLimitOffset()` returns `false`, this function has to be
     // no-op.
   }
@@ -372,6 +380,17 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
+  // Try to create a version of this operation with an additional column from a
+  // `BIND` pushed down into the tree. The default is to disallow push down. All
+  // operations where a `BIND` push down is semantically possible should
+  // override this method. Pushing a `BIND` down to a materialized view might
+  // produce a cheaper query plan for example. This function is tested in the
+  // `BindRewrite` test case in `MaterializedViewsTest`.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind&) const {
+    return std::nullopt;
+  };
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
@@ -410,6 +429,24 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Internal default implementation for `makeTreeWithBindColumn`. This
+  // implementation makes the assumption that a `BIND` can be pushed into this
+  // `Operation` iff any of its children accepts the `BIND` push down. This is
+  // the correct behavior for various operations like `Join`, which make use of
+  // this function for their `makeTreeWithBindColumn` override. Returns the
+  // index of the replaced child and its new `QueryExecutionTree`.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
+  // be instantiated in the code for operations that use it.
+  CPP_template(typename MakeCloneWithNewChildren)(
+      requires ad_utility::InvocableWithExactReturnType<
+          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+          std::vector<std::shared_ptr<QueryExecutionTree>>>)
+      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          const parsedQuery::Bind& bind,
+          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -520,6 +557,7 @@ class Operation {
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
   FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
   FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
   FRIEND_TEST(Operation,

@@ -7,6 +7,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
@@ -36,7 +37,12 @@ TEST(LibQlever, buildIndexAndRunQuery) {
                                ::testing::HasSubstr("buffer size"));
 
   c.parserBufferSize_ = std::nullopt;
+
+  // Test materialized views to be written at index build time.
+  c.writeMaterializedViews_ = {{"demoView", "SELECT ?s { ?s <p> <o> }"}};
+
   EXPECT_NO_THROW(Qlever::buildIndex(c));
+
   {
     EngineConfig ec{c};
     Qlever engine{ec};
@@ -78,6 +84,9 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     engine.clearNamedResultCache();
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);
+
+    // Test that the requested materialized view exists.
+    EXPECT_NO_THROW(engine.loadMaterializedView("demoView"));
   }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -219,4 +228,63 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       engine.query(queryNeedingPermutations, ad_utility::MediaType::tsv),
       HasSubstr("permutation to be loaded"));
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, disableCaching) {
+  std::string filename = "libQleverDisableCaching.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexWithoutPermutations";
+  c.memoryLimit_ = std::nullopt;
+
+  // Build the index normally.
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  EngineConfig ec{c};
+  {
+    // Load the index with `disableCaching` set to true.
+    ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
+    Qlever engine{ec};
+    auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+    auto& qec = std::get<1>(plan);
+    EXPECT_TRUE(qec->disableCaching());
+  }
+  {
+    // Load the index with `disableCaching` set to false.
+    ec.disableCaching_ = QueryExecutionContext::DisableCaching::False;
+    Qlever engine{ec};
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_FALSE(qec->disableCaching());
+    }
+  }
+
+  {
+    // Load the index with `disableCaching` set to `FromRuntimeParameter`
+    // (default value)..
+    ec.disableCaching_ =
+        QueryExecutionContext::DisableCaching::FromRuntimeParameter;
+    Qlever engine{ec};
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_FALSE(qec->disableCaching());
+    }
+    // Now after the fact disable the caching for new operations via the runtime
+    // parameters:
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::disableCaching_>(true);
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_TRUE(qec->disableCaching());
+    }
+  }
 }
