@@ -194,7 +194,7 @@ class TurtleParser : public RdfParserBase {
   TripleComponent lastParseResult_;
 
   ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
-  std::optional<UriParserUri> baseIri_;
+  std::optional<ParsedUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.

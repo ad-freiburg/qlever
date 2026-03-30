@@ -7,7 +7,10 @@
 #ifndef QLEVER_UTIL_URIPARSERURI_H
 #define QLEVER_UTIL_URIPARSERURI_H
 
+#include <absl/cleanup/cleanup.h>
 #include <uriparser/Uri.h>
+
+#include <string_view>
 
 // Wrapper class for the `UriUriA` struct from uriparser. This is needed to
 // ensure that the memory allocated for the members of the struct is properly
@@ -43,6 +46,10 @@ class UriParserUri {
     return a == nullptr && b == nullptr;
   }
 
+  explicit UriParserUri(UriUriA uri) : uri_{std::move(uri)} {
+    uriMakeOwnerA(&uri_);
+  }
+
  public:
   explicit UriParserUri(std::string_view uriString) {
     auto result = uriParseSingleUriExA(
@@ -59,6 +66,24 @@ class UriParserUri {
     if (other.isValid_) {
       uriCopyUriA(&uri_, &other.uri_);
     }
+  }
+
+  UriParserUri resolveUri(std::string_view uriString) const {
+    UriUriA relativeIri;
+    auto parseResult =
+        uriParseSingleUriExA(&relativeIri, uriString.data(),
+                             uriString.data() + uriString.size(), nullptr);
+    absl::Cleanup cleanupRelativeIri{
+        [&relativeIri]() { uriFreeUriMembersA(&relativeIri); }};
+    AD_CONTRACT_CHECK(parseResult == URI_SUCCESS);
+    UriUriA resolvedIri;
+    auto resolveResult = uriAddBaseUriExA(&resolvedIri, &relativeIri, &uri_,
+                                          URI_RESOLVE_STRICTLY);
+    absl::Cleanup cleanupResolvedIri{
+        [&resolvedIri]() { uriFreeUriMembersA(&resolvedIri); }};
+    AD_CONTRACT_CHECK(resolveResult == URI_SUCCESS);
+    std::move(cleanupResolvedIri).Cancel();
+    return UriParserUri{std::move(resolvedIri)};
   }
 
   UriParserUri& operator=(const UriParserUri& other) noexcept {

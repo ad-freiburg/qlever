@@ -622,7 +622,7 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
     const ad_utility::triple_component::Iri& iri) {
-  UriParserUri uri{asStringViewUnsafe(iri.getContent())};
+  ParsedUri uri{asStringViewUnsafe(iri.getContent())};
   if (useSimplifiedGrammar_ &&
       (!baseIri_.has_value() || baseIri_.value() != uri)) {
     raiseDisallowedPrefixOrBaseError();
@@ -906,8 +906,8 @@ bool TurtleParser<T>::iriref() {
 
   auto resolveIri = [this](std::string_view iri) {
     if (baseIri_.has_value()) {
-      lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
-          iri, baseIri_.value().get());
+      lastParseResult_ =
+          TripleComponent::Iri::fromIrirefConsiderBase(iri, baseIri_.value());
     } else {
       lastParseResult_ = TripleComponent::Iri::fromIriref(iri);
     }

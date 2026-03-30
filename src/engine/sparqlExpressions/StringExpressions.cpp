@@ -13,8 +13,8 @@
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "util/ParsedUri.h"
 #include "util/StringUtils.h"
-#include "util/UriParserUri.h"
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
@@ -127,9 +127,9 @@ struct ApplyBaseIfPresent {
     // It's unfortunate that we have to parse the base IRI for every single IRI
     // that we want to resolve against it, but this interface only allows
     // passing `IdOrLiteralOrIri` or similar objects.
-    UriParserUri uri{asStringViewUnsafe(baseIri.getContent())};
+    ParsedUri uri{asStringViewUnsafe(baseIri.getContent())};
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), uri.get())};
+        extractIri(iri).toStringRepresentation(), uri)};
   }
 };
 using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;

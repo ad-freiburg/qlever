@@ -1450,7 +1450,7 @@ std::string Visitor::visit(Parser::IrirefContext* ctx) const {
     return ctx->getText();
   }
   return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.value().get())
+             ctx->getText(), baseIri_.value())
       .toStringRepresentation();
 }
 
@@ -1534,7 +1534,7 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
   }
   auto iri =
       TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
-  baseIri_ = UriParserUri{asStringViewUnsafe(iri.getContent())};
+  baseIri_ = ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________
@@ -2664,7 +2664,7 @@ ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
         std::move(argList[0]),
         std::make_unique<IriExpression>(
             baseIri_.has_value()
-                ? TripleComponent::Iri::fromUri(baseIri_.value().get())
+                ? TripleComponent::Iri::fromUri(baseIri_.value())
                 : TripleComponent::Iri{}));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);

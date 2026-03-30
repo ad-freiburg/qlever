@@ -414,7 +414,7 @@ TEST(RdfParserTest, base) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("@base <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.base());
-    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value().get())
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
                   .toStringRepresentation(),
               "<http://www.example.org/path/>");
     parser.setInputStream("@base \"no iriref\" .");
@@ -428,7 +428,7 @@ TEST(RdfParserTest, sparqlBase) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("BASE <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.sparqlBase());
-    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value().get())
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
                   .toStringRepresentation(),
               "<http://www.example.org/path/>");
     parser.setInputStream("BASE \"no iriref\" .");

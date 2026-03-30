@@ -79,39 +79,18 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                const UriUriA& baseUri) {
+                                const ParsedUri& baseUri) {
   auto iriSv = iriStringWithBrackets;
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
-  UriUriA relativeIri;
-  auto parseResult =
-      uriParseSingleUriExA(&relativeIri, iriSv.data() + 1,
-                           iriSv.data() + (iriSv.size() - 1), nullptr);
-  absl::Cleanup cleanupRelativeIri{
-      [&relativeIri]() { uriFreeUriMembersA(&relativeIri); }};
-  AD_CONTRACT_CHECK(parseResult == URI_SUCCESS);
-  UriUriA resolvedIri;
-  auto resolveResult = uriAddBaseUriExA(&resolvedIri, &relativeIri, &baseUri,
-                                        URI_RESOLVE_STRICTLY);
-  absl::Cleanup cleanupResolvedIri{
-      [&resolvedIri]() { uriFreeUriMembersA(&resolvedIri); }};
-  AD_CONTRACT_CHECK(resolveResult == URI_SUCCESS);
-  return fromUri(resolvedIri);
+  iriSv.remove_prefix(1);
+  iriSv.remove_suffix(1);
+  return fromUri(baseUri.resolveUri(iriSv));
 }
 
 // ____________________________________________________________________________
-Iri Iri::fromUri(const UriUriA& uri) {
-  int charsRequired;
-  auto printResult = uriToStringCharsRequiredA(&uri, &charsRequired);
-  AD_CORRECTNESS_CHECK(printResult == URI_SUCCESS);
-  std::string targetIri;
-  targetIri.resize(charsRequired + 2);
-  targetIri.at(0) = '<';
-  printResult =
-      uriToStringA(targetIri.data() + 1, &uri, charsRequired + 1, nullptr);
-  AD_CORRECTNESS_CHECK(printResult == URI_SUCCESS);
-  targetIri.back() = '>';
-  return fromStringRepresentation(std::move(targetIri));
+Iri Iri::fromUri(const ParsedUri& uri) {
+  return fromStringRepresentation(uri.toIriString());
 }
 
 }  // namespace ad_utility::triple_component

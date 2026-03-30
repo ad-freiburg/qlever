@@ -20,6 +20,7 @@
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
+#include "util/ParsedUri.h"
 
 namespace {
 
@@ -46,11 +47,11 @@ TEST(IriTest, emptyIri) {
 TEST(IriTest, fromIrirefConsiderBase) {
   // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
   // IRI and returns the results as a string (including the angle brackets).
-  UriParserUri baseUri{"http://example.com/uniprot"};
+  ParsedUri baseUri{"http://example.com/uniprot"};
   Iri baseForAbsoluteIris;
   auto fromIrirefConsiderBase =
       [&baseUri](std::string_view iriStringWithBrackets) {
-        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri.get())
+        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri)
             .toStringRepresentation();
       };
 

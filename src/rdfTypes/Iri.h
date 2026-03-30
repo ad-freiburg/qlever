@@ -12,8 +12,6 @@
 #ifndef QLEVER_SRC_PARSER_IRI_H
 #define QLEVER_SRC_PARSER_IRI_H
 
-#include <uriparser/Uri.h>
-
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -23,6 +21,7 @@
 #include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
+#include "util/ParsedUri.h"
 
 namespace ad_utility::triple_component {
 
@@ -113,10 +112,10 @@ class Iri : public BasicIri<true> {
   // without a scheme, prepend the base prefix for relative IRIs (like
   // `<UPI001AF4585D>`) or for absolute IRIs (like `</prosite/PS51927>`).
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const UriUriA& baseUri);
+                                    const ParsedUri& baseUri);
 
   // Create an `Iri` object given from the given `UriUriA` object.
-  static Iri fromUri(const UriUriA& uri);
+  static Iri fromUri(const ParsedUri& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).
