@@ -13,10 +13,11 @@
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
+#include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/LruCache.h"
@@ -68,22 +69,6 @@ struct LocatedTriplesState {
 // that it can be forward-declared. The actual content of the
 // `LocatedTriplesState` can change in some cases.
 using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
-
-// A class for keeping track of the number of triples of the `DeltaTriples`.
-struct DeltaTriplesCount {
-  int64_t triplesInserted_;
-  int64_t triplesDeleted_;
-
-  /// Output as json. The signature of this function is mandated by the json
-  /// library to allow for implicit conversion.
-  friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
-
-  friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                                     const DeltaTriplesCount& rhs);
-
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
-                                              triplesInserted_, triplesDeleted_)
-};
 
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
@@ -206,6 +191,13 @@ class DeltaTriples {
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
+
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {

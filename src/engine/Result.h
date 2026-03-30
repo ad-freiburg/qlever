@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
 

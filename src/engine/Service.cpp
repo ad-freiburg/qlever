@@ -15,6 +15,7 @@
 #include "engine/Sort.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "index/ExportIds.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
@@ -189,10 +190,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  // Send the query to the remote endpoint. Redirects are handled automatically
+  // by the HTTP client up to the limit specified by the runtime parameter
+  // `service-max-redirects`.
+  const size_t maxRedirects =
+      getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      "application/sparql-results+json", maxRedirects);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -540,7 +546,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using enum Datatype;
   const auto& optionalStringAndXsdType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
     return "UNDEF";

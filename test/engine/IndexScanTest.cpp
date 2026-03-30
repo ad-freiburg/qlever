@@ -1405,7 +1405,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
   IndexScan scan1{qec, Permutation::PSO,
                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
   EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?z"}));
   EXPECT_THROW(scan1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
@@ -1415,7 +1415,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
       SparqlTripleSimple{
           Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
   EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?g"}));
   EXPECT_THROW(scan2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -1425,7 +1425,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
                   SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?x"}),
                ad_utility::Exception);
-  EXPECT_TRUE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
                ad_utility::Exception);
 }
@@ -2130,4 +2130,18 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
     EXPECT_TRUE(localVocab.empty());
     EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, additionalVariablesInDescriptor) {
+  auto* qec = getQec();
+  IndexScan scan1{qec, Permutation::PSO,
+                  SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}}};
+  EXPECT_EQ(scan1.getDescriptor(), "IndexScan PSO ?s ?p ?o");
+
+  IndexScan scan2{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{
+          Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
+  EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }
