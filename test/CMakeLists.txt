@@ -181,7 +181,7 @@ addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
-addLinkAndDiscoverTest(EngineTest engine)
+addLinkAndDiscoverTest(IdTableUtilsTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
@@ -225,6 +225,8 @@ addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
+
+addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
@@ -496,6 +498,8 @@ addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 
 addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
+addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
@@ -504,3 +508,6 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
+addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
+
+addLinkAndDiscoverTest(ExportIdsTest index engine parser)

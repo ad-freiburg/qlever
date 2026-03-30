@@ -333,7 +333,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
   std::string pleaseUseParallelParsingOption =
-      "please use the command-line option --parse-parallel or -p";
+      "please use the command-line option --parallel-parsing or -p";
   // Parallel parsing specified in the `settings.json` file. This is deprecated
   // for a single input stream and forbidden for multiple input streams.
   if (parallelParsingSpecifiedViaJson.has_value()) {

@@ -1065,7 +1065,7 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
         ::testing::AllOf(
             ::testing::HasSubstr("end of a statement was not found"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
-            ::testing::HasSubstr("use `--parse-parallel false`")));
+            ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
   };
   // Input, where the first triple fits into a 40_B buffer, but the second
@@ -1091,7 +1091,7 @@ TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::HasSubstr("'--parse-parallel false'"));
+        ::testing::HasSubstr("'--parallel-parsing false'"));
     ad_utility::deleteFile(filename);
   };
   // Redefinition
@@ -1199,7 +1199,7 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::AllOf(::testing::HasSubstr("`--parse-parallel false`"),
+        ::testing::AllOf(::testing::HasSubstr("`--parallel-parsing false`"),
                          ::testing::HasSubstr("multiline string literal")));
     ad_utility::deleteFile(filename);
   };

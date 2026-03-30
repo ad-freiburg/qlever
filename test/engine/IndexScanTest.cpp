@@ -2131,3 +2131,17 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
     EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, additionalVariablesInDescriptor) {
+  auto* qec = getQec();
+  IndexScan scan1{qec, Permutation::PSO,
+                  SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}}};
+  EXPECT_EQ(scan1.getDescriptor(), "IndexScan PSO ?s ?p ?o");
+
+  IndexScan scan2{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{
+          Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
+  EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
+}
