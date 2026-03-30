@@ -157,4 +157,59 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
+TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
+  auto testNumber = [](uint64_t number, ad_utility::source_location l =
+                                            AD_CURRENT_SOURCE_LOC()) {
+    using m = EncodedIriManager;
+    auto trace = generateLocationTrace(l);
+    EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
+                          m::encodeDecimalToNBit(std::to_string(number))));
+  };
+  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
+  testNumber(0);
+  testNumber(MAX);
+  auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
+  for (auto _ = 0; _ < 20; ++_) {
+    testNumber(intGenerator());
+  }
+}
+// _____________________________________________________________________________
+struct TestHardcodedPrefixes {
+  static constexpr std::array<std::string_view, 1> value = {
+      "http://example.org/always/"};
+};
+
+TEST(EncodedIriManager, HardcodedPrefixes) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  // Default constructor includes hardcoded prefix.
+  Manager em;
+  auto id = em.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em.toString(id.value()), "<http://example.org/always/42>");
+
+  // Constructor with additional prefixes also includes hardcoded.
+  Manager em2{{"http://other.org/"}};
+  auto id2 = em2.encode("<http://example.org/always/99>");
+  ASSERT_TRUE(id2.has_value());
+  auto id3 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id3.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, HardcodedPrefixesJson) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  Manager em{{"http://other.org/"}};
+  nlohmann::json j = em;
+  Manager em2 = j.get<Manager>();
+  auto id = em2.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");
+  auto id2 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id2.has_value());
+}
+
 }  // namespace
