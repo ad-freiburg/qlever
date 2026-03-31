@@ -274,7 +274,7 @@ void TextIndexBuilder::addContextToVector(
 void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
-  currenttOffset_ = 0;
+  off_t currentOffset = 0;
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
@@ -293,9 +293,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, currenttOffset_, scoreIsInt);
+          out, classicPostings, currentOffset, scoreIsInt);
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, currenttOffset_, scoreIsInt);
+          out, entityPostings, currentOffset, scoreIsInt);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -320,9 +320,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
   // Write the last block
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, currenttOffset_, scoreIsInt);
+      out, classicPostings, currentOffset, scoreIsInt);
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, currenttOffset_, scoreIsInt);
+      out, entityPostings, currentOffset, scoreIsInt);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();
