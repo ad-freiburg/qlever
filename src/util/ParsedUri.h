@@ -57,8 +57,7 @@ class ParsedUriImpl {
                                       charsRequired + 1, nullptr);
       AD_CORRECTNESS_CHECK(printResult == URI_SUCCESS);
     } else {
-      std::memcpy(targetIri.data() + 1, uri_.buffer().data() + 1,
-                  charsRequired);
+      std::memcpy(targetIri.data() + 1, uri_.buffer().data(), charsRequired);
     }
     targetIri.back() = '>';
     return targetIri;
