@@ -1121,6 +1121,8 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
     // so that user-specified blank node labels (_:foo) have the same ID
     // across all batches of the same file.
     parser.setFileBlankNodePrefix(this->fileBlankNodePrefix_);
+    parser.integerOverflowBehavior() = this->integerOverflowBehavior();
+    parser.invalidLiteralsAreSkipped() = this->invalidLiteralsAreSkipped();
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
     std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
@@ -1356,6 +1358,8 @@ RdfMultifileParser::RdfMultifileParser(
     try {
       auto parser =
           makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
+      parser->integerOverflowBehavior() = this->integerOverflowBehavior();
+      parser->invalidLiteralsAreSkipped() = this->invalidLiteralsAreSkipped();
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {
