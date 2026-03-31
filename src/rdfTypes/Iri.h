@@ -114,7 +114,7 @@ class Iri : public BasicIri<true> {
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                     const ParsedUri& baseUri);
 
-  // Create an `Iri` object given from the given `UriUriA` object.
+  // Create an `Iri` object given from the given `ParsedUri` object.
   static Iri fromUri(const ParsedUri& uri);
 };
 

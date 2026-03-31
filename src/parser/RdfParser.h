@@ -27,9 +27,9 @@
 #include "util/HashMap.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
+#include "util/ParsedUri.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
-#include "util/UriParserUri.h"
 
 enum class TurtleParserIntegerOverflowBehavior {
   Error,

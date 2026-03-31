@@ -23,9 +23,12 @@ class ParsedUriImpl {
 
   explicit ParsedUriImpl(std::string_view uri) : uri_{uri} {}
 
-  bool operator==(const ParsedUriImpl&) const requires(specCompliant) = default;
-  bool operator==(const ParsedUriImpl& other) const requires(!specCompliant) {
-    return uri_.buffer() == other.uri_.buffer();
+  bool operator==(const ParsedUriImpl& other) const {
+    if constexpr (specCompliant) {
+      return uri_.get() == other.uri_.get();
+    } else {
+      return uri_.buffer() == other.uri_.buffer();
+    }
   }
 
   ParsedUriImpl resolveUri(std::string_view uriString) const {
