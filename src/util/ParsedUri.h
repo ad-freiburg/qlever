@@ -25,7 +25,7 @@ class ParsedUriImpl {
 
   bool operator==(const ParsedUriImpl& other) const {
     if constexpr (specCompliant) {
-      return uri_.get() == other.uri_.get();
+      return uri_ == other.uri_;
     } else {
       return uri_.buffer() == other.uri_.buffer();
     }
