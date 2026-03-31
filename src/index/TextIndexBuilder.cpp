@@ -318,7 +318,6 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
     }
   }
   // Write the last block
-  AD_CONTRACT_CHECK(!classicPostings.empty());
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
       out, classicPostings, currenttOffset_, scoreIsInt);
