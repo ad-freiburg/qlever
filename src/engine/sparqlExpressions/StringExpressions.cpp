@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {
@@ -124,10 +125,13 @@ struct ApplyBaseIfPresent {
     if (baseIri.empty()) {
       return iri;
     }
-    // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
+
+    // It's unfortunate that we have to parse the base IRI for every single IRI
+    // that we want to resolve against it, but this interface only allows
+    // passing `IdOrLiteralOrIri` or similar objects.
+    ParsedUri uri{asStringViewUnsafe(baseIri.getContent())};
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
-        baseIri.getBaseIri(true))};
+        extractIri(iri).toStringRepresentation(), uri)};
   }
 };
 using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
