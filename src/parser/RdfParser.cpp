@@ -1028,19 +1028,18 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
         // (maybe the failure was due to statements crossing our block).
         if (resetStateAndRead(&b)) {
           // we have successfully extended our buffer
-          if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
-            auto d = tok_.view();
+          if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE.getBytes()) {
+            std::string_view unparsed = tok_.view();
             AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                         << " Within " << (BZIP2_MAX_TOTAL_BUFFER_SIZE >> 10)
-                         << "MB of Turtle input\n";
+                         << " Within " << BZIP2_MAX_TOTAL_BUFFER_SIZE
+                         << " of Turtle input\n";
             AD_LOG_ERROR << "If you really have Turtle input with such a "
                             "long structure please recompile with adjusted "
                             "constants in ConstantsIndexCreation.h or "
                             "decompress your file and "
                             "use --file-format mmap\n";
-            auto s = std::min(size_t(1000), size_t(d.size()));
             AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-            AD_LOG_INFO << std::string_view(d.data(), s) << std::endl;
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             if (ex.has_value()) {
               throw ex.value();
 
@@ -1063,15 +1062,14 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
             // triples parsed so far, check if we have indeed parsed through
             // the complete input
             tok_.skipWhitespaceAndComments();
-            auto d = tok_.view();
-            if (!d.empty()) {
+            std::string_view unparsed = tok_.view();
+            if (!unparsed.empty()) {
               AD_LOG_INFO
                   << "Parsing of line has Failed, but parseInput is not "
                      "yet exhausted. Remaining bytes: "
-                  << d.size() << '\n';
-              auto s = std::min(size_t(1000), size_t(d.size()));
+                  << unparsed.size() << '\n';
               AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-              AD_LOG_INFO << std::string_view(d.data(), s) << std::endl;
+              AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             }
             isParserExhausted_ = true;
             break;
