@@ -101,9 +101,11 @@ NormalizedStringView BasicLiteralOrIri<isOwning>::getContent() const {
 template <bool isOwning>
 ql::strong_ordering BasicLiteralOrIri<isOwning>::compareThreeWay(
     const BasicLiteralOrIri& rhs) const {
-  int i = IndexImpl::staticGlobalSingletonComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation(),
-      LocaleManager::Level::TOTAL);
+  int i = IndexImpl::staticGlobalSingletonIndex()
+              .getVocab()
+              .getCaseComparator()
+              .compare(toStringRepresentation(), rhs.toStringRepresentation(),
+                       LocaleManager::Level::TOTAL);
   if (i < 0) {
     return ql::strong_ordering::less;
   } else if (i > 0) {

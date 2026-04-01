@@ -491,7 +491,7 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
   // Ensure that the global singleton comparator (which is used for the <=>
   // comparison) is available. Creating a QEC sets this comparator.
   getQec(TestIndexConfig{});
-  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
+  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonIndex());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
   EXPECT_THAT(ql::compareThreeWay(l1, l2),
               testing::Not(testing::Eq(ql::strong_ordering::equal)));
