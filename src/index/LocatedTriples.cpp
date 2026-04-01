@@ -115,11 +115,11 @@ void SortedLocatedTriplesVector::sortSmallPart() {
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::consolidate() {
+void SortedLocatedTriplesVector::consolidate(double threshold) {
   if (!smallPartIsSorted_) {
     if (static_cast<double>(triples_.size() - numItemsLargePart_) /
             triples_.size() >
-        0.25) {
+        threshold) {
       sortAndMergeParts();
     } else {
       sortSmallPart();

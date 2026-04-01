@@ -140,7 +140,8 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
           // fullSort benchmark
           SortedLocatedTriplesVector vec = prepareVector(preExisting, newItems);
           table.addMeasurement(nIdx, 2, [&]() {
-            vec.sortSmallPart();
+            SortedLocatedTriplesVector::sortAndRemoveDuplicates(vec.triples_,
+                                                                vec.triples_);
             vec.numItemsLargePart_ = vec.triples_.size();
           });
         }

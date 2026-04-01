@@ -40,4 +40,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(EnsureIntegrationBenchmark index)
 
+    addAndLinkBenchmark(ZipMergeIteratorBenchmark index)
+
+    addAndLinkBenchmark(InsertBatchBenchmark index)
+
 endif()

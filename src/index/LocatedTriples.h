@@ -26,7 +26,9 @@ class Permutation;
 
 namespace ad_benchmark {
 class EnsureIntegrationBenchmark;
-}
+class ZipMergeIteratorBenchmark;
+class InsertBatchBenchmark;
+}  // namespace ad_benchmark
 
 struct NumAddedAndDeleted {
   size_t numAdded_;
@@ -128,6 +130,8 @@ class SortedLocatedTriplesVector {
   bool isClean() const { return smallPartIsSorted_; }
 
   friend class ad_benchmark::EnsureIntegrationBenchmark;
+  friend class ad_benchmark::ZipMergeIteratorBenchmark;
+  friend class ad_benchmark::InsertBatchBenchmark;
   FRIEND_TEST(SortedVectorTest, sortedVector);
 
  public:
@@ -139,7 +143,7 @@ class SortedLocatedTriplesVector {
   // Consolidates the stored items after inserts. `consolidate` must be called
   // before any access after inserting new items. After calling `consolidate`
   // `isClean` will be true.
-  void consolidate();
+  void consolidate(double threshold = 0.25);
 
   void insert(LocatedTriple lt);
 
