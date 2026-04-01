@@ -89,59 +89,38 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
     BenchmarkResults results;
 
     for (size_t N : totalSizes_) {
-      // Row names from small-part percentages.
-      std::vector<std::string> rowNames;
-      for (size_t pct : smallPartPercents_) {
-        rowNames.push_back(std::to_string(pct) + "%");
-      }
+      std::string nStr = formatNumber(N);
 
-      std::vector<std::string> columnNames = {
-          "Small part %",  "Vector iteration", "ZipMergeIterator iteration",
-          "Set iteration", "Consolidate",      "sortSmallPart",
-          "Set copy",      "SortedVector copy"};
+      // Table 1: Iteration and copy (independent of small part %).
+      {
+        std::vector<std::string> rowNames = {"result"};
+        std::vector<std::string> columnNames = {
+            "Vector iteration", "BlockSorted iteration", "Set iteration",
+            "Set copy",         "SortedVector copy",     "BlockSorted copy"};
 
-      std::string tableName = "N=" + formatNumber(N) + " total elements";
-      ResultTable& table = results.addTable(tableName, rowNames, columnNames);
+        ResultTable& fixedTable = results.addTable(
+            "N=" + nStr + " iteration and copy", rowNames, columnNames);
 
-      for (size_t pctIdx = 0; pctIdx < smallPartPercents_.size(); pctIdx++) {
-        size_t pct = smallPartPercents_[pctIdx];
-        size_t smallSize = N * pct / 100;
-        size_t largeSize = N - smallSize;
+        auto allSorted = generateSorted(N, 42);
 
-        table.setEntry(pctIdx, 0, pct);
-
-        // Generate two independently sorted sets of triples.
-        auto largePart = generateSorted(largeSize, 42);
-        auto smallPart = generateSorted(smallSize, 12345);
-
-        // Column 1: Plain vector iteration (baseline).
-        // Merge both parts into a single sorted vector and iterate it.
-        std::vector<LocatedTriple> merged;
-        merged.reserve(N);
-        merged.insert(merged.end(), largePart.begin(), largePart.end());
-        merged.insert(merged.end(), smallPart.begin(), smallPart.end());
-        std::sort(merged.begin(), merged.end(),
-                  [](const LocatedTriple& a, const LocatedTriple& b) {
-                    return a.triple_ < b.triple_;
-                  });
-
-        table.addMeasurement(pctIdx, 1, [&]() {
+        // Vector iteration (baseline).
+        fixedTable.addMeasurement(0, 0, [&]() {
           volatile size_t count = 0;
-          for (const auto& item : merged) {
-            // Access the triple to prevent dead-code elimination.
+          for (const auto& item : allSorted) {
             if (item.insertOrDelete_) {
               count++;
             }
           }
         });
 
+        // BlockSorted iteration.
         {
-          // Column 2: ZipMergeIterator iteration.
-          SortedLocatedTriplesVector vec = prepareVector(largePart, smallPart);
-
-          table.addMeasurement(pctIdx, 2, [&]() {
+          BlockSortedLocatedTriplesVector bvec =
+              BlockSortedLocatedTriplesVector::fromSorted(
+                  std::vector(allSorted));
+          fixedTable.addMeasurement(0, 1, [&]() {
             volatile size_t count = 0;
-            for (const auto& item : vec) {
+            for (const auto& item : bvec) {
               if (item.insertOrDelete_) {
                 count++;
               }
@@ -149,12 +128,11 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
           });
         }
 
+        // Set iteration.
         {
-          // Column 3: std::set iteration.
-          std::set<LocatedTriple, LocatedTripleCompare> s(merged.begin(),
-                                                          merged.end());
-
-          table.addMeasurement(pctIdx, 3, [&]() {
+          std::set<LocatedTriple, LocatedTripleCompare> s(allSorted.begin(),
+                                                          allSorted.end());
+          fixedTable.addMeasurement(0, 2, [&]() {
             volatile size_t count = 0;
             for (const auto& item : s) {
               if (item.insertOrDelete_) {
@@ -164,38 +142,102 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
           });
         }
 
+        // Set copy.
         {
-          // Column 4: Consolidate (merge both parts).
-          SortedLocatedTriplesVector vec = prepareVector(largePart, smallPart);
-          table.addMeasurement(pctIdx, 4, [&]() { vec.sortAndMergeParts(); });
-        }
-
-        {
-          // Column 5: Sort small part.
-          SortedLocatedTriplesVector vec =
-              prepareVector(largePart, generate(smallSize, 12345));
-          table.addMeasurement(pctIdx, 5, [&]() { vec.sortSmallPart(); });
-        }
-
-        {
-          // Column 6: std::set copy.
-          std::set<LocatedTriple, LocatedTripleCompare> s(merged.begin(),
-                                                          merged.end());
-          table.addMeasurement(pctIdx, 6, [&]() {
+          std::set<LocatedTriple, LocatedTripleCompare> s(allSorted.begin(),
+                                                          allSorted.end());
+          fixedTable.addMeasurement(0, 3, [&]() {
             auto copy = s;
             volatile auto* p = &copy;
             (void)p;
           });
         }
 
+        // SortedVector copy.
         {
-          // Column 7: SortedLocatedTriplesVector copy.
-          SortedLocatedTriplesVector vec = prepareVector(largePart, smallPart);
-          table.addMeasurement(pctIdx, 7, [&]() {
+          SortedLocatedTriplesVector vec = prepareVector(allSorted, {});
+          fixedTable.addMeasurement(0, 4, [&]() {
             auto copy = vec;
             volatile auto* p = &copy;
             (void)p;
           });
+        }
+
+        // BlockSorted copy.
+        {
+          BlockSortedLocatedTriplesVector bvec =
+              BlockSortedLocatedTriplesVector::fromSorted(
+                  std::vector(allSorted));
+          fixedTable.addMeasurement(0, 5, [&]() {
+            auto copy = bvec;
+            volatile auto* p = &copy;
+            (void)p;
+          });
+        }
+      }
+
+      // Table 2: Operations that depend on small part %.
+      {
+        std::vector<std::string> rowNames;
+        for (size_t pct : smallPartPercents_) {
+          rowNames.push_back(std::to_string(pct) + "%");
+        }
+
+        std::vector<std::string> columnNames = {
+            "Small part %", "ZipMergeIterator iteration", "zipMerge",
+            "sortSmallPart", "BlockSorted consolidate"};
+
+        ResultTable& table = results.addTable(
+            "N=" + nStr + " small-part dependent", rowNames, columnNames);
+
+        for (size_t pctIdx = 0; pctIdx < smallPartPercents_.size(); pctIdx++) {
+          size_t pct = smallPartPercents_[pctIdx];
+          size_t smallSize = N * pct / 100;
+          size_t largeSize = N - smallSize;
+
+          table.setEntry(pctIdx, 0, pct);
+
+          auto largePart = generateSorted(largeSize, 42);
+          auto smallPart = generateSorted(smallSize, 12345);
+
+          // ZipMergeIterator iteration with varying small part.
+          {
+            SortedLocatedTriplesVector vec =
+                prepareVector(largePart, smallPart);
+            table.addMeasurement(pctIdx, 1, [&]() {
+              volatile size_t count = 0;
+              for (const auto& item : vec) {
+                if (item.insertOrDelete_) {
+                  count++;
+                }
+              }
+            });
+          }
+
+          // zipMerge (merge both parts).
+          {
+            SortedLocatedTriplesVector vec =
+                prepareVector(largePart, smallPart);
+            table.addMeasurement(pctIdx, 2, [&]() { vec.sortAndMergeParts(); });
+          }
+
+          // sortSmallPart.
+          {
+            SortedLocatedTriplesVector vec =
+                prepareVector(largePart, generate(smallSize, 12345));
+            table.addMeasurement(pctIdx, 3, [&]() { vec.sortSmallPart(); });
+          }
+
+          // BlockSorted consolidate.
+          {
+            BlockSortedLocatedTriplesVector bvec =
+                BlockSortedLocatedTriplesVector::fromSorted(
+                    std::vector(largePart));
+            for (const auto& item : generate(smallSize, 12345)) {
+              bvec.insert(item);
+            }
+            table.addMeasurement(pctIdx, 4, [&]() { bvec.consolidate(); });
+          }
         }
       }
     }

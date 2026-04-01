@@ -114,10 +114,16 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
       }
 
       // Column names
-      std::vector<std::string> columnNames = {
-          "N items",         "Vector: Insert only", "Vector: Integration",
-          "Set: Insert",     "Vector: Copy",        "Set: Copy",
-          "Set: Copy (slow)"};
+      std::vector<std::string> columnNames = {"N items",
+                                              "Vector: Insert only",
+                                              "Vector: Integration",
+                                              "Set: Insert",
+                                              "Vector: Copy",
+                                              "Set: Copy",
+                                              "Set: Copy (slow)",
+                                              "BlockSorted: Insert only",
+                                              "BlockSorted: Integration",
+                                              "BlockSorted: Copy"};
 
       // Create table
       std::string tableName = "M=" + std::to_string(M) + " items inserted";
@@ -185,6 +191,27 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
                                                              s.end());
 
           // Use result to prevent optimization
+          volatile size_t dummy = copy.size();
+          (void)dummy;
+        });
+
+        // Column 7: BlockSorted Insert only
+        BlockSortedLocatedTriplesVector bvec =
+            BlockSortedLocatedTriplesVector::fromSorted(
+                std::vector(preExisting));
+        table.addMeasurement(nIdx, 7, [&]() {
+          for (const auto& item : newItems) {
+            bvec.insert(item);
+          }
+        });
+
+        // Column 8: BlockSorted Integration
+        table.addMeasurement(nIdx, 8, [&]() { bvec.consolidate(); });
+
+        // Column 9: BlockSorted Copy
+        table.addMeasurement(nIdx, 9, [&]() {
+          BlockSortedLocatedTriplesVector copy = bvec;
+
           volatile size_t dummy = copy.size();
           (void)dummy;
         });
