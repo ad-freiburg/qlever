@@ -49,7 +49,9 @@ CPP_template(typename It, typename Compare = std::less<>,
  public:
   explicit ZipMergeIteratorImpl(It b1, It e1, It b2, It e2, Compare cmp = {},
                                 Projection proj = {})
-      : it1(b1), end1(e1), it2(b2), end2(e2), comp(cmp), proj(proj) {}
+      : it1(b1), end1(e1), it2(b2), end2(e2), comp(cmp), proj(proj) {
+    decision_ = decide();
+  }
 
   ZipMergeIteratorImpl() = default;
 
@@ -59,6 +61,8 @@ CPP_template(typename It, typename Compare = std::less<>,
     UseSecond,          // yield *it2_ and advance it2_
     UseSecondSkipFirst  // equal projection: yield *it2_, advance both
   };
+
+  Decision decision_;
 
   // Determine which element to yield next.
   Decision decide() const {
@@ -73,15 +77,15 @@ CPP_template(typename It, typename Compare = std::less<>,
 
  public:
   reference operator*() const {
-    return (decide() == Decision::UseFirst) ? *it1 : *it2;
+    return (decision_ == Decision::UseFirst) ? *it1 : *it2;
   }
   pointer operator->() const {
-    return (decide() == Decision::UseFirst ? it1.operator->()
-                                           : it2.operator->());
+    return (decision_ == Decision::UseFirst ? it1.operator->()
+                                            : it2.operator->());
   }
 
   ZipMergeIteratorImpl& operator++() {
-    switch (decide()) {
+    switch (decision_) {
       case Decision::UseFirst:
         ++it1;
         break;
@@ -93,6 +97,7 @@ CPP_template(typename It, typename Compare = std::less<>,
         ++it2;
         break;
     }
+    decision_ = decide();
     return *this;
   }
   ZipMergeIteratorImpl operator++(int) {
