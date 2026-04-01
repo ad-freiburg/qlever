@@ -31,6 +31,10 @@ class ParsedUriImpl {
     }
   }
 
+  bool operator!=(const ParsedUriImpl& other) const {
+    return !(*this == other);
+  }
+
   ParsedUriImpl resolveUri(std::string_view uriString) const {
     if constexpr (specCompliant) {
       return ParsedUriImpl{uri_.resolveUri(uriString)};
