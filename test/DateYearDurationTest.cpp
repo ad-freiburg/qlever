@@ -933,8 +933,16 @@ TEST(DateYearOrDuration, Subtraction) {
 
     date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, -4));  // UTC - 4
     result = date - duration;
+    ASSERT_TRUE(result);
     EXPECT_EQ(DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, -4)),
               result.value());
+
+    date = DateYearOrDuration(Date(2004, 5, 16));  // Date without time.
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 10, 0, 0, 0));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(2004, 5, 6, 0, 0, 0)), result.value());
   }
   {
     // Test for `LargeYear` - `LargeYear`.
