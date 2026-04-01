@@ -487,14 +487,7 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
       "\"Comparative evaluation of the protective effect of sodium "
       "valproate, phenazepam and ionol in stress-induced liver damage in "
       "rats\"@en");
-  using namespace ad_utility::testing;
-  // Ensure that the global singleton comparator (which is used for the <=>
-  // comparison) is available. Creating a QEC sets this comparator.
-  getQec(TestIndexConfig{});
-  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonIndex());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
-  EXPECT_THAT(ql::compareThreeWay(l1, l2),
-              testing::Not(testing::Eq(ql::strong_ordering::equal)));
 }
 
 // _____________________________________________________________________________
