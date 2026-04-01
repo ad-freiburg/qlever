@@ -228,7 +228,8 @@ class BlockSortedLocatedTriplesVector {
   // boundaries (each block's last element).
   size_t findBlock(const LocatedTriple& lt) const;
 
-  // Split block at `blockIdx` into two halves if it exceeds kTargetBlockSize.
+  // Split block at `blockIdx` into kTargetBlockSize-sized pieces if it exceeds
+  // kTargetBlockSize.
   void splitIfNeeded(size_t blockIdx);
 
   // Remove empty blocks from `blocks_`.
@@ -236,8 +237,7 @@ class BlockSortedLocatedTriplesVector {
 
   // Merge sorted `pending` elements into an existing sorted `block` with
   // last-wins deduplication on equal triples.
-  static void mergeIntoBlock(Block& block,
-                             ql::span<const LocatedTriple> pending);
+  static void mergeIntoBlock(Block& block, ql::span<LocatedTriple> pending);
 
   bool isClean() const { return pending_.empty(); }
 

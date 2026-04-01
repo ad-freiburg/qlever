@@ -236,15 +236,21 @@ size_t BlockSortedLocatedTriplesVector::findBlock(
 
 // ____________________________________________________________________________
 void BlockSortedLocatedTriplesVector::splitIfNeeded(size_t blockIdx) {
-  auto& block = blocks_.at(blockIdx);
+  Block& block = blocks_.at(blockIdx);
   if (block.size() <= kTargetBlockSize) {
     return;
   }
-  size_t mid = block.size() / 2;
-  Block newBlock(std::make_move_iterator(block.begin() + mid),
-                 std::make_move_iterator(block.end()));
-  block.erase(block.begin() + mid, block.end());
-  blocks_.insert(blocks_.begin() + blockIdx + 1, std::move(newBlock));
+  // Split into ceil(block.size() / kTargetBlockSize) new blocks.
+  std::vector<Block> newBlocks;
+  for (size_t offset = 0; offset < block.size(); offset += kTargetBlockSize) {
+    size_t end = std::min(offset + kTargetBlockSize, block.size());
+    newBlocks.emplace_back(std::make_move_iterator(block.begin() + offset),
+                           std::make_move_iterator(block.begin() + end));
+  }
+  blocks_.erase(blocks_.begin() + blockIdx);
+  blocks_.insert(blocks_.begin() + blockIdx,
+                 std::make_move_iterator(newBlocks.begin()),
+                 std::make_move_iterator(newBlocks.end()));
 }
 
 // ____________________________________________________________________________
@@ -254,7 +260,7 @@ void BlockSortedLocatedTriplesVector::removeEmptyBlocks() {
 
 // ____________________________________________________________________________
 void BlockSortedLocatedTriplesVector::mergeIntoBlock(
-    Block& block, ql::span<const LocatedTriple> pending) {
+    Block& block, ql::span<LocatedTriple> pending) {
   if (pending.empty()) {
     return;
   }
@@ -270,18 +276,18 @@ void BlockSortedLocatedTriplesVector::mergeIntoBlock(
       merged.push_back(std::move(*blockIt));
       ++blockIt;
     } else if (lt(*pendIt, *blockIt)) {
-      merged.push_back(*pendIt);
+      merged.push_back(std::move(*pendIt));
       ++pendIt;
     } else {
       // Equal triples: pending (newer) wins.
-      merged.push_back(*pendIt);
+      merged.push_back(std::move(*pendIt));
       ++pendIt;
       ++blockIt;
     }
   }
 
   std::move(blockIt, block.end(), std::back_inserter(merged));
-  std::copy(pendIt, pending.end(), std::back_inserter(merged));
+  std::move(pendIt, pending.end(), std::back_inserter(merged));
 
   block.swap(merged);
 }
@@ -312,8 +318,7 @@ void BlockSortedLocatedTriplesVector::consolidate(double /*threshold*/) {
   }
 
   // Sort and deduplicate the pending buffer.
-  SortedLocatedTriplesVector::sortAndRemoveDuplicates(
-      pending_, ql::ranges::subrange(pending_.begin(), pending_.end()));
+  SortedLocatedTriplesVector::sortAndRemoveDuplicates(pending_, pending_);
 
   if (blocks_.empty()) {
     // No existing blocks: the pending buffer becomes the first block.
@@ -337,8 +342,7 @@ void BlockSortedLocatedTriplesVector::consolidate(double /*threshold*/) {
       }
 
       if (pendIt != pendEnd) {
-        mergeIntoBlock(blocks_[i], ql::span<const LocatedTriple>(
-                                       &*pendIt, pendEnd - pendIt));
+        mergeIntoBlock(blocks_[i], ql::span(&*pendIt, pendEnd - pendIt));
         splitIfNeeded(i);
         // If we just split, the next block is at i+1 which is the new second
         // half. The loop increment will move to i+1 which is correct since
@@ -348,11 +352,12 @@ void BlockSortedLocatedTriplesVector::consolidate(double /*threshold*/) {
     }
 
     // If there are remaining pending elements beyond all existing blocks,
-    // create new block(s).
+    // append them to the last block (they are all > last block's max, so
+    // sorted order is preserved) and split if needed.
     if (pendIt != pending_.end()) {
-      Block newBlock(std::make_move_iterator(pendIt),
-                     std::make_move_iterator(pending_.end()));
-      blocks_.push_back(std::move(newBlock));
+      auto& lastBlock = blocks_.back();
+      lastBlock.insert(lastBlock.end(), std::make_move_iterator(pendIt),
+                       std::make_move_iterator(pending_.end()));
       splitIfNeeded(blocks_.size() - 1);
     }
   }
