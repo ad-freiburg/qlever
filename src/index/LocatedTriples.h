@@ -18,6 +18,7 @@
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
+#include "util/FlattenIterator.h"
 #include "util/HashMap.h"
 #include "util/MergeInputRange.h"
 #include "util/TimeTracer.h"
@@ -132,6 +133,7 @@ class SortedLocatedTriplesVector {
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   friend class ad_benchmark::ZipMergeIteratorBenchmark;
   friend class ad_benchmark::InsertBatchBenchmark;
+  friend class BlockSortedLocatedTriplesVector;
   FRIEND_TEST(SortedVectorTest, sortedVector);
 
  public:
@@ -209,7 +211,81 @@ class SortedLocatedTriplesVector {
 };
 static_assert(std::ranges::range<SortedLocatedTriplesVector>);
 
-using LocatedTriples = SortedLocatedTriplesVector;
+// Variant of `SortedLocatedTriplesVector` that stores triples across multiple
+// sorted, non-overlapping blocks. Blocks are dynamically split when they exceed
+// a target size. After consolidation, each block is fully sorted and iteration
+// is plain sequential vector traversal with no merge comparisons.
+class BlockSortedLocatedTriplesVector {
+  using Block = std::vector<LocatedTriple>;
+
+  std::vector<Block> blocks_;
+  std::vector<LocatedTriple> pending_;
+  size_t totalSize_ = 0;
+
+  static constexpr size_t kTargetBlockSize = 16384;
+
+  // Find the block index where `lt` belongs by binary search on block
+  // boundaries (each block's last element).
+  size_t findBlock(const LocatedTriple& lt) const;
+
+  // Split block at `blockIdx` into two halves if it exceeds kTargetBlockSize.
+  void splitIfNeeded(size_t blockIdx);
+
+  // Remove empty blocks from `blocks_`.
+  void removeEmptyBlocks();
+
+  // Merge sorted `pending` elements into an existing sorted `block` with
+  // last-wins deduplication on equal triples.
+  static void mergeIntoBlock(Block& block,
+                             ql::span<const LocatedTriple> pending);
+
+  bool isClean() const { return pending_.empty(); }
+
+  friend class ad_benchmark::EnsureIntegrationBenchmark;
+  friend class ad_benchmark::ZipMergeIteratorBenchmark;
+  friend class ad_benchmark::InsertBatchBenchmark;
+  FRIEND_TEST(BlockSortedVectorTest, internals);
+
+ public:
+  BlockSortedLocatedTriplesVector() = default;
+
+  static BlockSortedLocatedTriplesVector fromSorted(
+      std::vector<LocatedTriple> sortedTriples);
+
+  void consolidate(double threshold = 0.25);
+
+  void insert(LocatedTriple lt);
+
+  using iterator =
+      ad_utility::detail::FlattenIterator<std::vector<Block>::iterator,
+                                          Block::iterator>;
+  using const_iterator =
+      ad_utility::detail::FlattenIterator<std::vector<Block>::const_iterator,
+                                          Block::const_iterator>;
+
+  iterator begin();
+  const_iterator begin() const;
+  iterator end();
+  const_iterator end() const;
+
+  LocatedTriple& back();
+  const LocatedTriple& back() const;
+
+  void erase(const LocatedTriple& elem);
+  void erase(std::vector<LocatedTriple> toDelete);
+
+  size_t size() const;
+  bool empty() const;
+
+  bool operator==(const BlockSortedLocatedTriplesVector& other) const {
+    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(other.isClean());
+    return ql::ranges::equal(*this, other);
+  }
+};
+static_assert(std::ranges::range<BlockSortedLocatedTriplesVector>);
+
+using LocatedTriples = BlockSortedLocatedTriplesVector;
 
 // This operator is only for debugging and testing. It returns a
 // human-readable representation.
