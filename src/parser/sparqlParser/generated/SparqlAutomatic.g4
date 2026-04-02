@@ -369,8 +369,20 @@ pathEltOrInverse
     ;
 
 pathMod
-    : '+' | '*' | '?'
+    : '+' | '*' | '?' | pathSyntaxExtension
     ;
+
+pathSyntaxExtension
+    : '{' ( exactLength | onlyMin | minMax | onlyMax ) '}'
+    ;
+
+exactLength: integer ;
+
+onlyMin: integer ',' ;
+
+minMax: integer ',' integer ;
+
+onlyMax: ',' integer ;
 
 
 pathPrimary
