@@ -294,6 +294,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   auto loc = LocatedTriple::locateTriplesInPermutation(
       locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
+  locatedTriples.consolidateAllBlocks();
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();
   auto blocks =
@@ -540,6 +541,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
       LocatedTriple{0, IdTriple{{V(1), V(2), V(3), V(g2)}}, false});
   locatedTriples.setOriginalMetadata(blocks);
   locatedTriples.add(deleteTriples);
+  locatedTriples.consolidateAllBlocks();
 
   // Test infrastructure.
   using Loc = ad_utility::source_location;
@@ -565,6 +567,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   deleteTriples.emplace_back(
       LocatedTriple{2, IdTriple{{V(1), V(4), V(5), V(g2)}}, false});
   locatedTriples.add(deleteTriples);
+  locatedTriples.consolidateAllBlocks();
   testFirstAndLastBlock({V(1), std::nullopt, std::nullopt},
                         matchFirstAndLastTriple(1, 3, 4, 1, 3, 4));
 }
@@ -974,6 +977,7 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     dt.insertTriples(handle, {IdTriple{{I(0), I(1), I(2), I(3)}},
                               IdTriple{{I(0), I(4), I(5), I(3)}}});
+    dt.consolidateAll();
   });
   auto sharedLocatedTriplesSnapshot =
       deltaTriplesManager.getCurrentLocatedTriplesSharedState();
@@ -1125,6 +1129,7 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});
+        deltaTriples.consolidateAll();
       });
   auto sharedLocatedTriplesSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();

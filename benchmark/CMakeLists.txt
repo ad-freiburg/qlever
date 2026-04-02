@@ -36,4 +36,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
+    addAndLinkBenchmark(SortedLocatedTriplesVectorBenchmark index)
+
+    addAndLinkBenchmark(EnsureIntegrationBenchmark index)
+
 endif()
