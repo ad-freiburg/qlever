@@ -5,6 +5,7 @@
 
 #include "index/IndexImpl.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include <cstdio>
@@ -1898,9 +1899,47 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
-    std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+    const std::vector<encodedIris::PrefixWithBitConstraints>& prefixConfigs) {
+  // Convert encodedIris::PrefixWithBitConstraints to detail::PrefixConfig.
+  std::vector<std::string> plainPrefixes;
+
+  for (const auto& config : prefixConfigs) {
+    if (config.constraints.empty()) {
+      // Plain prefix mode.
+      plainPrefixes.push_back(config.prefix);
+    } else {
+      // Multi-constraint mode - we'll add these after creating the manager.
+    }
+  }
+
+  // Create the manager with plain prefixes.
+  encodedIriManager_ = EncodedIriManager{std::move(plainPrefixes)};
+
+  // Add prefixes with constraints.
+  for (const auto& config : prefixConfigs) {
+    if (!config.constraints.empty()) {
+      // Convert qlever::BitRangeConstraint to detail::BitRangeConstraint.
+      std::vector<encodedIris::BitRangeConstraint> detailConstraints;
+      for (const auto& constraint : config.constraints) {
+        detailConstraints.emplace_back(constraint.bitStart, constraint.bitEnd,
+                                       constraint.value);
+      }
+      encodedIriManager_.prefixes_.emplace_back(
+          absl::StrCat("<", config.prefix), std::move(detailConstraints));
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValuesWithBitPattern(
+    std::vector<std::tuple<std::string, size_t, size_t>>
+        prefixesWithBitPatterns) {
+  // Add bit pattern prefixes to the existing encodedIriManager.
+  // This is kept for backward compatibility.
+  for (auto& [prefix, bitStart, bitEnd] : prefixesWithBitPatterns) {
+    encodedIriManager_.prefixes_.emplace_back(absl::StrCat("<", prefix),
+                                              bitStart, bitEnd);
+  }
 }
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {

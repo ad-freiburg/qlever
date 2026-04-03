@@ -18,6 +18,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/EncodedIriManager.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
@@ -26,6 +27,9 @@
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
+
+using encodedIris::BitRangeConstraint;
+using encodedIris::PrefixWithBitConstraints;
 
 // The common configuration shared by the index building and query execution.
 struct CommonConfig {
@@ -62,6 +66,47 @@ struct CommonConfig {
   // TODO: We have not tested this mode in a while. In particular, it is
   // unlikely to work when updates are involved.
   bool onlyPsoAndPos_ = false;
+
+  // Configuration for encoding IRIs directly into IDs.
+  //
+  // Each entry is either:
+  // - A simple string prefix (without angle brackets) for plain digit encoding
+  // - A prefix with bit range constraints for bit pattern encoding
+  //
+  // Plain mode: IRIs starting with the prefix followed by digits are encoded.
+  // Bit pattern mode: IRIs with numeric values where specified bit ranges
+  // have specified values get compressed by removing those bits.
+  //
+  // This reduces vocabulary size and improves export performance.
+  //
+  // NOTE: Read the description of
+  // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
+  // limitations regarding the correctness of FILTER and ORDER BY.
+  //
+  // Example:
+  //   // Plain mode (no constraints):
+  //   prefixesForIdEncodedIris_.push_back(
+  //       PrefixWithBitConstraints{"http://example.org/"});
+  //
+  //   // Multi-constraint mode:
+  //   prefixesForIdEncodedIris_.push_back(
+  //       PrefixWithBitConstraints{"http://constrained.org/", {
+  //           {0, 3, 0b001},    // bits 0-2 must be "001"
+  //           {13, 19, 0},      // bits 13-18 must be all zeros
+  //           {24, 28, 0b1010}  // bits 24-27 must be "1010"
+  //       }});
+  //
+  //   // Legacy single zero-bit-range mode (for backward compatibility):
+  //   prefixesForIdEncodedIris_.push_back(
+  //       PrefixWithBitConstraints{"http://legacy.org/", {
+  //           {10, 16, 0}  // bits 10-15 must be zero
+  //       }});
+  std::vector<PrefixWithBitConstraints> prefixesForIdEncodedIris_;
+
+  // DEPRECATED: Use prefixesForIdEncodedIris_ with PrefixWithBitConstraints
+  // instead. This field is kept for backward compatibility only.
+  std::vector<std::tuple<std::string, size_t, size_t>>
+      prefixesForIdEncodedIrisWithBitPattern_;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -99,17 +144,6 @@ struct IndexBuilderConfig : CommonConfig {
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
-
-  // A list of IRI prefixes (without angle brackets). IRIs that start with one
-  // of these prefixes, followed by a sequence of a bounded number of digits
-  // are encoded directly in the internal ID. This reduces the size of the
-  // vocabulary (see above) and the time for exporting results involving
-  // such IRIs.
-  //
-  // NOTE: Read the description of
-  // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
-  // limitations regarding the correctness of FILTER and ORDER BY.
-  std::vector<std::string> prefixesForIdEncodedIris_;
 
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index

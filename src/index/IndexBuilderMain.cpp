@@ -191,6 +191,7 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  std::vector<std::string> encodeAsIdPrefixes;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -266,7 +267,7 @@ int main(int argc, char** argv) {
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
-      po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
+      po::value(&encodeAsIdPrefixes)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
       "IRIs that start with one of these prefixes, followed by a sequence of "
       "digits, do not require a vocabulary entry, but are directly encoded "
@@ -319,6 +320,22 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+
+    // Convert plain string prefixes from --encode-as-id to the new
+    // PrefixWithBitConstraints format.
+    for (const auto& prefix : encodeAsIdPrefixes) {
+      config.prefixesForIdEncodedIris_.emplace_back(prefix);
+    }
+
+    // Add hard-coded BMW bit-pattern prefixes.
+    config.prefixesForIdEncodedIrisWithBitPattern_.push_back(
+        {"http://www.bmw-carit.de/Foresight/Map/Ontologies/Low/behaviorMap#dp_",
+         16, 32});
+    config.prefixesForIdEncodedIrisWithBitPattern_.push_back(
+        {"http://www.bmw.de/FS/Map#roadPart_", 16, 32});
+    config.prefixesForIdEncodedIrisWithBitPattern_.push_back(
+        {"http://www.bmw.de/FS/Map#lane_", 16, 32});
+
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
