@@ -13,6 +13,7 @@
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/Generator.h"
 #include "util/Serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
@@ -53,6 +54,28 @@ class VocabularyInMemory
 
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
+
+  /// Look up multiple words by index in a single batch call.
+  /// The returned string_views point directly into the in-memory word storage.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    auto data = std::make_shared<VocabBatchLookupData>();
+    data->views.resize(indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      data->views[i] = _words[indices[i]];
+    }
+    return VocabBatchLookupData::asResult(std::move(data));
+  }
+
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    auto gen = [](const VocabularyInMemory* self, VocabLookupInput input)
+        -> cppcoro::generator<VocabBatchLookupResult> {
+      for (auto& batch : input) {
+        co_yield self->lookupBatch(batch);
+      }
+    }(this, std::move(input));
+    return VocabLookupOutput{std::move(gen)};
+  }
 
   // Conversion function that is used by the Mixin base class.
   template <typename It>
