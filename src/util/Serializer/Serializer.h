@@ -7,8 +7,10 @@
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 
+#include <array>
 #include <stdexcept>
 
+#include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 
@@ -276,6 +278,59 @@ CPP_template(typename T,
                                   std::is_enum_v<std::decay_t<T>>))
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
+}
+
+// Type trait to check whether a serializer opts into aligned serialization.
+// A serializer opts in by defining a `static constexpr bool
+// UsesAlignedSerialization` member set to `true`.
+template <typename S>
+constexpr bool usesAlignedSerialization() {
+  if constexpr (requires {
+                  {
+                    std::decay_t<S>::UsesAlignedSerialization
+                  } -> std::convertible_to<bool>;
+                }) {
+    return std::decay_t<S>::UsesAlignedSerialization;
+  } else {
+    return false;
+  }
+}
+
+// Align the current write position to the alignment requirement of type T.
+// This adds padding bytes (zeros) if necessary. If the serializer does not use
+// aligned serialization, this is a no-op.
+CPP_template(typename T, typename S)(
+    requires WriteSerializer<S>) void alignForType(S& serializer) {
+  if constexpr (usesAlignedSerialization<S>()) {
+    size_t currentPos = serializer.getCurrentPosition();
+    size_t alignment = alignof(T);
+    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    if (padding > 0) {
+      // Use a static array to avoid dynamic allocation for padding.
+      // 64 bytes should cover all practical alignment requirements.
+      constexpr size_t maxAlignment = 64;
+      std::array<char, maxAlignment> zeros = {0};
+      AD_CONTRACT_CHECK(
+          padding < zeros.size(),
+          "Alignment padding exceeds maximum supported alignment");
+      serializer.serializeBytes(zeros.data(), padding);
+    }
+  }
+}
+
+// Skip bytes to align the current read position to the alignment requirement
+// of type T. If the serializer does not use aligned serialization, this is a
+// no-op.
+CPP_template(typename T, typename S)(
+    requires ReadSerializer<S>) void alignForType(S& serializer) {
+  if constexpr (usesAlignedSerialization<S>()) {
+    size_t currentPos = serializer.getCurrentPosition();
+    size_t alignment = alignof(T);
+    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    if (padding > 0) {
+      serializer.skip(padding);
+    }
+  }
 }
 
 }  // namespace ad_utility::serialization
