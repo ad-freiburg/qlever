@@ -40,14 +40,12 @@ using UninitializedBuffer =
 // exceeds the block size. Then the full block is compressed and serialized as a
 // vector to the underlying serializer. The last, possibly incomplete block is
 // written on destruction or when `close()` is called.
-CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
-             bool AlignedSerialization = false)(
+CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<CompressionFunction, ql::span<const char>,
                   UninitializedBuffer&>) class CompressedWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
-  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
  private:
   std::optional<UnderlyingSerializer> underlyingSerializer_;
@@ -58,8 +56,6 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
   // We need to temporarily store a single compressed block before flushing it.
   // Using a member variable for this purpose avoids reallocations.
   UninitializedBuffer compressedBuffer_;
-  // Track the total number of uncompressed bytes written.
-  size_t uncompressedBytesWritten_ = 0;
 
  public:
   // Create from the underlying serializer, the function used for compression,
@@ -91,7 +87,6 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
 
   // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {
-    uncompressedBytesWritten_ += numBytes;  // Track total uncompressed bytes.
     while (numBytes > 0) {
       size_t capacity = buffer_.capacity() - buffer_.size();
       size_t bytesToCopy = std::min(capacity, numBytes);
@@ -119,9 +114,6 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
     flushBlock();
     return std::move(*underlyingSerializer_);
   }
-
-  // Get the current write position (number of uncompressed bytes written).
-  size_t getCurrentPosition() const { return uncompressedBytesWritten_; }
 
  private:
   // Flush the `buffer_` by compressing it and writing to the
@@ -151,14 +143,12 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction,
 // Reads compressed blocks (as vectors) from the underlying serializer,
 // decompresses them, and provides the decompressed data to the caller.
 // This is the counterpart to `CompressedWriteSerializer` above.
-CPP_template(typename UnderlyingSerializer, typename DecompressionFunction,
-             bool AlignedSerialization = false)(
+CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
     requires ReadSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<DecompressionFunction, ql::span<const char>,
                   ql::span<char>>) class CompressedReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
-  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
  private:
   UnderlyingSerializer underlyingSerializer_;
@@ -166,8 +156,6 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction,
   UninitializedBuffer buffer_;
   UninitializedBuffer compressedBuffer_;
   size_t bufferPos_ = 0;
-  // Track the total number of uncompressed bytes read.
-  size_t uncompressedBytesRead_ = 0;
 
  public:
   // Compress from the underlying serializer, as well as the decompression
@@ -187,7 +175,6 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction,
   // bytes, then additional blocks are read and decompressed from the underlying
   // buffer.
   void serializeBytes(char* bytePointer, size_t numBytes) {
-    uncompressedBytesRead_ += numBytes;  // Track total uncompressed bytes.
     while (numBytes > 0) {
       // If buffer is empty, read and decompress the next block
       if (bufferPos_ >= buffer_.size()) {
@@ -200,23 +187,6 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction,
       bytePointer += bytesToCopy;
       bufferPos_ += bytesToCopy;
       numBytes -= bytesToCopy;
-    }
-  }
-
-  // Get the current read position (number of uncompressed bytes read).
-  size_t getCurrentPosition() const { return uncompressedBytesRead_; }
-
-  // Skip the given number of bytes without reading them.
-  void skip(size_t numBytes) {
-    uncompressedBytesRead_ += numBytes;  // Track skipped bytes too.
-    while (numBytes > 0) {
-      if (bufferPos_ >= buffer_.size()) {
-        readNextBlock();
-      }
-      size_t bytesAvailable = buffer_.size() - bufferPos_;
-      size_t bytesToSkip = std::min(bytesAvailable, numBytes);
-      bufferPos_ += bytesToSkip;
-      numBytes -= bytesToSkip;
     }
   }
 
@@ -264,15 +234,13 @@ inline const ad_utility::MemorySize defaultZstdBlockSize =
 }  // namespace detail
 
 // A write serializer that compresses data using `Zstd` before writing to an
-// underlying serializer. The `AlignedSerialization` template parameter controls
-// whether alignment padding is inserted for trivially serializable types.
-template <typename UnderlyingSerializer, bool AlignedSerialization = false>
+// underlying serializer.
+template <typename UnderlyingSerializer>
 class ZstdWriteSerializer
-    : public CompressedWriteSerializer<
-          UnderlyingSerializer, detail::ZstdCompress, AlignedSerialization> {
+    : public CompressedWriteSerializer<UnderlyingSerializer,
+                                       detail::ZstdCompress> {
   using Base =
-      CompressedWriteSerializer<UnderlyingSerializer, detail::ZstdCompress,
-                                AlignedSerialization>;
+      CompressedWriteSerializer<UnderlyingSerializer, detail::ZstdCompress>;
 
  public:
   explicit ZstdWriteSerializer(
@@ -283,16 +251,13 @@ class ZstdWriteSerializer
 };
 
 // A read serializer that decompresses data that was compressed using `Zstd`
-// (with the `ZstdWriteSerializer` above) from an underlying serializer. The
-// `AlignedSerialization` template parameter controls whether alignment padding
-// is skipped for trivially serializable types.
-template <typename UnderlyingSerializer, bool AlignedSerialization = false>
+// (with the `ZstdWriteSerializer` above) from an underlying serializer.
+template <typename UnderlyingSerializer>
 class ZstdReadSerializer
-    : public CompressedReadSerializer<
-          UnderlyingSerializer, detail::ZstdDecompress, AlignedSerialization> {
+    : public CompressedReadSerializer<UnderlyingSerializer,
+                                      detail::ZstdDecompress> {
   using Base =
-      CompressedReadSerializer<UnderlyingSerializer, detail::ZstdDecompress,
-                               AlignedSerialization>;
+      CompressedReadSerializer<UnderlyingSerializer, detail::ZstdDecompress>;
 
  public:
   explicit ZstdReadSerializer(UnderlyingSerializer underlyingSerializer)

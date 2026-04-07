@@ -283,17 +283,21 @@ CPP_template(typename T,
 // Type trait to check whether a serializer opts into aligned serialization.
 // A serializer opts in by defining a `static constexpr bool
 // UsesAlignedSerialization` member set to `true`.
+namespace detail {
+template <typename S, typename = void>
+struct AlignedSerializationFlag : std::false_type {};
+
+template <typename S>
+struct AlignedSerializationFlag<
+    S, std::enable_if_t<std::is_convertible_v<
+           decltype(S::UsesAlignedSerialization), bool>>> {
+  static constexpr bool value = S::UsesAlignedSerialization;
+};
+
+}  // namespace detail
 template <typename S>
 constexpr bool usesAlignedSerialization() {
-  if constexpr (requires {
-                  {
-                    std::decay_t<S>::UsesAlignedSerialization
-                  } -> std::convertible_to<bool>;
-                }) {
-    return std::decay_t<S>::UsesAlignedSerialization;
-  } else {
-    return false;
-  }
+  return detail::AlignedSerializationFlag<std::decay_t<S>>::value;
 }
 
 // Align the current write position to the alignment requirement of type T.

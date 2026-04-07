@@ -15,18 +15,13 @@ namespace serialization {
 
 using SerializationPosition = uint64_t;
 
-// A write serializer that writes to a file. The `AlignedSerialization`
-// template parameter controls whether alignment padding is inserted for
-// trivially serializable types (see `alignForType` in `Serializer.h`).
-template <bool AlignedSerialization = false>
-class FileWriteSerializerT {
+class FileWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
-  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
-  FileWriteSerializerT(File&& file) : _file{std::move(file)} {};
+  FileWriteSerializer(File&& file) : _file{std::move(file)} {};
 
-  FileWriteSerializerT(std::string filename) : _file{filename, "w"} {
+  FileWriteSerializer(std::string filename) : _file{filename, "w"} {
     AD_CONTRACT_CHECK(_file.isOpen());
     // TODO<joka921> File should be a move-only type, should support
     // "isOpenForReading" and should automatically check for "isOpen() when
@@ -40,38 +35,26 @@ class FileWriteSerializerT {
   void close() { _file.close(); }
 
   [[nodiscard]] SerializationPosition getSerializationPosition() const {
-    return _file.tell() - fileOffsetOnConstruction_;
-  }
-
-  // Alias for compatibility with alignment serialization framework.
-  [[nodiscard]] size_t getCurrentPosition() const {
-    return static_cast<size_t>(getSerializationPosition());
+    return _file.tell();
   }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(static_cast<off_t>(position + fileOffsetOnConstruction_),
-               SEEK_SET);
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }
 
  private:
   File _file;
-  size_t fileOffsetOnConstruction_ = _file.tell();
 };
 
-// A read serializer that reads from a file. The `AlignedSerialization`
-// template parameter controls whether alignment padding is skipped for
-// trivially serializable types (see `alignForType` in `Serializer.h`).
-template <bool AlignedSerialization = false>
-class FileReadSerializerT {
+class FileReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
-  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
 
-  explicit FileReadSerializerT(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
-  explicit FileReadSerializerT(const std::string& filename)
+  explicit FileReadSerializer(const std::string& filename)
       : _file{filename, "r"} {
     AD_CONTRACT_CHECK(_file.isOpen());
   }
@@ -85,32 +68,14 @@ class FileReadSerializerT {
   }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(static_cast<off_t>(position) + fileOffsetOnConstruction_,
-               SEEK_SET);
-  }
-
-  void skip(size_t numBytes) {
-    _file.seek(static_cast<off_t>(numBytes), SEEK_CUR);
-  }
-
-  size_t getCurrentPosition() const {
-    return _file.tell() - fileOffsetOnConstruction_;
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }
 
  private:
   File _file;
-  size_t fileOffsetOnConstruction_ = _file.tell();
 };
-
-// Backward-compatible aliases for the default (unaligned) serializers.
-using FileWriteSerializer = FileWriteSerializerT<false>;
-using FileReadSerializer = FileReadSerializerT<false>;
-
-// Aligned variants of the file serializers.
-using AlignedFileWriteSerializer = FileWriteSerializerT<true>;
-using AlignedFileReadSerializer = FileReadSerializerT<true>;
 
 /*
  * This Serializer may be copied. The copies will access the same file,
