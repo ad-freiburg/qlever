@@ -967,13 +967,13 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
   // Left side: two columns with UNDEF in second column.
   IdTable leftTable{2, makeAllocator()};
   auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .toValueId(qec2->getIndex().getImpl())
                 .value();
   auto s3 = TripleComponent{TripleComponent::Iri::fromIriref("<s3>")}
-                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .toValueId(qec2->getIndex().getImpl())
                 .value();
   auto o1 = TripleComponent{TripleComponent::Iri::fromIriref("<o1>")}
-                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .toValueId(qec2->getIndex().getImpl())
                 .value();
 
   leftTable.push_back({s1, o1});  // matches 1 row
@@ -1016,10 +1016,10 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   auto qec2 = getQec(std::move(config));
 
   auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .toValueId(qec2->getIndex().getImpl())
                 .value();
   auto s2 = TripleComponent{TripleComponent::Iri::fromIriref("<s2>")}
-                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .toValueId(qec2->getIndex().getImpl())
                 .value();
   auto o1 = Id::makeFromInt(2);
   auto o3 = Id::makeFromInt(4);

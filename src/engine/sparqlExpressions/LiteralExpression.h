@@ -53,8 +53,7 @@ class LiteralExpression : public SparqlExpression {
       }
       TripleComponent tc{s};
       const auto& index = context->_qec.getIndex();
-      std::optional<Id> id =
-          tc.toValueId(index.getVocab(), index.encodedIriManager());
+      std::optional<Id> id = tc.toValueId(index.getImpl());
       IdOrLiteralOrIri result =
           id.has_value()
               ? IdOrLiteralOrIri{id.value()}

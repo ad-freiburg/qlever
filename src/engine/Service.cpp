@@ -263,8 +263,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
-                                        getIndex().encodedIriManager());
+        Id id = std::move(tc).toValueId(getIndex().getImpl(), *localVocab);
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];

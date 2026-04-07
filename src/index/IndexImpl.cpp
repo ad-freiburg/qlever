@@ -1698,8 +1698,7 @@ size_t IndexImpl::getCardinality(
   if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  if (std::optional<Id> relId =
-          comp.toValueId(getVocab(), encodedIriManager())) {
+  if (std::optional<Id> relId = comp.toValueId(*this)) {
     return getCardinality(relId.value(), permutation, locatedTriplesState);
   }
   return 0;
@@ -1727,7 +1726,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
+  if (auto keyId = key.toValueId(*this)) {
     auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),

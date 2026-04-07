@@ -205,13 +205,12 @@ IdTable Describe::getIdsToDescribe(const Result& result,
                                    LocalVocab& localVocab) const {
   // First collect the `Id`s in a hash set, in order to remove duplicates.
   ad_utility::HashSetWithMemoryLimit<Id> idsToDescribe{allocator()};
-  const auto& vocab = getIndex().getVocab();
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab, getIndex().encodedIriManager()));
+              getIndex().getImpl(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.

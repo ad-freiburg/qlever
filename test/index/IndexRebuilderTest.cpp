@@ -271,7 +271,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                DEFAULT_GRAPH_IRI)}
-               .toValueId(index.getVocab(), index.encodedIriManager())
+               .toValueId(index.getImpl())
                .value();
 
   index.deltaTriplesManager().modify<void>([&cancellationHandle,
@@ -468,7 +468,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                  DeltaTriples& deltaTriples) {
       auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                    DEFAULT_GRAPH_IRI)}
-                   .toValueId(index.getVocab(), index.encodedIriManager())
+                   .toValueId(index.getImpl())
                    .value();
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},

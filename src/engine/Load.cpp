@@ -149,9 +149,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   parser.setInputStream(body);
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  auto toId = [this, &lv, &encodedIriManager](TripleComponent&& tc) {
-    return std::move(tc).toValueId(getIndex().getVocab(), lv,
-                                   encodedIriManager);
+  auto toId = [this, &lv](TripleComponent&& tc) {
+    return std::move(tc).toValueId(getIndex().getImpl(), lv);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
