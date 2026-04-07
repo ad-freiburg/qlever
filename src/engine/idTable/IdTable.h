@@ -126,7 +126,7 @@ class IdTable {
   static constexpr size_t numInlinedColumns = 10;
   using Storage = detail::VectorWithElementwiseMove<
       ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
-  using ViewSpans = std::vector<ql::span<const T>>;
+  using ViewSpans = absl::InlinedVector<ql::span<const T>, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
