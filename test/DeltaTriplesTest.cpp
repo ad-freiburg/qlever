@@ -398,7 +398,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   deltaTriples.clear();
   // Test internal language filter triples are inserted correctly.
-  auto toId = [this, &index, &localVocab](TripleComponent& component) {
+  auto toId = [&index, &localVocab](TripleComponent& component) {
     return std::move(component).toValueId(index, localVocab);
   };
 

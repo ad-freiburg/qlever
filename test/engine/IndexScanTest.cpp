@@ -29,11 +29,6 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 

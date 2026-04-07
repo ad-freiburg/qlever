@@ -1687,24 +1687,6 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(
-    const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
-  // permutations, but this internal predicate should never appear in subjects
-  // or objects anyway.
-  // TODO<joka921> Find out what the effect of this special case is for the
-  // query planning.
-  if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
-    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-  }
-  if (std::optional<Id> relId = comp.toValueId(*this)) {
-    return getCardinality(relId.value(), permutation, locatedTriplesState);
-  }
-  return 0;
-}
-
-// ___________________________________________________________________________
 RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
   return vocab_[id];
 }
