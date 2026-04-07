@@ -893,15 +893,15 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
 TEST(AlignedSerializer, TraitDetection) {
   using ad_utility::serialization::usesAlignedSerialization;
   // Default (unaligned) serializers.
-  static_assert(!usesAlignedSerialization<ByteBufferWriteSerializer>());
-  static_assert(!usesAlignedSerialization<ByteBufferReadSerializer>());
-  static_assert(!usesAlignedSerialization<FileWriteSerializer>());
-  static_assert(!usesAlignedSerialization<FileReadSerializer>());
+  static_assert(!usesAlignedSerialization<ByteBufferWriteSerializer>);
+  static_assert(!usesAlignedSerialization<ByteBufferReadSerializer>);
+  static_assert(!usesAlignedSerialization<FileWriteSerializer>);
+  static_assert(!usesAlignedSerialization<FileReadSerializer>);
   // Aligned serializers.
-  static_assert(usesAlignedSerialization<AlignedByteBufferWriteSerializer>());
-  static_assert(usesAlignedSerialization<AlignedByteBufferReadSerializer>());
+  static_assert(usesAlignedSerialization<AlignedByteBufferWriteSerializer>);
+  static_assert(usesAlignedSerialization<AlignedByteBufferReadSerializer>);
   // CopyableFileReadSerializer has no trait.
-  static_assert(!usesAlignedSerialization<CopyableFileReadSerializer>());
+  static_assert(!usesAlignedSerialization<CopyableFileReadSerializer>);
 }
 
 // Test that the aligned serializers fulfill the Serializer concepts.
@@ -964,10 +964,14 @@ TEST(AlignedSerializer, NoPaddingWithoutAlignment) {
 }
 
 // Test round-trip with matching alignment specifications for byte buffers.
+// While doing so, also test the zero copy serialization via a
+// `ByteBufferReadSerializer` that takes a span.
 TEST(AlignedSerializer, MatchingAlignmentByteBuffer) {
   // Aligned write + aligned read.
-  {
-    AlignedByteBufferWriteSerializer writer;
+
+  using namespace ad_utility::use_type_identity;
+  auto test = [&]<typename Writer, typename Reader>(TI<Writer>, TI<Reader>) {
+    Writer writer;
     char c = 'A';
     writer << c;
     std::vector<int64_t> v = {1, 2, 3, 4, 5};
@@ -975,38 +979,37 @@ TEST(AlignedSerializer, MatchingAlignmentByteBuffer) {
     std::string s = "hello";
     writer << s;
 
-    AlignedByteBufferReadSerializer reader{std::move(writer).data()};
-    char cRead;
-    reader >> cRead;
-    std::vector<int64_t> vRead;
-    reader >> vRead;
-    std::string sRead;
-    reader >> sRead;
-    EXPECT_EQ(cRead, 'A');
-    EXPECT_EQ(v, vRead);
-    EXPECT_EQ(s, sRead);
-  }
-  // Unaligned write + unaligned read.
-  {
-    ByteBufferWriteSerializer writer;
-    char c = 'A';
-    writer << c;
-    std::vector<int64_t> v = {1, 2, 3, 4, 5};
-    writer << v;
-    std::string s = "hello";
-    writer << s;
+    auto data = std::move(writer).data();
 
-    ByteBufferReadSerializer reader{std::move(writer).data()};
+    Reader reader{data};
     char cRead;
     reader >> cRead;
-    std::vector<int64_t> vRead;
-    reader >> vRead;
+    auto vRead = [&reader]() {
+      if constexpr (serialization::ZeroCopyReadSerializer<Reader>) {
+        return serialization::zeroCopyDeserializeToSpan<int64_t>(reader);
+      } else {
+        std::vector<int64_t> vRead;
+        reader >> vRead;
+        return vRead;
+      }
+    }();
     std::string sRead;
     reader >> sRead;
     EXPECT_EQ(cRead, 'A');
-    EXPECT_EQ(v, vRead);
+    EXPECT_THAT(vRead, ::testing::ElementsAreArray(v));
     EXPECT_EQ(s, sRead);
-  }
+  };
+
+  auto alignedWriter = ti<AlignedByteBufferWriteSerializer>;
+  auto alignedReader = ti<AlignedByteBufferReadSerializer>;
+  auto alignedZeroCopyReader =
+      ti<ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>>;
+  test(alignedWriter, alignedReader);
+  test(alignedWriter, alignedZeroCopyReader);
+
+  // Test the unaligned reading and writing.
+  test(ti<ByteBufferWriteSerializer>, ti<ByteBufferReadSerializer>);
 }
 
 // Test that mismatched alignment specifications produce incorrect results.

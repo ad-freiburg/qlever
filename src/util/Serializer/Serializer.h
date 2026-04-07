@@ -280,57 +280,71 @@ CPP_template(typename T,
   return {};
 }
 
-// Type trait to check whether a serializer opts into aligned serialization.
-// A serializer opts in by defining a `static constexpr bool
-// UsesAlignedSerialization` member set to `true`.
+// Implementation of `usesAlignedSerialization` defined below.
 namespace detail {
 template <typename S, typename = void>
-struct AlignedSerializationFlag : std::false_type {};
+struct UsesAlignedSerializationImpl : std::false_type {};
 
 template <typename S>
-struct AlignedSerializationFlag<
+struct UsesAlignedSerializationImpl<
     S, std::enable_if_t<std::is_convertible_v<
            decltype(S::UsesAlignedSerialization), bool>>> {
   static constexpr bool value = S::UsesAlignedSerialization;
 };
 
 }  // namespace detail
-template <typename S>
-constexpr bool usesAlignedSerialization() {
-  return detail::AlignedSerializationFlag<std::decay_t<S>>::value;
-}
 
-// Align the current write position to the alignment requirement of type T.
+// Type trait to check whether a serializer opts into aligned serialization.
+// A serializer opts in by defining a `static constexpr bool
+// UsesAlignedSerialization` member set to `true`.
+template <typename S>
+constexpr bool usesAlignedSerialization =
+    detail::UsesAlignedSerializationImpl<std::decay_t<S>>::value;
+
+// Concept for serializers that support zero-copy reads by providing direct
+// access to the underlying buffer.
+// Note: The concept currently only checks for the existence of the functions,
+// but leaves the return types unchecked, because the syntax in C++17 mode for
+// those checks is very very verbose.
+template <typename S>
+CPP_requires(zeroCopyReadSerializerRequires,
+             requires(S s,
+                      size_t numBytes)(s.getSpanToBytes(numBytes),
+                                       s.getCurrentPosition(), s.skip(numBytes),
+                                       concepts::requires_<ReadSerializer<S>>));
+
+template <typename S>
+CPP_concept ZeroCopyReadSerializer =
+    ReadSerializer<S> && usesAlignedSerialization<S> &&
+    CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+
+// Align the current write position to the alignment requirement of type `T`.
 // This adds padding bytes (zeros) if necessary. If the serializer does not use
 // aligned serialization, this is a no-op.
 CPP_template(typename T, typename S)(
     requires WriteSerializer<S>) void alignForType(S& serializer) {
-  if constexpr (usesAlignedSerialization<S>()) {
+  if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
-    size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    static constexpr size_t alignment = alignof(T);
+    size_t padding = alignment - (currentPos % alignment);
     if (padding > 0) {
       // Use a static array to avoid dynamic allocation for padding.
       // 64 bytes should cover all practical alignment requirements.
-      constexpr size_t maxAlignment = 64;
-      std::array<char, maxAlignment> zeros = {0};
-      AD_CONTRACT_CHECK(
-          padding < zeros.size(),
-          "Alignment padding exceeds maximum supported alignment");
+      std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
     }
   }
 }
 
 // Skip bytes to align the current read position to the alignment requirement
-// of type T. If the serializer does not use aligned serialization, this is a
+// of type `T`. If the serializer does not use aligned serialization, this is a
 // no-op.
 CPP_template(typename T, typename S)(
     requires ReadSerializer<S>) void alignForType(S& serializer) {
-  if constexpr (usesAlignedSerialization<S>()) {
+  if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = alignment - (currentPos % alignment);
     if (padding > 0) {
       serializer.skip(padding);
     }
