@@ -141,3 +141,16 @@ void LocalVocab::reserveBlankNodeBlocksFromExplicitIndices(
           blankNodeManager);
   localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
 }
+
+bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
+  auto c = [lvi](const auto& set) {
+    AD_CONTRACT_CHECK(set != nullptr);
+    for (auto& entry : *set) {
+      if (&entry == lvi) {
+        return true;
+      }
+    }
+    return false;
+  };
+  return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets_, c);
+}

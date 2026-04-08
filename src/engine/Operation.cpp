@@ -422,6 +422,15 @@ std::shared_ptr<const Result> Operation::getResult(
     // We are in the innermost level of the exception, so print
     AD_LOG_ERROR << "Aborted Operation" << std::endl;
     AD_LOG_DEBUG << getCacheKey() << std::endl;
+
+    if (ql::starts_with(std::string_view(e.what()),
+                        "LOCAL VOCAB LIFETIME VIOLATED")) {
+      AD_LOG_ERROR << "LOCAL VOCAB LIFETIME VIOLATED, printing the runtime info"
+                   << std::endl;
+      AD_LOG_ERROR << nlohmann::ordered_json{runtimeInfo()}.dump(4);
+      AD_LOG_ERROR << "ABORTING...";
+      std::terminate();
+    }
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
