@@ -23,12 +23,6 @@ class LazyJoinTestHelper {
  protected:
   QueryExecutionContext* qec_ = nullptr;
 
-  // Get the EncodedIriManager singleton.
-  static const EncodedIriManager& encodedIriManager() {
-    static EncodedIriManager manager;
-    return manager;
-  }
-
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
     return tc.toValueId(qec_->getIndex()).value();
