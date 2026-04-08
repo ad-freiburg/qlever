@@ -29,8 +29,8 @@ class Result {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
 
-  mutable ad_utility::Synchronized<RuntimeInformation>
-      runtimeInfoFromInputOperation_;
+  using RTI = ad_utility::Synchronized<std::shared_ptr<RuntimeInformation>>;
+  mutable RTI runtimeInfoFromInputOperation_;
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;

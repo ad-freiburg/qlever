@@ -67,8 +67,8 @@ void assertSortOrderIsRespected(const IdTable& idTable,
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
-void checkLocalVocabLifetime(const Result& res, const IdTable& idTable,
-                             const LocalVocab& voc) {
+void checkLocalVocabLifetime(const RuntimeInformation& rti,
+                             const IdTable& idTable, const LocalVocab& voc) {
   std::vector<LocalVocabIndex> lvis;
   for (const auto& col : idTable.getColumns()) {
     for (Id id : col) {
@@ -81,9 +81,7 @@ void checkLocalVocabLifetime(const Result& res, const IdTable& idTable,
     AD_LOG_ERROR
         << "Encountered LOCAL VOCAB lifetime violation, printing concrete "
            "runtime info...\n"
-        << nlohmann::ordered_json{*res.runtimeInfoFromInputOperation_.wlock()}
-               .dump(4)
-        << "\n end of RTI " << std::endl;
+        << nlohmann::ordered_json{rti}.dump(4) << "\n end of RTI " << std::endl;
     throw std::runtime_error("LOCAL VOCAB LIFETIME VIOLATED");
   }
 }
@@ -98,7 +96,8 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
   AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
                     nullptr);
   assertSortOrderIsRespected(this->idTable(), sortedBy_);
-  checkLocalVocabLifetime(this->idTable(), this->localVocab());
+  checkLocalVocabLifetime(**runtimeInfoFromInputOperation_.wlock(),
+                          this->idTable(), this->localVocab());
 }
 
 // _____________________________________________________________________________
@@ -115,7 +114,8 @@ Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
   // pointer above, but it still increases confidence.
   AD_CORRECTNESS_CHECK(materializedResult.localVocab_ != nullptr);
   assertSortOrderIsRespected(this->idTable(), sortedBy_);
-  checkLocalVocabLifetime(this->idTable(), this->localVocab());
+  checkLocalVocabLifetime(**runtimeInfoFromInputOperation_.wlock(),
+                          this->idTable(), this->localVocab());
 }
 
 // _____________________________________________________________________________
@@ -139,7 +139,8 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{ad_utility::CachingTransformInputRange(
           std::move(idTables),
-          [sortedBy, previousId = std::optional<IdTable::row_type>{}](
+          [rtiPtr = *runtimeInfoFromInputOperation_.wlock(), sortedBy,
+           previousId = std::optional<IdTable::row_type>{}](
               Result::IdTableVocabPair& pair) mutable {
             auto& idTable = pair.idTable_;
             if (!idTable.empty()) {
@@ -150,7 +151,7 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
               previousId = idTable.at(idTable.size() - 1);
             }
             assertSortOrderIsRespected(idTable, sortedBy);
-            checkLocalVocabLifetime(idTable, pair.localVocab_);
+            checkLocalVocabLifetime(*rtiPtr, idTable, pair.localVocab_);
             return std::move(pair);
           })}},
       sortedBy_{std::move(sortedBy)} {}

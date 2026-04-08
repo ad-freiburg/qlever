@@ -399,7 +399,8 @@ std::shared_ptr<const Result> Operation::getResult(
       storeToNamedResultCache(result._resultPointer->resultTable());
     }
     auto resultTable = result._resultPointer->resultTablePtr();
-    *resultTable->runtimeInfoFromInputOperation_.wlock() = runtimeInfo();
+    *resultTable->runtimeInfoFromInputOperation_.wlock() =
+        std::make_shared<RuntimeInformation>(runtimeInfo());
     return resultTable;
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
