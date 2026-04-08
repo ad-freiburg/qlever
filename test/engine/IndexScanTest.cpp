@@ -603,6 +603,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
+      deltaTriples.consolidateAll();
     });
     auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
@@ -612,6 +613,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
+      deltaTriples.consolidateAll();
     });
     auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
@@ -623,6 +625,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
+      deltaTriples.consolidateAll();
     });
     auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
