@@ -11,6 +11,7 @@
 #include <variant>
 #include <vector>
 
+#include "RuntimeInformation.h"
 #include "backports/span.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
@@ -28,6 +29,8 @@ class Result {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
 
+  mutable ad_utility::Synchronized<RuntimeInformation>
+      runtimeInfoFromInputOperation_;
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;

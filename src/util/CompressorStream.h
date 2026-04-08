@@ -30,8 +30,8 @@ using ad_utility::content_encoding::CompressionMethod;
 template <typename Range>
 cppcoro::generator<std::string> compressStream(
     Range range, CompressionMethod compressionMethod) {
-  io::filtering_ostream filteringStream;
   std::string stringBuffer;
+  io::filtering_ostream filteringStream;
 
   // setup compression method
   if (compressionMethod == CompressionMethod::DEFLATE) {

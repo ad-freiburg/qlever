@@ -67,7 +67,8 @@ void assertSortOrderIsRespected(const IdTable& idTable,
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
-void checkLocalVocabLifetime(const IdTable& idTable, const LocalVocab& voc) {
+void checkLocalVocabLifetime(const Result& res, const IdTable& idTable,
+                             const LocalVocab& voc) {
   std::vector<LocalVocabIndex> lvis;
   for (const auto& col : idTable.getColumns()) {
     for (Id id : col) {
@@ -77,6 +78,12 @@ void checkLocalVocabLifetime(const IdTable& idTable, const LocalVocab& voc) {
     }
   }
   if (!voc.verifyLocalVocabIndices(lvis)) {
+    AD_LOG_ERROR
+        << "Encountered LOCAL VOCAB lifetime violation, printing concrete "
+           "runtime info...\n"
+        << nlohmann::ordered_json{*res.runtimeInfoFromInputOperation_.wlock()}
+               .dump(4)
+        << "\n end of RTI " << std::endl;
     throw std::runtime_error("LOCAL VOCAB LIFETIME VIOLATED");
   }
 }

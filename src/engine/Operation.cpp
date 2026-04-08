@@ -398,8 +398,9 @@ std::shared_ptr<const Result> Operation::getResult(
     if (pinResultWithName) {
       storeToNamedResultCache(result._resultPointer->resultTable());
     }
-
-    return result._resultPointer->resultTablePtr();
+    auto resultTable = result._resultPointer->resultTablePtr();
+    *resultTable->runtimeInfoFromInputOperation_.wlock() = runtimeInfo();
+    return resultTable;
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
