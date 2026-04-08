@@ -68,14 +68,16 @@ void assertSortOrderIsRespected(const IdTable& idTable,
 }
 
 void checkLocalVocabLifetime(const IdTable& idTable, const LocalVocab& voc) {
+  std::vector<LocalVocabIndex> lvis;
   for (const auto& col : idTable.getColumns()) {
     for (Id id : col) {
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
-        if (!voc.isLocalVocabIndexContained(id.getLocalVocabIndex())) {
-          throw std::runtime_error("LOCAL VOCAB LIFETIME VIOLATED");
-        }
+        lvis.push_back(id.getLocalVocabIndex());
       }
     }
+  }
+  if (!voc.verifyLocalVocabIndices(lvis)) {
+    throw std::runtime_error("LOCAL VOCAB LIFETIME VIOLATED");
   }
 }
 }  // namespace
