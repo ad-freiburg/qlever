@@ -149,7 +149,7 @@ class WktEnvelope {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 

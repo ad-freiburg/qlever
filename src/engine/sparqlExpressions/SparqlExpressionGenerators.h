@@ -298,11 +298,11 @@ CPP_template(typename Operation, typename... Operands)(requires(
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
-// Return a lambda that takes a `LiteralOrIri` and converts it to an `Id` by
+// Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
 // adding it to the `localVocab`.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
-  return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+  return [localVocab](const LocalVocabEntry& entry) {
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   };
 }
