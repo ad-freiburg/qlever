@@ -1744,6 +1744,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
       IdTable table(numCols, allocator);
+      LocalVocab vocab;
 
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
@@ -1751,11 +1752,12 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
         for (size_t idx : block.getIndexRange()) {
           table.push_back(staticView[idx]);
         }
+        vocab.mergeWith(block.fullBlock().getLocalVocab());
       }
-      return table;
+      return makeIdTableAndFirstCols<1>(std::move(table), std::move(vocab));
     };
-    IdTable leftTable = materializeBlocksAsTable(blocksLeft);
-    IdTable rightTable = materializeBlocksAsTable(blocksRight);
+    auto leftTable = materializeBlocksAsTable(blocksLeft);
+    auto rightTable = materializeBlocksAsTable(blocksRight);
 
     // If either table is empty, we don't have to do anything (same as above).
     // TODO<joka921> Check if this case can happen at all, or whether we can
@@ -1765,8 +1767,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
     }
 
     // Extract the last join columns, on which we have to perform the join.
-    auto lastColLeft = leftTable.getColumn(numJoinColumns_ - 1);
-    auto lastColRight = rightTable.getColumn(numJoinColumns_ - 1);
+    auto lastColLeft =
+        leftTable.template asStaticView<0>().getColumn(numJoinColumns_ - 1);
+    auto lastColRight =
+        rightTable.template asStaticView<0>().getColumn(numJoinColumns_ - 1);
 
     this->compatibleRowAction_.setInput(leftTable, rightTable);
     // Set up actions for the single-column join on the last column.
