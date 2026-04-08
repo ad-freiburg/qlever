@@ -141,7 +141,7 @@ class WktCentroid {
 // Get the bounding box of a geometry.
 class WktEnvelope {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  sparqlExpression::IdOrLocalVocabEntry operator()(
       const std::optional<BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
       return ValueId::makeUndefined();
@@ -186,7 +186,7 @@ class WktBoundingCoordinate {
 // Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  sparqlExpression::IdOrLocalVocabEntry operator()(
       const std::optional<GeometryType>& geometryType) const {
     if (!geometryType.has_value()) {
       return ValueId::makeUndefined();
@@ -209,7 +209,7 @@ class WktGeometryType {
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  sparqlExpression::IdOrLocalVocabEntry operator()(
       const std::optional<GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
     using namespace triple_component;

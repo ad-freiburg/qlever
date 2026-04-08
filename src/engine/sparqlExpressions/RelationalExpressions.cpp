@@ -157,7 +157,7 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLocalVocabEntry>) {
       resultFromBinarySearch =
           std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {

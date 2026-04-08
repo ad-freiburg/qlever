@@ -200,7 +200,7 @@ TEST(RegexExpression, nonPrefixRegex) {
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
   // Our expression is a fixed string literal: "hallo".
-  VectorWithMemoryLimit<IdOrLiteralOrIri> input{
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> input{
       ad_utility::testing::getQec()->getAllocator()};
   input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
 

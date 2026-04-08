@@ -1274,7 +1274,7 @@ void GroupByImpl::extractValues(
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
-    for (sparqlExpression::IdOrLiteralOrIri val : generator) {
+    for (sparqlExpression::IdOrLocalVocabEntry val : generator) {
       *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
           std::move(val), *localVocab);
       ++targetIterator;

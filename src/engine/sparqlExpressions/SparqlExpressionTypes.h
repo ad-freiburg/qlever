@@ -97,9 +97,9 @@ static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
 // that can only yield strings.
-using IdOrLiteralOrIri = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 // Printing for GTest.
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -108,7 +108,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrLiteralOrIri, ValueId>;
+using ConstantTypes = std::tuple<IdOrLocalVocabEntry, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -245,7 +245,7 @@ CPP_template(typename T, typename LocalVocabT)(
     constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
+  } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
     return std::visit(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);

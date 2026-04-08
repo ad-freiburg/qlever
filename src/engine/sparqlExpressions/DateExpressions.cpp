@@ -56,7 +56,7 @@ struct ExtractDay {
 
 //______________________________________________________________________________
 struct ExtractStrTimezone {
-  IdOrLiteralOrIri operator()(std::optional<DateYearOrDuration> d) const {
+  IdOrLocalVocabEntry operator()(std::optional<DateYearOrDuration> d) const {
     // TODO<C++23> Use the monadic operations for std::optional
     if (!d.has_value()) {
       return Id::makeUndefined();

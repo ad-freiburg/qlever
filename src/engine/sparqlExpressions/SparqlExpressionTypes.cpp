@@ -9,7 +9,7 @@
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
   std::visit(
       [&os](const auto& s) {
         using T = std::decay_t<decltype(s)>;
