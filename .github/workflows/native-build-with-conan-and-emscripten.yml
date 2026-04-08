@@ -35,7 +35,7 @@ jobs:
         conan profile detect
 
     - name: Cache for conan
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       env:
         cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
       with:
