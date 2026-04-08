@@ -141,3 +141,55 @@ void LocalVocab::reserveBlankNodeBlocksFromExplicitIndices(
           blankNodeManager);
   localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
 }
+
+bool LocalVocab::verifyLocalVocabIndices(
+    std::vector<LocalVocabIndex> lvis) const {
+  if (lvis.size() < size()) {
+    ad_utility::HashMap<LocalVocabIndex, bool> seen;
+    for (auto lvi : lvis) {
+      seen[lvi] = false;
+    }
+    auto c = [&](const auto& set) {
+      AD_CONTRACT_CHECK(set != nullptr);
+      for (auto& entry : *set) {
+        auto it = seen.find(&entry);
+        if (it != seen.end()) {
+          it->second = true;
+        }
+      }
+    };
+    c(primaryWordSet_);
+    for (auto& set : otherWordSets_) {
+      c(set);
+    }
+    return ql::ranges::all_of(seen | ql::views::values, ql::identity{});
+  } else {
+    ad_utility::HashSet<LocalVocabIndex> all;
+    auto c = [&](const auto& set) {
+      AD_CONTRACT_CHECK(set != nullptr);
+      for (auto& entry : *set) {
+        all.emplace(&entry);
+      }
+    };
+    c(primaryWordSet_);
+    for (auto& set : otherWordSets_) {
+      c(set);
+    }
+
+    return ql::ranges::all_of(
+        lvis, [&](const auto& lvi) { return all.contains(lvi); });
+  }
+}
+
+bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
+  auto c = [lvi](const auto& set) {
+    AD_CONTRACT_CHECK(set != nullptr);
+    for (auto& entry : *set) {
+      if (&entry == lvi) {
+        return true;
+      }
+    }
+    return false;
+  };
+  return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets_, c);
+}
