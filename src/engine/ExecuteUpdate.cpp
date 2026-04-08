@@ -233,8 +233,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
       [&index, &variableColumns, &result](
           const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(index.getImpl(), variableColumns,
-                                     tripleTemplates);
+            transformTriplesTemplate(index, variableColumns, tripleTemplates);
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with

@@ -109,7 +109,7 @@ TEST_F(DeltaTriplesTest, clear) {
       std::make_shared<ad_utility::CancellationHandle<>>();
 
   DeltaTriples deltaTriples(testQec->getIndex());
-  auto& index = testQec->getIndex().getImpl();
+  auto& index = testQec->getIndex();
   auto& localVocab = deltaTriples.localVocab();
 
   EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0));
@@ -153,7 +153,7 @@ TEST_F(DeltaTriplesTest, clear) {
 
 TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   DeltaTriples deltaTriples(testQec->getIndex());
-  auto& index = testQec->getIndex().getImpl();
+  auto& index = testQec->getIndex();
   auto& localVocab = deltaTriples.localVocab();
 
   auto cancellationHandle =
@@ -517,7 +517,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // that we can test that both occurrences are rewritten to the same new blank
   // node.
   DeltaTriples deltaTriples(testQec->getIndex());
-  auto& index = testQec->getIndex().getImpl();
+  auto& index = testQec->getIndex();
   LocalVocab localVocabOutside;
   auto triples =
       makeIdTriples(index, localVocabOutside, {"<A> <notInVocab> <B>"});
@@ -589,7 +589,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // Preparation.
-  auto& index = testQec->getIndex().getImpl();
+  auto& index = testQec->getIndex();
   DeltaTriplesManager deltaTriplesManager(index);
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -702,7 +702,7 @@ TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
                  testing::ElementsAre(m, m, m, m, m, m))));
   };
   DeltaTriples deltaTriples(testQec->getIndex());
-  auto& index = testQec->getIndex().getImpl();
+  auto& index = testQec->getIndex();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 

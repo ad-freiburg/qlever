@@ -204,25 +204,25 @@ TEST(TripleComponent, toValueId) {
   TripleComponent tc = iri("<x>");
   auto getId = makeGetId(qec->getIndex());
   Id id = getId("<x>");
-  ASSERT_EQ(tc.toValueId(index.getImpl()).value(), id);
+  ASSERT_EQ(tc.toValueId(index).value(), id);
 
   tc = lit("\"alpha\"");
   id = getId("\"alpha\"");
-  EXPECT_EQ(tc.toValueId(index.getImpl()).value(), id);
+  EXPECT_EQ(tc.toValueId(index).value(), id);
 
   tc = iri("<notexisting>");
-  ASSERT_FALSE(tc.toValueId(index.getImpl()).has_value());
+  ASSERT_FALSE(tc.toValueId(index).has_value());
   tc = 42;
 
   ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
 
   tc = iri(HAS_PATTERN_PREDICATE);
-  ASSERT_EQ(tc.toValueId(index.getImpl()).value(),
+  ASSERT_EQ(tc.toValueId(index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
   auto lv = LocalVocab();
   auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
-    auto id = std::move(tc).toValueId(index.getImpl(), lv);
+    auto id = std::move(tc).toValueId(index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);
     auto lve = lv.getWord(id.getLocalVocabIndex());
     // Check that the constructed LVEs have the correct position in vocab set
@@ -247,7 +247,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
 
   auto expectIsInVocab = [&index, &getId](TripleComponent tc) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
-    auto idOrBounds = tc.toValueIdOrBounds(index.getImpl());
+    auto idOrBounds = tc.toValueIdOrBounds(index);
     auto expectedId =
         getId(tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
                              : tc.getIri().toStringRepresentation());
@@ -263,7 +263,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
   auto expectBounds = [&index, &makePos](TripleComponent tc, BoundsT bounds) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
     // Check that toValueIdOrBounds returns the expected bounds
-    auto idOrBounds = tc.toValueIdOrBounds(index.getImpl());
+    auto idOrBounds = tc.toValueIdOrBounds(index);
     EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
     auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral())

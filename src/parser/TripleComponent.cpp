@@ -136,7 +136,7 @@ std::optional<Id> TripleComponent::toValueId(const IndexImpl& index) const {
 Id TripleComponent::toValueId(const IndexImpl& index,
                               LocalVocab& localVocab) && {
   auto idOrBounds = toValueIdOrBounds(index);
-  if (auto* id = std::get_if<Id>(&idOrBounds)) {
+  if (const auto* id = std::get_if<Id>(&idOrBounds)) {
     return *id;
   }
   using Bounds = std::pair<VocabIndex, VocabIndex>;
@@ -146,7 +146,7 @@ Id TripleComponent::toValueId(const IndexImpl& index,
   // which we look up in (and potentially add to) our local vocabulary.
   AD_CORRECTNESS_CHECK(isLiteral() || isIri());
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  auto moveWord = [&]() -> LiteralOrIri {
+  auto moveWord = [&]() {
     if (isLiteral()) {
       return LiteralOrIri{std::move(getLiteral())};
     } else {

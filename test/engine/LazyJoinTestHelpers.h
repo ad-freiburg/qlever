@@ -31,7 +31,7 @@ class LazyJoinTestHelper {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getImpl()).value();
+    return tc.toValueId(qec_->getIndex()).value();
   }
 
   // Create an id table with a single column from a vector of TripleComponents.

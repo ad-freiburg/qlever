@@ -813,7 +813,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex().getImpl());
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }

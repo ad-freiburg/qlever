@@ -470,8 +470,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(index.getImpl(),
-                                                    variableColumns, triples);
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -492,8 +492,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                    AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(
-                index.getImpl(), variableColumns, std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
