@@ -16,17 +16,17 @@ jobs:
       cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: "recursive"
           path: qlever-code
       - name: Checkout sparql-test-suite-files
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: "w3c/rdf-tests"
           path: sparql-test-suite
       - name: Checkout qlever-test-suite
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: "ad-freiburg/sparql-conformance"
           path: qlever-test-suite
