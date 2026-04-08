@@ -428,7 +428,7 @@ std::shared_ptr<const Result> Operation::getResult(
       AD_LOG_ERROR << "LOCAL VOCAB LIFETIME VIOLATED, printing the runtime info"
                    << std::endl;
       AD_LOG_ERROR << nlohmann::ordered_json{runtimeInfo()}.dump(4);
-      AD_LOG_ERROR << "ABORTING...";
+      AD_LOG_ERROR << "ABORTING..." << std::endl;
       std::terminate();
     }
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
