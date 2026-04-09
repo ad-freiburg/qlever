@@ -530,10 +530,9 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
-  IdOrLocalVocabEntry reference =
-      sparqlExpression::detail::promote(rightSideReferenceValue_);
   LocalVocab localVocab{};
-  auto referenceId = getValueIdFromIdOrLocalVocabEntry(reference, localVocab);
+  auto referenceId =
+      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
   // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
@@ -575,20 +574,16 @@ std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
 template <CompOp Comparison>
 std::string RelationalExpression<Comparison>::asString(
     [[maybe_unused]] size_t depth) const {
-  auto referenceValueToString =
-      [](std::stringstream& stream,
-         const sparqlExpression::IdOrLiteralOrIri& referenceValue) {
-        std::visit(
-            ad_utility::OverloadCallOperator{
-                [&stream](const ValueId& referenceId) {
-                  stream << referenceId;
-                },
-                [&stream](const ad_utility::triple_component::LiteralOrIri&
-                              referenceValue) {
-                  stream << referenceValue.toStringRepresentation();
-                }},
-            referenceValue);
-      };
+  auto referenceValueToString = [](std::stringstream& stream,
+                                   const IdOrLocalVocabEntry& referenceValue) {
+    std::visit(
+        ad_utility::OverloadCallOperator{
+            [&stream](const ValueId& referenceId) { stream << referenceId; },
+            [&stream](const LocalVocabEntry& referenceValue) {
+              stream << referenceValue.toStringRepresentation();
+            }},
+        referenceValue);
+  };
 
   std::stringstream stream;
   stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
@@ -967,30 +962,28 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 //______________________________________________________________________________
 template <CompOp comparison>
 static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
-    const sparqlExpression::IdOrLiteralOrIri& referenceValue,
-    bool prefilterDateByYear) {
+    const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
   using enum Datatype;
   // Standard pre-filtering procedure.
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
   }
   // Helper to safely retrieve `ValueId/Id` values from the provided
-  // `IdOrLiteralOrIri referenceValue` if contained. Given no
+  // `IdOrLocalVocabEntry referenceValue` if contained. Given no
   // `ValueId` is contained, a explanatory message per
   // `std::runtime_error` is thrown.
   const auto retrieveValueIdOrThrowErr =
-      [](const sparqlExpression::IdOrLiteralOrIri& referenceValue) {
+      [](const IdOrLocalVocabEntry& referenceValue) {
         return std::visit(
             [](const auto& value) -> ValueId {
               using T = std::decay_t<decltype(value)>;
               if constexpr (ad_utility::isSimilar<T, ValueId>) {
                 return value;
               } else {
-                static_assert(ad_utility::isSimilar<
-                              T, ad_utility::triple_component::LiteralOrIri>);
+                static_assert(ad_utility::isSimilar<T, LocalVocabEntry>);
                 throw std::runtime_error(absl::StrCat(
                     "Provided Literal or Iri with value: ",
-                    value.toStringRepresentation(),
+                    value.asLiteralOrIri().toStringRepresentation(),
                     ". This is an invalid reference value for filtering date "
                     "values over expression YEAR. Please provide an integer "
                     "value as reference year."));
@@ -1003,8 +996,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   // value was provided, throw a std::runtime_error with an
   // explanatory message.
   const auto retrieveYearIntOrThrowErr =
-      [&retrieveValueIdOrThrowErr](
-          const sparqlExpression::IdOrLiteralOrIri& referenceValue) {
+      [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
         const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
         if (valueId.getDatatype() == Int) {
           return valueId.getInt();
@@ -1022,8 +1014,8 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
 //______________________________________________________________________________
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
-    const sparqlExpression::IdOrLiteralOrIri& referenceValue,
-    const Variable& variable, bool mirrored, bool prefilterDateByYear) {
+    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+    bool mirrored, bool prefilterDateByYear) {
   using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
@@ -1048,11 +1040,10 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 }
 
 //______________________________________________________________________________
-#define INSTANTIATE_MAKE_PREFILTER(Comparison)    \
-  template std::vector<PrefilterExprVariablePair> \
-  makePrefilterExpressionVec<Comparison>(         \
-      const sparqlExpression::IdOrLiteralOrIri&, const Variable&, bool, bool);
-
+#define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
+  template std::vector<PrefilterExprVariablePair>                    \
+  makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
+                                         const Variable&, bool, bool);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
 INSTANTIATE_MAKE_PREFILTER(CompOp::GE);

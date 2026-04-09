@@ -25,14 +25,14 @@ using namespace prefilterExpressions;
 
 // Make RelationalExpression
 template <typename RelExpr>
-inline auto relExpr = [](const sparqlExpression::IdOrLiteralOrIri& referenceId)
+inline auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<RelExpr>(referenceId);
 };
 
 // Make IsInExpression
 inline auto isInExpression =
-    [](std::vector<sparqlExpression::IdOrLiteralOrIri>&& referenceValues,
+    [](std::vector<IdOrLocalVocabEntry>&& referenceValues,
        bool isNegated = false) {
       return std::make_unique<IsInExpression>(referenceValues, isNegated);
     };

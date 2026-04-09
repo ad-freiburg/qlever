@@ -261,20 +261,21 @@ using SingleUseExpression = detail::SingleUseExpression;
 namespace detail {
 
 //______________________________________________________________________________
+using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // Given a `SparqlExpression*` pointing to a `LiteralExpression`, this helper
-// function retrieves a corresponding `IdOrLiteralOrIri` variant
-// (`std::variant<ValueId, LiteralOrIri>`) for `LiteralExpression`s that
+// function retrieves a corresponding `IdOrLocalVocabEntry` variant
+// (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
-inline std::optional<IdOrLiteralOrIri>
+inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child) {
-  using ad_utility::triple_component::LiteralOrIri;
+  using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {
-    return LiteralOrIri{literalExpr->value()};
+    return LocalVocabEntry{literalExpr->value()};
   } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
-    return LiteralOrIri{iriExpr->value()};
+    return LocalVocabEntry{iriExpr->value()};
   } else {
     return std::nullopt;
   }
