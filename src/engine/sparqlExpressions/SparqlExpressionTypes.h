@@ -430,13 +430,16 @@ inline bool isConstantExpressionResult(const ExpressionResult& res) {
       res);
 }
 
-// Helper type to upgrade the variant type.
+// Helper type to convert the type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry`. For other types, the type is unchanged.
 template <typename T>
 using PromoteToLocalVocabEntry =
     std::conditional_t<std::is_same_v<T, IdOrLiteralOrIri>, IdOrLocalVocabEntry,
                        T>;
 
-// Helper functor to upgrade the variant type.
+// Helper functor to upgrade the variant type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
+// For other types, the functor just returns the input as is.
 struct Promote {
   template <typename T>
   PromoteToLocalVocabEntry<std::decay_t<T>> operator()(T&& value) const {
