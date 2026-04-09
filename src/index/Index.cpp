@@ -152,6 +152,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
+bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
+
+// ____________________________________________________________________________
 bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
 
 // ____________________________________________________________________________
