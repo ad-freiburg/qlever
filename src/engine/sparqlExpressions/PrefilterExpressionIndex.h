@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
@@ -260,11 +261,12 @@ class IsInExpression : public PrefilterExpression {
   // Represents the reference values used for equality-based prefiltering, since
   // the applied `PrefilterExpression` over these referenceValues is
   // semantically equivalent to: refVal1 || refVal2 || ... || refValN.
-  std::vector<IdOrLocalVocabEntry> referenceValues_;
+  std::vector<sparqlExpression::IdOrLiteralOrIri> referenceValues_;
 
  public:
-  explicit IsInExpression(std::vector<IdOrLocalVocabEntry> referenceValues,
-                          bool isNegated = false)
+  explicit IsInExpression(
+      std::vector<sparqlExpression::IdOrLiteralOrIri> referenceValues,
+      bool isNegated = false)
       : isNegated_(isNegated), referenceValues_(std::move(referenceValues)) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
@@ -298,10 +300,11 @@ class RelationalExpression : public PrefilterExpression {
   // E.g., a less-than expression with a value of 3 will represent the logical
   // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
   // represent ?var = "Freiburg".
-  IdOrLocalVocabEntry rightSideReferenceValue_;
+  sparqlExpression::IdOrLiteralOrIri rightSideReferenceValue_;
 
  public:
-  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+  explicit RelationalExpression(
+      const sparqlExpression::IdOrLiteralOrIri& referenceValue)
       : rightSideReferenceValue_(referenceValue) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
@@ -438,7 +441,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 //______________________________________________________________________________
 // Creates a `RelationalExpression<comparison>` prefilter expression based on
 // the specified `CompOp` comparison operation and the reference
-// `IdOrLocalVocabEntry` value. With the next step, the corresponding
+// `IdOrLiteralOrIri` value. With the next step, the corresponding
 // `<RelationalExpression<comparison>, Variable>` pair is created, and finally
 // returned in a vector.
 // The `mirrored` flag indicates if the given `RelationalExpression<comparison>`
@@ -452,8 +455,8 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 // `prefilterDateByYear` as an indicator.
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
-    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDateByYear = false);
+    const sparqlExpression::IdOrLiteralOrIri& referenceValue,
+    const Variable& variable, bool mirrored, bool prefilterDateByYear = false);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

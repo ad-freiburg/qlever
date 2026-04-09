@@ -261,30 +261,20 @@ using SingleUseExpression = detail::SingleUseExpression;
 namespace detail {
 
 //______________________________________________________________________________
-using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // Given a `SparqlExpression*` pointing to a `LiteralExpression`, this helper
-// function retrieves a corresponding `IdOrLocalVocabEntry` variant
-// (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
+// function retrieves a corresponding `IdOrLiteralOrIri` variant
+// (`std::variant<ValueId, LiteralOrIri>`) for `LiteralExpression`s that
 // contain a suitable type.
-// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
-// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
-// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
-// from `LiteralExpression<ValueId>` will be returned.
-inline std::optional<IdOrLocalVocabEntry>
-getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
-                                            bool stringAndIriOnly = false) {
-  using enum Datatype;
+inline std::optional<IdOrLiteralOrIri>
+getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child) {
+  using ad_utility::triple_component::LiteralOrIri;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
-    auto idType = idExpr->value().getDatatype();
-    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
-      return std::nullopt;
-    }
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {
-    return LocalVocabEntry{literalExpr->value()};
+    return LiteralOrIri{literalExpr->value()};
   } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
-    return LocalVocabEntry{iriExpr->value()};
+    return LiteralOrIri{iriExpr->value()};
   } else {
     return std::nullopt;
   }

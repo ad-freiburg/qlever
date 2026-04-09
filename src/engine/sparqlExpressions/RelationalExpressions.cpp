@@ -520,12 +520,11 @@ InExpression::getPrefilterExpressionForMetadata(
     return {};
   }
 
-  std::vector<prefilterExpressions::IdOrLocalVocabEntry> referenceValues;
+  std::vector<IdOrLiteralOrIri> referenceValues;
   referenceValues.reserve(children_.size());
   for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
     auto optReferenceValue =
-        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
-            expr.get());
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(expr.get());
     if (!optReferenceValue.has_value()) {
       return {};
     }
