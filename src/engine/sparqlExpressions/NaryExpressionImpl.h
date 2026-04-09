@@ -85,8 +85,9 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
           ql::ranges::range_value_t<decltype(resultGenerator)>>;
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
-      ql::ranges::move(ql::views::transform(resultGenerator, promote),
-                       std::back_inserter(result));
+      ql::ranges::move(
+          ql::views::transform(std::move(resultGenerator), promote),
+          std::back_inserter(result));
 
       if constexpr (resultIsConstant) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
