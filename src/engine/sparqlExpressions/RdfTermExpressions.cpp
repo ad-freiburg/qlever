@@ -8,7 +8,7 @@ namespace sparqlExpression {
 namespace detail::rdfExpressions {
 
 struct GetDatatypeImpl {
-  IdOrLocalVocabEntry operator()(OptIri input) const {
+  IdOrLiteralOrIri operator()(OptIri input) const {
     if (!input.has_value()) {
       return Id::makeUndefined();
     } else {

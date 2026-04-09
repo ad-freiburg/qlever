@@ -55,9 +55,9 @@ void concatOrSetLiteral(
 
 // String functions.
 struct StrImpl {
-  IdOrLocalVocabEntry operator()(std::optional<std::string> s) const {
+  IdOrLiteralOrIri operator()(std::optional<std::string> s) const {
     if (s.has_value()) {
-      return IdOrLocalVocabEntry{toLiteral(s.value())};
+      return LiteralOrIri{toLiteral(s.value())};
     } else {
       return Id::makeUndefined();
     }
@@ -145,7 +145,7 @@ using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<Strlen>>;
 // UCase and LCase
 template <auto toLowerOrToUpper>
 struct UpperOrLowerCaseImpl {
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> input) const {
     if (!input.has_value()) {
       return Id::makeUndefined();
@@ -189,7 +189,7 @@ class SubstrImpl {
   };
 
  public:
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
       NumericValue start, NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
@@ -292,7 +292,7 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 struct StrAfterOrBeforeImpl {
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> optLiteral,
       std::optional<ad_utility::triple_component::Literal> optPattern) const {
     if (!optPattern.has_value() || !optLiteral.has_value()) {
@@ -341,9 +341,8 @@ using StrBeforeExpression =
                           LiteralValueGetterWithoutStrFunction>;
 
 struct MergeFlagsIntoRegex {
-  IdOrLocalVocabEntry operator()(
-      std::optional<std::string> regex,
-      const std::optional<std::string>& flags) const {
+  IdOrLiteralOrIri operator()(std::optional<std::string> regex,
+                              const std::optional<std::string>& flags) const {
     if (!flags.has_value() || !regex.has_value()) {
       return Id::makeUndefined();
     }
@@ -365,7 +364,7 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, MergeFlagsIntoRegex, LiteralFromIdGetter>;
 
 struct ReplaceImpl {
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
       const std::shared_ptr<RE2>& pattern,
       const std::optional<std::string>& replacement) const {
@@ -525,7 +524,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
 // ENCODE_FOR_URI
 struct EncodeForUriImpl {
-  IdOrLocalVocabEntry operator()(std::optional<std::string> input) const {
+  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!input.has_value()) {
       return Id::makeUndefined();
@@ -560,7 +559,7 @@ using LangMatches = StringExpressionImpl<2, LangMatching, StringValueGetter>;
 
 // STRING WITH LANGUAGE TAG
 struct StrLangTag {
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> literal,
       std::optional<std::string> langTag) const {
     if (!literal.has_value() || !langTag.has_value() ||
@@ -579,7 +578,7 @@ using StrLangTagged = LiteralExpressionImpl<2, StrLangTag, StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
 struct StrIriDtTag {
-  IdOrLocalVocabEntry operator()(
+  IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> literal,
       OptIri inputIri) const {
     if (!literal.has_value() || !inputIri.has_value() ||
@@ -615,7 +614,7 @@ using StrIriTagged = LiteralExpressionImpl<2, StrIriDtTag, IriValueGetter>;
 // HASH
 template <typename HashFunc>
 struct Hash {
-  IdOrLocalVocabEntry operator()(std::optional<std::string> input) const {
+  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
     if (!input.has_value()) {
       return Id::makeUndefined();
     } else {

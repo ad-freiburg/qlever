@@ -186,7 +186,7 @@ class WktBoundingCoordinate {
 // Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
-  sparqlExpression::IdOrLocalVocabEntry operator()(
+  sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeometryType>& geometryType) const {
     if (!geometryType.has_value()) {
       return ValueId::makeUndefined();
@@ -202,14 +202,14 @@ class WktGeometryType {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
  public:
-  sparqlExpression::IdOrLocalVocabEntry operator()(
+  sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
     using namespace triple_component;
@@ -224,7 +224,7 @@ class WktGeometryN {
     }
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 

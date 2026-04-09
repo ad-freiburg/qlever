@@ -18,7 +18,7 @@ using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________
 struct GetLanguageTag {
-  IdOrLocalVocabEntry operator()(OptValue optLangTag) const {
+  IdOrLiteralOrIri operator()(OptValue optLangTag) const {
     if (!optLangTag.has_value()) {
       return Id::makeUndefined();
     } else {
