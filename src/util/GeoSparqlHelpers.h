@@ -141,7 +141,7 @@ class WktCentroid {
 // Get the bounding box of a geometry.
 class WktEnvelope {
  public:
-  sparqlExpression::IdOrLocalVocabEntry operator()(
+  sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
       return ValueId::makeUndefined();
