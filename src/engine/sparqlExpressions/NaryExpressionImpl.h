@@ -81,10 +81,12 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
                                             AD_FWD(operands)...);
 
       // Compute the result.
-      using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
+      using ResultType = PromoteToLocalVocabEntry<
+          ql::ranges::range_value_t<decltype(resultGenerator)>>;
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
-      ql::ranges::move(resultGenerator, std::back_inserter(result));
+      ql::ranges::move(ql::views::transform(resultGenerator, promote),
+                       std::back_inserter(result));
 
       if constexpr (resultIsConstant) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
@@ -238,14 +240,15 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // Apply the `function_` on a tuple of arguments (the `zipper` above has
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
-      return std::apply(
+      return promote(std::apply(
           [this](auto&&... args) { return function_(AD_FWD(args)...); },
-          AD_FWD(tuple));
+          AD_FWD(tuple)));
     };
     auto resultGenerator =
         ql::views::transform(ql::ranges::ref_view(zipper), onTuple);
     // Compute the result.
-    VectorWithMemoryLimit<std::decay_t<Ret>> result{context->_allocator};
+    VectorWithMemoryLimit<PromoteToLocalVocabEntry<std::decay_t<Ret>>> result{
+        context->_allocator};
     result.reserve(targetSize);
     ql::ranges::move(resultGenerator, std::back_inserter(result));
 

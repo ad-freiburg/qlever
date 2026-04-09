@@ -98,6 +98,10 @@ static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 // their result (for example IF and COALESCE). It is also used for expressions
 // that can only yield strings.
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+// Similar to `IdOrLocalVocabEntry`, but doesn't require the context for
+// `LocalVocabEntry`.
+using IdOrLiteralOrIri =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
@@ -425,6 +429,31 @@ inline bool isConstantExpressionResult(const ExpressionResult& res) {
       },
       res);
 }
+
+// Helper type to upgrade the variant type.
+template <typename T>
+using PromoteToLocalVocabEntry =
+    std::conditional_t<std::is_same_v<T, IdOrLiteralOrIri>, IdOrLocalVocabEntry,
+                       T>;
+
+// Helper functor to upgrade the variant type.
+struct Promote {
+  template <typename T>
+  PromoteToLocalVocabEntry<std::decay_t<T>> operator()(T&& value) const {
+    if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
+      return std::visit(ad_utility::OverloadCallOperator{
+                            [](Id id) -> IdOrLocalVocabEntry { return id; },
+                            [](auto&& literalOrIri) -> IdOrLocalVocabEntry {
+                              return {LocalVocabEntry{AD_FWD(literalOrIri)}};
+                            }},
+                        AD_FWD(value));
+    } else {
+      return AD_FWD(value);
+    }
+  }
+};
+
+constexpr Promote promote{};
 
 }  // namespace detail
 }  // namespace sparqlExpression
