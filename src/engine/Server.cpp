@@ -658,6 +658,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto [qec, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString, messageSender,
                          parameters, timeLimit.value(), accessTokenOk);
+    // NOTE: `plannedQuery` (a local in the caller `process`) holds operations
+    // that store raw pointers to `qec` (a local on this coroutine frame). When
+    // this coroutine frame is destroyed, `plannedQuery` must be reset BEFORE
+    // `qec` is destroyed, otherwise the cascading destruction of the lazy
+    // result generators will access the freed `qec` via `signalQueryUpdate`.
+    // Declaring this cleanup after `qec` ensures it runs first (reverse
+    // destruction order).
+    absl::Cleanup resetPlannedQuery{
+        [&plannedQuery]() { plannedQuery.reset(); }};
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
           msg, ad_utility::truncateOperationString(operationString)));
