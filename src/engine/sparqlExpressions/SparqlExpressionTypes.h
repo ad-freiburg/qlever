@@ -440,9 +440,9 @@ using PromoteToLocalVocabEntry =
 // Helper functor to upgrade the variant type from `IdOrLiteralOrIri` to
 // `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
 // For other types, the functor just returns the input as is.
-struct Promote {
+struct PromoteToLocalVocabEntryT {
   template <typename T>
-  PromoteToLocalVocabEntry<std::decay_t<T>> operator()(T&& value) const {
+  decltype(auto) operator()(T&& value) const {
     if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
       return std::visit(ad_utility::OverloadCallOperator{
                             [](Id id) -> IdOrLocalVocabEntry { return id; },
@@ -456,7 +456,7 @@ struct Promote {
   }
 };
 
-constexpr Promote promote{};
+constexpr PromoteToLocalVocabEntryT promoteToLocalVocabEntry{};
 
 }  // namespace detail
 }  // namespace sparqlExpression

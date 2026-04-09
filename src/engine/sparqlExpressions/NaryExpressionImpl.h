@@ -86,7 +86,7 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
       for (auto&& element : resultGenerator) {
-        result.push_back(promote(AD_FWD(element)));
+        result.push_back(promoteToLocalVocabEntry(std::move(element)));
       }
 
       if constexpr (resultIsConstant) {
@@ -241,7 +241,7 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // Apply the `function_` on a tuple of arguments (the `zipper` above has
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
-      return promote(std::apply(
+      return promoteToLocalVocabEntry(std::apply(
           [this](auto&&... args) { return function_(AD_FWD(args)...); },
           AD_FWD(tuple)));
     };
