@@ -154,7 +154,7 @@ class ValuesForTesting : public Operation {
     std::stringstream str;
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
-    auto numCols = tables_.empty() ? 0 : tables().[0].numColumns();
+    auto numCols = tables_.empty() ? 0 : tables()[0].numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
     if (totalNumRows > 1000) {
