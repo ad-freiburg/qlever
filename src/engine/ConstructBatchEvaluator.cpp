@@ -14,12 +14,22 @@
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTerm>
-ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>> optStringAndType) {
-  if (!optStringAndType.has_value()) return std::nullopt;
-  auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
+BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
+    ql::span<const size_t> variableColumnIndices,
+    const BatchEvaluationContext& evaluationContext,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
+  BatchEvaluationResult batchResult;
+  batchResult.numRows_ = evaluationContext.numRows();
+
+  for (size_t variableColumnIdx : variableColumnIndices) {
+    auto [it, wasNew] = batchResult.variablesByColumn_.emplace(
+        variableColumnIdx,
+        evaluateVariableByColumn(variableColumnIdx, evaluationContext,
+                                 localVocab, index, idCache));
+    AD_CORRECTNESS_CHECK(wasNew);
+  }
+
+  return batchResult;
 }
 
 // _____________________________________________________________________________
@@ -27,6 +37,15 @@ std::optional<EvaluatedTerm> ConstructBatchEvaluator::idToEvaluatedTerm(
     const Index& index, Id id, const LocalVocab& localVocab) {
   return stringAndTypeToEvaluatedTerm(
       ql::exportIds::idToStringAndType(index, id, localVocab));
+}
+
+// _____________________________________________________________________________
+std::optional<EvaluatedTerm>
+ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+    std::optional<std::pair<std::string, const char*>> optStringAndType) {
+  if (!optStringAndType.has_value()) return std::nullopt;
+  auto& [str, type] = optStringAndType.value();
+  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
 // _____________________________________________________________________________
@@ -79,25 +98,6 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
         });
   }
   return result;
-}
-
-// _____________________________________________________________________________
-BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
-    ql::span<const size_t> variableColumnIndices,
-    const BatchEvaluationContext& evaluationContext,
-    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  BatchEvaluationResult batchResult;
-  batchResult.numRows_ = evaluationContext.numRows();
-
-  for (size_t variableColumnIdx : variableColumnIndices) {
-    auto [it, wasNew] = batchResult.variablesByColumn_.emplace(
-        variableColumnIdx,
-        evaluateVariableByColumn(variableColumnIdx, evaluationContext,
-                                 localVocab, index, idCache));
-    AD_CORRECTNESS_CHECK(wasNew);
-  }
-
-  return batchResult;
 }
 
 }  // namespace qlever::constructExport
