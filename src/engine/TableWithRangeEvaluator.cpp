@@ -61,9 +61,9 @@ std::vector<EvaluatedTriple> TableWithRangeEvaluator::computeBatch(
   BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
                                       firstRow() + batchStart,
                                       firstRow() + batchEnd};
-  auto batchResult =
-      evaluateBatch(preprocessedTemplate_.uniqueVariableColumns_, batchContext,
-                    tableWithVocab_.localVocab(), index_.get(), idCache_);
+  auto batchResult = ConstructBatchEvaluator::evaluateBatch(
+      preprocessedTemplate_.uniqueVariableColumns_, batchContext,
+      tableWithVocab_.localVocab(), index_.get(), idCache_);
 
   const size_t blankNodeBaseId = currentRowOffset_ + firstRow() + batchStart;
   return instantiateBatch(preprocessedTemplate_, batchResult, blankNodeBaseId);

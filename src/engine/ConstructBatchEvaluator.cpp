@@ -14,7 +14,8 @@
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
+std::optional<EvaluatedTerm>
+ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
     std::optional<std::pair<std::string, const char*>> optStringAndType) {
   if (!optStringAndType.has_value()) return std::nullopt;
   auto& [str, type] = optStringAndType.value();
@@ -22,14 +23,14 @@ std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
 }
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTerm> idToEvaluatedTerm(const Index& index, Id id,
-                                               const LocalVocab& localVocab) {
+std::optional<EvaluatedTerm> ConstructBatchEvaluator::idToEvaluatedTerm(
+    const Index& index, Id id, const LocalVocab& localVocab) {
   return stringAndTypeToEvaluatedTerm(
       ql::exportIds::idToStringAndType(index, id, localVocab));
 }
 
 // _____________________________________________________________________________
-EvaluatedVariableValues evaluateVariableByColumn(
+EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
@@ -73,14 +74,15 @@ EvaluatedVariableValues evaluateVariableByColumn(
   for (size_t i = 0; i < missIds.size(); ++i) {
     result[missRows[i]] =
         idCache.getOrCompute(missIds[i], [&missResolved, i](const Id&) {
-          return stringAndTypeToEvaluatedTerm(std::move(missResolved[i]));
+          return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+              std::move(missResolved[i]));
         });
   }
   return result;
 }
 
 // _____________________________________________________________________________
-BatchEvaluationResult evaluateBatch(
+BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     ql::span<const size_t> variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {

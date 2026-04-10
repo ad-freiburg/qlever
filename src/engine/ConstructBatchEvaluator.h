@@ -17,11 +17,12 @@
 #include "index/Index.h"
 #include "index/LocalVocab.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"
 
 namespace qlever::constructExport {
 
-// `EvaluatedVariablesValues` is used to store the evaluation results
+// `EvaluatedVariableValues` is used to store the evaluation results
 // (`EvaluatedTerm`s) for the values of a single variable across all rows in a
 // batch. The i-th element corresponds to the i-th row in the batch, and is
 // `nullopt` iff the variable was unbound for that row.
@@ -30,7 +31,7 @@ using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 // Result of batch-evaluating all variables for a batch of rows. Stores the
 // evaluated values per variable column and the number of rows in the batch.
 struct BatchEvaluationResult {
-  // `variablesByColumn_` maps the column index of the result that is being
+  // `variablesByColumn_` maps a column index of the `Result` that is being
   // evaluated to the `EvaluatedVariableValues` for the variable that is stored
   // in that column. We use a hash map (instead of a dense vector) because the
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
@@ -64,24 +65,40 @@ struct BatchEvaluationContext {
   size_t numRows() const { return endRow_ - firstRow_; }
 };
 
-// Evaluates the variables identified by `variableColumnIndices` for all rows
-// in `evaluationContext`. Each entry in `variableColumnIndices` is an
-// `IdTable` column index representing a variable in the CONSTRUCT template.
-BatchEvaluationResult evaluateBatch(
-    ql::span<const size_t> variableColumnIndices,
-    const BatchEvaluationContext& evaluationContext,
-    const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+// Resolves `Id` values in variable columns to their string representations
+// (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
+//
+// The evaluation is column-oriented: for each variable (identified by their
+// `IdTable` column), all rows in the batch are evaluated before moving to the
+// next variable.
+//
+// An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
+// same `Id` across rows and batches.
+class ConstructBatchEvaluator {
+ public:
+  // Evaluates the variables identified by `variableColumnIndices` for all rows
+  // in `evaluationContext`. Each entry in `variableColumnIndices` is an
+  // `IdTable` column index representing a variable in the CONSTRUCT template.
+  static BatchEvaluationResult evaluateBatch(
+      ql::span<const size_t> variableColumnIndices,
+      const BatchEvaluationContext& evaluationContext,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
-// Evaluate a single variable (identified by its `IdTable` column index)
-// across all rows in the batch.
-static EvaluatedVariableValues evaluateVariableByColumn(
-    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-    const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+ private:
+  // Evaluate a single variable (identified by its `IdTable` column index)
+  // across all rows in the batch.
+  static EvaluatedVariableValues evaluateVariableByColumn(
+      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
-// Convert a single `Id` to its `EvaluatedTerm` string representation.
-// Returns `std::nullopt` if the `Id` has no string representation.
-static std::optional<EvaluatedTerm> idToEvaluatedTerm(
-    const Index& index, Id id, const LocalVocab& localVocab);
+  // Convert a single `Id` to its `EvaluatedTerm` string representation.
+  // Returns `std::nullopt` if the `Id` has no string representation.
+  static std::optional<EvaluatedTerm> idToEvaluatedTerm(
+      const Index& index, Id id, const LocalVocab& localVocab);
+
+  static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
+      std::optional<std::pair<std::string, const char*>> optStringAndType);
+};
 
 }  // namespace qlever::constructExport
 
