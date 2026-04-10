@@ -31,8 +31,8 @@ static constexpr auto evalTerm = [](const std::string& expected) {
 };
 
 static const EvaluatedVariableValues& getColumn(
-    const BatchEvaluationResult& result, size_t positionIdx) {
-  return result.variablesByColumn_.at(positionIdx);
+    const BatchEvaluationResult& result, size_t variableColumnIdx) {
+  return result.variablesByColumn_.at(variableColumnIdx);
 }
 
 // =============================================================================
