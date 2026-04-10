@@ -762,7 +762,7 @@ struct JoinSide {
   [[no_unique_address]] const End end_;
   const Projection& projection_;
   // Dummy, only required for a better interface of `makeJoinSide` below.
-  [[no_unique_address]] std::type_identity<ProjectedElT> projectedElT_{};
+  [[no_unique_address]] ql::type_identity<ProjectedElT> projectedElT_{};
   CurrentBlocks currentBlocks_{};
   CurrentBlocks undefBlocks_{};
 
@@ -781,7 +781,7 @@ template <typename It, typename End, typename Projection>
 JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 
 template <typename It, typename End, typename Projection, typename ProjectedElT>
-JoinSide(It, End, const Projection&, std::type_identity<ProjectedElT>)
+JoinSide(It, End, const Projection&, ql::type_identity<ProjectedElT>)
     -> JoinSide<It, End, Projection, ProjectedElT>;
 
 // Create a `JoinSide` object from a range of `blocks` and a `projection`. Note
@@ -797,7 +797,7 @@ auto makeJoinSide(Blocks& blocks, const Projection& projection) {
 // explicitly.
 template <typename Blocks, typename Projection, typename ProjectedEl>
 auto makeJoinSide(Blocks& blocks, const Projection& projection,
-                  std::type_identity<ProjectedEl> tg) {
+                  ql::type_identity<ProjectedEl> tg) {
   return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection, tg};
 }
@@ -1853,9 +1853,9 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
       ql::ranges::range_value_t<std::decay_t<RightBlocks>>>;
   static_assert(std::is_same_v<ProjectedLeft, ProjectedRight>);
   auto leftSide = detail::makeJoinSide(leftBlocks, ql::identity{},
-                                       std::type_identity<ProjectedLeft>{});
+                                       ql::type_identity<ProjectedLeft>{});
   auto rightSide = detail::makeJoinSide(rightBlocks, ql::identity{},
-                                        std::type_identity<ProjectedLeft>{});
+                                        ql::type_identity<ProjectedLeft>{});
   using LeftSide = decltype(leftSide);
   using RightSide = decltype(rightSide);
   detail::BlockZipperJoinImplForSpecialOptionalJoin<

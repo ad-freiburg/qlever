@@ -21,6 +21,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -95,6 +96,60 @@ void DeltaTriples::clear() {
             locatedTriples_->getLocatedTriples<false>());
   clearImpl(triplesToHandlesInternal_,
             locatedTriples_->getLocatedTriples<true>());
+}
+
+// ____________________________________________________________________________
+nlohmann::json DeltaTriples::vacuum(
+    ad_utility::SharedCancellationHandle cancellationHandle) {
+  // When the cancellation handle stops the execution this results in the state
+  // that only a part of the triples have been vacuumed, which is valid.
+  using namespace ad_utility::use_value_identity;
+  auto identifyTriplesToVacuum = [this, &cancellationHandle](auto isInternal) {
+    auto perm = Permutation::PSO;
+    auto& basePerm = index_.getPermutation(perm);
+    const auto& actualPerm =
+        isInternal ? basePerm.internalPermutation() : basePerm;
+    const auto& ltpb =
+        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(perm);
+    return ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
+  };
+  auto removeIdentifiedTriples =
+      [this, &cancellationHandle](
+          auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
+          const std::vector<IdTriple<0>>& insertionsToRemove) {
+        auto& state = getState<isInternal>();
+        auto removeTriples = [this, &cancellationHandle, &isInternal](
+                                 const std::vector<IdTriple<0>>& triples,
+                                 auto& triplesToHandlesMap) {
+          ad_utility::chunkedForLoop<10'000>(
+              0, triples.size(),
+              [&triples, &triplesToHandlesMap, this, &isInternal](size_t i) {
+                auto it = triplesToHandlesMap.find(triples[i]);
+                AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
+                this->eraseTripleInAllPermutations<isInternal>(it->second);
+                triplesToHandlesMap.erase(it);
+              },
+              [&cancellationHandle]() {
+                cancellationHandle->throwIfCancelled();
+              });
+        };
+
+        removeTriples(deletionsToRemove, state.triplesDeleted_);
+        removeTriples(insertionsToRemove, state.triplesInserted_);
+      };
+
+  nlohmann::json result = nlohmann::json::object();
+  auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
+  removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove_,
+                          toRemoveInExternal.insertionsToRemove_);
+  result["external"] = toRemoveInExternal.stats_;
+
+  auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
+  removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove_,
+                          toRemoveInInternal.insertionsToRemove_);
+  result["internal"] = toRemoveInInternal.stats_;
+
+  return result;
 }
 
 // ____________________________________________________________________________
@@ -404,10 +459,11 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
-      locatedTriples_->locatedTriplesPerBlock_,
-      locatedTriples_->internalLocatedTriplesPerBlock_,
-      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
+  return LocatedTriplesSharedState{
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
+          locatedTriples_->locatedTriplesPerBlock_,
+          locatedTriples_->internalLocatedTriplesPerBlock_,
+          localVocab_.getLifetimeExtender(), locatedTriples_->index_})};
 }
 
 // ____________________________________________________________________________

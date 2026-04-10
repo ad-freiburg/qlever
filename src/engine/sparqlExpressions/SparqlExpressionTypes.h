@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
+#include <boost/mp11.hpp>
 #include <vector>
 
 #include "backports/keywords.h"

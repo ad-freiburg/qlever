@@ -103,9 +103,9 @@ class DeltaTriples {
   // `shared_ptr` so that we can easily convert them to a
   // `LocatedTriplesSnapshot`.
   std::shared_ptr<LocatedTriplesState> locatedTriples_ =
-      std::make_shared<LocatedTriplesState>(
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
           LocatedTriplesPerBlockAllPermutations<false>{},
-          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0);
+          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0});
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -191,6 +191,13 @@ class DeltaTriples {
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
+
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {

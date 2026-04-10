@@ -300,7 +300,7 @@ class NaryExpressionTypeErased<
   using Helper =
       TypeErasedNaryHelper<Function,
                            ValueGetterPack<N, std::tuple<ValueGetters...>>>;
-  using Base = Helper::BaseType;
+  using Base = typename Helper::BaseType;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
  public:

@@ -85,7 +85,7 @@ class Sort : public Operation {
 
   virtual Result computeResult(bool requestLaziness) override;
 
-  // Sort in memory, using `Engine::sort`.
+  // Sort in memory, using `IdTableUtils::sort`.
   Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
 
   // Sort externally, using `CompressedExternalIdTableSorter`, using the value
