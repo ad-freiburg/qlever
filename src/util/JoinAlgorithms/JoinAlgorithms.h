@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"

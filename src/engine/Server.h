@@ -82,8 +82,26 @@ class Server {
 
   // Helper struct bundling a parsed query with a query execution tree.
   struct PlannedQuery {
+   private:
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
+    std::shared_ptr<const QueryExecutionContext> qec_;
+
+   public:
+    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+                 const QueryExecutionContext& qec)
+        : parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)},
+          qec_{qec.shared_from_this()} {
+      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+    }
+
+    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+    ParsedQuery& parsedQuery() { return parsedQuery_; }
+    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
+    const QueryExecutionTree& queryExecutionTree() const {
+      return queryExecutionTree_;
+    }
   };
 
  private:
