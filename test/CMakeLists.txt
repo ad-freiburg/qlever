@@ -512,4 +512,4 @@ addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(EvaluatedTripleIteratorTest engine)
+addLinkAndDiscoverTest(TableWithRangeEvaluatorTest engine)

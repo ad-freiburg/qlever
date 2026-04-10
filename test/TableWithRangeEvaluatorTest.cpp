@@ -51,7 +51,7 @@ static std::vector<EvaluatedTriple> collectAll(TableWithRangeEvaluator& proc) {
 // Provides helpers to build IdTables, templates, and TableWithRange values.
 // =============================================================================
 
-class EvaluatedTripleIteratorTest : public ::testing::Test {
+class TableWithRangeEvaluatorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ =
       ad_utility::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
@@ -104,7 +104,7 @@ class EvaluatedTripleIteratorTest : public ::testing::Test {
 // =============================================================================
 
 // No rows in the view -> no triples emitted, regardless of the template.
-TEST_F(EvaluatedTripleIteratorTest, emptyTable) {
+TEST_F(TableWithRangeEvaluatorTest, emptyTable) {
   auto idTable = makeIdTableFromVector({});
   auto tmpl = makeTemplate({triple(Const("<s>"), Const("<p>"), Const("<o>"))});
   auto table = makeRange(idTable, 0, 0);
@@ -116,7 +116,7 @@ TEST_F(EvaluatedTripleIteratorTest, emptyTable) {
 
 // All-constants template: every result row emits one identical triple,
 // regardless of IdTable cell contents.
-TEST_F(EvaluatedTripleIteratorTest, allConstantsYieldsOneTriplePerRow) {
+TEST_F(TableWithRangeEvaluatorTest, allConstantsYieldsOneTriplePerRow) {
   auto idTable = makeIdTableFromVector(
       {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}});
   auto tmpl = makeTemplate({triple(Const("<s>"), Const("<p>"), Const("<o>"))});
@@ -131,7 +131,7 @@ TEST_F(EvaluatedTripleIteratorTest, allConstantsYieldsOneTriplePerRow) {
 }
 
 // Variable in subject position: correctly resolved from the IdTable column.
-TEST_F(EvaluatedTripleIteratorTest, variableInSubjectResolved) {
+TEST_F(TableWithRangeEvaluatorTest, variableInSubjectResolved) {
   //              col 0
   // row 0:       <s>
   // row 1:       <o>
@@ -147,7 +147,7 @@ TEST_F(EvaluatedTripleIteratorTest, variableInSubjectResolved) {
 
 // A row where a variable resolves to an undefined Id -> that triple is dropped.
 // Rows before and after the undefined row are unaffected.
-TEST_F(EvaluatedTripleIteratorTest, undefDropsTriple) {
+TEST_F(TableWithRangeEvaluatorTest, undefDropsTriple) {
   auto idTable = makeIdTableFromVector({{idS_}, {Id::makeUndefined()}, {idO_}});
   auto tmpl = makeTemplate({triple(Var(0), Const("<p>"), Const("<o>"))}, {0});
   auto table = makeRange(idTable, 0, 3);
@@ -160,7 +160,7 @@ TEST_F(EvaluatedTripleIteratorTest, undefDropsTriple) {
 
 // Multiple template triples: for each result row all template triples are
 // emitted in row-major order (all triples for row 0, then row 1, ...).
-TEST_F(EvaluatedTripleIteratorTest, multipleTemplateTriples) {
+TEST_F(TableWithRangeEvaluatorTest, multipleTemplateTriples) {
   auto idTable = makeIdTableFromVector({{idS_}, {idO_}});
   auto tmpl = makeTemplate({triple(Var(0), Const("<p>"), Const("<o1>")),
                             triple(Var(0), Const("<q>"), Const("<o2>"))},
@@ -177,7 +177,7 @@ TEST_F(EvaluatedTripleIteratorTest, multipleTemplateTriples) {
 
 // Blank-node row IDs combine currentRowOffset, firstRow, and the in-batch
 // row index: blankNodeRowId = currentRowOffset + firstRow + rowInBatch.
-TEST_F(EvaluatedTripleIteratorTest, blankNodeUsesCorrectRowId) {
+TEST_F(TableWithRangeEvaluatorTest, blankNodeUsesCorrectRowId) {
   auto idTable = makeIdTableFromVector(
       {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}});
   // Template: _:u<rowId>_node <p> <o>
@@ -197,7 +197,7 @@ TEST_F(EvaluatedTripleIteratorTest, blankNodeUsesCorrectRowId) {
 }
 
 // A view starting at a non-zero index reads the correct rows from the IdTable.
-TEST_F(EvaluatedTripleIteratorTest, viewSubrangeReadsCorrectRows) {
+TEST_F(TableWithRangeEvaluatorTest, viewSubrangeReadsCorrectRows) {
   //              col 0
   // row 0:       <s>     ← not in the view
   // row 1:       <p>     ← firstRow (view starts here)
@@ -217,7 +217,7 @@ TEST_F(EvaluatedTripleIteratorTest, viewSubrangeReadsCorrectRows) {
 
 // More than DEFAULT_BATCH_SIZE rows: the processor correctly crosses the
 // internal batch boundary and yields triples for all rows.
-TEST_F(EvaluatedTripleIteratorTest, acrossBatchBoundary) {
+TEST_F(TableWithRangeEvaluatorTest, acrossBatchBoundary) {
   constexpr size_t N = TableWithRangeEvaluator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
@@ -236,7 +236,7 @@ TEST_F(EvaluatedTripleIteratorTest, acrossBatchBoundary) {
 
 // After consuming all triples in batch 0, cancelling the handle causes the
 // next `get()` call (which starts batch 1) to throw.
-TEST_F(EvaluatedTripleIteratorTest, cancellationThrowsBetweenBatches) {
+TEST_F(TableWithRangeEvaluatorTest, cancellationThrowsBetweenBatches) {
   constexpr size_t N = TableWithRangeEvaluator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
