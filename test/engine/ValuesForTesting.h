@@ -154,7 +154,7 @@ class ValuesForTesting : public Operation {
     std::stringstream str;
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
-    auto numCols = tables_.empty() ? 0 : tables().at(0).numColumns();
+    auto numCols = tables_.empty() ? 0 : tables().[0].numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
     if (totalNumRows > 1000) {
@@ -180,7 +180,7 @@ class ValuesForTesting : public Operation {
   size_t getResultWidth() const override {
     // Assume a width of 1 if we have no tables and no other information to base
     // it on because 0 would otherwise cause stuff to break.
-    return tables_.empty() ? 1 : tables().at(0).numColumns();
+    return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
   std::vector<ColumnIndex> resultSortedOn() const override {
