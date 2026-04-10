@@ -432,10 +432,10 @@ TEST(ServerTest, gspHead) {
     EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
                 testing::IsEmpty());
   };
-  // testHead(std::nullopt);
-  // testHead("text/csv");
-  // testHead("text/tab-separated-values");
-  // testHead("text/turtle");
+  testHead(std::nullopt);
+  testHead("text/csv");
+  testHead("text/tab-separated-values");
+  testHead("text/turtle");
   testHead("application/qlever-results+json");
 }
 

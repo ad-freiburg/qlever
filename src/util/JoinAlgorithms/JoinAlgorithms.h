@@ -1746,7 +1746,6 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
       IdTable table(numCols, allocator);
       LocalVocab vocab;
-
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
         const auto& staticView = block.fullBlock().template asStaticView<0>();
@@ -1755,6 +1754,11 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
         }
         vocab.mergeWith(block.fullBlock().getLocalVocab());
       }
+      // Note: We use `IdTableAndFirstCols` here because it allows us to combine
+      // an `IdTable`  with a `LocalVocab` in a way that the
+      // `AddCombinedRowAdder` understands. The `1` template argument is
+      // actually a dummy, as we will never access the data via the
+      // `getFirstCols` interface.
       return makeIdTableAndFirstCols<1>(std::move(table), std::move(vocab));
     };
     auto leftTable = materializeBlocksAsTable(blocksLeft);

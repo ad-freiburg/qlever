@@ -81,6 +81,10 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
+  // As the `QueryExecutionTree` stores a raw pointer to the
+  // `QueryExecutionContext`, We additionally store the context as a
+  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
+  // server code.
   struct PlannedQuery {
    private:
     ParsedQuery parsedQuery_;
