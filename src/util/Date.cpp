@@ -65,7 +65,7 @@ std::string Date::getFormattedYear() const {
                         : absl::StrFormat("%05d", getYear());
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   auto epoch1 = toEpoch();
@@ -87,7 +87,7 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   // Get total nanoseconds and convert them so a seconds double.
   double second =
       std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
-      1'000'000'000;
+      1'000'000'000.0;
   // Only passing seconds to `DayTimeDuration`. The object itself will convert
   // the input to days, hours, minutes and seconds.
   return DayTimeDuration{durationType, 0, 0, 0, second};
@@ -132,6 +132,8 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 // _____________________________________________________________________________
 Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
+  // Shift the timestamp according to the given `TimeZone`offset.
+  timestamp = timestamp + std::chrono::hours{offset};
 
   // Extract date from epoch timestamp.
   auto days = std::chrono::floor<std::chrono::days>(timestamp);
@@ -148,7 +150,7 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   return Date{static_cast<int>(date.year()),
               static_cast<int>(static_cast<unsigned>(date.month())),
               static_cast<int>(static_cast<unsigned>(date.day())),
-              static_cast<int>(remainder.hours().count()) + offset,
+              static_cast<int>(remainder.hours().count()),
               static_cast<int>(remainder.minutes().count()),
               static_cast<double>(remainder.seconds().count()),
               tz};

@@ -1,8 +1,11 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
@@ -106,6 +109,8 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+    EXPECT_THAT(qet->getRootOperation()->getDescriptor(),
+                ::testing::HasSubstr("?x"));
     // For a full scan on a materialized view, the size estimate should be
     // exactly the number of rows in the view. This is also a regression test
     // for a bug introduced in #2680.
@@ -120,6 +125,24 @@ TEST_F(MaterializedViewsTest, Basic) {
       qlv().loadMaterializedView("doesNotExist"),
       ::testing::HasSubstr(
           "The materialized view 'doesNotExist' does not exist."));
+
+  // Test the `IndexScan` operation's descriptor when reading from columns not
+  // within the first three.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s ?s ;
+                   view:column-p ?p ;
+                   view:column-o ?o ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    EXPECT_EQ(qet->getRootOperation()->getDescriptor(),
+              "IndexScan testView1 ?s ?p ?o ?g");
+  }
 
   // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
@@ -1374,14 +1397,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
 
     VariableToColumnMap expectedVarToColResult{
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makeAlwaysDefinedColumn(1)},
+        {V{"?b3"}, makePossiblyUndefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
     VariableToColumnMap expectedVarToColPermutation{
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makeAlwaysDefinedColumn(4)},
+        {V{"?b3"}, makePossiblyUndefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),
@@ -1417,6 +1440,120 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   }
 }
 
+// Example dataset for usage of `MaterializedView` with `SpatialJoin`.
+constexpr std::string_view geoTtl = R"'(
+    @prefix geo: <http://www.opengis.net/ont/geosparql#> .
+    <s1> geo:hasGeometry <m1> .
+    <m1> geo:asWKT "POINT(1 2)"^^geo:wktLiteral .
+    <s2> geo:hasGeometry <m2> .
+    <m2> geo:asWKT "LINESTRING(7.8341918 48.014192,7.8342038 48.0135509)"^^geo:wktLiteral .
+    <s3> geo:hasGeometry <m3> .
+    <m3> geo:asWKT "POINT(7.841295 47.997731)"^^geo:wktLiteral .
+    <s1> <name> "Demo" .
+    <s2> <is> <demo> .
+    <s3> <is> <demo> .
+    <s3> <is> <demo2> .
+    <s4> geo:hasGeometry <m4> .
+    <m4> geo:asWKT "An Invalid Wkt Literal Does Not Throw"^^geo:wktLiteral .
+)'";
+constexpr std::string_view geoBoundingBoxesViewQuery = R"(
+  PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+  PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+  SELECT ?osm_id ?intermediate ?geometry ?lower_left ?upper_right ?centroid {
+    ?osm_id geo:hasGeometry ?intermediate .
+    ?intermediate geo:asWKT ?geometry .
+    BIND (ql:envelopeLowerLeft(?geometry) AS ?lower_left)
+    BIND (ql:envelopeUpperRight(?geometry) AS ?upper_right)
+    BIND (geof:centroid(?geometry) AS ?centroid)
+  }
+)";
+
+// Automatic `BIND` push-down for bounding boxes in `SpatialJoin`.
+TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
+  const std::string onDiskBase = "_materializedViewRewriteSpatialJoin";
+  const std::string viewName = "geoms";
+
+  // Initialize engine on test index.
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, std::string{geoTtl});
+  auto cleanUp = absl::MakeCleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Write geometries view with bounding boxes.
+  qlv.writeMaterializedView(viewName, std::string{geoBoundingBoxesViewQuery});
+  qlv.loadMaterializedView(viewName);
+
+  // Running the same query for reading that was used for writing results in a
+  // single `IndexScan` for all columns of the materialized view.
+  qpExpect(qlv, geoBoundingBoxesViewQuery,
+           viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 6,
+                    {
+                        {3, V{"?lower_left"}},
+                        {4, V{"?upper_right"}},
+                        {5, V{"?centroid"}},
+                    }));
+
+  // Check for the correct `VariableToColumnMap`, in particular, the correct
+  // `UndefStatus`.
+  {
+    auto [qet, qec, parsed] =
+        qlv.parseAndPlanQuery(std::string{geoBoundingBoxesViewQuery});
+    VariableToColumnMap expected{
+        {V{"?osm_id"}, makeAlwaysDefinedColumn(0)},
+        {V{"?intermediate"}, makeAlwaysDefinedColumn(1)},
+        {V{"?geometry"}, makeAlwaysDefinedColumn(2)},
+        {V{"?lower_left"}, makePossiblyUndefinedColumn(3)},
+        {V{"?upper_right"}, makePossiblyUndefinedColumn(4)},
+        {V{"?centroid"}, makePossiblyUndefinedColumn(5)}};
+    EXPECT_THAT(qet->getVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+
+  // A `SpatialJoin` adds the bounding box columns to its child `IndexScan`s
+  // automatically, even if there is a `Join` operation in between.
+  const std::string spatialJoinQuery = R"(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+        # Force materialized view (the test dataset is too small for the view's
+        # query plan to reliably have lower cost than the standard plan).
+        ?osm_id1 view:geoms-geometry ?geometry1 .
+        ?osm_id2 view:geoms-geometry ?geometry2 .
+        ?osm_id1 <is> <demo> .
+        FILTER geof:sfIntersects(?geometry1, ?geometry2)
+    }
+  )";
+  {
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(spatialJoinQuery);
+    auto sjMatcher = h::spatialJoin(
+        -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
+        PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+        SpatialJoinType::INTERSECTS,
+        // Push down of automatic `BIND`s through a `Join`.
+        h::Join(viewScan(viewName, "?osm_id1", "?_ql_materialized_view_p",
+                         "?geometry1", 4,
+                         {{3, V{"?_ql_sj_ll_geometry1"}},
+                          {4, V{"?_ql_sj_ur_geometry1"}}}),
+                h::IndexScanFromStrings("?osm_id1", "<is>", "<demo>")),
+        // Push down of automatic `BIND`s into direct child.
+        viewScan(
+            viewName, "?osm_id2", "?_ql_materialized_view_p", "?geometry2", 4,
+            {{3, V{"?_ql_sj_ll_geometry2"}}, {4, V{"?_ql_sj_ur_geometry2"}}}));
+    // The query plan contains the pushed down columns.
+    EXPECT_THAT(*qet, sjMatcher);
+
+    // Prefiltering using the pushed down columns is actually applied on
+    // evaluation of the query plan.
+    auto res = qet->getResult();
+    const auto& runtimeInfo = qet->getRootOperation()->runtimeInfo().details_;
+    ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
+    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
+  }
+}
+
 // Example queries for testing query rewriting.
 constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
 constexpr std::string_view simpleChainRenamed =
@@ -1427,6 +1564,10 @@ constexpr std::string_view simpleChainPlusJoin =
     "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
 constexpr std::string_view simpleChainRenamedPlusBind =
     "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
+constexpr std::string_view simpleChainDifferentSort =
+    "SELECT ?m ?s ?o { ?s <p1> ?m . ?m <p2> ?o }";
+constexpr std::string_view overlappingChains =
+    "SELECT * { ?s <p1> ?m . ?m <p2> ?o1 . ?m <p2> ?o2 }";
 
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
@@ -1460,8 +1601,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
                     h::IndexScanFromStrings("?m", "<p2>", "?o")));
 
   // Write a chain structure to the materialized view.
-  MaterializedViewsManager manager{onDiskBase};
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
+  qlv.writeMaterializedView(viewName, p.writeQuery_);
   qlv.loadMaterializedView(viewName);
   auto chainView = std::bind_front(&viewScanSimple, viewName);
 
@@ -1475,7 +1615,24 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
            h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
-  // TODO<ullingerc> Test overlapping view plans.
+  // If the view is sorted such that the subject of the chain is not the first
+  // column, rewriting cannot be applied with a fixed subject.
+  qlv.writeMaterializedView(viewName, std::string{simpleChainDifferentSort});
+  qlv.loadMaterializedView(viewName);
+  qpExpect(qlv, simpleChainFixed,
+           h::Join(h::IndexScanFromStrings("<s2>", "<p1>",
+                                           "?_QLever_internal_variable_qp_0"),
+                   h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
+                                           "<p2>", "?c")));
+
+  // Test overlapping view plans: the rewriting can be applied but the remaining
+  // triple must be joined normally.
+  auto firstRewritten = h::Join(chainView("?m", "?s", "?o1"),
+                                h::IndexScanFromStrings("?m", "<p2>", "?o2"));
+  auto secondRewritten = h::Join(chainView("?m", "?s", "?o2"),
+                                 h::IndexScanFromStrings("?m", "<p2>", "?o1"));
+  qpExpect(qlv, overlappingChains,
+           ::testing::AnyOf(firstRewritten, secondRewritten));
 }
 
 // _____________________________________________________________________________

@@ -1103,7 +1103,7 @@ TEST(DateYearOrDuration, Addition) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     EXPECT_FALSE(date + duration);
 
-    // `Date`- `Date`
+    // `Date` + `Date`
     DateYearOrDuration date1 =
         DateYearOrDuration(Date(2012, 12, 22, 12, 6, 12));
     DateYearOrDuration date2 =

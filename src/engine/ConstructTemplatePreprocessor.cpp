@@ -1,8 +1,11 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ConstructTemplatePreprocessor.h"
 
@@ -26,7 +29,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
                                                  PositionInTriple role) {
   auto opt = ConstructQueryEvaluator::evaluate(literal, role);
   if (opt) {
-    return PrecomputedConstant(std::move(*opt));
+    return PrecomputedConstant{std::move(*opt)};
   }
   return std::nullopt;
 }
@@ -52,23 +55,21 @@ ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
     const VariableToColumnMap& variableColumns) {
-  return std::visit(
-      [&role,
-       &variableColumns](const auto& t) -> std::optional<PreprocessedTerm> {
-        using T = std::decay_t<decltype(t)>;
-        if constexpr (std::is_same_v<T, Iri>) {
-          return preprocessIri(t);
-        } else if constexpr (std::is_same_v<T, Literal>) {
-          return preprocessLiteral(t, role);
-        } else if constexpr (std::is_same_v<T, Variable>) {
-          return preprocessVariable(t, variableColumns);
-        } else if constexpr (std::is_same_v<T, BlankNode>) {
-          return preprocessBlankNode(t);
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>);
-        }
-      },
-      term);
+  return term.visit([&role, &variableColumns](
+                        const auto& t) -> std::optional<PreprocessedTerm> {
+    using T = std::decay_t<decltype(t)>;
+    if constexpr (std::is_same_v<T, Iri>) {
+      return preprocessIri(t);
+    } else if constexpr (std::is_same_v<T, Literal>) {
+      return preprocessLiteral(t, role);
+    } else if constexpr (std::is_same_v<T, Variable>) {
+      return preprocessVariable(t, variableColumns);
+    } else if constexpr (std::is_same_v<T, BlankNode>) {
+      return preprocessBlankNode(t);
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  });
 }
 
 // _____________________________________________________________________________

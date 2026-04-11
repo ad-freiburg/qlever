@@ -817,7 +817,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
    public:
     MockValues(QueryExecutionContext* qec,
                parsedQuery::SparqlValues parsedValues)
-        : Values(qec, parsedValues) {}
+        : Operation{qec}, Values(qec, parsedValues) {}
 
     Result computeResult([[maybe_unused]] bool requestLaziness) override {
       Result res = Values::computeResult(false);

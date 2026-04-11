@@ -111,7 +111,7 @@ ParallelBufferWithEndRegex::getNextBlock() {
                                               ','),
           "; possible fixes are: "
           "use `--parser-buffer-size` to increase the buffer size or "
-          "use `--parse-parallel false` to disable parallel parsing"));
+          "use `--parallel-parsing false` to disable parallel parsing"));
     }
     endPosition = rawInput->size();
     exhausted_ = true;

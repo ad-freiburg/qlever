@@ -15,6 +15,7 @@
 #include "engine/Sort.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "index/ExportIds.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
@@ -262,8 +263,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
-                                        getIndex().encodedIriManager());
+        Id id = std::move(tc).toValueId(getIndex(), *localVocab);
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -545,7 +545,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using enum Datatype;
   const auto& optionalStringAndXsdType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
     return "UNDEF";
