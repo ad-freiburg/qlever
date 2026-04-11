@@ -1029,7 +1029,6 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   // Left side: two columns with UNDEF in second column.
   auto getId = makeGetId(qec2->getIndex());
   auto s1 = getId("<s1>");
-  auto o1 = getId("<o1>");
   auto o2 = getId("<o2>");
   // Set up three input tables for the left side with one row each.
   // The first two columns are join columns, the third column is a local vocab
