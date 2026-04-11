@@ -52,13 +52,11 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      const auto& index = context->_qec.getIndex();
-      std::optional<Id> id =
-          tc.toValueId(index.getVocab(), index.encodedIriManager());
+      std::optional<Id> id = tc.toValueId(context->_qec.getIndex());
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
-                         : IdOrLocalVocabEntry{
-                               ad_utility::triple_component::LiteralOrIri{s}};
+                         : IdOrLocalVocabEntry{LocalVocabEntry{
+                               ad_utility::triple_component::LiteralOrIri{s}}};
       auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));

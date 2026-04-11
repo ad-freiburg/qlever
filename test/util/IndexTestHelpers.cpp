@@ -234,6 +234,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      throw std::runtime_error("The text index is not available in C++17 mode");
+#else
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
@@ -282,6 +285,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
+#endif
     }
   }
   if (!c.usePatterns || !c.loadAllPermutations) {
@@ -377,7 +381,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<MaterializedViewsManager>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  qec->getIndex().getImpl().setGlobalIndexOnlyForTesting();
   return qec;
 }
 
@@ -401,8 +405,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static const EncodedIriManager encodedIriManager;
-    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
+    auto id = literalOrIri.toValueId(index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

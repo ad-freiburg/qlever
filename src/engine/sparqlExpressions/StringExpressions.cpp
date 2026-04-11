@@ -87,7 +87,7 @@ struct LiftStringFunction {
     static_assert(concepts::same_as<ResultOfFunction, Id> ||
                       concepts::same_as<ResultOfFunction, LiteralOrIri>,
                   "Template argument of `LiftStringFunction` must return `Id` "
-                  "or `std::string`");
+                  "or `LiteralOrIri`");
     using Result =
         std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>, Id,
                            IdOrLocalVocabEntry>;

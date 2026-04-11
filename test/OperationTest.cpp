@@ -872,7 +872,7 @@ TEST(OperationTest, disableCachingForOperation) {
 TEST(OperationTest, disableCachingGlobally) {
   auto qecPtr = getQec();
   auto qecCopy = *qecPtr;
-  qecCopy.disableCaching_ = true;
+  qecCopy.setDisableCachingOnlyForTesting(true);
   auto* qec = &qecCopy;
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
@@ -891,4 +891,8 @@ TEST(OperationTest, disableCachingGlobally) {
   valuesForTesting.getResult(true);
   // Still not stored in the cache, because caching was disabled.
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+
+  // ONLY_IF_CACHED returns nullptr when caching is disabled.
+  EXPECT_EQ(valuesForTesting.getResult(false, ComputationMode::ONLY_IF_CACHED),
+            nullptr);
 }

@@ -356,14 +356,37 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     if (!difference.has_value()) {
       return std::nullopt;
     } else {
-      return DateYearOrDuration(difference.value());
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` - `DayTimeDuration` => `Date`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+    return DateYearOrDuration{ownDuration - otherDuration};
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` - `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<Date> difference = ownDate - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isLongYear() && rhs.isLongYear()) {
+    //  `LargeYear` - `LargeYear` => `LargeYear` or `Date`.
+    int64_t year1 = getYear();
+    int64_t year2 = rhs.getYear();
+    int64_t result = year1 - year2;
+    if (result >= Date::minYear && result <= Date::maxYear) {
+      // The result year can be constructed as a `Date`.
+      return DateYearOrDuration{Date(result, 1, 1)};
+    } else {
+      // The result year will also be a `LargeYear`.
+      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
     }
   }
-
-  // TODO<yarox-1>: The following subtractions should be implemented next:
-  //  `DayTimeDuration` - `DayTimeDuration`,
-  //  `Date` - `DayTimeDuration`,
-  //  `LargeYear` - `LargeYear`.
 
   // The following will not be implemented (not viable):
   //  `DayTimeDuration` - `Date`,

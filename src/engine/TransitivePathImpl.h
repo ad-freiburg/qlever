@@ -233,8 +233,7 @@ class TransitivePathImpl : public TransitivePathBase {
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
+            : std::optional{std::move(target).toValueId(index, targetHelper)};
     bool sameVariableOnBothSides =
         !targetId.has_value() && lhs_.value_ == rhs_.value_;
     bool endsWithGraphVariable =
@@ -323,8 +322,8 @@ class TransitivePathImpl : public TransitivePathBase {
     }
     // id -> var|id
     LocalVocab helperVocab;
-    Id startId = TripleComponent{startSide.value_}.toValueId(
-        getIndex().getVocab(), helperVocab, getIndex().encodedIriManager());
+    Id startId =
+        TripleComponent{startSide.value_}.toValueId(getIndex(), helperVocab);
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways. This also augments the id with matching graph ids.

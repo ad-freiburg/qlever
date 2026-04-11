@@ -94,12 +94,12 @@ class VectorWithMemoryLimit
 static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 
-// A class to store the results of expressions that can yield strings or IDs as
-// their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings.
+// The result of an expression that can yield an ID or a string (for example
+// IF and COALESCE). `IdOrLocalVocabEntry` is the fully resolved type used in
+// `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
+// helpers can return without needing vocab position bounds; it gets promoted
+// to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
-// Similar to `IdOrLocalVocabEntry`, but doesn't require the context for
-// `LocalVocabEntry`.
 using IdOrLiteralOrIri =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.

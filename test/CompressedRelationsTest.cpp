@@ -1048,7 +1048,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
 
   auto getId = [&index](std::string_view iri) {
     return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
-        .toValueId(index.getVocab(), index.encodedIriManager())
+        .toValueId(index)
         .value();
   };
   auto a = getId("<a>");

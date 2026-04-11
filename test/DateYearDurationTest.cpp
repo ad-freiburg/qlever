@@ -842,12 +842,140 @@ TEST(DateYearOrDuration, Subtraction) {
                     date1 - date2);
   }
   {
-    // Not supported subtraction.
+    // Test for `DayTimeDuration` subtraction.
     DateYearOrDuration duration1 = DateYearOrDuration(
-        DayTimeDuration(DayTimeDuration::Type::Negative, 0, 4, 0, 0));
+        DayTimeDuration(DayTimeDuration::Type::Positive, 25, 0, 0, 0));
     DateYearOrDuration duration2 = DateYearOrDuration(
-        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 4, 0, 0));
-    EXPECT_FALSE(duration1 - duration2);
+        DayTimeDuration(DayTimeDuration::Type::Positive, 20, 0, 0, 0));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 5, 0, 0, 0)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 0, 0, 0));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 45, 0, 0, 0)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 20, 0, 0, 0));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 45, 0, 0, 0)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 0, 0, 0));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 5, 0, 0, 0)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 40, 0, 0, 0));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 15, 0, 0, 0)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 40, 23, 8, 54));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 40, 20, 3, 40));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 0, 3, 5, 14)),
+                    duration1 - duration2);
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 40, 3, 8, 54));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 41, 20, 3, 40));
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 1, 16, 54, 46)),
+                    duration1 - duration2);
+  }
+  {
+    // Test for `Date` - `DayTimeDuration` subtraction.
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
+    std::optional<DateYearOrDuration> result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 23, 0, 0, 0)), result.value());
+
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 0, 3, 49, 27));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 24, 0, 0, 0)), result.value());
+
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 30, 20, 10, 33));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1988, 12, 24, 0, 0, 0)), result.value());
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, 2));  // UTC + 2
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 10, 10, 0));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(
+        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, 2)).toStringAndType(),
+        result.value().toStringAndType());
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, -4));  // UTC - 4
+    result = date - duration;
+    EXPECT_EQ(
+        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, -4)).toStringAndType(),
+        result.value().toStringAndType());
+  }
+  {
+    // Test for `LargeYear` - `LargeYear`.
+    DateYearOrDuration year1 =
+        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
+    DateYearOrDuration year2 =
+        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
+
+    std::optional<DateYearOrDuration> result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(11'000, DateYearOrDuration::Type::Year),
+              result.value());
+
+    year2 = DateYearOrDuration(42'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(-20'000, DateYearOrDuration::Type::Year),
+              result.value());
+
+    year2 = DateYearOrDuration(20'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_FALSE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(Date(2000, 1, 1)), result.value());
+
+    year2 = DateYearOrDuration(24'000, DateYearOrDuration::Type::Year);
+    result = year1 - year2;
+    ASSERT_TRUE(result);
+    EXPECT_FALSE(result.value().isLongYear());
+    EXPECT_EQ(DateYearOrDuration(Date(-2000, 1, 1)), result.value());
+  }
+  {
+    // Test invalid subtractions.
+    // Invalid `Date`.
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
+    ASSERT_FALSE(date - duration);
   }
 }
 #endif
