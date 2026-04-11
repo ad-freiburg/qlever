@@ -830,7 +830,14 @@ class OptionalJoinWithIndexScan
     EXPECT_EQ(requestLaziness, !result.isFullyMaterialized());
     if (!result.isFullyMaterialized()) {
       IdTable lazyResult{optJoin.getResultWidth(), qec_->getAllocator()};
-      for (auto& [idTable, _] : result.idTables()) {
+      for (auto& [idTable, localVocab] : result.idTables()) {
+        for (Id id :
+             ad_utility::OwningView{idTable.getColumns()} | ql::views::join) {
+          if (id.getDatatype() == Datatype::LocalVocabIndex) {
+            EXPECT_TRUE(
+                localVocab.isLocalVocabIndexContained(id.getLocalVocabIndex()));
+          }
+        }
         lazyResult.insertAtEnd(idTable);
       }
       return lazyResult;
@@ -1005,6 +1012,80 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
   // There is a nonmatching block for `s1, o1`, but currently we only filter on
   // the first columns.
   checkPrefilteringStats(optJoin, 3, 5);
+}
+
+// This is a regression test for the missing local vocab propagation in the
+// lazy `SpecialOptionalJoin`.
+TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
+  // Test with two join columns where UNDEF is only in the last column.
+  // Create knowledge graph with two-column structure.
+  std::string kg2 =
+      "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
+      "<o3>. ";
+  TestIndexConfig config{kg2};
+  config.blocksizePermutations = 8_B;
+  auto qec2 = getQec(std::move(config));
+
+  // Left side: two columns with UNDEF in second column.
+  auto getId = makeGetId(qec2->getIndex());
+  auto s1 = getId("<s1>");
+  auto o2 = getId("<o2>");
+  // Set up three input tables for the left side with one row each.
+  // The first two columns are join columns, the third column is a local vocab
+  // payload.
+  std::vector<Result::IdTableVocabPair> tAndV;
+
+  auto i = [](int i) {
+    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">"))};
+  };
+  LocalVocab v;
+  auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
+  tAndV.emplace_back(makeIdTableFromVector({{s1, U, l1}}), std::move(v));
+
+  LocalVocab v2;
+  auto l2 = Id::makeFromLocalVocabIndex(v2.getIndexAndAddIfNotContained(i(2)));
+  tAndV.emplace_back(makeIdTableFromVector({{s1, U, l2}}), std::move(v2));
+
+  LocalVocab v3;
+  auto l3 = Id::makeFromLocalVocabIndex(v3.getIndexAndAddIfNotContained(i(3)));
+  tAndV.emplace_back(makeIdTableFromVector({{s1, o2, l3}}), std::move(v3));
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec2, std::move(tAndV),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
+                                           Variable{"?payload"}},
+      false, std::vector<ColumnIndex>{0, 1});
+
+  // Right side: IndexScan with two output columns.
+  SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
+                            TripleComponent{Variable{"?y"}}};
+  auto right =
+      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+
+  OptionalJoin optJoin{qec2, left, right};
+  qec2->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  // `materializeResult` also verifies that each local vocab entry is in fact
+  // being kep alive by the `LocalVocab`.
+  IdTable actual = materializeResult(optJoin, result, requestLaziness);
+
+  // Result should have 2 rows (one for each left entry matched with <p>
+  // predicate).
+  EXPECT_EQ(actual.numRows(), 5);
+  EXPECT_EQ(actual.numColumns(), 3);
+
+  const auto& payload = actual.getColumn(2);
+  const auto& payloadBits = payload | ql::views::transform(&Id::getBits);
+  EXPECT_TRUE(ad_utility::contains(payloadBits, l1.getBits()));
+  EXPECT_TRUE(ad_utility::contains(payloadBits, l2.getBits()));
+  EXPECT_TRUE(ad_utility::contains(payloadBits, l3.getBits()));
+
+  // There is a nonmatching block for `s1, o1`, but currently we only filter on
+  // the first columns.
+  checkPrefilteringStats(optJoin, 2, 5);
 }
 
 // _____________________________________________________________________________
