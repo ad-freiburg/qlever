@@ -440,6 +440,34 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+TEST(IndexTest, emptyTextIndex) {
+  std::array<std::string, 2> inputs = {
+      "<a:> <a:> <a:> .",
+      "<a:> <a:> \"\" .",
+  };
+  for (auto input : inputs) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(input);
+    config.createTextIndex = true;
+    auto* qec = ad_utility::testing::getQec(std::move(config));
+    const auto& index = qec->getIndex().getImpl();
+    // Test that scanning an empty text index works, and yields a single result.
+    const auto& actualPermutation = index.getPermutation(Permutation::PSO);
+    auto locatedTriplesSnapshot = qec->locatedTriplesState();
+    IdTable result = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{iri("<a:>"), iri("<a:>"),
+                                               std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    EXPECT_EQ(result.size(), 1);
+  }
+}
+
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
