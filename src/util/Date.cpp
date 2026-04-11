@@ -114,8 +114,11 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
+    // If getHour returns -1 the date does not specify time, therefore just
+    // assume 0 hours.
+    auto hour = (getHour() == -1) ? 0 : getHour();
     Date::Nanoseconds result =
-        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
+        sys_days(date) + hours{hour - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<nanoseconds>(
             second);  // Here all times are converted to a UTC time.
