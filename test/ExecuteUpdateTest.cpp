@@ -419,8 +419,6 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   indexConfig.encodedIriManager = encodedIriManager;
   Index index = ad_utility::testing::makeTestIndex(
       "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
-  // We need a non-const vocab for the test.
-  auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
 
   // Helpers
   using namespace ::testing;
@@ -463,7 +461,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         component);
   };
   auto expectTransformTriplesTemplate =
-      [&vocab, &TripleComponentMatcher, &encodedIriManager](
+      [&index, &TripleComponentMatcher](
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
@@ -472,8 +470,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(encodedIriManager, vocab,
-                                                    variableColumns, triples);
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -487,16 +485,15 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
-      [&vocab, &encodedIriManager](
-          const VariableToColumnMap& variableColumns,
-          std::vector<SparqlTripleSimpleWithGraph>&& triples,
-          const Matcher<const std::string&>& messageMatcher,
-          ad_utility::source_location sourceLocation =
-              AD_CURRENT_SOURCE_LOC()) {
+      [&index](const VariableToColumnMap& variableColumns,
+               std::vector<SparqlTripleSimpleWithGraph>&& triples,
+               const Matcher<const std::string&>& messageMatcher,
+               ad_utility::source_location sourceLocation =
+                   AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(
-                encodedIriManager, vocab, variableColumns, std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
