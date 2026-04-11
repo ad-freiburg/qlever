@@ -47,11 +47,11 @@ function.
 creation of multiple different validator functions. For more information,
 what the exact difference is, see the code in `createDummyValueForValidator`.
 */
-template <typename... ParameterTypes>
-requires((ad_utility::SameAsAnyTypeIn<
-             ParameterTypes, ad_utility::ConfigOption::AvailableTypes>) &&
-         ...)
-auto generateDummyNonExceptionValidatorFunction(size_t variant) {
+CPP_variadic_template(typename... ParameterTypes)(
+    requires(ad_utility::SameAsAnyTypeIn<
+                 ParameterTypes, ad_utility::ConfigOption::AvailableTypes> &&
+             ...)) auto generateDummyNonExceptionValidatorFunction(size_t
+                                                                       variant) {
   return [... dummyValuesToCompareTo =
               createDummyValueForValidator<ParameterTypes>(variant)](
              const ParameterTypes&... args) {
