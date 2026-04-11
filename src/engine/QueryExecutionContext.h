@@ -98,7 +98,8 @@ class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
-class QueryExecutionContext {
+class QueryExecutionContext
+    : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
