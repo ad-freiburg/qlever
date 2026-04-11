@@ -355,6 +355,9 @@ std::shared_ptr<const Result> Operation::getResult(
             });
 
     if (_executionContext->disableCaching()) {
+      if (computationMode == ComputationMode::ONLY_IF_CACHED) {
+        return nullptr;
+      }
       return std::make_shared<Result>(runComputation(timer, computationMode));
     }
 
