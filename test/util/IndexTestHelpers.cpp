@@ -381,7 +381,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<MaterializedViewsManager>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  qec->getIndex().getImpl().setGlobalIndexOnlyForTesting();
   return qec;
 }
 
