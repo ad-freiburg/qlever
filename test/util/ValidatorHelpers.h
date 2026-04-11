@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <sstream>
+#include <tuple>
 
 #include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -53,9 +54,9 @@ CPP_variadic_template(typename... ParameterTypes)(requires(
         ad_utility::ConfigOption::
             AvailableTypes>&&...)) auto generateDummyNonExceptionValidatorFunction(size_t
                                                                                        variant) {
-  return [... dummyValuesToCompareTo =
-              createDummyValueForValidator<ParameterTypes>(variant)](
-             const ParameterTypes&... args) {
+  return [dummyValuesToCompareTo = std::tuple<ParameterTypes...>{
+              createDummyValueForValidator<ParameterTypes>(
+                  variant)...}](const ParameterTypes&... args) {
     // Special handling for `args` of type bool is needed. For the reasoning:
     // See the doc string.
     auto compare = [](const auto& arg, const auto& dummyValueToCompareTo) {
@@ -69,7 +70,11 @@ CPP_variadic_template(typename... ParameterTypes)(requires(
         return arg != dummyValueToCompareTo;
       }
     };
-    return (compare(args, dummyValuesToCompareTo) || ...);
+    return std::apply(
+        [&](const ParameterTypes&... dummies) {
+          return (compare(args, dummies) || ...);
+        },
+        dummyValuesToCompareTo);
   };
 };
 
