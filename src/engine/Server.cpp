@@ -30,10 +30,12 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
+#include "opentelemetry/metrics/provider.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Metrics.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
 #include "util/TypeIdentity.h"
@@ -127,6 +129,19 @@ void Server::run(const std::string& indexBaseName, bool useText,
                  bool usePatterns, bool loadAllPermutations,
                  bool persistUpdates,
                  std::vector<std::string> preloadMaterializedViews) {
+  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
+      "qlever", "0.0.1");
+  activeQueries_ = meter->CreateInt64UpDownCounter(
+      "qlever.active_queries",
+      "Number of SPARQL queries currently being processed");
+  activeUpdates_ = meter->CreateInt64UpDownCounter(
+      "qlever.active_updates",
+      "Number of SPARQL updates currently being processed");
+  queryDuration_ = meter->CreateDoubleHistogram(
+      "qlever.query_duration", "Total execution time of SPARQL queries", "ms");
+  updateDuration_ = meter->CreateDoubleHistogram(
+      "qlever.update_duration", "Total execution time of SPARQL updates", "ms");
+
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -1031,6 +1046,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
+  ad_utility::metrics::ActiveCounterGuard queryGuard{*activeQueries_};
 
   auto mediaTypes = determineMediaTypes(params, request);
   AD_LOG_INFO << "Requested media types of the result are: "
@@ -1086,6 +1102,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
+  queryDuration_->Record(static_cast<double>(requestTimer.msecs().count()), {});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1189,6 +1206,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
+  ad_utility::metrics::ActiveCounterGuard updateGuard{*activeUpdates_};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1265,6 +1283,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
+  updateDuration_->Record(static_cast<double>(requestTimer.msecs().count()),
+                          {});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");

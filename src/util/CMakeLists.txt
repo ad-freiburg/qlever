@@ -3,3 +3,7 @@ add_subdirectory(MemorySize)
 add_subdirectory(http)
 add_library(qlever_util GeoSparqlHelpers.cpp UnitOfMeasurement.cpp antlr/ANTLRErrorHandling.cpp ParseException.cpp Conversions.cpp Date.cpp DateYearDuration.cpp Duration.cpp antlr/GenerateAntlrExceptionMetadata.cpp CancellationHandle.cpp StringUtils.cpp LazyJsonParser.cpp BlankNodeManager.cpp)
 qlever_target_link_libraries(qlever_util re2::re2 s2 pb_util pb_util_geo)
+
+add_library(metrics Metrics.cpp)
+qlever_target_link_libraries(metrics opentelemetry-cpp::api opentelemetry-cpp::sdk opentelemetry-cpp::metrics opentelemetry-cpp::ostream_metrics_exporter
+        opentelemetry-cpp::prometheus_exporter)

@@ -414,6 +414,26 @@ FetchContent_Declare(
 )
 
 ################################
+# OpenTelemetry C++ SDK
+################################
+set(WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
+set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
+set(WITH_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(WITH_FUNC_TESTS OFF CACHE BOOL "" FORCE)
+set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
+set(WITH_STL ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        opentelemetry-cpp
+        GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
+        GIT_TAG v1.26.0
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(opentelemetry-cpp)
+
+################################
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
@@ -528,13 +548,13 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain util)
+qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS

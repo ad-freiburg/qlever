@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Metrics.h"  // for ad_utility::metrics::initialize
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
@@ -49,6 +50,8 @@ int main(int argc, char** argv) {
   bool noAccessCheck = false;
   bool text = false;
   unsigned short port;
+  bool metricsEnabled = false;
+  uint16_t metricsPort = 9464;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
   bool onlyPsoAndPosPermutations;
@@ -197,6 +200,10 @@ int main(int argc, char** argv) {
       "prefix are rejected. To disable all federated queries, set this option "
       "to an invalid IRI prefix like `-`. Magic services (for example spatial "
       "search or materialized views) are never affected.");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus scrape endpoint.");
+  add("metrics-port", po::value<uint16_t>(&metricsPort)->default_value(9464),
+      "Port on which Prometheus metrics are exposed (default: 9464).");
   po::variables_map optionsMap;
 
   try {
@@ -222,6 +229,7 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
+    ad_utility::metrics::initialize(metricsEnabled, metricsPort);
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
