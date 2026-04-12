@@ -125,18 +125,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::PSO), 0, 1);
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(POS), 1, 0);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OPS), 1,
+        col0IdTag);
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OSP), 0,
+        col0IdTag);
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
