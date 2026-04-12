@@ -47,7 +47,7 @@ class UuidExpressionImpl : public SparqlExpression {
 
  public:
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
     ad_utility::UuidGenerator uuidGen;

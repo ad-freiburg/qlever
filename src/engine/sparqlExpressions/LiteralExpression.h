@@ -24,7 +24,7 @@ class LiteralExpression : public SparqlExpression {
   // make the `const` evaluate function threadsafe and lock-free.
   // TODO<joka921> Make this unnecessary by completing multiple small groups at
   // once during the GROUP BY.
-  mutable std::atomic<IdOrLiteralOrIri*> cachedResult_ = nullptr;
+  mutable std::atomic<IdOrLocalVocabEntry*> cachedResult_ = nullptr;
 
  public:
   // ___________________________________________________________________________
@@ -53,11 +53,11 @@ class LiteralExpression : public SparqlExpression {
       }
       TripleComponent tc{s};
       std::optional<Id> id = tc.toValueId(context->_qec.getIndex());
-      IdOrLiteralOrIri result =
-          id.has_value()
-              ? IdOrLiteralOrIri{id.value()}
-              : IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{s}};
-      auto ptrForCache = std::make_unique<IdOrLiteralOrIri>(result);
+      IdOrLocalVocabEntry result =
+          id.has_value() ? IdOrLocalVocabEntry{id.value()}
+                         : IdOrLocalVocabEntry{LocalVocabEntry{
+                               ad_utility::triple_component::LiteralOrIri{s}}};
+      auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
       context->cancellationHandle_->throwIfCancelled();
@@ -264,19 +264,10 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
-// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
-// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
-// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
-// from `LiteralExpression<ValueId>` will be returned.
 inline std::optional<IdOrLocalVocabEntry>
-getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
-                                            bool stringAndIriOnly = false) {
+getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child) {
   using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
-    auto idType = idExpr->value().getDatatype();
-    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
-      return std::nullopt;
-    }
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {

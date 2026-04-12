@@ -157,7 +157,7 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLocalVocabEntry>) {
       resultFromBinarySearch =
           std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {
@@ -524,8 +524,7 @@ InExpression::getPrefilterExpressionForMetadata(
   referenceValues.reserve(children_.size());
   for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
     auto optReferenceValue =
-        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
-            expr.get());
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(expr.get());
     if (!optReferenceValue.has_value()) {
       return {};
     }
