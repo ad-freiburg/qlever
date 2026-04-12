@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -3134,6 +3135,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3257,10 +3260,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& index = planner_._qec->getIndex();
-  const auto& vocab = index.getVocab();
-  auto config =
-      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
+  auto config = pathQuery.toPathSearchConfiguration(planner_._qec->getIndex());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
@@ -3352,6 +3352,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  auto externalValues =
+      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+  auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _____________________________________________________________________________

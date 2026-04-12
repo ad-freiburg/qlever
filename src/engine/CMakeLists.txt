@@ -20,7 +20,7 @@ add_library(engine
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructBatchEvaluator.cpp MaterializedViewsQueryAnalysis.cpp
-        UpdateMetadata.cpp)
+        UpdateMetadata.cpp ExternalValues.cpp)
 
 qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
 

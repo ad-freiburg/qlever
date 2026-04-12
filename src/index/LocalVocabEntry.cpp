@@ -8,6 +8,23 @@
 #include "index/IndexImpl.h"
 
 // ___________________________________________________________________________
+ql::strong_ordering LocalVocabEntry::compareThreeWay(
+    const LocalVocabEntry& rhs) const {
+  int i = IndexImpl::staticGlobalSingletonIndex()
+              .getVocab()
+              .getCaseComparator()
+              .compare(toStringRepresentation(), rhs.toStringRepresentation(),
+                       LocaleManager::Level::TOTAL);
+  if (i < 0) {
+    return ql::strong_ordering::less;
+  } else if (i > 0) {
+    return ql::strong_ordering::greater;
+  } else {
+    return ql::strong_ordering::equal;
+  }
+}
+
+// ___________________________________________________________________________
 auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // Lookup the lower and upper bound from the vocabulary of the index,
   // cache and return them. This represents the place in the vocabulary where

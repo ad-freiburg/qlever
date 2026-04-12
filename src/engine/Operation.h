@@ -25,6 +25,7 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class ExternalValues;
 namespace parsedQuery {
 struct Bind;
 }
@@ -103,10 +104,7 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
-
-  // Typical Constructor.
+  // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
@@ -357,6 +355,19 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Recursively collect all `ExternalValues` operations in this
+  // operation tree. This allows the following pattern:
+  // 1. Parse and plan a query that contains an `ExternalValues`
+  //    clause.
+  // 2. Modify the contents of the `ExternalValues` after obtaining
+  //    them from the planned `QueryExecutionTree` via this function.
+  // 3. Execute the query.
+  // 4. Repeat steps 2 and 3 with different values. This does not require
+  //    running the parser and query planner again (which is the point of the
+  //    whole `ExternalValues` feature). For a complete E2E example,
+  //    see QleverTest.cpp.
+  virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.

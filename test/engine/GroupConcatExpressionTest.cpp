@@ -59,7 +59,7 @@ void expectLiteralsAreConcatenatedTo(
     input.push_back({Id::makeFromLocalVocabIndex(idx)});
   }
   expectIdsAreConcatenatedTo(
-      distinct, input, IdOrLiteralOrIri{LocalVocabEntry{literal}}, location);
+      distinct, input, IdOrLocalVocabEntry{LocalVocabEntry{literal}}, location);
 }
 
 auto lit = [](std::string s) {

@@ -82,9 +82,31 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
+  // As the `QueryExecutionTree` stores a raw pointer to the
+  // `QueryExecutionContext`, We additionally store the context as a
+  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
+  // server code.
   struct PlannedQuery {
+   private:
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
+    std::shared_ptr<const QueryExecutionContext> qec_;
+
+   public:
+    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+                 const QueryExecutionContext& qec)
+        : parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)},
+          qec_{qec.shared_from_this()} {
+      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+    }
+
+    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+    ParsedQuery& parsedQuery() { return parsedQuery_; }
+    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
+    const QueryExecutionTree& queryExecutionTree() const {
+      return queryExecutionTree_;
+    }
   };
 
  private:

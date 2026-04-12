@@ -99,7 +99,7 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
   evaluationContext._endIndex = 1044;
   auto resultAsVariant = StrUuidExpression{}.evaluate(&evaluationContext);
 
-  using V = VectorWithMemoryLimit<IdOrLiteralOrIri>;
+  using V = VectorWithMemoryLimit<IdOrLocalVocabEntry>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
   const auto& resultVector = std::get<V>(resultAsVariant);
   ASSERT_EQ(resultVector.size(), 1001);
@@ -118,8 +118,9 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
 
   evaluationContext._isPartOfGroupBy = true;
   auto resultAsVariant2 = StrUuidExpression{}.evaluate(&evaluationContext);
-  ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
-  IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
+  ASSERT_TRUE(std::holds_alternative<IdOrLocalVocabEntry>(resultAsVariant2));
+  IdOrLocalVocabEntry litOrIriUuid =
+      std::get<IdOrLocalVocabEntry>(resultAsVariant2);
   ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
   ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isLiteral());
 }
@@ -131,7 +132,7 @@ TEST(UuidExpression, evaluateUuidExpression) {
   evaluationContext._endIndex = 1044;
   auto resultAsVariant = UuidExpression{}.evaluate(&evaluationContext);
 
-  using V = VectorWithMemoryLimit<IdOrLiteralOrIri>;
+  using V = VectorWithMemoryLimit<IdOrLocalVocabEntry>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
   const auto& resultVector = std::get<V>(resultAsVariant);
   ASSERT_EQ(resultVector.size(), 1001);
@@ -150,8 +151,9 @@ TEST(UuidExpression, evaluateUuidExpression) {
 
   evaluationContext._isPartOfGroupBy = true;
   auto resultAsVariant2 = UuidExpression{}.evaluate(&evaluationContext);
-  ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
-  IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
+  ASSERT_TRUE(std::holds_alternative<IdOrLocalVocabEntry>(resultAsVariant2));
+  IdOrLocalVocabEntry litOrIriUuid =
+      std::get<IdOrLocalVocabEntry>(resultAsVariant2);
   ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
   ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isIri());
 }

@@ -813,9 +813,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  const auto& vocabulary = getIndex().getVocab();
-  std::optional<Id> col0Id =
-      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }
@@ -1274,7 +1272,7 @@ void GroupByImpl::extractValues(
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
-    for (sparqlExpression::IdOrLiteralOrIri val : generator) {
+    for (sparqlExpression::IdOrLocalVocabEntry val : generator) {
       *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
           std::move(val), *localVocab);
       ++targetIterator;

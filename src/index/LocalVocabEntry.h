@@ -111,10 +111,7 @@ class alignas(16) LocalVocabEntry
   // cached `position` if it has previously been computed for both of the
   // entries, but it is currently questionable whether this gains much
   // performance.
-  auto compareThreeWay(const LocalVocabEntry& rhs) const {
-    return ql::compareThreeWay(static_cast<const Base&>(*this),
-                               static_cast<const Base&>(rhs));
-  }
+  ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
  private:

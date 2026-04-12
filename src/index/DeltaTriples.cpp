@@ -234,8 +234,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     languagePredicate_ =
         TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
-            .toValueId(index_.getVocab(), localVocab_,
-                       index_.encodedIriManager());
+            .toValueId(index_, localVocab_);
   }
   ad_utility::HashSet<Id> addedObjects;
   for (const auto& triple : triples) {
@@ -261,7 +260,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     auto specialPredicate =
         ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
     Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
-        index_.getVocab(), localVocab_, index_.encodedIriManager());
+        index_, localVocab_);
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
@@ -273,8 +272,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
           return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
-              .toValueId(index_.getVocab(), localVocab_,
-                         index_.encodedIriManager());
+              .toValueId(index_, localVocab_);
         });
 
     // Because we don't track the exact counts of existing objects, we just

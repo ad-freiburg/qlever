@@ -84,11 +84,11 @@ CPP_template(bool NanOrInfToUndef = false,
 }
 
 // All the numeric value getters have an `operator()` for `ValueId` and one for
-// `std::string`. This mixin adds the `operator()` for the `IdOrLiteralOrIri`
+// `std::string`. This mixin adds the `operator()` for the `IdOrLocalVocabEntry`
 // variant via the CRTP pattern.
 template <typename Self>
 struct Mixin {
-  decltype(auto) operator()(IdOrLiteralOrIri s,
+  decltype(auto) operator()(IdOrLocalVocabEntry s,
                             const EvaluationContext* ctx) const {
     return std::visit(
         [this, ctx](auto el) {
@@ -450,12 +450,12 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLiteralOrIri;
+  using Value = IdOrLocalVocabEntry;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLiteralOrIri operator()(ValueId id,
-                              const EvaluationContext* context) const;
-  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
-                              const EvaluationContext* context) const;
+  IdOrLocalVocabEntry operator()(ValueId id,
+                                 const EvaluationContext* context) const;
+  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
+                                 const EvaluationContext* context) const;
 };
 
 // Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
