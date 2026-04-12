@@ -18,6 +18,8 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
+class IndexImpl;
+
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
@@ -44,22 +46,27 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. However, we don't consider this case to be likely.
+  const IndexImpl& index_;
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
-  // Inherit the constructors from `LiteralOrIri`
-  using Base::Base;
+  LocalVocabEntry(LiteralT literal, const IndexImpl& index)
+      : Base{std::move(literal)}, index_{index} {}
+  LocalVocabEntry(IriT iri, const IndexImpl& index) noexcept
+      : Base{std::move(iri)}, index_{index} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  QL_EXPLICIT(false)
-  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  LocalVocabEntry(const Base& base, const IndexImpl& index)
+      : Base{base}, index_{index} {}
+  LocalVocabEntry(Base&& base, const IndexImpl& index) noexcept
+      : Base{std::move(base)}, index_{index} {}
+
   // Constructor for when the position in the vocab is already known.
-  QL_EXPLICIT(true)
-  LocalVocabEntry(Base&& base, auto lower, auto upper)
+  LocalVocabEntry(Base&& base, auto lower, auto upper, const IndexImpl& index)
       : Base{std::move(base)},
+        index_{index},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {

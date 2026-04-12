@@ -158,9 +158,6 @@ class IndexImpl {
   TextScoringMetric textScoringMetric_;
   std::pair<float, float> bAndKParamForTextScoring_;
 
-  // Global static pointer to the currently active index. It is used to compare
-  // LocalVocab entries with each other as well as with Vocab entries.
-  static inline const IndexImpl* globalSingletonIndex_ = nullptr;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -205,8 +202,7 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
-                     bool registerSingleton = true);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -225,13 +221,6 @@ class IndexImpl {
 
   // Function only exposed for testing.
   auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
-
-  static const IndexImpl& staticGlobalSingletonIndex() {
-    AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
-    return *globalSingletonIndex_;
-  }
-
-  void setGlobalIndexOnlyForTesting() const { globalSingletonIndex_ = this; }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference or shared pointer (`pso_`).
