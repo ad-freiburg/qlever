@@ -18,8 +18,8 @@ add_library(engine
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
-        PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
-        ConstructTemplatePreprocessor.cpp TableWithRangeEvaluator.cpp
+        PermutationSelector.cpp ConstructTripleGenerator.cpp
+        ConstructTemplatePreprocessor.cpp
         ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp)
 

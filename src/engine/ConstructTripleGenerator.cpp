@@ -9,126 +9,128 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
-#include "engine/TableWithRangeEvaluator.h"
+#include "engine/ConstructTripleInstantiator.h"
+#include "util/InputRangeUtils.h"
+#include "util/Views.h"
 
 namespace qlever::constructExport {
 
 using ad_utility::InputRangeTypeErased;
-using StringTriple =
-    qlever::constructExport::ConstructTripleGenerator::StringTriple;
-using CancellationHandle = ad_utility::SharedCancellationHandle;
+using StringTriple = ConstructTripleGenerator::StringTriple;
 
-// _____________________________________________________________________________
-// Adapter that transforms `EvaluatedTriple` to a formatted string.
-// The output format is selected at runtime via `format_`.
-class FormattedTripleAdapter
-    : public ad_utility::InputRangeFromGet<std::string> {
- public:
-  FormattedTripleAdapter(std::unique_ptr<TableWithRangeEvaluator> processor,
-                         ad_utility::MediaType format)
-      : processor_{std::move(processor)}, format_{format} {}
+namespace {
 
-  std::optional<std::string> get() override {
-    auto triple = processor_->get();
-    if (!triple) return std::nullopt;
-    return formatTriple(triple->subject_, triple->predicate_, triple->object_,
-                        format_);
-  }
+constexpr size_t DEFAULT_BATCH_SIZE = 1024;
+constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
- private:
-  std::unique_ptr<TableWithRangeEvaluator> processor_;
-  ad_utility::MediaType format_;
-};
+IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl) {
+  return IdCache{std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
+                 CACHE_ENTRIES_PER_VARIABLE};
+}
 
-// _____________________________________________________________________________
-// Adapter that transforms `EvaluatedTriple` to `StringTriple`.
-class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
- public:
-  explicit StringTripleAdapter(
-      std::unique_ptr<TableWithRangeEvaluator> processor)
-      : processor_(std::move(processor)) {}
+// Lazily evaluates all rows of `table` in batches of DEFAULT_BATCH_SIZE,
+// yielding one `EvaluatedTriple` at a time. `rowOffset` is the absolute
+// row index of the first row of `table` within the full result (used for
+// blank-node ID generation).
+//
+// `tmpl` and `index` are passed as reference_wrappers so the lambda can
+// capture them by value without copying the underlying objects.
+InputRangeTypeErased<EvaluatedTriple> evaluateTable(
+    std::reference_wrapper<const PreprocessedConstructTemplate> tmpl,
+    std::reference_wrapper<const Index> index,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    TableWithRange table, size_t rowOffset) {
+  const size_t numRows = ql::ranges::distance(table.view_);
+  const size_t firstRow = numRows > 0 ? *ql::ranges::begin(table.view_) : 0;
+  const size_t numBatches =
+      (numRows + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
-  std::optional<StringTriple> get() override {
-    auto triple = processor_->get();
-    if (!triple) return std::nullopt;
-    return StringTriple{formatTerm(*triple->subject_, true),
-                        formatTerm(*triple->predicate_, true),
-                        formatTerm(*triple->object_, true)};
-  }
+  return InputRangeTypeErased<EvaluatedTriple>{
+      ad_utility::CachingContinuableTransformInputRange(
+          ql::views::iota(size_t{0}, numBatches),
+          // Captures by value: `tmpl` and `index` are cheap reference_wrappers;
+          // `table` holds reference_wrappers to the IdTable/LocalVocab (kept
+          // alive by ConstructTripleGenerator::result_); `idCache` is moved in.
+          [tmpl, index, cancellationHandle, table, firstRow, numRows, rowOffset,
+           idCache = makeIdCache(tmpl.get())](size_t batchIdx) mutable
+          -> ad_utility::LoopControl<EvaluatedTriple> {
+            cancellationHandle->throwIfCancelled();
+            const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
+            const size_t batchEnd =
+                std::min(batchStart + DEFAULT_BATCH_SIZE, numRows);
+            BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
+                                       firstRow + batchStart,
+                                       firstRow + batchEnd};
+            auto batchResult = ConstructBatchEvaluator::evaluateBatch(
+                tmpl.get().uniqueVariableColumns_, ctx,
+                table.tableWithVocab_.localVocab(), index.get(), idCache);
+            const size_t blankNodeBase = rowOffset + firstRow + batchStart;
+            return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
+                instantiateBatch(tmpl.get(), batchResult, blankNodeBase));
+          })};
+}
 
- private:
-  std::unique_ptr<TableWithRangeEvaluator> processor_;
-};
+}  // namespace
 
 // _____________________________________________________________________________
 ConstructTripleGenerator::ConstructTripleGenerator(
     Triples constructTriples, std::shared_ptr<const Result> result,
     const VariableToColumnMap& variableColumns, const Index& index,
     CancellationHandle cancellationHandle)
-    : templateTriples_(std::move(constructTriples)),
-      result_(std::move(result)),
+    : result_(std::move(result)),
+      preprocessedTemplate_(ConstructTemplatePreprocessor::preprocess(
+          constructTriples, variableColumns)),
       index_(index),
-      cancellationHandle_(std::move(cancellationHandle)) {
-  preprocessedTemplate_ = ConstructTemplatePreprocessor::preprocess(
-      templateTriples_, variableColumns);
-}
+      cancellationHandle_(std::move(cancellationHandle)) {}
 
 // _____________________________________________________________________________
-std::unique_ptr<TableWithRangeEvaluator>
-ConstructTripleGenerator::prepareTableWithRangeEvaluator(
-    const TableWithRange& table) {
-  const size_t currentRowOffset = rowOffset_;
-  rowOffset_ += table.tableWithVocab_.idTable().numRows();
-
-  return std::make_unique<TableWithRangeEvaluator>(
-      preprocessedTemplate_, index_.get(), cancellationHandle_, table,
-      currentRowOffset);
-}
-
-// _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<StringTriple>
-ConstructTripleGenerator::generateStringTriplesForResultTable(
-    const TableWithRange& table) {
-  return ad_utility::InputRangeTypeErased<StringTriple>{
-      std::make_unique<StringTripleAdapter>(
-          prepareTableWithRangeEvaluator(table))};
-}
-
-// _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriplesForResultTable(
-    const TableWithRange& table, ad_utility::MediaType format) {
-  return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleAdapter>(
-          prepareTableWithRangeEvaluator(table), format)};
-}
-
-// _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
-    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    InputRangeTypeErased<TableWithRange> tables,
     ad_utility::MediaType format) && {
-  auto tableTriples = ql::views::transform(
-      ad_utility::OwningView{std::move(rowIndices)},
+  auto tableStrings = ql::views::transform(
+      ad_utility::OwningView{std::move(tables)},
       [gen = std::move(*this), format](const TableWithRange& table) mutable {
-        return gen.generateFormattedTriplesForResultTable(table, format);
+        auto triples = evaluateTable(
+            std::cref(gen.preprocessedTemplate_), std::cref(gen.index_.get()),
+            gen.cancellationHandle_, table, gen.rowOffset_);
+        gen.rowOffset_ += ql::ranges::distance(table.view_);
+        return InputRangeTypeErased<std::string>{
+            ad_utility::CachingTransformInputRange(
+                ad_utility::OwningView{std::move(triples)},
+                [format](EvaluatedTriple triple) {
+                  return formatTriple(triple.subject_, triple.predicate_,
+                                      triple.object_, format);
+                })};
       });
-  return InputRangeTypeErased<std::string>(
-      ql::views::join(std::move(tableTriples)));
+  return InputRangeTypeErased<std::string>{
+      ql::views::join(std::move(tableStrings))};
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<StringTriple>
+InputRangeTypeErased<StringTriple>
 ConstructTripleGenerator::generateStringTriples(
-    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) && {
-  auto tableTriples = ql::views::transform(
-      ad_utility::OwningView{std::move(rowIndices)},
+    InputRangeTypeErased<TableWithRange> tables) && {
+  auto tableStringTriples = ql::views::transform(
+      ad_utility::OwningView{std::move(tables)},
       [gen = std::move(*this)](const TableWithRange& table) mutable {
-        return gen.generateStringTriplesForResultTable(table);
+        auto triples = evaluateTable(
+            std::cref(gen.preprocessedTemplate_), std::cref(gen.index_.get()),
+            gen.cancellationHandle_, table, gen.rowOffset_);
+        gen.rowOffset_ += ql::ranges::distance(table.view_);
+        return InputRangeTypeErased<StringTriple>{
+            ad_utility::CachingTransformInputRange(
+                ad_utility::OwningView{std::move(triples)},
+                [](EvaluatedTriple triple) -> StringTriple {
+                  return {formatTerm(*triple.subject_, true),
+                          formatTerm(*triple.predicate_, true),
+                          formatTerm(*triple.object_, true)};
+                })};
       });
-  return InputRangeTypeErased<StringTriple>(
-      ql::views::join(std::move(tableTriples)));
+  return InputRangeTypeErased<StringTriple>{
+      ql::views::join(std::move(tableStringTriples))};
 }
 
 }  // namespace qlever::constructExport

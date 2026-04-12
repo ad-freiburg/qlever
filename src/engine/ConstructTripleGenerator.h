@@ -8,20 +8,17 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
-#include <functional>
 #include <memory>
-#include <vector>
 
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/TableWithRangeEvaluator.h"
-#include "global/Constants.h"
-#include "global/Id.h"
-#include "parser/data/ConstructQueryExportContext.h"
+#include "engine/Result.h"
+#include "engine/VariableToColumnMap.h"
+#include "index/Index.h"
 #include "util/CancellationHandle.h"
+#include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
-#include "util/stream_generator.h"
 
 namespace qlever::constructExport {
 
@@ -42,39 +39,25 @@ class ConstructTripleGenerator {
 
   // Generate formatted strings for all tables in a range. Consumes the
   // generator; must be called as
-  // `std::move(generator).generateFormattedTriplesForResultTable(...)`.
+  // `std::move(generator).generateFormattedTriples(...)`.
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      ad_utility::InputRangeTypeErased<TableWithRange> tables,
       ad_utility::MediaType format) &&;
 
   // Generate `StringTriple`s for all tables in a range. Consumes the
   // generator; must be called as
   // `std::move(generator).generateStringTriples(...)`.
   ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
-      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) &&;
+      ad_utility::InputRangeTypeErased<TableWithRange> tables) &&;
 
  private:
-  Triples templateTriples_;
+  // Kept alive to prevent the IdTable/LocalVocab references in the
+  // TableWithRange objects from dangling.
   std::shared_ptr<const Result> result_;
+  PreprocessedConstructTemplate preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
-
-  // Preprocessed template with triples and unique variable columns.
-  PreprocessedConstructTemplate preprocessedTemplate_;
-
-  // Generate `StringTriple`s for a single result table.
-  ad_utility::InputRangeTypeErased<StringTriple>
-  generateStringTriplesForResultTable(const TableWithRange& table);
-
-  // Generate formatted strings for a single result table.
-  ad_utility::InputRangeTypeErased<std::string>
-  generateFormattedTriplesForResultTable(const TableWithRange& table,
-                                         ad_utility::MediaType format);
-
-  // Helper that handles `rowOffset_` and creates a `TableWithRangeEvaluator`.
-  std::unique_ptr<TableWithRangeEvaluator> prepareTableWithRangeEvaluator(
-      const TableWithRange& table);
 };
 
 }  // namespace qlever::constructExport
