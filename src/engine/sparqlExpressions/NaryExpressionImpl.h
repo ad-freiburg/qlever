@@ -86,7 +86,8 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
       for (auto&& element : resultGenerator) {
-        result.push_back(promoteToLocalVocabEntry(std::move(element)));
+        result.push_back(promoteToLocalVocabEntry(std::move(element),
+                                                  context->_qec.getIndex()));
       }
 
       if constexpr (resultIsConstant) {
@@ -241,9 +242,11 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // Apply the `function_` on a tuple of arguments (the `zipper` above has
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
-      return promoteToLocalVocabEntry(std::apply(
-          [this](auto&&... args) { return function_(AD_FWD(args)...); },
-          AD_FWD(tuple)));
+      return promoteToLocalVocabEntry(
+          std::apply(
+              [this](auto&&... args) { return function_(AD_FWD(args)...); },
+              AD_FWD(tuple)),
+          context->_qec.getIndex());
     };
     auto resultGenerator =
         ql::views::transform(ql::ranges::ref_view(zipper), onTuple);

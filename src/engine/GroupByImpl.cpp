@@ -1296,7 +1296,8 @@ GroupByImpl::getHashMapAggregationResults(
     IdTable* resultTable,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const IndexImpl& index, LocalVocab* localVocab,
+    const Allocator& allocator) {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(allocator);
   aggregateResults.resize(endIndex - beginIndex);
 
@@ -1320,10 +1321,10 @@ GroupByImpl::getHashMapAggregationResults(
       vectorIdx = aggregationData.getIndex(mapKey);
     }
 
-    auto visitor = [&aggregateResults, vectorIdx, rowIdx, beginIndex,
+    auto visitor = [&index, &aggregateResults, vectorIdx, rowIdx, beginIndex,
                     localVocab](auto& aggregateDataVariant) {
       aggregateResults[rowIdx - beginIndex] =
-          aggregateDataVariant.at(vectorIdx).calculateResult(localVocab);
+          aggregateDataVariant.at(vectorIdx).calculateResult(index, localVocab);
     };
 
     std::visit(visitor, aggregateDataVariant);
@@ -1365,7 +1366,8 @@ GroupByImpl::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    IdTable* resultTable, LocalVocab* localVocab, const Allocator& allocator) {
+    IdTable* resultTable, const IndexImpl& index, LocalVocab* localVocab,
+    const Allocator& allocator) {
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren;
   originalChildren.reserve(info.size());
@@ -1373,7 +1375,7 @@ GroupByImpl::substituteAllAggregates(
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
         resultTable, aggregationData, aggregate.aggregateDataIndex_, beginIndex,
-        endIndex, localVocab, allocator);
+        endIndex, index, localVocab, allocator);
 
     // Substitute the resulting vector as a literal
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
@@ -1480,7 +1482,7 @@ void GroupByImpl::substituteAndEvaluate(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator,
+    const IndexImpl& index, LocalVocab* localVocab, const Allocator& allocator,
     std::vector<HashMapAggregateInformation>& info,
     const std::vector<HashMapGroupedVariableInformation>& substitutions) {
   // Store which SPARQL expressions of grouped variables have been substituted.
@@ -1507,7 +1509,7 @@ void GroupByImpl::substituteAndEvaluate(
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren = substituteAllAggregates(
           info, evaluationContext._beginIndex, evaluationContext._endIndex,
-          aggregationData, result, localVocab, allocator);
+          aggregationData, result, index, localVocab, allocator);
 
   // Evaluate top-level alias expression.
   sparqlExpression::ExpressionResult expressionResult =
@@ -1550,7 +1552,8 @@ void GroupByImpl::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const IndexImpl& index, LocalVocab* localVocab,
+    const Allocator& allocator) {
   auto& info = alias.aggregateInfo_;
 
   // Either:
@@ -1594,8 +1597,8 @@ void GroupByImpl::evaluateAlias(
     // Get aggregate results
     auto aggregateResults = getHashMapAggregationResults(
         result, aggregationData, aggregate.aggregateDataIndex_,
-        evaluationContext._beginIndex, evaluationContext._endIndex, localVocab,
-        allocator);
+        evaluationContext._beginIndex, evaluationContext._endIndex, index,
+        localVocab, allocator);
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
@@ -1608,7 +1611,7 @@ void GroupByImpl::evaluateAlias(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
     substituteAndEvaluate<NUM_GROUP_COLUMNS>(alias, result, evaluationContext,
-                                             aggregationData, localVocab,
+                                             aggregationData, index, localVocab,
                                              allocator, info, substitutions);
   }
 }
@@ -1671,7 +1674,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, &result, evaluationContext, aggregationData,
-                    localVocab, allocator());
+                    getIndex(), localVocab, allocator());
     }
   }
   runtimeInfo().addDetail("timeEvaluationAndResults",

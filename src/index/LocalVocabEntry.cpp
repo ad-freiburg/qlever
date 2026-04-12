@@ -10,7 +10,7 @@
 // ___________________________________________________________________________
 ql::strong_ordering LocalVocabEntry::compareThreeWay(
     const LocalVocabEntry& rhs) const {
-  int i = index_.getVocab().getCaseComparator().compare(
+  int i = index_->getVocab().getCaseComparator().compare(
       toStringRepresentation(), rhs.toStringRepresentation(),
       LocaleManager::Level::TOTAL);
   if (i < 0) {
@@ -29,13 +29,13 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // this word would be stored if it were present.
   PositionInVocab positionInVocab;
 
-  const auto& vocab = index_.getVocab();
+  const auto& vocab = index_->getVocab();
 
   // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
   // give us a consistent ordering, which is important for determining equality
   // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
   auto [lower, upper] = [&]() {
-    if (auto opt = index_.encodedIriManager().encode(toStringRepresentation());
+    if (auto opt = index_->encodedIriManager().encode(toStringRepresentation());
         opt.has_value()) {
       return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }

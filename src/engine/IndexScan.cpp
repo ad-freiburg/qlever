@@ -233,11 +233,11 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    const auto& vocab = getIndex().getVocab();
     const auto& blockMetadataRanges =
         prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(
-                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIndex),
+            it->first->evaluate(getIndex(),
+                                getScanSpecAndBlocks().getBlockMetadataSpan(),
+                                colIndex),
             scanSpecAndBlocks_.blockMetadata_);
 
     return makeCopyWithPrefilteredScanSpecAndBlocks(

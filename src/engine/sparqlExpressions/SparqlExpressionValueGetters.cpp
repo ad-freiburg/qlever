@@ -526,12 +526,13 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
 
 //______________________________________________________________________________
 sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
-    const LiteralOrIri& litOrIri,
-    [[maybe_unused]] const EvaluationContext* context) const {
-  return LiteralOrIri{litOrIri.isIri()
-                          ? litOrIri.getIri()
-                          : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
-                                litOrIri.getLiteral().getContent()))};
+    const LiteralOrIri& litOrIri, const EvaluationContext* context) const {
+  return LocalVocabEntry{
+      LiteralOrIri{litOrIri.isIri()
+                       ? litOrIri.getIri()
+                       : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
+                             litOrIri.getLiteral().getContent()))},
+      context->_qec.getIndex()};
 }
 
 //______________________________________________________________________________

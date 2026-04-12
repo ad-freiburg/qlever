@@ -53,12 +53,15 @@ class UuidExpressionImpl : public SparqlExpression {
     ad_utility::UuidGenerator uuidGen;
 
     if (context->_isPartOfGroupBy) {
-      return FuncConv(uuidGen());
+      return LocalVocabEntry{FuncConv(uuidGen()), context->_qec.getIndex()};
     }
 
     ad_utility::chunkedForLoop<1000>(
         0, numElements,
-        [&result, &uuidGen](size_t) { result.push_back(FuncConv(uuidGen())); },
+        [&result, &uuidGen, context](size_t) {
+          result.push_back(
+              LocalVocabEntry{FuncConv(uuidGen()), context->_qec.getIndex()});
+        },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
   }

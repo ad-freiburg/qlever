@@ -636,8 +636,8 @@ void DeltaTriples::readFromDisk() {
     return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] = ad_utility::deserializeIds(
-      filenameForPersisting_.value(), index_.getBlankNodeManager());
+  auto [vocab, idRanges] =
+      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
   if (idRanges.empty()) {
     return;
   }

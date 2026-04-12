@@ -280,7 +280,7 @@ class Qlever {
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
     namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         *index_.getBlankNodeManager());
+                                         index_.getImpl());
   }
 
   // Low-level access to the QLever API, use with care.

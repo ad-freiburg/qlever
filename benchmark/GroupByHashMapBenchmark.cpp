@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/RuntimeParameters.h"
+#include "index/LocalVocabEntry.h"
 #include "util/Log.h"
 #include "util/Random.h"
 #include "util/TypeIdentity.h"
@@ -70,7 +71,8 @@ auto generateSortedGroupVec = [](size_t n, size_t g) {
 
 // Create a local vocab of random strings and a vector of the local vocab
 // indices.
-auto generateRandomLocalVocabAndIndicesVec = [](size_t n, size_t m) {
+auto generateRandomLocalVocabAndIndicesVec = [](const IndexImpl& index,
+                                                size_t n, size_t m) {
   LocalVocab localVocab;
   std::vector<LocalVocabIndex> indices;
 
@@ -88,7 +90,7 @@ auto generateRandomLocalVocabAndIndicesVec = [](size_t n, size_t m) {
     }
     using namespace ad_utility::triple_component;
     indices.push_back(localVocab.getIndexAndAddIfNotContained(
-        LiteralOrIri::literalWithoutQuotes(str)));
+        LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(str), index}));
   }
 
   return std::make_pair(std::move(localVocab), indices);
@@ -404,7 +406,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
           });
     } else {
       auto [newLocalVocab, indices] = generateRandomLocalVocabAndIndicesVec(
-          numInputRows, randomStringLength);
+          qec->getIndex(), numInputRows, randomStringLength);
       localVocab = std::move(newLocalVocab);
 
       ql::ranges::transform(indices.begin(), indices.end(), otherValues.begin(),

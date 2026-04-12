@@ -437,26 +437,23 @@ using PromoteToLocalVocabEntry =
     std::conditional_t<std::is_same_v<T, IdOrLiteralOrIri>, IdOrLocalVocabEntry,
                        T>;
 
-// Helper functor to upgrade the variant type from `IdOrLiteralOrIri` to
+// Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
 // `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
 // For other types, the functor just returns the input as is.
-struct PromoteToLocalVocabEntryT {
-  template <typename T>
-  decltype(auto) operator()(T&& value) const {
-    if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
-      return std::visit(ad_utility::OverloadCallOperator{
-                            [](Id id) -> IdOrLocalVocabEntry { return id; },
-                            [](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-                              return {LocalVocabEntry{AD_FWD(literalOrIri)}};
-                            }},
-                        AD_FWD(value));
-    } else {
-      return AD_FWD(value);
-    }
+template <typename T>
+decltype(auto) promoteToLocalVocabEntry(T&& value, const IndexImpl& index) {
+  if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](Id id) -> IdOrLocalVocabEntry { return id; },
+            [&index](auto&& literalOrIri) -> IdOrLocalVocabEntry {
+              return {LocalVocabEntry{AD_FWD(literalOrIri), index}};
+            }},
+        AD_FWD(value));
+  } else {
+    return AD_FWD(value);
   }
-};
-
-constexpr PromoteToLocalVocabEntryT promoteToLocalVocabEntry{};
+}
 
 }  // namespace detail
 }  // namespace sparqlExpression

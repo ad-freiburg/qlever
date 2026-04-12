@@ -39,6 +39,8 @@ class alignas(16) LocalVocabEntry
   FRIEND_TEST(TripleComponent, toValueId);
 
  private:
+  // Pointer to keep this object assignable.
+  const IndexImpl* index_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -46,27 +48,26 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. However, we don't consider this case to be likely.
-  const IndexImpl& index_;
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
   LocalVocabEntry(LiteralT literal, const IndexImpl& index)
-      : Base{std::move(literal)}, index_{index} {}
+      : Base{std::move(literal)}, index_{&index} {}
   LocalVocabEntry(IriT iri, const IndexImpl& index) noexcept
-      : Base{std::move(iri)}, index_{index} {}
+      : Base{std::move(iri)}, index_{&index} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
   LocalVocabEntry(const Base& base, const IndexImpl& index)
-      : Base{base}, index_{index} {}
+      : Base{base}, index_{&index} {}
   LocalVocabEntry(Base&& base, const IndexImpl& index) noexcept
-      : Base{std::move(base)}, index_{index} {}
+      : Base{std::move(base)}, index_{&index} {}
 
   // Constructor for when the position in the vocab is already known.
   LocalVocabEntry(Base&& base, auto lower, auto upper, const IndexImpl& index)
       : Base{std::move(base)},
-        index_{index},
+        index_{&index},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
@@ -77,6 +78,11 @@ class alignas(16) LocalVocabEntry
                         PositionInVocab{IdProxy::make(lower.getBits()),
                                         IdProxy::make(upper.getBits())}));
   }
+
+  LocalVocabEntry(const LocalVocabEntry&) = default;
+  LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
+  LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
+  LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
