@@ -64,8 +64,8 @@ TEST(TripleSerializer, blankNodesRemapper) {
   std::vector<std::vector<Id>> ids;
 
   auto bn = [&]() {
-    ad_utility::BlankNodeManager& bm = *qec->getIndex().getBlankNodeManager();
-    return Id::makeFromBlankNodeIndex(localVocab.getBlankNodeIndex(&bm));
+    return Id::makeFromBlankNodeIndex(
+        localVocab.getBlankNodeIndex(qec->getIndex().getBlankNodeManager()));
   };
 
   ids.emplace_back(std::vector{bn(), bn(), bn()});
