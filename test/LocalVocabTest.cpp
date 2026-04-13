@@ -37,9 +37,8 @@ namespace {
 
 using TestWords = std::vector<LocalVocabEntry>;
 
-TestWords getTestCollectionOfWords(size_t size) {
+TestWords getTestCollectionOfWords(size_t size, const IndexImpl& index) {
   using namespace ad_utility::triple_component;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
     testCollectionOfWords.push_back(LocalVocabEntry{
@@ -57,8 +56,9 @@ auto lit(std::string_view s) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
+  auto* qec = ad_utility::testing::getQec();
   // Test collection of words.
-  TestWords testWords = getTestCollectionOfWords(1000);
+  TestWords testWords = getTestCollectionOfWords(1000, qec->getIndex());
 
   // Create empty local vocabulary.
   LocalVocab localVocab;
@@ -94,11 +94,10 @@ TEST(LocalVocab, constructionAndAccess) {
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
     std::string content{asStringViewUnsafe(testWords[i].getContent())};
-    const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
     auto illegalWord = LocalVocabEntry{
         ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
             content + "A"),
-        index};
+        qec->getIndex()};
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
 
@@ -119,11 +118,12 @@ TEST(LocalVocab, constructionAndAccess) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, clone) {
+  auto* qec = ad_utility::testing::getQec();
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
   std::vector<LocalVocabIndex> indices;
-  auto inputWords = getTestCollectionOfWords(localVocabSize);
+  auto inputWords = getTestCollectionOfWords(localVocabSize, qec->getIndex());
   for (const auto& word : inputWords) {
     indices.push_back(localVocabOriginal.getIndexAndAddIfNotContained(word));
   }
@@ -159,7 +159,8 @@ TEST(LocalVocab, merge) {
   std::vector<LocalVocabIndex> indices;
   LocalVocab vocA;
   LocalVocab vocB;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   constexpr auto lit = [](std::string_view s) {
     return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
   };
@@ -228,13 +229,13 @@ TEST(LocalVocab, propagation) {
           ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
     TestWords expectedWords;
-    const auto& idx = testQec->getIndex().getImpl();
-    auto toLitOrIri = [&idx](const auto& word) {
+    const auto& index = testQec->getIndex();
+    auto toLitOrIri = [&index](const auto& word) {
       using namespace ad_utility::triple_component;
       if (ql::starts_with(word, '<')) {
-        return LocalVocabEntry{LiteralOrIri::iriref(word), idx};
+        return LocalVocabEntry{LiteralOrIri::iriref(word), index};
       } else {
-        return LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(word), idx};
+        return LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(word), index};
       }
     };
     ql::ranges::transform(expectedWordsAsStrings,
@@ -436,7 +437,8 @@ TEST(LocalVocab, getBlankNodeIndex) {
 // _____________________________________________________________________________
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   using ad_utility::triple_component::LiteralOrIri;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
       LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test"), index});
@@ -455,7 +457,8 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   using ad_utility::triple_component::LiteralOrIri;
   using ::testing::UnorderedElementsAre;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
       LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test"), index});
@@ -483,7 +486,8 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
   using ad_utility::triple_component::LiteralOrIri;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   {
@@ -520,7 +524,8 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   using ad_utility::triple_component::LiteralOrIri;
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;

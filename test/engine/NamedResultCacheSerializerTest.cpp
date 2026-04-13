@@ -28,20 +28,20 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
  protected:
   // Blank node manager and allocator that can be used when we don't really
   // care about blank nodes and allocation details.
-  ad_utility::BlankNodeManager blankNodeManager_;
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Serialize and immediately deserialize and return the `value`.
   NamedResultCache::Value serializeAndDeserializeValue(
-      const NamedResultCache::Value& value, const IndexImpl& index,
+      const NamedResultCache::Value& value,
       ad_utility::AllocatorWithLimit<Id> allocator) const {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
     NamedResultCache::Value result;
     result.allocatorForSerialization_ = std::move(allocator);
-    result.indexForSerialization_ = &index;
+    result.indexForSerialization_ = &qec_->getIndex().getImpl();
     readSerializer >> result;
     return result;
   }
@@ -49,22 +49,18 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   // Overload that uses the default member variables.
   NamedResultCache::Value serializeAndDeserializeValue(
       const NamedResultCache::Value& value) {
-    return serializeAndDeserializeValue(
-        value, ad_utility::testing::getQec()->getIndex().getImpl(), alloc_);
+    return serializeAndDeserializeValue(value, alloc_);
   }
 };
 
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
-  // we need to setup a dummy index somewhere, because otherwise the comparison
-  // of `IdTable`s won't work;
-  [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
   LocalVocab localVocab;
   [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::iriref(
                           "<http://example.org/test>"),
-                      qec->getIndex().getImpl()});
+                      qec_->getIndex()});
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -130,8 +126,7 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
-  auto qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex().getImpl();
+  const auto& index = qec_->getIndex();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
       LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::iriref(
@@ -162,14 +157,14 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   EXPECT_EQ(cache.numEntries(), 2);
 
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              qec->getIndex().getImpl());
+                              qec_->getIndex());
     return cache2;
   }();
 
@@ -197,15 +192,14 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
 
-  auto qec = ad_utility::testing::getQec();
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              qec->getIndex().getImpl());
+                              qec_->getIndex());
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);

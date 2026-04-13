@@ -196,8 +196,8 @@ TEST_F(ServiceTest, computeResult) {
     // Compute the Result lazily for the given Service and check that the
     // resulting IdTable equals the expected IdTable-vector.
     auto checkLazyResult =
-        [](Service& service,
-           const std::vector<std::vector<std::string>>& expIdTableVector) {
+        [this](Service& service,
+               const std::vector<std::vector<std::string>>& expIdTableVector) {
           auto result = service.computeResultOnlyForTesting(true);
 
           // compute resulting idTable
@@ -209,15 +209,13 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
-          const auto& indexImpl =
-              ad_utility::testing::getQec()->getIndex().getImpl();
           auto get =
-              [&localVocabs, &indexImpl](
+              [this, &localVocabs](
                   const std::string& s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
               auto index = localVocab.getIndexOrNullopt(LocalVocabEntry{
                   ad_utility::triple_component::LiteralOrIri::iriref(s),
-                  indexImpl});
+                  testQec->getIndex()});
               if (index.has_value()) {
                 return index;
               }

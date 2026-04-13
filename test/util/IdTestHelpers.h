@@ -36,15 +36,17 @@ inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;
   // Use `getQec()` to obtain a valid `IndexImpl` reference for creating
-  // `LocalVocabEntry` objects.
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  // `LocalVocabEntry` objects. This works because we store the indices in a
+  // static map.
+  auto* qec = getQec();
   return Id::makeFromLocalVocabIndex(
-      localVocab.wlock()->getIndexAndAddIfNotContained(LocalVocabEntry{
-          LiteralOrIri::literalWithoutQuotes(std::to_string(v)), index}));
+      localVocab.wlock()->getIndexAndAddIfNotContained(
+          LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(std::to_string(v)),
+                          qec->getIndex()}));
 };
 
 inline auto TextRecordId = [](const auto& t) {
-  return Id::makeFromTextRecordIndex(TextRecordIndex ::make(t));
+  return Id::makeFromTextRecordIndex(TextRecordIndex::make(t));
 };
 
 inline auto WordVocabId = [](const auto& t) {

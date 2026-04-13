@@ -132,10 +132,8 @@ struct TestContext {
 };
 
 // ____________________________________________________________________________
-auto litOrIri = [](const std::string& literal) -> IdOrLocalVocabEntry {
-  const auto& index = ad_utility::testing::getQec(TestContext::turtleInput)
-                          ->getIndex()
-                          .getImpl();
+auto localVocabEntry = [](const std::string& literal,
+                          const IndexImpl& index) -> IdOrLocalVocabEntry {
   return LocalVocabEntry{LiteralOrIri::fromStringRepresentation(
                              absl::StrCat("\""sv, literal, "\""sv)),
                          index};
@@ -173,16 +171,15 @@ auto getLangMatchesExpression =
 
 // ____________________________________________________________________________
 template <auto GetExpr, typename T>
-auto testLanguageExpressions = [](const std::vector<T>& expected,
-                                  const std::string& variable,
-                                  const auto&... args) {
-  TestContext context;
-  ASSERT_TRUE(context.isValidVariableStr(variable));
-  SparqlExpression::Ptr expr = GetExpr(variable, args...);
-  auto resultAsVariant = expr->evaluate(&context.context);
-  const auto& result = std::get<VectorWithMemoryLimit<T>>(resultAsVariant);
-  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
-};
+auto testLanguageExpressions =
+    [](TestContext& context, const std::vector<T>& expected,
+       const std::string& variable, const auto&... args) {
+      ASSERT_TRUE(context.isValidVariableStr(variable));
+      SparqlExpression::Ptr expr = GetExpr(variable, args...);
+      auto resultAsVariant = expr->evaluate(&context.context);
+      const auto& result = std::get<VectorWithMemoryLimit<T>>(resultAsVariant);
+      EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+    };
 
 // ____________________________________________________________________________
 TEST(LanguageTagGetter, testLanguageTagValueGetterWithoutVocabId) {
@@ -236,17 +233,25 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
+  TestContext context;
+  auto lve = [&context](const std::string& literal) {
+    return localVocabEntry(literal, context.qec->getIndex().getImpl());
+  };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
-      {litOrIri(""), litOrIri("es"), litOrIri("de-LATN-CH"), litOrIri("de-DE"),
-       litOrIri("de-DE"), litOrIri("de-AT"), litOrIri("de"), litOrIri("de-AT")},
+      context,
+      {lve(""), lve("es"), lve("de-LATN-CH"), lve("de-DE"), lve("de-DE"),
+       lve("de-AT"), lve("de"), lve("de-AT")},
       "?literals");
 }
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
+  TestContext context;
+  auto lve = [&context](const std::string& literal) {
+    return localVocabEntry(literal, context.qec->getIndex().getImpl());
+  };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
-      {litOrIri(""), litOrIri(""), litOrIri("de"), U, U, U, U, litOrIri("")},
-      "?mixed");
+      context, {lve(""), lve(""), lve("de"), U, U, U, U, lve("")}, "?mixed");
 }
 
 // ____________________________________________________________________________
@@ -263,34 +268,36 @@ TEST(LangExpression, testSimpleMethods) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
+  TestContext context;
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, T, T, T, T, T}, "?literals", "de");
+      context, {F, F, T, T, T, T, T, T}, "?literals", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, T, T, T, T, T, T, T}, "?literals", "*");
+      context, {F, T, T, T, T, T, T, T}, "?literals", "*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, F, F, F, F, F}, "?literals", "de-LATN-CH");
+      context, {F, F, T, F, F, F, F, F}, "?literals", "de-LATN-CH");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, F, F, F, F, F}, "?literals", "DE-LATN-CH");
+      context, {F, F, T, F, F, F, F, F}, "?literals", "DE-LATN-CH");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, F, F, F, F, F, F}, "?literals", "en-US");
+      context, {F, F, F, F, F, F, F, F}, "?literals", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, F, F, F, F, F, F}, "?literals", "");
+      context, {F, F, F, F, F, F, F, F}, "?literals", "");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, T, T, T, F, T}, "?literals", "de-*");
+      context, {F, F, T, T, T, T, F, T}, "?literals", "de-*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, T, T, T, F, T}, "?literals", "De-*");
+      context, {F, F, T, T, T, T, F, T}, "?literals", "De-*");
 }
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
+  TestContext context;
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, U, U, U, U, F}, "?mixed", "de");
+      context, {F, F, T, U, U, U, U, F}, "?mixed", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, U, U, U, U, F}, "?mixed", "dE");
+      context, {F, F, T, U, U, U, U, F}, "?mixed", "dE");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, T, U, U, U, U, F}, "?mixed", "*");
+      context, {F, F, T, U, U, U, U, F}, "?mixed", "*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, F, U, U, U, U, F}, "?mixed", "en-US");
+      context, {F, F, F, U, U, U, U, F}, "?mixed", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {F, F, F, U, U, U, U, F}, "?mixed", "");
+      context, {F, F, F, U, U, U, U, F}, "?mixed", "");
 }

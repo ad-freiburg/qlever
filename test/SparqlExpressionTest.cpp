@@ -58,24 +58,29 @@ auto U = Id::makeUndefined();
 using Ids = std::vector<Id>;
 using IdOrLocalVocabEntryVec = std::vector<IdOrLocalVocabEntry>;
 
-const auto& testIndexImpl() {
-  static const auto& impl =
-      ad_utility::testing::getQec(sparqlExpression::TestContext::turtleInput)
-          ->getIndex()
-          .getImpl();
-  return impl;
+// All the helper functions `testUnaryExpression` etc. below internally evaluate
+// the given expressions using the `TestContext` class, so it is possible to use
+// IDs from the global and local vocab of this class to test expressions. For
+// example `testContext().x` is the ID of the entity `<x>` in the vocabulary of
+// the index on which the expressions will be evaluated. For details see the
+// `TestContext` class. Note: The indirection via a function is necessary
+// because otherwise the `gtest_discover_test` step of the CMake build fails for
+// some reason.
+const auto& testContext() {
+  static TestContext ctx{};
+  return ctx;
 }
 
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri(
           ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype)),
-      testIndexImpl()};
+      testContext().qec->getIndex()};
 };
 
 auto iriref = [](std::string_view s) {
   return LocalVocabEntry{ad_utility::triple_component::LiteralOrIri(iri(s)),
-                         testIndexImpl()};
+                         testContext().qec->getIndex()};
 };
 
 auto idOrLitOrStringVec =
@@ -95,19 +100,6 @@ auto geoLit = [](std::string_view content) {
   return IdOrLocalVocabEntry{
       lit(content, "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")};
 };
-
-// All the helper functions `testUnaryExpression` etc. below internally evaluate
-// the given expressions using the `TestContext` class, so it is possible to use
-// IDs from the global and local vocab of this class to test expressions. For
-// example `testContext().x` is the ID of the entity `<x>` in the vocabulary of
-// the index on which the expressions will be evaluated. For details see the
-// `TestContext` class. Note: The indirection via a function is necessary
-// because otherwise the `gtest_discover_test` step of the CMake build fails for
-// some reason.
-const auto& testContext() {
-  static TestContext ctx{};
-  return ctx;
-}
 
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
@@ -784,12 +776,12 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(
-      IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
-      std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99), dateDate,
-                                        dateLYear, T, F},
-                 IdOrLocalVocabEntry{LocalVocabEntry{
-                     ad_utility::triple_component::Iri{}, testIndexImpl()}}});
+  checkIriOrUri(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
+                std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
+                                                  dateDate, dateLYear, T, F},
+                           IdOrLocalVocabEntry{LocalVocabEntry{
+                               ad_utility::triple_component::Iri{},
+                               testContext().qec->getIndex()}}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -812,8 +804,9 @@ TEST(SparqlExpression, stringOperators) {
               testContext().notInVocabIri, testContext().notInVocabIriLit,
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
-          IdOrLocalVocabEntry{LocalVocabEntry{
-              ad_utility::triple_component::Iri{}, testIndexImpl()}}});
+          IdOrLocalVocabEntry{
+              LocalVocabEntry{ad_utility::triple_component::Iri{},
+                              testContext().qec->getIndex()}}});
 
   // test with base iri
   checkIriOrUri(

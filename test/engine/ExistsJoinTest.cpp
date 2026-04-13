@@ -195,15 +195,15 @@ TEST(ExistsJoin, computeResult) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
   LocalVocabEntry entryA{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"a\""),
-      index};
+      qec->getIndex()};
   LocalVocabEntry entryB{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"b\""),
-      index};
+      qec->getIndex()};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -226,7 +226,6 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   IdTable expected = makeIdTableFromVector(
       {{1, 1, 2, T}, {4, 2, 1, F}, {2, 8, 1, F}, {3, 8, 2, T}, {4, 8, 2, T}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{
@@ -257,15 +256,15 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
   LocalVocabEntry entryA{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"a\""),
-      index};
+      qec->getIndex()};
   LocalVocabEntry entryB{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"b\""),
-      index};
+      qec->getIndex()};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -292,7 +291,6 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
                                             {10, 11, 12, 13, F},
                                             {14, 15, 16, 17, F}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool requestLaziness : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{

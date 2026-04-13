@@ -16,10 +16,10 @@ namespace tc = ad_utility::triple_component;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
-    bool distinct, const IdTable& idTable, const ExpressionResult& expected,
+    QueryExecutionContext* qec, bool distinct, const IdTable& idTable,
+    const ExpressionResult& expected,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   AD_CONTRACT_CHECK(idTable.numColumns() == 1);
-  auto* qec = ad_utility::testing::getQec();
   auto g = generateLocationTrace(location);
 
   Variable var{"?x"};
@@ -47,21 +47,21 @@ void expectIdsAreConcatenatedTo(
 
 // _____________________________________________________________________________
 void expectLiteralsAreConcatenatedTo(
-    bool distinct, const std::vector<tc::Literal>& literals,
+    QueryExecutionContext* qec, bool distinct,
+    const std::vector<tc::Literal>& literals,
     const ad_utility::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   LocalVocab localVocab;
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   for (const auto& inputLiteral : literals) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{inputLiteral, index});
+        LocalVocabEntry{inputLiteral, qec->getIndex()});
     input.push_back({Id::makeFromLocalVocabIndex(idx)});
   }
   expectIdsAreConcatenatedTo(
-      distinct, input, IdOrLocalVocabEntry{LocalVocabEntry{literal, index}},
-      location);
+      qec, distinct, input,
+      IdOrLocalVocabEntry{LocalVocabEntry{literal, qec->getIndex()}}, location);
 }
 
 auto lit = [](std::string s) {
@@ -71,67 +71,69 @@ auto lit = [](std::string s) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, basicConcatenation) {
-  expectLiteralsAreConcatenatedTo(false, {}, lit("\"\""));
-  expectLiteralsAreConcatenatedTo(true, {}, lit("\"\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"\"")}, lit("\"\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"")}, lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"")}, lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\""), lit("\"a\"")},
+  auto* qec = ad_utility::testing::getQec();
+  expectLiteralsAreConcatenatedTo(qec, false, {}, lit("\"\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {}, lit("\"\""));
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"\"")}, lit("\"\""));
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\"")}, lit("\"a\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"")}, lit("\"a\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\""), lit("\"a\"")},
                                   lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\""), lit("\"b\"")},
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\""), lit("\"b\"")},
                                   lit("\"a;b\""));
   expectLiteralsAreConcatenatedTo(
-      true, {lit("\"a\""), lit("\"a\""), lit("\"b\"")}, lit("\"a;b\""));
+      qec, true, {lit("\"a\""), lit("\"a\""), lit("\"b\"")}, lit("\"a;b\""));
 
   expectLiteralsAreConcatenatedTo(
-      false, {lit("\"a\""), lit("\"b\""), lit("\"\"")}, lit("\"a;b;\""));
+      qec, false, {lit("\"a\""), lit("\"b\""), lit("\"\"")}, lit("\"a;b;\""));
   expectLiteralsAreConcatenatedTo(
-      false, {lit("\"a\""), lit("\"b\""), lit("\"\""), lit("\"\"")},
+      qec, false, {lit("\"a\""), lit("\"b\""), lit("\"\""), lit("\"\"")},
       lit("\"a;b;;\""));
   expectLiteralsAreConcatenatedTo(
-      false,
+      qec, false,
       {lit("\"a\""), lit("\"b\""), lit("\"\""), lit("\"\""), lit("\"c\"")},
       lit("\"a;b;;;c\""));
 }
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
+  auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
-  expectIdsAreConcatenatedTo(false,
+  expectIdsAreConcatenatedTo(qec, false,
                              makeIdTableFromVector({{Id::makeUndefined()}}),
                              ExpressionResult{Id::makeUndefined()});
 
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"a\""),
-      index});
+      qec->getIndex()});
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
-      false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),
+      qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),
       ExpressionResult{Id::makeUndefined()});
   expectIdsAreConcatenatedTo(
-      false, makeIdTableFromVector({{a}, {Id::makeUndefined()}}),
+      qec, false, makeIdTableFromVector({{a}, {Id::makeUndefined()}}),
       ExpressionResult{Id::makeUndefined()});
 }
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithLanguageTags) {
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en")}, lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en")}, lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en"), lit("\"a\"@en")},
+  auto* qec = ad_utility::testing::getQec();
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\"@en")}, lit("\"a\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en")}, lit("\"a\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en"), lit("\"a\"@en")},
                                   lit("\"a\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en"), lit("\"b\"@en")},
+  expectLiteralsAreConcatenatedTo(
+      qec, false, {lit("\"a\"@en"), lit("\"b\"@en")}, lit("\"a;b\""));
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\""), lit("\"b\"@en")},
                                   lit("\"a;b\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\""), lit("\"b\"@en")},
-                                  lit("\"a;b\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\""), lit("\"a\"@en")},
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\""), lit("\"a\"@en")},
                                   lit("\"a;a\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en"), lit("\"b\"")},
+  expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\"@en"), lit("\"b\"")},
                                   lit("\"a;b\""));
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en"), lit("\"b\"@de")},
-                                  lit("\"a;b\""));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en"), lit("\"a\"@de")},
+  expectLiteralsAreConcatenatedTo(
+      qec, false, {lit("\"a\"@en"), lit("\"b\"@de")}, lit("\"a;b\""));
+  expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en"), lit("\"a\"@de")},
                                   lit("\"a;a\""));
 }
 

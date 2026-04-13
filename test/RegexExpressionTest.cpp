@@ -200,12 +200,12 @@ TEST(RegexExpression, nonPrefixRegex) {
 
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
   // Our expression is a fixed string literal: "hallo".
-  VectorWithMemoryLimit<IdOrLocalVocabEntry> input{
-      ad_utility::testing::getQec()->getAllocator()};
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> input{qec->getAllocator()};
   input.push_back(LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")),
-      ad_utility::testing::getQec()->getIndex().getImpl()});
+      ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")), index});
 
   {
     auto child =

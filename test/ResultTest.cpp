@@ -170,23 +170,24 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
+  auto* queryExecutionContext = ad_utility::testing::getQec();
   auto idTable1 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}});
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   Result result{
-      [](auto& t1, auto& t2, auto& t3) -> Result::Generator {
+      [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
         std::this_thread::sleep_for(1ms);
         LocalVocab localVocab{};
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
             ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-            ad_utility::testing::getQec()->getIndex().getImpl()});
+            qec->getIndex()});
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
         co_yield {t2.clone(), LocalVocab{}};
         std::this_thread::sleep_for(5ms);
         co_yield {t3.clone(), LocalVocab{}};
-      }(idTable1, idTable2, idTable3),
+      }(queryExecutionContext, idTable1, idTable2, idTable3),
       {}};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;

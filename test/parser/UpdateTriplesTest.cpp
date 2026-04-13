@@ -21,10 +21,10 @@ TEST(UpdateTriples, DefaultConstructor) {
 
 // _____________________________________________________________________________
 TEST(UpdateTriples, ConstructorsAndAssignments) {
-  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto* qec = ad_utility::testing::getQec();
   LocalVocab l;
   auto iri = LocalVocabEntry::iriref("<hallo>");
-  l.getIndexAndAddIfNotContained(LocalVocabEntry{iri, index});
+  l.getIndexAndAddIfNotContained(LocalVocabEntry{iri, qec->getIndex()});
   std::vector<SparqlTripleSimpleWithGraph> triples;
 
   SparqlTripleSimpleWithGraph triple{V{"?x"}, V{"?y"}, V{"?z"},

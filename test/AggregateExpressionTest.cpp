@@ -31,11 +31,8 @@ auto V = VocabId;
 auto U = Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
-  return IdOrLocalVocabEntry(LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)),
-      getQec(sparqlExpression::TestContext::turtleInput)
-          ->getIndex()
-          .getImpl()});
+  return IdOrLiteralOrIri{
+      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
@@ -49,15 +46,22 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
                         bool distinct = false,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  VectorWithMemoryLimit<T> input(inputAsVector.begin(), inputAsVector.end(),
-                                 makeAllocator());
-  auto d = std::make_unique<SingleUseExpression>(input.clone());
   auto t = TestContext{};
+  VectorWithMemoryLimit<sparqlExpression::detail::PromoteToLocalVocabEntry<T>>
+      input(makeAllocator());
+  input.reserve(inputAsVector.size());
+  for (auto& value : inputAsVector) {
+    input.push_back(sparqlExpression::detail::promoteToLocalVocabEntry(
+        std::move(value), t.context._qec.getIndex()));
+  }
+  auto d = std::make_unique<SingleUseExpression>(input.clone());
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};
   auto resAsVariant = m.evaluate(&t.context);
-  auto res = std::get<U>(resAsVariant);
-  EXPECT_EQ(res, expectedResult);
+  auto res = std::get<sparqlExpression::detail::PromoteToLocalVocabEntry<U>>(
+      resAsVariant);
+  EXPECT_EQ(res, sparqlExpression::detail::promoteToLocalVocabEntry(
+                     expectedResult, t.context._qec.getIndex()));
 };
 
 // Same as `testAggregate` above, but the input is specified as a variable.
@@ -86,8 +90,7 @@ TEST(AggregateExpression, count) {
   testCountId({I(3), NaN, NaN}, I(2), true);
   testCountId({}, I(0));
 
-  auto testCountString =
-      testAggregate<CountExpression, IdOrLocalVocabEntry, Id>;
+  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
 
@@ -109,10 +112,10 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), NaN}, NaN);
   testSumId({}, I(0));
 
-  auto testMaxString = testAggregate<MaxExpression, IdOrLocalVocabEntry>;
+  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("unfug"));
-  auto testSumString = testAggregate<SumExpression, IdOrLocalVocabEntry, Id>;
+  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
   testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -125,7 +128,7 @@ TEST(AggregateExpression, avg) {
   testAvgId({I(3), NaN}, NaN);
   testAvgId({}, I(0));
 
-  auto testAvgString = testAggregate<AvgExpression, IdOrLocalVocabEntry, Id>;
+  auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -152,8 +155,7 @@ TEST(StdevExpression, avg) {
   testStdevId({D(500)}, D(0));
   testStdevId({D(500), D(500), D(500)}, D(0));
 
-  auto testStdevString =
-      testAggregate<StdevExpression, IdOrLocalVocabEntry, Id>;
+  auto testStdevString = testAggregate<StdevExpression, IdOrLiteralOrIri, Id>;
   testStdevString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -184,7 +186,7 @@ TEST(AggregateExpression, min) {
   testMinId({I(3), alpha, alx, (I(-1)), U}, U);
   testMinId({alpha, alx, aalx}, aalx);
   testMinId({}, U);
-  auto testMinString = testAggregate<MinExpression, IdOrLocalVocabEntry>;
+  auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("alpha"));
 }
