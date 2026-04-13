@@ -854,7 +854,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
-  const auto& index = testQec->getIndex().getImpl();
+  const auto& index = testQec->getIndex();
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
     deltaTriples.setPersists(tmpFile);
@@ -934,7 +934,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 TEST_F(DeltaTriplesTest, copyLocalVocab) {
   using namespace ::testing;
   using ad_utility::triple_component::LiteralOrIri;
-  const auto& index = testQec->getIndex().getImpl();
+  const auto& index = testQec->getIndex();
   DeltaTriples deltaTriples{testQec->getIndex()};
 
   std::string iri1 = "<test>";
@@ -976,7 +976,7 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   using namespace ::testing;
   using ad_utility::triple_component::LiteralOrIri;
-  const auto& index = testQec->getIndex().getImpl();
+  const auto& index = testQec->getIndex();
   DeltaTriplesManager deltaTriplesManager(index);
 
   std::string iri1 = "<test>";

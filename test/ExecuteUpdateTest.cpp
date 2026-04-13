@@ -299,11 +299,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
-    const auto& indexImpl = qec->getIndex().getImpl();
-    auto LVI = [&localVocab, &indexImpl](const std::string& iri) {
+    auto LVI = [&localVocab, qec](const std::string& iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri), indexImpl)));
+              ad_utility::triple_component::Iri::fromIriref(iri),
+              qec->getIndex())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -436,8 +436,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
-  const auto& outerIndexImpl = index.getImpl();
-  auto TripleComponentMatcher = [&outerIndexImpl](
+  auto TripleComponentMatcher = [&index](
                                     const ::LocalVocab& localVocab,
                                     TripleComponentT component) -> MatcherType {
     return std::visit(
@@ -448,11 +447,11 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab, &outerIndexImpl](
+            [&localVocab, &index](
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry{literalOrIri, outerIndexImpl});
+                  LocalVocabEntry{literalOrIri, index});
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

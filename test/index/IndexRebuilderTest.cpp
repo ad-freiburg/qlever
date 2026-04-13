@@ -115,9 +115,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  const auto& indexImpl = oldIndex.getImpl();
-  auto makeVocabEntry = [&indexImpl](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str), indexImpl};
+  auto makeVocabEntry = [&oldIndex](std::string_view str) {
+    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -275,17 +274,16 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                .toValueId(index)
                .value();
 
-  const auto& indexImpl = index.getImpl();
-  index.deltaTriplesManager().modify<void>([&cancellationHandle, g, &indexImpl](
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, g, &index](
                                                DeltaTriples& deltaTriples) {
     LocalVocabEntry entry1{
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
             "<a2>"),
-        indexImpl};
+        index};
     LocalVocabEntry entry2{
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
             "<d2>"),
-        indexImpl};
+        index};
     auto a2 = Id::makeFromLocalVocabIndex(&entry1);
     auto d2 = Id::makeFromLocalVocabIndex(&entry2);
     deltaTriples.insertTriples(

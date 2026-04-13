@@ -980,7 +980,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getIndex().getImpl()});
+        qec_->getIndex()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1167,11 +1167,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
-  const auto& impl = qec_->getIndex().getImpl();
+  const auto& index = qec_->getIndex();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), impl});
+      LocalVocabEntry{iri("<e>"), index});
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), impl});
+      LocalVocabEntry{iri("<g>"), index});
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1791,7 +1791,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     return makePrefilterVec(
         pr(lt(LocalVocabEntry{
                ad_utility::triple_component::LiteralOrIri::iriref("<s2>"),
-               qec->getIndex().getImpl()}),
+               qec->getIndex()}),
            Var{"?x"}));
   };
 
@@ -1894,7 +1894,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getIndex().getImpl()});
+        qec_->getIndex()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),

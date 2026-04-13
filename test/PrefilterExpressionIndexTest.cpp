@@ -117,7 +117,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Given that we depend on LocalVocab and Vocab values during evaluation an
   // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
-  const IndexImpl& idx = qet->getIndex().getImpl();
+  const Index& idx = qet->getIndex();
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
   LocalVocab vocab{};
@@ -176,7 +176,6 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idIri4 = getId(iri4, vocab);
   const Id idIri5 = getId(iri5, vocab);
   const Id iriStart = getId(iriBegin, vocab);
-  const IndexImpl& indexVocab = qet->getIndex().getImpl();
 
   // Define CompressedBlockMetadata
   const CompressedBlockMetadata b1 = makeBlock(undef, undef);  // 0
@@ -410,7 +409,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           size_t evaluationColumn = 2) {
     std::vector<CompressedBlockMetadata> testBlocks = input;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        expr->evaluate(indexVocab, testBlocks, evaluationColumn),
+        expr->evaluate(idx, testBlocks, evaluationColumn),
         ::testing::HasSubstr(expected));
   }
 
@@ -434,7 +433,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, testBlocks, 2)),
+    ASSERT_EQ(toVec(expr->evaluate(idx, testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -459,10 +458,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
-    ASSERT_EQ(
-        toVec(expr->evaluate(
-            indexVocab, input.empty() ? allTestBlocksIsDatatype : input, 2)),
-        adjustedExpected);
+    ASSERT_EQ(toVec(expr->evaluate(
+                  idx, input.empty() ? allTestBlocksIsDatatype : input, 2)),
+              adjustedExpected);
   }
 
   // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
@@ -504,13 +502,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, dateBlocks, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(idx, dateBlocks, 2)), expected);
   }
 
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, blocksRegexTest, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(idx, blocksRegexTest, 2)), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -1219,16 +1217,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)), input);
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)), input);
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)), input);
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 0)), input);
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 1)), input);
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)),
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 2)),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)),
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 1)),
             std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)),
+  EXPECT_EQ(toVec(expr->evaluate(idx, input, 0)),
             std::vector<CompressedBlockMetadata>{});
 }
 

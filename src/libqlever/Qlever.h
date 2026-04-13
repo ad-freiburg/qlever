@@ -279,8 +279,7 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         index_.getImpl());
+    namedResultCache_.readFromSerializer(serializer, allocator_, index_);
   }
 
   // Low-level access to the QLever API, use with care.

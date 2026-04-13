@@ -166,7 +166,7 @@ TEST(AggregateExpression, min) {
   // IDs of one word from the vocabulary ("alpha") and two words
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
-  const auto& index = t.qec->getIndex().getImpl();
+  const auto& index = t.qec->getIndex();
   LocalVocabEntry l1{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
       index};
@@ -199,7 +199,7 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
-  const auto& index = t.qec->getIndex().getImpl();
+  const auto& index = t.qec->getIndex();
   LocalVocabEntry l{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
       index};

@@ -70,7 +70,7 @@ TEST(StringMapping, flush) {
   auto* qec = ad_utility::testing::getQec(std::move(config));
   StringMapping mapping;
 
-  const auto& index = qec->getIndex().getImpl();
+  const auto& index = qec->getIndex();
   LocalVocabEntry testWord{
       ad_utility::triple_component::Literal::fromStringRepresentation(
           "\"abc\""),
@@ -92,6 +92,6 @@ TEST(StringMapping, flush) {
   EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
 
   EXPECT_THAT(
-      mapping.flush(qec->getIndex()),
+      mapping.flush(index),
       ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 }

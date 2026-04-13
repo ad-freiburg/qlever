@@ -118,7 +118,7 @@ void testValuesInVariables(
         ctx.localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
             ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
                 value),
-            ctx.qec->getIndex().getImpl()}));
+            ctx.qec->getIndex()}));
   };
   for (const auto& value : inputValues) {
     ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),

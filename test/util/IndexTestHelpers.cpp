@@ -380,8 +380,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>(),
                    std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(c).qec_.get();
-  return qec;
+  return contextMap.at(c).qec_.get();
 }
 
 // _____________________________________________________________________________

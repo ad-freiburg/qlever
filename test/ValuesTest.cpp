@@ -75,9 +75,9 @@ TEST(Values, computeResult) {
   const auto& table = result->idTable();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
-  const auto& indexImpl = testQec->getIndex().getImpl();
-  auto l = result->localVocab().getIndexOrNullopt(LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::iriref("<y>"), indexImpl});
+  auto l = result->localVocab().getIndexOrNullopt(
+      LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::iriref("<y>"),
+                      testQec->getIndex()});
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

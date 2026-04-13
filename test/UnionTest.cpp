@@ -351,12 +351,11 @@ TEST(Union, sortedMergeWithLocalVocab) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  const auto& indexImpl = qec->getIndex().getImpl();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"Test1\""),
-      indexImpl});
+      qec->getIndex()});
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
@@ -366,7 +365,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   vocab2.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           "\"Test2\""),
-      indexImpl});
+      qec->getIndex()});
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));

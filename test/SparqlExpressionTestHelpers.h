@@ -69,7 +69,7 @@ struct TestContext {
     zz = getId("\"zz\"@en");
     blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
-    const auto& index = qec->getIndex().getImpl();
+    const auto& index = qec->getIndex();
     auto addLocalLiteral = [this, &index](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
           this->localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{

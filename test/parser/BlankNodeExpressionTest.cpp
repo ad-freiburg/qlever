@@ -35,7 +35,7 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
   EXPECT_NE(result1, result3);
   EXPECT_NE(result2, result3);
 
-  const auto& index = context.qec->getIndex().getImpl();
+  const auto& index = context.qec->getIndex();
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
   vector.emplace_back(LocalVocabEntry{
       LiteralOrIri{Literal::literalWithoutQuotes("Other")}, index});
@@ -158,7 +158,7 @@ TEST(BlankNodeExpression, uniqueValuesAcrossInstances) {
 TEST(BlankNodeExpression, consistentCounterWithUndefined) {
   TestContext context;
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
-  const auto& index = context.qec->getIndex().getImpl();
+  const auto& index = context.qec->getIndex();
   vector.emplace_back(LocalVocabEntry{
       LiteralOrIri{Literal::literalWithoutQuotes("T1")}, index});
   vector.emplace_back(Id::makeUndefined());

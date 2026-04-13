@@ -73,7 +73,7 @@ TEST(StripColumns, computeResult) {
     LocalVocab voc;
     voc.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::LiteralOrIri::iriref("<kartoffel>"),
-        qec->getIndex().getImpl()});
+        qec->getIndex()});
     qec->clearCacheUnpinnedOnly();
     std::vector<IdTable> children;
     children.push_back(makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}));
@@ -89,7 +89,7 @@ TEST(StripColumns, computeResult) {
       std::mem_fn(&LocalVocab::getAllWordsForTesting),
       ElementsAre(LocalVocabEntry{
           ad_utility::triple_component::LiteralOrIri::iriref("<kartoffel>"),
-          qec->getIndex().getImpl()}));
+          qec->getIndex()}));
   // Test materialized result.
   {
     auto strip = makeOp();

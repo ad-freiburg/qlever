@@ -237,9 +237,8 @@ class ValueGetterTester {
     auto litOrIri =
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
             literal);
-    const auto& index = testContext.qec->getIndex().getImpl();
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{litOrIri, index});
+        LocalVocabEntry{litOrIri, testContext.qec->getIndex()});
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
     EXPECT_THAT(res, expected);

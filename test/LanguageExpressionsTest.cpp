@@ -89,25 +89,25 @@ struct TestContext {
       return ad_utility::triple_component::LiteralOrIri::iriref(s);
     };
 
-    const auto& indexImpl = qec->getIndex().getImpl();
+    const auto& index = qec->getIndex();
     locVocIri1 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{iri("<https:://some_example/iri>"), indexImpl}));
+            LocalVocabEntry{iri("<https:://some_example/iri>"), index}));
     locVocIri2 = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            iri("<http://www.w3.org/2001/XMLSchema#integer>"), indexImpl}));
+            iri("<http://www.w3.org/2001/XMLSchema#integer>"), index}));
     locVocLit1 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"leipzig\""), indexImpl}));
+            LocalVocabEntry{lit("\"leipzig\""), index}));
     locVocLit2 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"munich\"@de-DE"), indexImpl}));
+            LocalVocabEntry{lit("\"munich\"@de-DE"), index}));
     locVocLit3 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"hamburg\"@de"), indexImpl}));
+            LocalVocabEntry{lit("\"hamburg\"@de"), index}));
     locVocLit4 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"düsseldorf\"@de-AT"), indexImpl}));
+            LocalVocabEntry{lit("\"düsseldorf\"@de-AT"), index}));
 
     table.setNumColumns(2);
     // Order of the columns:
@@ -235,7 +235,7 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
   TestContext context;
   auto lve = [&context](const std::string& literal) {
-    return localVocabEntry(literal, context.qec->getIndex().getImpl());
+    return localVocabEntry(literal, context.qec->getIndex());
   };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       context,
@@ -248,7 +248,7 @@ TEST(LangExpression, testLangExpressionOnLiteralColumn) {
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
   TestContext context;
   auto lve = [&context](const std::string& literal) {
-    return localVocabEntry(literal, context.qec->getIndex().getImpl());
+    return localVocabEntry(literal, context.qec->getIndex());
   };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       context, {lve(""), lve(""), lve("de"), U, U, U, U, lve("")}, "?mixed");

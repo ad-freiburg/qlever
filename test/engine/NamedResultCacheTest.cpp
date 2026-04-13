@@ -139,7 +139,7 @@ TEST(NamedResultCache, E2E) {
       ad_utility::triple_component::LiteralOrIri::iriref("<notInVocab>");
   auto notInVocab =
       Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{litOrIri, qec->getIndex().getImpl()}));
+          LocalVocabEntry{litOrIri, qec->getIndex()}));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTable(), matchesIdTable(expected));

@@ -383,10 +383,10 @@ TEST_F(ServiceTest, computeResult) {
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
-    const auto& indexImpl = testQec->getIndex().getImpl();
-    auto get = [&localVocab, &indexImpl](const std::string& s) {
+    const auto& index = testQec->getIndex();
+    auto get = [&localVocab, &index](const std::string& s) {
       return localVocab.getIndexOrNullopt(LocalVocabEntry{
-          ad_utility::triple_component::LiteralOrIri::iriref(s), indexImpl});
+          ad_utility::triple_component::LiteralOrIri::iriref(s), index});
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -727,7 +727,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
           "a\"b\"c"),
-      index.getImpl()};
+      index};
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 

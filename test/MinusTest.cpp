@@ -677,11 +677,10 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   auto qec = ad_utility::testing::getQec();
 
-  const auto& indexImpl = qec->getIndex().getImpl();
   LocalVocabEntry testLiteral{
       ad_utility::triple_component::Literal::fromStringRepresentation(
           "\"Abc\""),
-      indexImpl};
+      qec->getIndex()};
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
@@ -689,7 +688,7 @@ TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   rightVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::fromStringRepresentation(
           "\"Def\""),
-      indexImpl});
+      qec->getIndex()});
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -771,12 +770,11 @@ struct Wrapper {
 // _____________________________________________________________________________
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   auto qec = ad_utility::testing::getQec();
-  const auto& indexImpl = qec->getIndex().getImpl();
 
   LocalVocabEntry testLiteral{
       ad_utility::triple_component::Literal::fromStringRepresentation(
           "\"Abc\""),
-      indexImpl};
+      qec->getIndex()};
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);

@@ -1048,7 +1048,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
 
   auto i = [&qec2](int i) {
     return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">")),
-                           qec2->getIndex().getImpl()};
+                           qec2->getIndex()};
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));

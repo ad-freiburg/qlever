@@ -29,7 +29,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
       sparqlExpression::EvaluationContext::TimePoint::max()};
 
   Id calculate(const auto& data) {
-    return data.calculateResult(qec_->getIndex().getImpl(), &localVocab_);
+    return data.calculateResult(qec_->getIndex(), &localVocab_);
   }
 
   template <typename T>
@@ -57,7 +57,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     using ad_utility::triple_component::LiteralOrIri;
     auto literal = LiteralOrIri::literalWithoutQuotes(string);
     return Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-        LocalVocabEntry{std::move(literal), qec_->getIndex().getImpl()}));
+        LocalVocabEntry{std::move(literal), qec_->getIndex()}));
   };
 };
 
@@ -88,7 +88,7 @@ TEST_F(GroupByHashMapOptimizationTest, AvgAggregationDataAggregatesCorrectly) {
   auto literal = LiteralOrIri::literalWithoutQuotes("non-numeric value");
   auto id =
       Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-          LocalVocabEntry{std::move(literal), qec_->getIndex().getImpl()}));
+          LocalVocabEntry{std::move(literal), qec_->getIndex()}));
   addValue(id);
   EXPECT_TRUE(calc().isUndefined());
 }
@@ -236,7 +236,7 @@ TEST_F(GroupByHashMapOptimizationTest,
         LiteralOrIri::literalWithoutQuotes(string, std::move(langTag));
     addValue(
         Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-            LocalVocabEntry{std::move(literal), qec_->getIndex().getImpl()})));
+            LocalVocabEntry{std::move(literal), qec_->getIndex()})));
   };
 
   data.reset();
