@@ -36,8 +36,6 @@ class ServiceTest : public ::testing::Test {
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  ad_utility::AllocatorWithLimit<Id> testAllocator =
-      ad_utility::testing::makeAllocator();
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
   // is used by default by a `Service` operation (see the constructor in

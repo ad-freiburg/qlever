@@ -60,11 +60,11 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 
 TEST(TripleSerializer, blankNodesRemapper) {
   auto* qec = ad_utility::testing::getQec();
-  ad_utility::BlankNodeManager bm;
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
 
   auto bn = [&]() {
+    ad_utility::BlankNodeManager& bm = *qec->getIndex().getBlankNodeManager();
     return Id::makeFromBlankNodeIndex(localVocab.getBlankNodeIndex(&bm));
   };
 
