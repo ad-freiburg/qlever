@@ -209,12 +209,15 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
+          const auto& indexImpl =
+              ad_utility::testing::getQec()->getIndex().getImpl();
           auto get =
-              [&localVocabs](
+              [&localVocabs, &indexImpl](
                   const std::string& s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index = localVocab.getIndexOrNullopt(
-                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              auto index = localVocab.getIndexOrNullopt(LocalVocabEntry{
+                  ad_utility::triple_component::LiteralOrIri::iriref(s),
+                  indexImpl});
               if (index.has_value()) {
                 return index;
               }
@@ -382,9 +385,10 @@ TEST_F(ServiceTest, computeResult) {
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
-    auto get = [&localVocab](const std::string& s) {
-      return localVocab.getIndexOrNullopt(
-          ad_utility::triple_component::LiteralOrIri::iriref(s));
+    const auto& indexImpl = testQec->getIndex().getImpl();
+    auto get = [&localVocab, &indexImpl](const std::string& s) {
+      return localVocab.getIndexOrNullopt(LocalVocabEntry{
+          ad_utility::triple_component::LiteralOrIri::iriref(s), indexImpl});
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -722,9 +726,10 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry(
+  auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "a\"b\"c"));
+          "a\"b\"c"),
+      index.getImpl()};
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 

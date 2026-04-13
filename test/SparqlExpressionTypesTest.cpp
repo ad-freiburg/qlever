@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/GTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace sparqlExpression;
 
@@ -35,7 +36,9 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   IdOrLocalVocabEntry idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "U:0");
-  idOrString = LiteralOrIri::literalWithoutQuotes("bimm");
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  idOrString =
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("bimm"), index};
   // Clear the stringstream.
   str.str({});
   PrintTo(idOrString, &str);

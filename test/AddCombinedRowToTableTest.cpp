@@ -8,6 +8,7 @@
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 static constexpr auto U = Id::makeUndefined();
@@ -285,16 +286,22 @@ Literal fromString(std::string_view string) {
 }
 
 // _____________________________________________________________________________
+const auto& getTestIndexImpl() {
+  return ad_utility::testing::getQec()->getIndex().getImpl();
+}
+
 LocalVocab createVocabWithSingleString(std::string_view string) {
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{fromString(string)});
+  localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{fromString(string), getTestIndexImpl()});
   return localVocab;
 }
 
 // _____________________________________________________________________________
 bool vocabContainsString(const LocalVocab& vocab, std::string_view string) {
-  return ad_utility::contains(vocab.getAllWordsForTesting(),
-                              LocalVocabEntry{fromString(string)});
+  return ad_utility::contains(
+      vocab.getAllWordsForTesting(),
+      LocalVocabEntry{fromString(string), getTestIndexImpl()});
 }
 }  // namespace
 

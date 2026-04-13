@@ -35,10 +35,14 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
   EXPECT_NE(result1, result3);
   EXPECT_NE(result2, result3);
 
+  const auto& index = context.qec->getIndex().getImpl();
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
-  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("Other")});
-  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("Test")});
-  vector.emplace_back(LiteralOrIri{Iri::fromIriref("<http://example.com>")});
+  vector.emplace_back(LocalVocabEntry{
+      LiteralOrIri{Literal::literalWithoutQuotes("Other")}, index});
+  vector.emplace_back(LocalVocabEntry{
+      LiteralOrIri{Literal::literalWithoutQuotes("Test")}, index});
+  vector.emplace_back(LocalVocabEntry{
+      LiteralOrIri{Iri::fromIriref("<http://example.com>")}, index});
 
   auto expression4 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(
@@ -154,9 +158,12 @@ TEST(BlankNodeExpression, uniqueValuesAcrossInstances) {
 TEST(BlankNodeExpression, consistentCounterWithUndefined) {
   TestContext context;
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
-  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("T1")});
+  const auto& index = context.qec->getIndex().getImpl();
+  vector.emplace_back(LocalVocabEntry{
+      LiteralOrIri{Literal::literalWithoutQuotes("T1")}, index});
   vector.emplace_back(Id::makeUndefined());
-  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("T2")});
+  vector.emplace_back(LocalVocabEntry{
+      LiteralOrIri{Literal::literalWithoutQuotes("T2")}, index});
 
   auto expression0 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(

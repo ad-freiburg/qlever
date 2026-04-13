@@ -53,13 +53,15 @@ void expectLiteralsAreConcatenatedTo(
   LocalVocab localVocab;
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   for (const auto& inputLiteral : literals) {
-    auto idx =
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{inputLiteral});
+    auto idx = localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{inputLiteral, index});
     input.push_back({Id::makeFromLocalVocabIndex(idx)});
   }
   expectIdsAreConcatenatedTo(
-      distinct, input, IdOrLocalVocabEntry{LocalVocabEntry{literal}}, location);
+      distinct, input, IdOrLocalVocabEntry{LocalVocabEntry{literal, index}},
+      location);
 }
 
 auto lit = [](std::string s) {
@@ -99,8 +101,11 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
                              makeIdTableFromVector({{Id::makeUndefined()}}),
                              ExpressionResult{Id::makeUndefined()});
 
-  auto idx = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"a\""));
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      index});
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "index/Index.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
@@ -57,13 +58,24 @@ auto U = Id::makeUndefined();
 using Ids = std::vector<Id>;
 using IdOrLocalVocabEntryVec = std::vector<IdOrLocalVocabEntry>;
 
+const auto& testIndexImpl() {
+  static const auto& impl =
+      ad_utility::testing::getQec(sparqlExpression::TestContext::turtleInput)
+          ->getIndex()
+          .getImpl();
+  return impl;
+}
+
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
-  return ad_utility::triple_component::LiteralOrIri(
-      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype));
+  return LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri(
+          ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype)),
+      testIndexImpl()};
 };
 
 auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
+  return LocalVocabEntry{ad_utility::triple_component::LiteralOrIri(iri(s)),
+                         testIndexImpl()};
 };
 
 auto idOrLitOrStringVec =
@@ -772,11 +784,12 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
-                std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
-                                                  dateDate, dateLYear, T, F},
-                           IdOrLocalVocabEntry{LocalVocabEntry{
-                               ad_utility::triple_component::Iri{}}}});
+  checkIriOrUri(
+      IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
+      std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99), dateDate,
+                                        dateLYear, T, F},
+                 IdOrLocalVocabEntry{LocalVocabEntry{
+                     ad_utility::triple_component::Iri{}, testIndexImpl()}}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -799,8 +812,8 @@ TEST(SparqlExpression, stringOperators) {
               testContext().notInVocabIri, testContext().notInVocabIriLit,
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
-          IdOrLocalVocabEntry{
-              LocalVocabEntry{ad_utility::triple_component::Iri{}}}});
+          IdOrLocalVocabEntry{LocalVocabEntry{
+              ad_utility::triple_component::Iri{}, testIndexImpl()}}});
 
   // test with base iri
   checkIriOrUri(
@@ -1454,11 +1467,10 @@ TEST(SparqlExpression, testToBooleanExpression) {
 
   checkGetBoolean(
       IdOrLocalVocabEntryVec(
-          {sparqlExpression::detail::LiteralOrIri{
-               iri("<http://example.org/z>")},
-           lit("string"), lit("-10.2E3"), lit("+33.3300"), lit("0.0"), lit("0"),
-           lit("0E1"), lit("1.5"), lit("1"), lit("1E0"), lit("13"),
-           lit("2002-10-10T17:00:00Z"), lit("false"), lit("true"), T, F,
+          {iriref("<http://example.org/z>"), lit("string"), lit("-10.2E3"),
+           lit("+33.3300"), lit("0.0"), lit("0"), lit("0E1"), lit("1.5"),
+           lit("1"), lit("1E0"), lit("13"), lit("2002-10-10T17:00:00Z"),
+           lit("false"), lit("true"), T, F,
            lit("0", absl::StrCat("^^<", XSD_PREFIX.second, "boolean>")), I(0),
            I(1), I(-1), D(0.0), D(1.0), D(-1.0),
            // The SPARQL compliance tests for the boolean conversion functions

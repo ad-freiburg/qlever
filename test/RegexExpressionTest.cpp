@@ -115,9 +115,10 @@ void testValuesInVariables(
   ctx.table.setNumColumns(3);
   auto toLiteralId = [&ctx](const std::string& value) {
     return Id::makeFromLocalVocabIndex(
-        ctx.localVocab.getIndexAndAddIfNotContained(
+        ctx.localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
             ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                value)));
+                value),
+            ctx.qec->getIndex().getImpl()}));
   };
   for (const auto& value : inputValues) {
     ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),
@@ -202,7 +203,9 @@ TEST(RegexExpression, inputNotVariable) {
   // Our expression is a fixed string literal: "hallo".
   VectorWithMemoryLimit<IdOrLocalVocabEntry> input{
       ad_utility::testing::getQec()->getAllocator()};
-  input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
+  input.push_back(LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")),
+      ad_utility::testing::getQec()->getIndex().getImpl()});
 
   {
     auto child =

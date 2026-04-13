@@ -409,8 +409,15 @@ TEST(OptionalJoin, gallopingJoin) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  LocalVocabEntry entryA{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      index};
+  LocalVocabEntry entryB{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"b\""),
+      index};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -469,8 +476,15 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  LocalVocabEntry entryA{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      index};
+  LocalVocabEntry entryB{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"b\""),
+      index};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -1035,8 +1049,9 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   // payload.
   std::vector<Result::IdTableVocabPair> tAndV;
 
-  auto i = [](int i) {
-    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">"))};
+  auto i = [&qec2](int i) {
+    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">")),
+                           qec2->getIndex().getImpl()};
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));

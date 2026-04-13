@@ -89,20 +89,25 @@ struct TestContext {
       return ad_utility::triple_component::LiteralOrIri::iriref(s);
     };
 
+    const auto& indexImpl = qec->getIndex().getImpl();
     locVocIri1 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            iri("<https:://some_example/iri>")));
-    locVocIri2 =
+            LocalVocabEntry{iri("<https:://some_example/iri>"), indexImpl}));
+    locVocIri2 = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+            iri("<http://www.w3.org/2001/XMLSchema#integer>"), indexImpl}));
+    locVocLit1 =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            iri("<http://www.w3.org/2001/XMLSchema#integer>")));
-    locVocLit1 = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("\"leipzig\"")));
-    locVocLit2 = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("\"munich\"@de-DE")));
-    locVocLit3 = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("\"hamburg\"@de")));
-    locVocLit4 = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("\"düsseldorf\"@de-AT")));
+            LocalVocabEntry{lit("\"leipzig\""), indexImpl}));
+    locVocLit2 =
+        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry{lit("\"munich\"@de-DE"), indexImpl}));
+    locVocLit3 =
+        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry{lit("\"hamburg\"@de"), indexImpl}));
+    locVocLit4 =
+        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry{lit("\"düsseldorf\"@de-AT"), indexImpl}));
 
     table.setNumColumns(2);
     // Order of the columns:
@@ -127,9 +132,13 @@ struct TestContext {
 };
 
 // ____________________________________________________________________________
-auto litOrIri = [](const std::string& literal) {
-  return LiteralOrIri::fromStringRepresentation(
-      absl::StrCat("\""sv, literal, "\""sv));
+auto litOrIri = [](const std::string& literal) -> IdOrLocalVocabEntry {
+  const auto& index = ad_utility::testing::getQec(TestContext::turtleInput)
+                          ->getIndex()
+                          .getImpl();
+  return LocalVocabEntry{LiteralOrIri::fromStringRepresentation(
+                             absl::StrCat("\""sv, literal, "\""sv)),
+                         index};
 };
 
 // ____________________________________________________________________________

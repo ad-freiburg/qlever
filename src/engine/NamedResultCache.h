@@ -37,12 +37,11 @@ class NamedResultCache {
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
 
-    // The following two members (`Allocator` and `BlankNodeManager`) are only
+    // The following two members (`Allocator` and `IndexImpl`) are only
     // used when reading a `Value` from a serializer.
     using Allocator = ad_utility::AllocatorWithLimit<Id>;
     std::optional<Allocator> allocatorForSerialization_{std::nullopt};
-    boost::optional<ad_utility::BlankNodeManager&>
-        blankNodeManagerForSerialization_{boost::none};
+    const IndexImpl* indexForSerialization_{nullptr};
   };
 
   // The size of a cached result, which currently is just a dummy value of 1,
@@ -111,8 +110,7 @@ class NamedResultCache {
       requires ad_utility::serialization::ReadSerializer<
           Serializer>) void readFromSerializer(Serializer& serializer,
                                                Value::Allocator allocator,
-                                               ad_utility::BlankNodeManager&
-                                                   blankNodeManager);
+                                               const IndexImpl& index);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

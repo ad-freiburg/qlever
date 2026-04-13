@@ -266,8 +266,9 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto idOrBounds = tc.toValueIdOrBounds(index);
     EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
-    auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral())
-                              : LocalVocabEntry(tc.getIri());
+    auto lve = tc.isLiteral()
+                   ? LocalVocabEntry(tc.getLiteral(), index.getImpl())
+                   : LocalVocabEntry(tc.getIri(), index.getImpl());
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);

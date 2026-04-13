@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "parser/UpdateTriples.h"
 #include "util/CompilerWarnings.h"
 
@@ -20,9 +21,10 @@ TEST(UpdateTriples, DefaultConstructor) {
 
 // _____________________________________________________________________________
 TEST(UpdateTriples, ConstructorsAndAssignments) {
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   LocalVocab l;
   auto iri = LocalVocabEntry::iriref("<hallo>");
-  l.getIndexAndAddIfNotContained(LocalVocabEntry{iri});
+  l.getIndexAndAddIfNotContained(LocalVocabEntry{iri, index});
   std::vector<SparqlTripleSimpleWithGraph> triples;
 
   SparqlTripleSimpleWithGraph triple{V{"?x"}, V{"?y"}, V{"?z"},

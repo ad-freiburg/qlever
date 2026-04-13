@@ -5,7 +5,9 @@
 #ifndef QLEVER_TEST_UTIL_IDTESTHELPERS_H
 #define QLEVER_TEST_UTIL_IDTESTHELPERS_H
 
+#include "IndexTestHelpers.h"
 #include "global/Id.h"
+#include "index/Index.h"
 #include "index/LocalVocab.h"
 #include "util/Synchronized.h"
 
@@ -33,9 +35,12 @@ inline auto BlankNodeId = [](const auto& v) {
 inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;
+  // Use `getQec()` to obtain a valid `IndexImpl` reference for creating
+  // `LocalVocabEntry` objects.
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
   return Id::makeFromLocalVocabIndex(
-      localVocab.wlock()->getIndexAndAddIfNotContained(
-          LiteralOrIri::literalWithoutQuotes(std::to_string(v))));
+      localVocab.wlock()->getIndexAndAddIfNotContained(LocalVocabEntry{
+          LiteralOrIri::literalWithoutQuotes(std::to_string(v)), index}));
 };
 
 inline auto TextRecordId = [](const auto& t) {

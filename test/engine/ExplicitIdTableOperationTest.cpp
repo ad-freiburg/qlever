@@ -159,10 +159,12 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 
 // _____________________________________________________________________________
 TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
+  const auto& index = qec_->getIndex().getImpl();
   LocalVocab localVocab;
   LocalVocabEntry testEntry{
       ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"test_word\"")};
+          "\"test_word\""),
+      index};
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
@@ -179,10 +181,12 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 
 // Test cloneImpl functionality
 TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
+  const auto& index = qec_->getIndex().getImpl();
   LocalVocab localVocab;
   LocalVocabEntry testEntry{
       ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"clone_test\"")};
+          "\"clone_test\""),
+      index};
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation original(qec_, testTable_, testVariables_,

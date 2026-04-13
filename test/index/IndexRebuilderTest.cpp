@@ -115,8 +115,9 @@ TEST(IndexRebuilder, materializeLocalVocab) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  auto makeVocabEntry = [](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str)};
+  const auto& indexImpl = oldIndex.getImpl();
+  auto makeVocabEntry = [&indexImpl](std::string_view str) {
+    return LocalVocabEntry{ad_utility::testing::iri(str), indexImpl};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -274,14 +275,17 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                .toValueId(index)
                .value();
 
-  index.deltaTriplesManager().modify<void>([&cancellationHandle,
-                                            g](DeltaTriples& deltaTriples) {
+  const auto& indexImpl = index.getImpl();
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, g, &indexImpl](
+                                               DeltaTriples& deltaTriples) {
     LocalVocabEntry entry1{
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<a2>")};
+            "<a2>"),
+        indexImpl};
     LocalVocabEntry entry2{
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<d2>")};
+            "<d2>"),
+        indexImpl};
     auto a2 = Id::makeFromLocalVocabIndex(&entry1);
     auto d2 = Id::makeFromLocalVocabIndex(&entry2);
     deltaTriples.insertTriples(
@@ -404,7 +408,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
-  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = "/tmp/createPermutationWriterTask";
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
@@ -487,7 +491,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);

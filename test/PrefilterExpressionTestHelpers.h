@@ -15,6 +15,7 @@
 #include "./engine/sparqlExpressions/SparqlExpression.h"
 #include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::DateId;
 
@@ -104,8 +105,12 @@ namespace filterHelper {
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
 // value with `'`/`'`.
-constexpr inline auto LVE = [](const std::string& litOrIri) -> LocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(litOrIri);
+inline auto LVE = [](const std::string& litOrIri,
+                     const IndexImpl& index) -> LocalVocabEntry {
+  return LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          litOrIri),
+      index};
 };
 
 //______________________________________________________________________________

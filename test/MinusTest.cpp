@@ -144,14 +144,20 @@ TEST(Minus, computeMinus) {
 
 // _____________________________________________________________________________
 TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
+  const auto& indexImpl = ad_utility::testing::getQec()->getIndex().getImpl();
   IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
   IdTable b = makeIdTableFromVector({{0}});
-  LocalVocabEntry aEntry = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry aEntry = LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      indexImpl};
   LocalVocab vocabA;
   vocabA.getIndexAndAddIfNotContained(aEntry);
   LocalVocab vocabB;
-  vocabB.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"b\""));
+  vocabB.getIndexAndAddIfNotContained(LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"b\""),
+      indexImpl});
 
   auto* qec = ad_utility::testing::getQec();
   Minus m{qec,
@@ -171,8 +177,15 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  const auto& indexImpl = ad_utility::testing::getQec()->getIndex().getImpl();
+  LocalVocabEntry entryA{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      indexImpl};
+  LocalVocabEntry entryB{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"b\""),
+      indexImpl};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -223,8 +236,15 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  const auto& indexImpl = ad_utility::testing::getQec()->getIndex().getImpl();
+  LocalVocabEntry entryA{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"a\""),
+      indexImpl};
+  LocalVocabEntry entryB{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "\"b\""),
+      indexImpl};
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -657,16 +677,19 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   auto qec = ad_utility::testing::getQec();
 
+  const auto& indexImpl = qec->getIndex().getImpl();
   LocalVocabEntry testLiteral{
       ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\"")};
+          "\"Abc\""),
+      indexImpl};
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
   LocalVocab rightVocab{};
   rightVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Def\"")});
+          "\"Def\""),
+      indexImpl});
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -748,10 +771,12 @@ struct Wrapper {
 // _____________________________________________________________________________
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   auto qec = ad_utility::testing::getQec();
+  const auto& indexImpl = qec->getIndex().getImpl();
 
   LocalVocabEntry testLiteral{
       ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\"")};
+          "\"Abc\""),
+      indexImpl};
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);

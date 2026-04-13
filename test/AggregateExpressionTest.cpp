@@ -31,8 +31,11 @@ auto V = VocabId;
 auto U = Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
-  return IdOrLocalVocabEntry(
-      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)));
+  return IdOrLocalVocabEntry(LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)),
+      getQec(sparqlExpression::TestContext::turtleInput)
+          ->getIndex()
+          .getImpl()});
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
@@ -161,11 +164,14 @@ TEST(AggregateExpression, min) {
   // IDs of one word from the vocabulary ("alpha") and two words
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
-  LocalVocabEntry l1 =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  const auto& index = t.qec->getIndex().getImpl();
+  LocalVocabEntry l1{
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
+      index};
   Id alx = Id::makeFromLocalVocabIndex(&l1);
-  LocalVocabEntry l2 =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx");
+  LocalVocabEntry l2{
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx"),
+      index};
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
@@ -191,8 +197,10 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
-  LocalVocabEntry l =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  const auto& index = t.qec->getIndex().getImpl();
+  LocalVocabEntry l{
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
+      index};
   Id alx = Id::makeFromLocalVocabIndex(&l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are

@@ -7,13 +7,16 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/GTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace sparqlExpression::detail;
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, makeStringResultGetter) {
   using ad_utility::triple_component::LiteralOrIri;
-  auto literal = LiteralOrIri::literalWithoutQuotes("Test String");
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto literal =
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("Test String"), index};
   LocalVocab localVocab{};
 
   auto function = makeStringResultGetter(&localVocab);
@@ -27,7 +30,9 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
   using ad_utility::triple_component::LiteralOrIri;
-  auto literal = LiteralOrIri::literalWithoutQuotes("Test String");
+  const auto& index = ad_utility::testing::getQec()->getIndex().getImpl();
+  auto literal =
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("Test String"), index};
   LocalVocab localVocab{};
 
   auto result = idOrLiteralOrIriToId(literal, &localVocab);

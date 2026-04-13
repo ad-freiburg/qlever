@@ -323,11 +323,13 @@ TEST_F(ValueIdTest, Hashing) {
     auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
+    const auto& indexImpl = index.getImpl();
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1(iri);
-    LocalVocabEntry lve2(iri);
-    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""));
-    LocalVocabEntry lve4(Iri::fromIriref("<x>"));
+    LocalVocabEntry lve1(iri, indexImpl);
+    LocalVocabEntry lve2(iri, indexImpl);
+    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""),
+                         indexImpl);
+    LocalVocabEntry lve4(Iri::fromIriref("<x>"), indexImpl);
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -368,7 +370,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(makeVocabId(15), "V:15");
   auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "SomeValue")};
+          "SomeValue"),
+      ad_utility::testing::getQec()->getIndex().getImpl()};
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
@@ -418,7 +421,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a LocalVocabEntry with the same IRI
   auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri};
+  LocalVocabEntry localVocabEntry{iri, getQec(config)->getIndex().getImpl()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
   // The encoded ID should compare equal to the LocalVocabEntry ID
@@ -433,7 +436,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   auto encodedId2 = *encodedIdOpt2;
   auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2};
+  LocalVocabEntry localVocabEntry2{iri2, getQec(config)->getIndex().getImpl()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 
   EXPECT_EQ(encodedId2, localVocabId2)

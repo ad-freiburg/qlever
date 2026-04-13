@@ -6,6 +6,7 @@
 
 #include "engine/Result.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
@@ -178,8 +179,8 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
         std::this_thread::sleep_for(1ms);
         LocalVocab localVocab{};
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::Literal::literalWithoutQuotes(
-                "Test")});
+            ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+            ad_utility::testing::getQec()->getIndex().getImpl()});
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
         co_yield {t2.clone(), LocalVocab{}};

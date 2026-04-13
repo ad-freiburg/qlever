@@ -854,6 +854,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  const auto& index = testQec->getIndex().getImpl();
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
     deltaTriples.setPersists(tmpFile);
@@ -861,12 +862,14 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
-    LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation("<test>")};
+    LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation("<test>"),
+                           index};
     deltaTriples.insertTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
                      Id::makeFromBool(true)}}});
-    LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation("<other>")};
+    LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation("<other>"),
+                           index};
     deltaTriples.deleteTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
@@ -905,7 +908,8 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
              Id::makeFromLocalVocabIndex(
                  deltaTriples.localVocab()
                      .getIndexOrNullopt(LocalVocabEntry{
-                         LiteralOrIri::fromStringRepresentation("<test>")})
+                         LiteralOrIri::fromStringRepresentation("<test>"),
+                         index})
                      .value()),
              Id::makeFromBool(true)}})));
     std::vector<IdTriple<>> deletedTriples;
@@ -919,7 +923,8 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
              Id::makeFromLocalVocabIndex(
                  deltaTriples.localVocab()
                      .getIndexOrNullopt(LocalVocabEntry{
-                         LiteralOrIri::fromStringRepresentation("<other>")})
+                         LiteralOrIri::fromStringRepresentation("<other>"),
+                         index})
                      .value()),
              Id::makeFromBool(false)}})));
   }
@@ -929,6 +934,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 TEST_F(DeltaTriplesTest, copyLocalVocab) {
   using namespace ::testing;
   using ad_utility::triple_component::LiteralOrIri;
+  const auto& index = testQec->getIndex().getImpl();
   DeltaTriples deltaTriples{testQec->getIndex()};
 
   std::string iri1 = "<test>";
@@ -936,12 +942,12 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1), index};
   deltaTriples.insertTriples(
       cancellationHandle,
       {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
                    Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337))}}});
-  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2), index};
   deltaTriples.deleteTriples(
       cancellationHandle,
       {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
@@ -970,14 +976,15 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   using namespace ::testing;
   using ad_utility::triple_component::LiteralOrIri;
-  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  const auto& index = testQec->getIndex().getImpl();
+  DeltaTriplesManager deltaTriplesManager(index);
 
   std::string iri1 = "<test>";
-  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1), index};
   IdTriple<> triple1{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
                       Id::makeFromBool(true)}};
   std::string iri2 = "<other>";
-  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2), index};
   IdTriple<> triple2{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
                       Id::makeFromBool(false)}};
   deltaTriplesManager.modify<void>(

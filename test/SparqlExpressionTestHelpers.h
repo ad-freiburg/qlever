@@ -69,17 +69,19 @@ struct TestContext {
     zz = getId("\"zz\"@en");
     blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
-    auto addLocalLiteral = [this](std::string_view s) {
+    const auto& index = qec->getIndex().getImpl();
+    auto addLocalLiteral = [this, &index](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
-          this->localVocab.getIndexAndAddIfNotContained(
+          this->localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
               ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                  s)));
+                  s),
+              index}));
     };
 
-    auto addLocalIri = [this](const std::string& s) {
+    auto addLocalIri = [this, &index](const std::string& s) {
       return Id::makeFromLocalVocabIndex(
-          this->localVocab.getIndexAndAddIfNotContained(
-              ad_utility::triple_component::LiteralOrIri::iriref(s)));
+          this->localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+              ad_utility::triple_component::LiteralOrIri::iriref(s), index}));
     };
 
     notInVocabA = addLocalLiteral("notInVocabA");

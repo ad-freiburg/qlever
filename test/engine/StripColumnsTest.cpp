@@ -71,7 +71,9 @@ TEST(StripColumns, computeResult) {
   auto qec = ad_utility::testing::getQec();
   auto makeOp = [&qec]() {
     LocalVocab voc;
-    voc.getIndexAndAddIfNotContained(LocalVocabEntry::iriref("<kartoffel>"));
+    voc.getIndexAndAddIfNotContained(LocalVocabEntry{
+        ad_utility::triple_component::LiteralOrIri::iriref("<kartoffel>"),
+        qec->getIndex().getImpl()});
     qec->clearCacheUnpinnedOnly();
     std::vector<IdTable> children;
     children.push_back(makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}));
@@ -83,9 +85,11 @@ TEST(StripColumns, computeResult) {
     return StripColumns{qec, std::move(valuesTree), {V{"?c"}, V{"?a"}}};
   };
 
-  auto localVocabMatcher =
-      ResultOf(std::mem_fn(&LocalVocab::getAllWordsForTesting),
-               ElementsAre(LocalVocabEntry::iriref("<kartoffel>")));
+  auto localVocabMatcher = ResultOf(
+      std::mem_fn(&LocalVocab::getAllWordsForTesting),
+      ElementsAre(LocalVocabEntry{
+          ad_utility::triple_component::LiteralOrIri::iriref("<kartoffel>"),
+          qec->getIndex().getImpl()}));
   // Test materialized result.
   {
     auto strip = makeOp();

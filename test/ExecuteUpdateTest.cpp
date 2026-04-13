@@ -299,10 +299,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
-    auto LVI = [&localVocab](const std::string& iri) {
+    const auto& indexImpl = qec->getIndex().getImpl();
+    auto LVI = [&localVocab, &indexImpl](const std::string& iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri))));
+              ad_utility::triple_component::Iri::fromIriref(iri), indexImpl)));
     };
 
     expectComputeGraphUpdateQuads(
@@ -435,8 +436,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
-  auto TripleComponentMatcher = [](const ::LocalVocab& localVocab,
-                                   TripleComponentT component) -> MatcherType {
+  const auto& outerIndexImpl = index.getImpl();
+  auto TripleComponentMatcher = [&outerIndexImpl](
+                                    const ::LocalVocab& localVocab,
+                                    TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ::Id& id) -> MatcherType {
@@ -445,10 +448,11 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab](
+            [&localVocab, &outerIndexImpl](
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
-              const auto lviOpt = localVocab.getIndexOrNullopt(literalOrIri);
+              const auto lviOpt = localVocab.getIndexOrNullopt(
+                  LocalVocabEntry{literalOrIri, outerIndexImpl});
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

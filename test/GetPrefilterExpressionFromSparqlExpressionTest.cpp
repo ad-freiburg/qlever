@@ -68,6 +68,11 @@ const auto equalityCheckPrefilterVectors =
 // `<PrefilterExpression, Variable>` pairs in the correct order. If no
 // `<PrefilterExpression, Variable>` pair is provided, the expected value for
 // the `SparqlExpression` is an empty vector.
+const auto& testIdx() {
+  static const auto& impl = ad_utility::testing::getQec()->getIndex().getImpl();
+  return impl;
+}
+
 const auto evalAndEqualityCheck =
     [](std::unique_ptr<SparqlExpression> sparqlExpr,
        std::convertible_to<PrefilterExprVariablePair> auto&&... prefilterArgs) {
@@ -78,7 +83,7 @@ const auto evalAndEqualityCheck =
          ...);
       }
       equalityCheckPrefilterVectors(
-          sparqlExpr->getPrefilterExpressionForMetadata(),
+          sparqlExpr->getPrefilterExpressionForMetadata(testIdx()),
           std::move(prefilterVarPair));
     };
 
@@ -181,10 +186,11 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   // ?x >= "berlin" AND ?x != "hamburg"
   // expected prefilter pairs:
   // {<((>= "berlin") AND (!= "hamburg")), ?x>}
-  evalAndEqualityCheck(
-      andSprqlExpr(geSprql(varX, L("\"berlin\"")),
-                   neqSprql(varX, L("\"hamburg\""))),
-      pr(andExpr(ge(LVE("\"berlin\"")), neq(LVE("\"hamburg\""))), varX));
+  evalAndEqualityCheck(andSprqlExpr(geSprql(varX, L("\"berlin\"")),
+                                    neqSprql(varX, L("\"hamburg\""))),
+                       pr(andExpr(ge(LVE("\"berlin\"", testIdx())),
+                                  neq(LVE("\"hamburg\"", testIdx()))),
+                          varX));
   // ?z > <iri> AND ?y > 0 AND ?x < 30.00
   // expected prefilter pairs
   // {<(< 30.00), ?x>, <(> 0), ?y>, <(> <iri>), ?z>}
@@ -192,7 +198,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                                  gtSprql(varY, IntId(0))),
                                     ltSprql(varX, DoubleId(30.00))),
                        pr(lt(DoubleId(30.00)), varX), pr(gt(IntId(0)), varY),
-                       pr(gt(LVE("<iri>")), varZ));
+                       pr(gt(LVE("<iri>", testIdx())), varZ));
 
   // ?x == VocabId(10) AND ?y >= VocabId(10)
   // expected prefilter pairs:
@@ -237,7 +243,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                            leSprql(varY, L("\"world\""))),
                                leSprql(varX, VocabId(10)))),
       pr(notExpr(le(VocabId(10))), varX),
-      pr(notExpr(le(LVE("\"world\""))), varY),
+      pr(notExpr(le(LVE("\"world\"", testIdx()))), varY),
       pr(notExpr(le(VocabId(10))), varZ));
   // ?x >= 10 AND ?y >= 10
   // expected prefilter pairs:
@@ -279,7 +285,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                             eqSprql(varX, I("<iri/ref10>")))),
                    notSprqlExpr(orSprqlExpr(geSprql(varZ, DoubleId(10)),
                                             eqSprql(varY, BoolId(false))))),
-      pr(notExpr(orExpr(eq(LVE("<iri/ref1>")), eq(LVE("<iri/ref10>")))), varX),
+      pr(notExpr(orExpr(eq(LVE("<iri/ref1>", testIdx())),
+                        eq(LVE("<iri/ref10>", testIdx())))),
+         varX),
       pr(notExpr(eq(BoolId(false))), varY),
       pr(notExpr(ge(DoubleId(10))), varZ));
   // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
@@ -313,8 +321,8 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
       notSprqlExpr(orSprqlExpr(
           andSprqlExpr(geSprql(varY, VocabId(0)), leSprql(varY, L("\"W\""))),
           notSprqlExpr(geSprql(varX, I("<iri>"))))),
-      pr(notExpr(notExpr(ge(LVE("<iri>")))), varX),
-      pr(notExpr(andExpr(ge(VocabId(0)), le(LVE("\"W\"")))), varY));
+      pr(notExpr(notExpr(ge(LVE("<iri>", testIdx())))), varX),
+      pr(notExpr(andExpr(ge(VocabId(0)), le(LVE("\"W\"", testIdx())))), varY));
   // ?z >= 10 AND ?z <= 100 AND ?x >= 10 AND ?x != 50 AND !(?y <= 10) AND
   // !(?city <= VocabId(1000) OR ?city == VocabId(1005))
   // expected prefilter pairs:
@@ -572,8 +580,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
 
   auto assertThrowsError = [](std::unique_ptr<SparqlExpression> expr,
                               const std::string& runtimeErrorMessage) {
-    AD_EXPECT_THROW_WITH_MESSAGE(expr->getPrefilterExpressionForMetadata(),
-                                 ::testing::Eq(runtimeErrorMessage));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        expr->getPrefilterExpressionForMetadata(testIdx()),
+        ::testing::Eq(runtimeErrorMessage));
   };
   // Test SparqlExpressions for which we expect that the reference value-type
   // error is thrown.

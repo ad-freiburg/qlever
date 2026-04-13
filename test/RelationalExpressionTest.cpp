@@ -27,12 +27,23 @@ using valueIdComparators::Comparison;
 // First some internal helper functions and constants.
 namespace {
 
+const auto& testIndexImpl() {
+  static const auto& impl =
+      ad_utility::testing::getQec(sparqlExpression::TestContext::turtleInput)
+          ->getIndex()
+          .getImpl();
+  return impl;
+}
+
 auto lit = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
+  return LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)),
+      testIndexImpl()};
 };
 
 auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
+  return LocalVocabEntry{ad_utility::triple_component::LiteralOrIri(iri(s)),
+                         testIndexImpl()};
 };
 
 // Convenient access to constants for "infinity" and "not a number". The
