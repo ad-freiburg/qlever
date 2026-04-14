@@ -755,10 +755,13 @@ DeltaTriples::computeDeltaTripleDifference(
           .computeDeltaTripleDifference(
               oldState.getLocatedTriplesForPermutation<false>(
                   deltaPermutation));
-  auto [internaInsertions, internalDeletions] =
-      newState.getLocatedTriplesForPermutation<true>(deltaPermutation)
+  auto internalPermutation = Permutation::PSO;
+  auto [internalInsertions, internalDeletions] =
+      newState.getLocatedTriplesForPermutation<true>(internalPermutation)
           .computeDeltaTripleDifference(
-              oldState.getLocatedTriplesForPermutation<true>(deltaPermutation));
+              oldState.getLocatedTriplesForPermutation<true>(
+                  internalPermutation));
   return std::array{std::move(insertions), std::move(deletions),
-                    std::move(internaInsertions), std::move(internalDeletions)};
+                    std::move(internalInsertions),
+                    std::move(internalDeletions)};
 }

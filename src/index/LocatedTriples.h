@@ -267,6 +267,9 @@ class LocatedTriplesPerBlock {
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
 
+  // Compute the inserted + deleted triples that are present in this
+  // `LocatedTriplesPerBlock` instance, but not in `oldBlocks`. The resulting
+  // vectors are always sorted in SPO order.
   std::array<std::vector<IdTriple<0>>, 2> computeDeltaTripleDifference(
       const LocatedTriplesPerBlock& oldBlocks) const;
 

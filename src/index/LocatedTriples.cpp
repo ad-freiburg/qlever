@@ -533,6 +533,9 @@ LocatedTriplesPerBlock::computeDeltaTripleDifference(
           }
         });
   }
+  // Account for non-deterministic order introduced by hash map. (Or in case a
+  // permutation that is not SPO was used).
+  ql::ranges::for_each(result, ql::ranges::sort);
 
   return result;
 }

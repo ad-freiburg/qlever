@@ -297,6 +297,9 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+  // Fill this `DeltaTriples` instance with the difference between `oldState`
+  // and `newState` and map the `Id`s to their new versions using the given
+  // `idMapping`.
   void fillFromOldDeltaTriples(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
       const std::tuple<qlever::indexRebuilder::InsertionPositions,
