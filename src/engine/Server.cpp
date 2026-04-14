@@ -111,6 +111,19 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     }
   }
 
+  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
+      "qlever", "0.0.1");
+  activeQueries_ = meter->CreateInt64UpDownCounter(
+      "qlever.active_queries",
+      "Number of SPARQL queries currently being processed");
+  activeUpdates_ = meter->CreateInt64UpDownCounter(
+      "qlever.active_updates",
+      "Number of SPARQL updates currently being processed");
+  queryDuration_ = meter->CreateDoubleHistogram(
+      "qlever.query_duration", "Total execution time of SPARQL queries", "ms");
+  updateDuration_ = meter->CreateDoubleHistogram(
+      "qlever.update_duration", "Total execution time of SPARQL updates", "ms");
+
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
@@ -129,19 +142,6 @@ void Server::run(const std::string& indexBaseName, bool useText,
                  bool usePatterns, bool loadAllPermutations,
                  bool persistUpdates,
                  std::vector<std::string> preloadMaterializedViews) {
-  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
-      "qlever", "0.0.1");
-  activeQueries_ = meter->CreateInt64UpDownCounter(
-      "qlever.active_queries",
-      "Number of SPARQL queries currently being processed");
-  activeUpdates_ = meter->CreateInt64UpDownCounter(
-      "qlever.active_updates",
-      "Number of SPARQL updates currently being processed");
-  queryDuration_ = meter->CreateDoubleHistogram(
-      "qlever.query_duration", "Total execution time of SPARQL queries", "ms");
-  updateDuration_ = meter->CreateDoubleHistogram(
-      "qlever.update_duration", "Total execution time of SPARQL updates", "ms");
-
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
