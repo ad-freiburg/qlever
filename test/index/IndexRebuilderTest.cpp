@@ -274,23 +274,19 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                .toValueId(index)
                .value();
 
-  index.deltaTriplesManager().modify<void>([&cancellationHandle, g, &index](
-                                               DeltaTriples& deltaTriples) {
-    LocalVocabEntry entry1{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<a2>"),
-        index};
-    LocalVocabEntry entry2{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<d2>"),
-        index};
-    auto a2 = Id::makeFromLocalVocabIndex(&entry1);
-    auto d2 = Id::makeFromLocalVocabIndex(&entry2);
-    deltaTriples.insertTriples(
-        cancellationHandle,
-        {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
-         IdTriple<0>{std::array{V(0), d2, B(1), g}}});
-  });
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry1 =
+            LocalVocabEntry::fromStringRepresentation("<a2>", index);
+        LocalVocabEntry entry2 =
+            LocalVocabEntry::fromStringRepresentation("<d2>", index);
+        auto a2 = Id::makeFromLocalVocabIndex(&entry1);
+        auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
+             IdTriple<0>{std::array{V(0), d2, B(1), g}}});
+      });
 
   auto [state, vocabEntries, rawBlocks] =
       index.deltaTriplesManager()
