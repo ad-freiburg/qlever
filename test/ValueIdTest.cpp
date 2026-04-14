@@ -322,8 +322,10 @@ TEST_F(ValueIdTest, Hashing) {
     Iri iri = Iri::fromIriref("<foo>");
     LocalVocabEntry lve1(iri, index);
     LocalVocabEntry lve2(iri, index);
-    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""), index);
-    LocalVocabEntry lve4(Iri::fromIriref("<x>"), index);
+    LocalVocabEntry lve3 =
+        LocalVocabEntry::fromStringRepresentation("\"foo\"", index);
+    LocalVocabEntry lve4 =
+        LocalVocabEntry::fromStringRepresentation("<x>", index);
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };

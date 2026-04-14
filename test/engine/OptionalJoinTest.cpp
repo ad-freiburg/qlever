@@ -409,14 +409,10 @@ TEST(OptionalJoin, gallopingJoin) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      qec->getIndex()};
-  LocalVocabEntry entryB{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"b\""),
-      qec->getIndex()};
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex());
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", qec->getIndex());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -475,14 +471,10 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      qec->getIndex()};
-  LocalVocabEntry entryB{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"b\""),
-      qec->getIndex()};
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex());
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", qec->getIndex());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);

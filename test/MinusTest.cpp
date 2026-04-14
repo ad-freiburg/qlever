@@ -175,14 +175,10 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
 TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
   const auto& index = qec->getIndex();
-  LocalVocabEntry entryA{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      index};
-  LocalVocabEntry entryB{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"b\""),
-      index};
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", index);
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", index);
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -234,14 +230,10 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
 TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
   const auto& index = qec->getIndex();
-  LocalVocabEntry entryA{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      index};
-  LocalVocabEntry entryB{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"b\""),
-      index};
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", index);
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", index);
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);

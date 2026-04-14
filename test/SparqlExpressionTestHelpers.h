@@ -80,8 +80,8 @@ struct TestContext {
 
     auto addLocalIri = [this, &index](const std::string& s) {
       return Id::makeFromLocalVocabIndex(
-          this->localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-              ad_utility::triple_component::LiteralOrIri::iriref(s), index}));
+          this->localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromStringRepresentation(s, index)));
     };
 
     notInVocabA = addLocalLiteral("notInVocabA");

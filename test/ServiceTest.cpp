@@ -211,9 +211,9 @@ TEST_F(ServiceTest, computeResult) {
               [this, &localVocabs](
                   const std::string& s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index = localVocab.getIndexOrNullopt(LocalVocabEntry{
-                  ad_utility::triple_component::LiteralOrIri::iriref(s),
-                  testQec->getIndex()});
+              auto index = localVocab.getIndexOrNullopt(
+                  LocalVocabEntry::fromStringRepresentation(
+                      s, testQec->getIndex()));
               if (index.has_value()) {
                 return index;
               }
@@ -383,8 +383,8 @@ TEST_F(ServiceTest, computeResult) {
     EXPECT_EQ(localVocab.size(), 3);
     const auto& index = testQec->getIndex();
     auto get = [&localVocab, &index](const std::string& s) {
-      return localVocab.getIndexOrNullopt(LocalVocabEntry{
-          ad_utility::triple_component::LiteralOrIri::iriref(s), index});
+      return localVocab.getIndexOrNullopt(
+          LocalVocabEntry::fromStringRepresentation(s, index));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");

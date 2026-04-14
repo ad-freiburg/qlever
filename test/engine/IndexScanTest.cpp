@@ -1788,11 +1788,9 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
 
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
-    return makePrefilterVec(
-        pr(lt(LocalVocabEntry{
-               ad_utility::triple_component::LiteralOrIri::iriref("<s2>"),
-               qec->getIndex()}),
-           Var{"?x"}));
+    return makePrefilterVec(pr(
+        lt(LocalVocabEntry::fromStringRepresentation("<s2>", qec->getIndex())),
+        Var{"?x"}));
   };
 
   // Test with different variable combinations

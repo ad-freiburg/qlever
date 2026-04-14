@@ -103,10 +103,8 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
                              makeIdTableFromVector({{Id::makeUndefined()}}),
                              ExpressionResult{Id::makeUndefined()});
 
-  auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      qec->getIndex()});
+  auto idx = localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex()));
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

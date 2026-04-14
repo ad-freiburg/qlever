@@ -41,8 +41,8 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
       LiteralOrIri{Literal::literalWithoutQuotes("Other")}, index});
   vector.emplace_back(LocalVocabEntry{
       LiteralOrIri{Literal::literalWithoutQuotes("Test")}, index});
-  vector.emplace_back(LocalVocabEntry{
-      LiteralOrIri{Iri::fromIriref("<http://example.com>")}, index});
+  vector.emplace_back(
+      LocalVocabEntry::fromStringRepresentation("<http://example.com>", index));
 
   auto expression4 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(

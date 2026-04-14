@@ -1119,8 +1119,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry{
-            ad_utility::triple_component::Iri::fromIriref("<zzz>"), index};
+        LocalVocabEntry entry =
+            LocalVocabEntry::fromStringRepresentation("<zzz>", index);
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,

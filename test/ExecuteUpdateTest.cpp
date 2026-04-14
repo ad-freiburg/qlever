@@ -301,9 +301,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     LocalVocab localVocab;
     auto LVI = [&localVocab, qec](const std::string& iri) {
       return Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri),
-              qec->getIndex())));
+          localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromStringRepresentation(iri, qec->getIndex())));
     };
 
     expectComputeGraphUpdateQuads(

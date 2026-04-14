@@ -81,33 +81,18 @@ struct TestContext {
   };
 
   TestContext() {
-    constexpr auto lit = [](const std::string& s) {
-      return ad_utility::triple_component::LiteralOrIri::
-          fromStringRepresentation(s);
-    };
-    constexpr auto iri = [](const std::string& s) {
-      return ad_utility::triple_component::LiteralOrIri::iriref(s);
-    };
-
     const auto& index = qec->getIndex();
-    locVocIri1 =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{iri("<https:://some_example/iri>"), index}));
-    locVocIri2 = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            iri("<http://www.w3.org/2001/XMLSchema#integer>"), index}));
-    locVocLit1 =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"leipzig\""), index}));
-    locVocLit2 =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"munich\"@de-DE"), index}));
-    locVocLit3 =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"hamburg\"@de"), index}));
-    locVocLit4 =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry{lit("\"düsseldorf\"@de-AT"), index}));
+    auto add = [this, &index](const std::string& s) {
+      return Id::makeFromLocalVocabIndex(
+          localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromStringRepresentation(s, index)));
+    };
+    locVocIri1 = add("<https:://some_example/iri>");
+    locVocIri2 = add("<http://www.w3.org/2001/XMLSchema#integer>");
+    locVocLit1 = add("\"leipzig\"");
+    locVocLit2 = add("\"munich\"@de-DE");
+    locVocLit3 = add("\"hamburg\"@de");
+    locVocLit4 = add("\"düsseldorf\"@de-AT");
 
     table.setNumColumns(2);
     // Order of the columns:

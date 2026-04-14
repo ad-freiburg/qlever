@@ -465,11 +465,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LocalVocabEntry{
-          ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-              "<>"),
-          context},
-      localVocab);
+      LocalVocabEntry::fromStringRepresentation("<>", context), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
@@ -688,9 +684,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // in order. The smallest possible IRI is represented by "<>", we
   // use its corresponding ValueId later on as a lower bound.
   return make<GreaterThanExpression>(
-             LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::
-                                 fromStringRepresentation("<>"),
-                             context})
+             LocalVocabEntry::fromStringRepresentation("<>", context))
       ->evaluateImpl(context, idRange, blockRange, isNegated_);
 }
 
@@ -709,9 +703,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
       getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
   auto nonInlinedRanges =
       make<LessThanExpression>(
-          LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::
-                              fromStringRepresentation("<>"),
-                          context})
+          LocalVocabEntry::fromStringRepresentation("<>", context))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
 
   if (isNegated_) {

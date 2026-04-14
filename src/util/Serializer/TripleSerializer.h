@@ -112,9 +112,8 @@ CPP_template(typename Serializer)(
   for (uint64_t i = 0; i < size; ++i) {
     auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
-    auto localVocabIndex = vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        triple_component::LiteralOrIri::fromStringRepresentation(std::move(s)),
-        context});
+    auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
     mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
