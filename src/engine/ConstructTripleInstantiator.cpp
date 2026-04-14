@@ -15,7 +15,6 @@
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -66,7 +65,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 }
 
 // _____________________________________________________________________________
-std::string formatTerm(const EvaluatedTermData& term, bool shortForm) {
+std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
   if (term.type == nullptr) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
     return term.str;
@@ -75,25 +74,26 @@ std::string formatTerm(const EvaluatedTermData& term, bool shortForm) {
   const char* d = XSD_DECIMAL_TYPE;
   const char* b = XSD_BOOLEAN_TYPE;
   // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") never use short form.
-  if (shortForm && (term.type == i || term.type == d ||
-                    (term.type == b && term.str.length() > 1))) {
+  if (!includeDataType && (term.type == i || term.type == d ||
+                           (term.type == b && term.str.length() > 1))) {
     return term.str;
   }
   return absl::StrCat("\"", term.str, "\"^^<", term.type, ">");
 }
 
 // _____________________________________________________________________________
-std::string formatTriple(const EvaluatedTerm& subject,
-                         const EvaluatedTerm& predicate,
-                         const EvaluatedTerm& object,
-                         const ad_utility::MediaType& format) {
+std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
+                         const ad_utility::MediaType& format,
+                         bool includeDataType) {
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
-  std::string s = formatTerm(*subject, true);
-  std::string p = formatTerm(*predicate, true);
-  std::string o = formatTerm(*object, true);
+  const auto& [subject, predicate, object] = evaluatedTriple;
+
+  std::string s = formatTerm(*subject, includeDataType);
+  std::string p = formatTerm(*predicate, includeDataType);
+  std::string o = formatTerm(*object, includeDataType);
 
   if (format == turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
@@ -117,5 +117,16 @@ std::string formatTriple(const EvaluatedTerm& subject,
   } else {
     AD_FAIL();  // unreachable
   }
+}
+
+StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
+                                bool includeDataType) {
+  const auto& [subject, predicate, object] = evaluatedTriple;
+
+  std::string s = formatTerm(*subject, includeDataType);
+  std::string p = formatTerm(*predicate, includeDataType);
+  std::string o = formatTerm(*object, includeDataType);
+
+  return StringTriple{std::move(s), std::move(p), std::move(o)};
 }
 }  // namespace qlever::constructExport

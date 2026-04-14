@@ -16,9 +16,12 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
+#include "engine/QueryExecutionTree.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
+
+using StringTriple = QueryExecutionTree::StringTriple;
 
 // Instantiates a single preprocessed term for a specific row.
 // For constants: returns the precomputed string.
@@ -49,10 +52,12 @@ std::string formatTerm(const EvaluatedTermData& term, bool shortForm);
 
 // Formats a triple (subject, predicate, object) according to the output
 // format `format`.
-std::string formatTriple(const EvaluatedTerm& subject,
-                         const EvaluatedTerm& predicate,
-                         const EvaluatedTerm& object,
-                         const ad_utility::MediaType& format);
+std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
+                         const ad_utility::MediaType& mediaType,
+                         bool includeDataType = false);
+
+StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
+                                bool includeDataType = false);
 
 }  // namespace qlever::constructExport
 
