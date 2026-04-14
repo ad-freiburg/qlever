@@ -511,3 +511,28 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
     return blockContains(block, index);
   });
 }
+
+// _____________________________________________________________________________
+std::array<std::vector<IdTriple<0>>, 2>
+LocatedTriplesPerBlock::computeDeltaTripleDifference(
+    const LocatedTriplesPerBlock& oldBlocks) const {
+  std::array<std::vector<IdTriple<0>>, 2> result;
+  auto addTriple = [&result](const IdTriple<0>& triple, bool insertion) {
+    result.at(insertion ? 0 : 1).push_back(triple);
+  };
+
+  for (const auto& [blockIndex, locatedTriples] : map_) {
+    auto it = oldBlocks.map_.find(blockIndex);
+    LocatedTriples empty;
+    const auto& set = it != oldBlocks.map_.end() ? it->second : empty;
+    ql::ranges::for_each(
+        locatedTriples, [&addTriple, &set](const LocatedTriple& lt) {
+          auto it = set.find(lt);
+          if (it == set.end() || it->insertOrDelete_ != lt.insertOrDelete_) {
+            addTriple(lt.triple_, lt.insertOrDelete_);
+          }
+        });
+  }
+
+  return result;
+}

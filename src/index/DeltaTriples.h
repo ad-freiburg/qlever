@@ -17,6 +17,7 @@
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/IndexRebuilderTypes.h"
 #include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
@@ -296,6 +297,14 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+  void fillFromOldDeltaTriples(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+      const std::tuple<qlever::indexRebuilder::InsertionPositions,
+                       qlever::indexRebuilder::LocalVocabMapping,
+                       qlever::indexRebuilder::BlankNodeBlocks>& idMapping,
+      uint64_t minBlankNodeIndex, CancellationHandle cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer);
+
  private:
   // The proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
@@ -346,6 +355,10 @@ class DeltaTriples {
   template <bool isInternal>
   void eraseTripleInAllPermutations(
       typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
+
+  // Compute which delta triples have been added since `oldState`.
+  static std::array<std::vector<IdTriple<0>>, 4> computeDeltaTripleDifference(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
 
   friend class DeltaTriplesManager;
 };

@@ -20,6 +20,7 @@
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
@@ -692,4 +693,72 @@ DeltaTriples::copyLocalVocab() const {
           [](const LocalVocabEntry& entry) { return &entry; }));
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::fillFromOldDeltaTriples(
+    const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+    const std::tuple<qlever::indexRebuilder::InsertionPositions,
+                     qlever::indexRebuilder::LocalVocabMapping,
+                     qlever::indexRebuilder::BlankNodeBlocks>& idMapping,
+    uint64_t minBlankNodeIndex, CancellationHandle cancellationHandle,
+    ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("computeDeltaTripleDifference");
+  auto difference = computeDeltaTripleDifference(oldState, newState);
+  for (auto& triples : difference) {
+    ql::ranges::for_each(
+        triples, [&idMapping, minBlankNodeIndex](auto& triple) {
+          ql::ranges::for_each(triple.ids(), [&idMapping,
+                                              minBlankNodeIndex](Id& id) {
+            const auto& [insertionPositions, localVocabMapping,
+                         blankNodeBlocks] = idMapping;
+            auto type = id.getDatatype();
+            if (type == Datatype::VocabIndex) {
+              id = qlever::indexRebuilder::remapVocabId(id, insertionPositions);
+            } else if (type == Datatype::LocalVocabIndex) {
+              auto it = localVocabMapping.find(id.getBits());
+              if (it != localVocabMapping.end()) {
+                id = it->second;
+              }
+            } else if (type == Datatype::BlankNodeIndex) {
+              auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
+                  id, blankNodeBlocks, minBlankNodeIndex);
+              if (value.has_value()) {
+                id = value.value();
+              }
+            }
+          });
+        });
+  }
+  tracer.endTrace("computeDeltaTripleDifference");
+  tracer.beginTrace("insertDiffedTriples");
+  modifyTriplesImpl<false, true>(cancellationHandle,
+                                 std::move(difference.at(0)), tracer);
+  modifyTriplesImpl<false, false>(cancellationHandle,
+                                  std::move(difference.at(1)), tracer);
+  modifyTriplesImpl<true, true>(cancellationHandle, std::move(difference.at(2)),
+                                tracer);
+  modifyTriplesImpl<true, false>(std::move(cancellationHandle),
+                                 std::move(difference.at(3)), tracer);
+  tracer.endTrace("insertDiffedTriples");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
+}
+
+// _____________________________________________________________________________
+std::array<std::vector<IdTriple<0>>, 4>
+DeltaTriples::computeDeltaTripleDifference(
+    const LocatedTriplesState& oldState, const LocatedTriplesState& newState) {
+  auto deltaPermutation = Permutation::SPO;
+  auto [insertions, deletions] =
+      newState.getLocatedTriplesForPermutation<false>(deltaPermutation)
+          .computeDeltaTripleDifference(
+              oldState.getLocatedTriplesForPermutation<false>(
+                  deltaPermutation));
+  auto [internaInsertions, internalDeletions] =
+      newState.getLocatedTriplesForPermutation<true>(deltaPermutation)
+          .computeDeltaTripleDifference(
+              oldState.getLocatedTriplesForPermutation<true>(deltaPermutation));
+  return std::array{std::move(insertions), std::move(deletions),
+                    std::move(internaInsertions), std::move(internalDeletions)};
 }

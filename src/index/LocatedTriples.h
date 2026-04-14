@@ -267,6 +267,9 @@ class LocatedTriplesPerBlock {
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
 
+  std::array<std::vector<IdTriple<0>>, 2> computeDeltaTripleDifference(
+      const LocatedTriplesPerBlock& oldBlocks) const;
+
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,
