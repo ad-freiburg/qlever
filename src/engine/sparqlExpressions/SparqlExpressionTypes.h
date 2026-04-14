@@ -239,6 +239,11 @@ struct EvaluationContext {
   // _____________________________________________________________________________
   std::optional<ExpressionResult> getResultFromPreviousAggregate(
       const Variable& var) const;
+
+  // Currently a helper function that returns the index from `qec_`. Might
+  // change in the future so we hide the implementation details behind this
+  // function.
+  const LocalVocabContext& getLocalVocabContext() const;
 };
 
 namespace detail {

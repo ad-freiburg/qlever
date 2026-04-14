@@ -429,7 +429,7 @@ class ConcatExpression : public detail::VariadicExpression {
         return Id::makeUndefined();
       }
       return LocalVocabEntry{LiteralOrIri(std::move(literal.value())),
-                             ctx->_qec.getIndex()};
+                             ctx->getLocalVocabContext()};
     };
 
     auto visitSingleExpressionResult = CPP_template_lambda(

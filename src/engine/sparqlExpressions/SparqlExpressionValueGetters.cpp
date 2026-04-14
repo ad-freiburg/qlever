@@ -532,7 +532,7 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
                        ? litOrIri.getIri()
                        : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
                              litOrIri.getLiteral().getContent()))},
-      context->_qec.getIndex()};
+      context->getLocalVocabContext()};
 }
 
 //______________________________________________________________________________

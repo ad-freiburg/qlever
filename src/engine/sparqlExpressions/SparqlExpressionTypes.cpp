@@ -80,4 +80,9 @@ EvaluationContext::getResultFromPreviousAggregate(const Variable& var) const {
   return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
 }
 
+// _____________________________________________________________________________
+const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
+  return _qec.getIndex();
+}
+
 }  // namespace sparqlExpression

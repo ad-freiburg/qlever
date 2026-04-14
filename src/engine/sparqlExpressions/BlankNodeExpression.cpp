@@ -113,7 +113,7 @@ class BlankNodeExpression : public SparqlExpression {
                 LiteralOrIri{
                     ad_utility::triple_component::Iri::fromStringRepresentation(
                         std::move(uniqueIri))},
-                context->_qec.getIndex()});
+                context->getLocalVocabContext()});
           } else {
             result.push_back(Id::makeUndefined());
             ++counter_;

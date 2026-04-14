@@ -62,7 +62,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
         ad_utility::triple_component::LiteralOrIri{
             ad_utility::triple_component::Literal::literalWithNormalizedContent(
                 asNormalizedStringViewUnsafe(result))},
-        context->_qec.getIndex()}};
+        context->getLocalVocabContext()}};
   };
 
   auto childRes = child_->evaluate(context);
