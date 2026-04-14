@@ -31,10 +31,6 @@ auto lit = [](std::string_view s) {
   return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
 };
 
-auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
-};
-
 // Convenient access to constants for "infinity" and "not a number". The
 // spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
@@ -756,10 +752,12 @@ TEST(RelationalExpression, VariableAndConstant) {
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
   testWithExplicitIdResult<GT>(
-      IdOrLocalVocabEntry{LocalVocabEntry{iriref("<xa>"), qec->getIndex()}},
+      IdOrLocalVocabEntry{
+          LocalVocabEntry::fromStringRepresentation("<xa>", qec->getIndex())},
       Variable{"?mixed"}, {U, U, B(true)});
   testWithExplicitIdResult<LT>(
-      IdOrLocalVocabEntry{LocalVocabEntry{iriref("<u>"), qec->getIndex()}},
+      IdOrLocalVocabEntry{
+          LocalVocabEntry::fromStringRepresentation("<u>", qec->getIndex())},
       Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
@@ -888,7 +886,8 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(
       mixed,
-      IdOrLocalVocabEntry{LocalVocabEntry{iriref("<z>"), qec->getIndex()}},
+      IdOrLocalVocabEntry{
+          LocalVocabEntry::fromStringRepresentation("<z>", qec->getIndex())},
       {{{2, 3}}});
 }
 

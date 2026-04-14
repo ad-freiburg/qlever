@@ -316,7 +316,7 @@ TEST_F(ValueIdTest, Hashing) {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
     const Index& index = qec_->getIndex();
-    auto mkId = makeGetId(qec_->getIndex());
+    auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");

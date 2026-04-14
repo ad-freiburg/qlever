@@ -710,12 +710,10 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>"),
-                        indexImpl};
-    LocalVocabEntry literal{
-        ad_utility::triple_component::Literal::fromStringRepresentation(
-            "\"test\"@en"),
-        indexImpl};
+    LocalVocabEntry zzz =
+        LocalVocabEntry::fromStringRepresentation("<zzz>", indexImpl);
+    LocalVocabEntry literal =
+        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.

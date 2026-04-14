@@ -148,17 +148,13 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
   const auto& index = qec->getIndex();
   IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
   IdTable b = makeIdTableFromVector({{0}});
-  LocalVocabEntry aEntry = LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"a\""),
-      index};
+  LocalVocabEntry aEntry =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", index);
   LocalVocab vocabA;
   vocabA.getIndexAndAddIfNotContained(aEntry);
   LocalVocab vocabB;
-  vocabB.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "\"b\""),
-      index});
+  vocabB.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"b\"", index));
 
   Minus m{qec,
           ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -677,18 +673,14 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\""),
-      qec->getIndex()};
+  LocalVocabEntry testLiteral =
+      LocalVocabEntry::fromStringRepresentation("\"Abc\"", qec->getIndex());
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
   LocalVocab rightVocab{};
-  rightVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Def\""),
-      qec->getIndex()});
+  rightVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"Def\"", qec->getIndex()));
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -771,10 +763,8 @@ struct Wrapper {
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\""),
-      qec->getIndex()};
+  LocalVocabEntry testLiteral =
+      LocalVocabEntry::fromStringRepresentation("\"Abc\"", qec->getIndex());
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);

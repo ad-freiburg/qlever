@@ -109,11 +109,8 @@ class BlankNodeExpression : public SparqlExpression {
             auto uniqueIri = absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX,
                                           "_:", blankNodePrefix, label.value(),
                                           "_", counter_++, ">");
-            result.push_back(LocalVocabEntry{
-                LiteralOrIri{
-                    ad_utility::triple_component::Iri::fromStringRepresentation(
-                        std::move(uniqueIri))},
-                context->getLocalVocabContext()});
+            result.push_back(LocalVocabEntry::fromStringRepresentation(
+                std::move(uniqueIri), context->getLocalVocabContext()));
           } else {
             result.push_back(Id::makeUndefined());
             ++counter_;

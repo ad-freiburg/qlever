@@ -135,9 +135,8 @@ struct TestContext {
 auto localVocabEntry =
     [](const std::string& literal,
        const LocalVocabContext& context) -> IdOrLocalVocabEntry {
-  return LocalVocabEntry{LiteralOrIri::fromStringRepresentation(
-                             absl::StrCat("\""sv, literal, "\""sv)),
-                         context};
+  return LocalVocabEntry::fromStringRepresentation(
+      absl::StrCat("\""sv, literal, "\""sv), context);
 };
 
 // ____________________________________________________________________________

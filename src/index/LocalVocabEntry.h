@@ -86,6 +86,13 @@ class alignas(16) LocalVocabEntry
   LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
   LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
 
+  // Factory method that creates a `LocalVocabEntry` from a string
+  // representation (e.g. `"<someIri>"` or `"\"someLiteral\""`).
+  static LocalVocabEntry fromStringRepresentation(
+      std::string s, const LocalVocabContext& ctx) {
+    return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
+  }
+
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
     return *this;

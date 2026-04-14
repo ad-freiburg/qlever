@@ -87,8 +87,7 @@ TEST(ExternalValues, computeResult) {
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      LocalVocabEntry{ad_utility::triple_component::LiteralOrIri::iriref("<y>"),
-                      testQec->getIndex()});
+      LocalVocabEntry::fromStringRepresentation("<y>", testQec->getIndex()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,
