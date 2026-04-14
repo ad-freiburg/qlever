@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
@@ -22,44 +23,48 @@
 
 namespace qlever::constructExport {
 
+using ad_utility::InputRangeTypeErased;
+using CancellationHandle = ad_utility::SharedCancellationHandle;
+using Triples = ad_utility::sparql_types::Triples;
+using IdCache =
+    ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
+using StringTriple = QueryExecutionTree::StringTriple;
+
 // Generates triples from CONSTRUCT query results by instantiating triple
 // patterns (from the CONSTRUCT clause) with values from the result table
 // (produced by the WHERE clause).
 class ConstructTripleGenerator {
  public:
-  using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using StringTriple = QueryExecutionTree::StringTriple;
-  using Triples = ad_utility::sparql_types::Triples;
+  static InputRangeTypeErased<std::string> generateFormattedTriples(
+      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Index& index, CancellationHandle cancellationhandle,
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+      ad_utility::MediaType mediaType);
 
-  ConstructTripleGenerator(Triples constructTriples,
-                           std::shared_ptr<const Result> result,
-                           const VariableToColumnMap& variableColumns,
-                           const Index& index,
-                           CancellationHandle cancellationHandle);
-
-  // Generate formatted strings for all tables in a range. Consumes the
-  // generator; must be called as
-  // `std::move(generator).generateFormattedTriples(...)`.
-  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      ad_utility::InputRangeTypeErased<TableWithRange> tables,
-      ad_utility::MediaType format) &&;
-
-  // Generate `StringTriple`s for all tables in a range. Consumes the
-  // generator; must be called as
-  // `std::move(generator).generateStringTriples(...)`.
-  ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
-      ad_utility::InputRangeTypeErased<TableWithRange> tables) &&;
+  static InputRangeTypeErased<StringTriple> generateStringTriples(
+      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Index& index, CancellationHandle cancellationhandle,
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
 
  private:
-  // Kept alive to prevent the IdTable/LocalVocab references in the
-  // TableWithRange objects from dangling.
-  std::shared_ptr<const Result> result_;
-  PreprocessedConstructTemplate preprocessedTemplate_;
-  std::reference_wrapper<const Index> index_;
-  CancellationHandle cancellationHandle_;
-  size_t rowOffset_ = 0;
+  const static size_t DEFAULT_BATCH_SIZE = 1024;
+  const static size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
+
+  static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
+
+  static InputRangeTypeErased<EvaluatedTriple> evaluateTableWithRange(
+      const PreprocessedConstructTemplate& tmpl, const Index& index,
+      CancellationHandle cancellationHandle, const TableWithRange& table,
+      size_t rowOffset, IdCache& cache);
+
+  static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationhandle,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      size_t rowOffset);
 };
 
-}  // namespace qlever::constructExport
+};  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

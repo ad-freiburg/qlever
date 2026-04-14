@@ -20,7 +20,6 @@ using namespace qlever::constructExport;
 using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Field;
-using StringTriple = ConstructTripleGenerator::StringTriple;
 using Triples = ad_utility::sparql_types::Triples;
 
 // Batch size as defined in the anonymous namespace of
@@ -98,10 +97,15 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
       Triples triples, VariableToColumnMap varMap,
       std::shared_ptr<const Result> result, TableWithRange table,
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
-    ConstructTripleGenerator gen{std::move(triples), result, varMap, index_,
-                                 std::move(handle)};
-    return collectAll(std::move(gen).generateStringTriples(
-        singleTableRange(std::move(table))));
+    auto stringTriples = ConstructTripleGenerator::generateStringTriples(
+        triples, varMap, index_, handle, singleTableRange(std::move(table)), 0);
+
+    std::vector<StringTriple> resultTriples;
+    for (auto& triple : stringTriples) {
+      resultTriples.push_back(triple);
+    }
+
+    return resultTriples;
   }
 
   // Build a single-triple CONSTRUCT template.
@@ -226,11 +230,12 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
 
   auto triples = oneTriple(BlankNode{false, "x"}, Iri{"<p>"}, Iri{"<o>"});
 
-  ConstructTripleGenerator gen{triples, result1, {}, index_, makeHandle()};
   std::vector<TableWithRange> tables{table1, table2};
-  auto range = std::move(gen).generateStringTriples(
+  auto range = ConstructTripleGenerator::generateStringTriples(
+      triples, {}, index_, makeHandle(),
       ad_utility::InputRangeTypeErased<TableWithRange>{
-          ad_utility::OwningView{std::move(tables)}});
+          ad_utility::OwningView{std::move(tables)}},
+      0);
 
   // Table 1: rowOffset=0, firstRow=0
   //   row 0: rowId = 0+0+0 = 0
@@ -297,8 +302,8 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
   auto triples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   auto handle = makeHandle();
-  ConstructTripleGenerator gen{triples, result, {}, index_, handle};
-  auto range = std::move(gen).generateStringTriples(singleTableRange(table));
+  auto range = ConstructTripleGenerator::generateStringTriples(
+      triples, {}, index_, handle, singleTableRange(table), 0);
 
   // Drain all BATCH_SIZE triples from batch 0.
   for (size_t i = 0; i < BATCH_SIZE; ++i) {
