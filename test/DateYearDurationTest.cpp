@@ -978,10 +978,15 @@ TEST(DateYearOrDuration, Subtraction) {
   }
   {
     // Test invalid subtractions.
-    // Invalid `Date`.
     DateYearOrDuration date =
-        DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
+        DateYearOrDuration(Date(1989, 10, 20, 20, 10, 33));
     DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 30, 10, 33));
+    ASSERT_FALSE(duration - date);
+
+    // Invalid `Date`.
+    date = DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
+    duration = DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     ASSERT_FALSE(date - duration);
   }
