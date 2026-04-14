@@ -19,6 +19,7 @@
 #include "util/Exception.h"
 
 class IndexImpl;
+using LocalVocabContext = IndexImpl;
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -40,7 +41,7 @@ class alignas(16) LocalVocabEntry
 
  private:
   // Pointer to keep this object assignable.
-  const IndexImpl* index_;
+  const LocalVocabContext* context_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -53,21 +54,22 @@ class alignas(16) LocalVocabEntry
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
-  LocalVocabEntry(LiteralT literal, const IndexImpl& index)
-      : Base{std::move(literal)}, index_{&index} {}
-  LocalVocabEntry(IriT iri, const IndexImpl& index) noexcept
-      : Base{std::move(iri)}, index_{&index} {}
+  LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
+      : Base{std::move(literal)}, context_{&context} {}
+  LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
+      : Base{std::move(iri)}, context_{&context} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  LocalVocabEntry(const Base& base, const IndexImpl& index)
-      : Base{base}, index_{&index} {}
-  LocalVocabEntry(Base&& base, const IndexImpl& index) noexcept
-      : Base{std::move(base)}, index_{&index} {}
+  LocalVocabEntry(const Base& base, const LocalVocabContext& context)
+      : Base{base}, context_{&context} {}
+  LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
+      : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known.
-  LocalVocabEntry(Base&& base, auto lower, auto upper, const IndexImpl& index)
+  LocalVocabEntry(Base&& base, auto lower, auto upper,
+                  const LocalVocabContext& context)
       : Base{std::move(base)},
-        index_{&index},
+        context_{&context},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
