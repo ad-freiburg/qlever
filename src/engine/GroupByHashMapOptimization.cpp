@@ -6,7 +6,7 @@
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId AvgAggregationData::calculateResult(
-    [[maybe_unused]] const IndexImpl& index,
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   if (error_) {
     return ValueId::makeUndefined();
@@ -21,7 +21,7 @@
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId CountAggregationData::calculateResult(
-    [[maybe_unused]] const IndexImpl& index,
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   return ValueId::makeFromInt(count_);
 }
@@ -29,7 +29,8 @@
 // _____________________________________________________________________________
 template <valueIdComparators::Comparison Comp>
 [[nodiscard]] ValueId ExtremumAggregationData<Comp>::calculateResult(
-    [[maybe_unused]] const IndexImpl& index, LocalVocab* localVocab) const {
+    [[maybe_unused]] const LocalVocabContext& context,
+    LocalVocab* localVocab) const {
   return sparqlExpression::detail::idOrLiteralOrIriToId(currentValue_,
                                                         localVocab);
 }
@@ -39,7 +40,7 @@ template struct ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId SumAggregationData::calculateResult(
-    [[maybe_unused]] const IndexImpl& index,
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   if (error_) {
     return ValueId::makeUndefined();
@@ -67,7 +68,7 @@ void GroupConcatAggregationData::addValueImpl(
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId GroupConcatAggregationData::calculateResult(
-    const IndexImpl& index, LocalVocab* localVocab) const {
+    const LocalVocabContext& context, LocalVocab* localVocab) const {
   if (undefined_) {
     return ValueId::makeUndefined();
   }
@@ -76,7 +77,7 @@ void GroupConcatAggregationData::addValueImpl(
       localVocab->getIndexAndAddIfNotContained(LocalVocabEntry{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
               asNormalizedStringViewUnsafe(currentValue_)),
-          index});
+          context});
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
 }
 
@@ -96,7 +97,8 @@ void GroupConcatAggregationData::reset() {
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId SampleAggregationData::calculateResult(
-    [[maybe_unused]] const IndexImpl& index, LocalVocab* localVocab) const {
+    [[maybe_unused]] const LocalVocabContext& context,
+    LocalVocab* localVocab) const {
   if (!value_.has_value()) {
     return Id::makeUndefined();
   }

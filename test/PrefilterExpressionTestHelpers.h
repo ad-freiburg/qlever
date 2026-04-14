@@ -106,11 +106,11 @@ namespace filterHelper {
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
 // value with `'`/`'`.
 inline auto LVE = [](const std::string& litOrIri,
-                     const IndexImpl& index) -> LocalVocabEntry {
+                     const LocalVocabContext& context) -> LocalVocabEntry {
   return LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           litOrIri),
-      index};
+      context};
 };
 
 //______________________________________________________________________________

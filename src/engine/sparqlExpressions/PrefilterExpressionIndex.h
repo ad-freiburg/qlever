@@ -130,7 +130,7 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  BlockMetadataRanges evaluate(const IndexImpl& index,
+  BlockMetadataRanges evaluate(const LocalVocabContext& context,
                                BlockMetadataSpan blockRange,
                                size_t evaluationColumn) const;
 
@@ -142,7 +142,7 @@ class PrefilterExpression {
   // return their corresponding complement over ALL datatypes. This is in
   // particular needed for the complement of `IsDatatype` and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
-      const IndexImpl& index, const ValueIdSubrange& idRange,
+      const LocalVocabContext& context, const ValueIdSubrange& idRange,
       BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
 
   // Format for debugging
@@ -181,7 +181,7 @@ class PrefixRegexExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -215,7 +215,7 @@ class LogicalExpression : public PrefilterExpression {
   // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
   // requires access to the `evaluateImpl` declared here.
   friend class PrefixRegexExpression;
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -244,7 +244,7 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -274,7 +274,7 @@ class IsInExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -314,7 +314,7 @@ class RelationalExpression : public PrefilterExpression {
   // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -340,7 +340,7 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;

@@ -241,7 +241,7 @@ CPP_template(typename NaryOperation)(
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      [[maybe_unused]] const IndexImpl& index,
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
     std::vector<PrefilterExprVariablePair> prefilterVec;
     const auto& children = this->children();

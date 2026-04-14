@@ -288,7 +288,7 @@ void PrefixRegexExpression::checkCancellation(
 // _____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
 PrefixRegexExpression::getPrefilterExpressionForMetadata(
-    [[maybe_unused]] const IndexImpl& index,
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   // It is currently not possible to prefilter PREFIX expressions involving
   // STR(?var), since we not only have to match "Bob", but also "Bob"@en,

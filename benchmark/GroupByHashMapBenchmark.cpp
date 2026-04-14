@@ -71,7 +71,8 @@ auto generateSortedGroupVec = [](size_t n, size_t g) {
 
 // Create a local vocab of random strings and a vector of the local vocab
 // indices.
-auto generateRandomLocalVocabAndIndicesVec = [](const IndexImpl& index,
+auto generateRandomLocalVocabAndIndicesVec = [](const LocalVocabContext&
+                                                    context,
                                                 size_t n, size_t m) {
   LocalVocab localVocab;
   std::vector<LocalVocabIndex> indices;
@@ -90,7 +91,7 @@ auto generateRandomLocalVocabAndIndicesVec = [](const IndexImpl& index,
     }
     using namespace ad_utility::triple_component;
     indices.push_back(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(str), index}));
+        LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(str), context}));
   }
 
   return std::make_pair(std::move(localVocab), indices);

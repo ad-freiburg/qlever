@@ -267,15 +267,15 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // contain a suitable type.
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
-                                            const IndexImpl& index) {
+                                            const LocalVocabContext& context) {
   using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {
-    return LocalVocabEntry{literalExpr->value(), index};
+    return LocalVocabEntry{literalExpr->value(), context};
   } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
-    return LocalVocabEntry{iriExpr->value(), index};
+    return LocalVocabEntry{iriExpr->value(), context};
   } else {
     return std::nullopt;
   }

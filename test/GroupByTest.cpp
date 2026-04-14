@@ -55,10 +55,11 @@ auto lit(std::string_view s) {
 
 // Helper function to get the local vocab ID for a given word.
 Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
-                            const std::string& word, const IndexImpl& index) {
+                            const std::string& word,
+                            const LocalVocabContext& context) {
   auto lit =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
-  auto value = localVocab.getIndexOrNullopt(LocalVocabEntry{lit, index});
+  auto value = localVocab.getIndexOrNullopt(LocalVocabEntry{lit, context});
   if (value.has_value()) {
     return ValueId::makeFromLocalVocabIndex(value.value());
   }

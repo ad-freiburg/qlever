@@ -41,7 +41,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
     NamedResultCache::Value result;
     result.allocatorForSerialization_ = std::move(allocator);
-    result.indexForSerialization_ = &qec_->getIndex().getImpl();
+    result.contextForSerialization_ = &qec_->getIndex().getImpl();
     readSerializer >> result;
     return result;
   }

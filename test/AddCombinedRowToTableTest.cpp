@@ -287,18 +287,18 @@ Literal fromString(std::string_view string) {
 
 // _____________________________________________________________________________
 LocalVocab createVocabWithSingleString(std::string_view string,
-                                       const IndexImpl& index) {
+                                       const LocalVocabContext& context) {
   LocalVocab localVocab;
   localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{fromString(string), index});
+      LocalVocabEntry{fromString(string), context});
   return localVocab;
 }
 
 // _____________________________________________________________________________
 bool vocabContainsString(const LocalVocab& vocab, std::string_view string,
-                         const IndexImpl& index) {
+                         const LocalVocabContext& context) {
   return ad_utility::contains(vocab.getAllWordsForTesting(),
-                              LocalVocabEntry{fromString(string), index});
+                              LocalVocabEntry{fromString(string), context});
 }
 }  // namespace
 

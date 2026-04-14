@@ -119,7 +119,7 @@ class SparqlExpression {
   // <`PrefilterExpression`, `Variable`> pairs (see `getMergeFunction` in
   // NumericBinaryExpression.cpp).
   virtual std::vector<PrefilterExprVariablePair>
-  getPrefilterExpressionForMetadata(const IndexImpl& index,
+  getPrefilterExpressionForMetadata(const LocalVocabContext& context,
                                     bool isNegated = false) const;
 
   // Returns true iff this expression is a simple constant. Default

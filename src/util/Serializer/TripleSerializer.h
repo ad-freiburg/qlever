@@ -97,13 +97,13 @@ CPP_template(typename Serializer)(
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
     tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, const IndexImpl& index) {
+        Serializer& serializer, const LocalVocabContext& context) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
           BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
           serializer),
-      index.getBlankNodeManager());
+      context.getBlankNodeManager());
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
@@ -114,7 +114,7 @@ CPP_template(typename Serializer)(
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         triple_component::LiteralOrIri::fromStringRepresentation(std::move(s)),
-        index});
+        context});
     mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
@@ -183,7 +183,7 @@ CPP_template(typename Range)(
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const std::filesystem::path& path, const IndexImpl& index) {
+    const std::filesystem::path& path, const LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
@@ -205,7 +205,7 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   AD_LOG_INFO << "Reading and processing persisted updates from " << path
               << " ..." << std::endl;
   detail::readHeader(serializer);
-  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, index);
+  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, context);
   std::vector<std::vector<Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
   for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {

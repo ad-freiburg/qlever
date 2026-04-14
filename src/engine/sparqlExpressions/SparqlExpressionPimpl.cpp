@@ -103,8 +103,8 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 //_____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
 SparqlExpressionPimpl::getPrefilterExpressionForMetadata(
-    const IndexImpl& index) const {
-  return _pimpl->getPrefilterExpressionForMetadata(index);
+    const LocalVocabContext& context) const {
+  return _pimpl->getPrefilterExpressionForMetadata(context);
 }
 
 // _____________________________________________________________________________

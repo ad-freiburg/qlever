@@ -441,13 +441,14 @@ using PromoteToLocalVocabEntry =
 // `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
 // For other types, the functor just returns the input as is.
 template <typename T>
-decltype(auto) promoteToLocalVocabEntry(T&& value, const IndexImpl& index) {
+decltype(auto) promoteToLocalVocabEntry(T&& value,
+                                        const LocalVocabContext& context) {
   if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](Id id) -> IdOrLocalVocabEntry { return id; },
-            [&index](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-              return {LocalVocabEntry{AD_FWD(literalOrIri), index}};
+            [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
+              return {LocalVocabEntry{AD_FWD(literalOrIri), context}};
             }},
         AD_FWD(value));
   } else {

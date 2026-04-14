@@ -35,7 +35,7 @@ inline auto BlankNodeId = [](const auto& v) {
 inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;
-  // Use `getQec()` to obtain a valid `IndexImpl` reference for creating
+  // Use `getQec()` to obtain a valid `LocalVocabContext` reference for creating
   // `LocalVocabEntry` objects. This works because we store the indices in a
   // static map.
   auto* qec = getQec();

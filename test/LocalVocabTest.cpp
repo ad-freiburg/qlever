@@ -37,13 +37,14 @@ namespace {
 
 using TestWords = std::vector<LocalVocabEntry>;
 
-TestWords getTestCollectionOfWords(size_t size, const IndexImpl& index) {
+TestWords getTestCollectionOfWords(size_t size,
+                                   const LocalVocabContext& context) {
   using namespace ad_utility::triple_component;
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
     testCollectionOfWords.push_back(LocalVocabEntry{
         LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)),
-        index});
+        context});
   }
   return testCollectionOfWords;
 }

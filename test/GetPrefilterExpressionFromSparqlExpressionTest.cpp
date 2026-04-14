@@ -69,10 +69,10 @@ const auto equalityCheckPrefilterVectors =
 // `<PrefilterExpression, Variable>` pairs in the correct order. If no
 // `<PrefilterExpression, Variable>` pair is provided, the expected value for
 // the `SparqlExpression` is an empty vector.
-auto makeEvalAndEqualityCheck(const IndexImpl& index) {
-  return [&index](std::unique_ptr<SparqlExpression> sparqlExpr,
-                  std::convertible_to<
-                      PrefilterExprVariablePair> auto&&... prefilterArgs) {
+auto makeEvalAndEqualityCheck(const LocalVocabContext& context) {
+  return [&context](std::unique_ptr<SparqlExpression> sparqlExpr,
+                    std::convertible_to<
+                        PrefilterExprVariablePair> auto&&... prefilterArgs) {
     std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
     if constexpr (sizeof...(prefilterArgs) > 0) {
       (prefilterVarPair.emplace_back(
@@ -80,7 +80,7 @@ auto makeEvalAndEqualityCheck(const IndexImpl& index) {
        ...);
     }
     equalityCheckPrefilterVectors(
-        sparqlExpr->getPrefilterExpressionForMetadata(index),
+        sparqlExpr->getPrefilterExpressionForMetadata(context),
         std::move(prefilterVarPair));
   };
 }

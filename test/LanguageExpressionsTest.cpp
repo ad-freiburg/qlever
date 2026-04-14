@@ -132,11 +132,12 @@ struct TestContext {
 };
 
 // ____________________________________________________________________________
-auto localVocabEntry = [](const std::string& literal,
-                          const IndexImpl& index) -> IdOrLocalVocabEntry {
+auto localVocabEntry =
+    [](const std::string& literal,
+       const LocalVocabContext& context) -> IdOrLocalVocabEntry {
   return LocalVocabEntry{LiteralOrIri::fromStringRepresentation(
                              absl::StrCat("\""sv, literal, "\""sv)),
-                         index};
+                         context};
 };
 
 // ____________________________________________________________________________

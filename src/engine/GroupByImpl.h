@@ -445,7 +445,7 @@ class GroupByImpl : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      const IndexImpl& index, LocalVocab* localVocab,
+      const LocalVocabContext& context, LocalVocab* localVocab,
       const Allocator& allocator);
 
   // Helper function of `evaluateAlias`.
@@ -465,7 +465,7 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      const IndexImpl& index, LocalVocab* localVocab,
+      const LocalVocabContext& context, LocalVocab* localVocab,
       const Allocator& allocator,
       std::vector<HashMapAggregateInformation>& info,
       const std::vector<HashMapGroupedVariableInformation>& substitutions);
@@ -478,7 +478,7 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      const IndexImpl& index, LocalVocab* localVocab,
+      const LocalVocabContext& context, LocalVocab* localVocab,
       const Allocator& allocator);
 
   // Helper function to evaluate the child expression of an aggregate function.
@@ -534,8 +534,8 @@ class GroupByImpl : public Operation {
           std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
           size_t endIndex,
           const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          IdTable* resultTable, const IndexImpl& index, LocalVocab* localVocab,
-          const Allocator& allocator);
+          IdTable* resultTable, const LocalVocabContext& context,
+          LocalVocab* localVocab, const Allocator& allocator);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
