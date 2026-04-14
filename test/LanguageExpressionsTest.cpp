@@ -227,7 +227,7 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
-  testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
+  testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       {litOrIri(""), litOrIri("es"), litOrIri("de-LATN-CH"), litOrIri("de-DE"),
        litOrIri("de-DE"), litOrIri("de-AT"), litOrIri("de"), litOrIri("de-AT")},
       "?literals");
@@ -235,7 +235,7 @@ TEST(LangExpression, testLangExpressionOnLiteralColumn) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
-  testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
+  testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       {litOrIri(""), litOrIri(""), litOrIri("de"), U, U, U, U, litOrIri("")},
       "?mixed");
 }

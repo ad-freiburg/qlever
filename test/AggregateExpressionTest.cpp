@@ -31,7 +31,7 @@ auto V = VocabId;
 auto U = Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
-  return IdOrLiteralOrIri(
+  return IdOrLocalVocabEntry(
       ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)));
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
@@ -83,7 +83,8 @@ TEST(AggregateExpression, count) {
   testCountId({I(3), NaN, NaN}, I(2), true);
   testCountId({}, I(0));
 
-  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
+  auto testCountString =
+      testAggregate<CountExpression, IdOrLocalVocabEntry, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
 
@@ -105,10 +106,10 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), NaN}, NaN);
   testSumId({}, I(0));
 
-  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
+  auto testMaxString = testAggregate<MaxExpression, IdOrLocalVocabEntry>;
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("unfug"));
-  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
+  auto testSumString = testAggregate<SumExpression, IdOrLocalVocabEntry, Id>;
   testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -121,7 +122,7 @@ TEST(AggregateExpression, avg) {
   testAvgId({I(3), NaN}, NaN);
   testAvgId({}, I(0));
 
-  auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
+  auto testAvgString = testAggregate<AvgExpression, IdOrLocalVocabEntry, Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -148,7 +149,8 @@ TEST(StdevExpression, avg) {
   testStdevId({D(500)}, D(0));
   testStdevId({D(500), D(500), D(500)}, D(0));
 
-  auto testStdevString = testAggregate<StdevExpression, IdOrLiteralOrIri, Id>;
+  auto testStdevString =
+      testAggregate<StdevExpression, IdOrLocalVocabEntry, Id>;
   testStdevString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -176,7 +178,7 @@ TEST(AggregateExpression, min) {
   testMinId({I(3), alpha, alx, (I(-1)), U}, U);
   testMinId({alpha, alx, aalx}, aalx);
   testMinId({}, U);
-  auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
+  auto testMinString = testAggregate<MinExpression, IdOrLocalVocabEntry>;
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("alpha"));
 }

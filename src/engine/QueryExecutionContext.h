@@ -98,7 +98,8 @@ class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
-class QueryExecutionContext {
+class QueryExecutionContext
+    : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
@@ -169,6 +170,10 @@ class QueryExecutionContext {
   // write to the cache. This avoids in particular the overhead of computing
   // cache keys for operations.
   bool disableCaching() const { return disableCaching_; }
+
+  void setDisableCachingOnlyForTesting(bool disableCaching) {
+    disableCaching_ = disableCaching;
+  }
 
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
@@ -245,7 +250,6 @@ class QueryExecutionContext {
   MaterializedViewsManager* materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
-  FRIEND_TEST(OperationTest, disableCachingGlobally);
   bool disableCaching_ = false;
 
   // The last point in time when a websocket update was sent. This is used for

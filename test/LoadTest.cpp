@@ -153,9 +153,7 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            const auto& idx = testQec->getIndex();
-            auto idOpt =
-                field.toValueId(idx.getVocab(), idx.encodedIriManager());
+            auto idOpt = field.toValueId(testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());

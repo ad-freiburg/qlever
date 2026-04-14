@@ -462,7 +462,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
-    requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+    requires(concepts::same_as<sparqlExpression::IdOrLocalVocabEntry, T> ||
              concepts::same_as<std::optional<std::string>, T>)) T
     getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
              ValueGetter& valueGetter) {
@@ -484,7 +484,7 @@ CPP_template(typename T, typename ValueGetter)(
     case Date:
     case GeoPoint:
     case Undefined:
-      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
+      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLocalVocabEntry>) {
         return Id::makeUndefined();
       } else {
         return std::nullopt;
@@ -494,9 +494,9 @@ CPP_template(typename T, typename ValueGetter)(
 }
 
 //_____________________________________________________________________________
-sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<sparqlExpression::IdOrLiteralOrIri>(id, context, *this);
+  return getValue<sparqlExpression::IdOrLocalVocabEntry>(id, context, *this);
 }
 
 //______________________________________________________________________________
@@ -525,7 +525,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
     const LiteralOrIri& litOrIri,
     [[maybe_unused]] const EvaluationContext* context) const {
   return LiteralOrIri{litOrIri.isIri()

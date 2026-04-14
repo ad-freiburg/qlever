@@ -296,7 +296,7 @@ addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
-addLinkAndDiscoverTest(CompressorStreamTest engine)
+addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
 
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
@@ -508,8 +508,11 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest engine parser)
+addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
+addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
+
+addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)

@@ -995,9 +995,8 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
-  auto getId = [&lv, &qec](TC&& tc) {
-    EncodedIriManager mgr;
-    return std::move(tc).toValueId(qec->getIndex().getVocab(), lv, mgr);
+  auto getId = [&lv, &index](TC&& tc) {
+    return std::move(tc).toValueId(index, lv);
   };
   auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
   auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
