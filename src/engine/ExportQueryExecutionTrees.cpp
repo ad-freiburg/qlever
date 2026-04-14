@@ -261,9 +261,9 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 }
 
 // _____________________________________________________________________________
-auto ExportQueryExecutionTrees::constructQueryResultToTriples(
+auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const ad_utility::sparql_types::Triples& constructClauseTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // For each result from the WHERE clause, we produce up to
@@ -271,11 +271,12 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
   // filtered out because one of the components is UNDEF (it would require
   // materializing the whole result).
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
-  return qlever::constructExport::ConstructTripleGenerator(
-             constructTriples, std::move(result), qet.getVariableColumns(),
-             qet.getQec()->getIndex(), std::move(cancellationHandle))
-      .generateStringTriples(std::move(rowIndices));
+                                  constructClauseTriples.size());
+
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(constructClauseTriples, qet.getVariableColumns(),
+                            qet.getQec()->getIndex(), cancellationHandle,
+                            std::move(rowIndices), limitAndOffset._offset);
 }
 
 // _____________________________________________________________________________
@@ -286,7 +287,7 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(
+  auto generator = constructQueryResultToStringTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
 
@@ -775,16 +776,18 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   result->logResultSize();
 
-  [[maybe_unused]] uint64_t resultSize = 0;
+  uint64_t resultSize = 0;
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
-  qlever::constructExport::ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
-  for (const auto& tripleString : std::move(generator).generateFormattedTriples(
-           std::move(rowIndices), format)) {
-    STREAMABLE_YIELD(tripleString);
+  auto triples = qlever::constructExport::ConstructTripleGenerator::
+      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
+                               qet.getQec()->getIndex(), cancellationHandle,
+                               std::move(rowIndices), limitAndOffset._offset,
+                               format);
+
+  for (const std::string& triple : triples) {
+    STREAMABLE_YIELD(triple);
   }
 }
 

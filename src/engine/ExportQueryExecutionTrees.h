@@ -127,7 +127,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.
-  static auto constructQueryResultToTriples(
+  static auto constructQueryResultToStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructClauseTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
