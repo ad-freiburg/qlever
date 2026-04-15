@@ -47,8 +47,8 @@ class ConstructTripleGenerator {
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
 
  private:
-  const static size_t DEFAULT_BATCH_SIZE = 1024;
-  const static size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
+  static constexpr size_t DEFAULT_BATCH_SIZE = 1024;
+  static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 

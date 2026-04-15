@@ -38,7 +38,13 @@ ConstructTripleGenerator::evaluateTableWithRange(
       (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
   // this lambda computes the result for a batch of the `TableWithRange`.
-  auto computeBatch = [&](int batchIdx) {
+  // `numRowsOfTable`, `firstRowOfTable`, and `rowOffset` are captured by value
+  // because they are stack-local to this function and would be dangling
+  // references if captured by `[&]` and the returned range is iterated after
+  // this function returns. `table`, `tmpl`, `index`, and `cache` outlive the
+  // returned range (owned by the caller) so they are captured by reference.
+  auto computeBatch = [&table, &tmpl, &index, &cache, numRowsOfTable,
+                       firstRowOfTable, rowOffset](int batchIdx) {
     const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
     const size_t batchEnd =
         std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
@@ -76,9 +82,13 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   // TODO<ms2144>: 3) what does ad_utility::LoopControl::yieldAll do and why do
   // we need it here?
 
+  // `tmpl` and `cache` are moved into the lambda because they are local
+  // variables that would be dangling references after `evaluateTables` returns.
+  // `index` is a long-lived reference (QEC-owned) so it is safe to capture by
+  // reference.
   return InputRangeTypeErased(ad_utility::CachingContinuableTransformInputRange(
       ad_utility::allView(std::move(rowIndices)),
-      [&tmpl, &index, cancellationhandle, rowOffset,
+      [tmpl = std::move(tmpl), &index, cancellationhandle, rowOffset,
        cache = std::move(cache)](const TableWithRange& table) mutable {
         return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
             evaluateTableWithRange(tmpl, index, cancellationhandle, table,
