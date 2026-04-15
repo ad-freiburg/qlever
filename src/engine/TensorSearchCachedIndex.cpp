@@ -71,16 +71,8 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
 
   for (size_t row = 0; row < restable.size(); row++) {
     auto id = restable.at(row, col);
-    std::optional<ad_utility::TensorData> tensor = std::nullopt;
-    auto& vocab = index.getVocab();
-    if (vocab.isTensorDataAvailable()) {
-      auto id_vocab = id.getVocabIndex();
-      tensor = vocab.getTensorData(id_vocab);
-    } else {
-      auto optionalStringAndType =
-          ExportQueryExecutionTrees::idToStringAndType<true>(index, id, {});
-      tensor = ad_utility::TensorData::parseFromPair(optionalStringAndType);
-    }
+    std::optional<ad_utility::TensorData> tensor =
+        ExportQueryExecutionTrees::idToTensorData<true>(index, id, {});
     std::optional<std::vector<float>> tensorData;
     if (tensor.has_value()) {
       tensorData = tensor.value().tensorData();

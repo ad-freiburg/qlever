@@ -131,19 +131,9 @@ Result TensorSearchImpl::computeTensorSearchResultFaiss() {
       qec_->getIndex(), params_.config_);
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
     auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
-    std::optional<ad_utility::TensorData> left = std::nullopt;
-    auto& vocab = qec_->getIndex().getVocab();
-
-    if (vocab.isTensorDataAvailable()) {
-      auto id_vocab = id.getVocabIndex();
-      left = vocab.getTensorData(id_vocab);
-    } else {
-      auto optionalStringAndType =
-          ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(),
-                                                             id, {});
-      auto tensorData =
-          ad_utility::TensorData::parseFromPair(optionalStringAndType);
-    }
+    std::optional<ad_utility::TensorData> left =
+        ExportQueryExecutionTrees::idToTensorData<true>(qec_->getIndex(), id,
+                                                        {});
     if (!left.has_value()) {
       continue;
     }
@@ -170,25 +160,19 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
 
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
     auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
-    auto optionalStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
-                                                           {});
-    auto tensorData =
-        ad_utility::TensorData::parseFromPair(optionalStringAndType);
-    if (!tensorData.has_value() && optionalStringAndType.has_value()) {
-      AD_LOG_WARN << "Could not parse tensor of "
-                  << optionalStringAndType.value().first << " at row " << i
+
+    auto tensorData = ExportQueryExecutionTrees::idToTensorData<true>(
+        qec_->getIndex(), id, {});
+    if (!tensorData.has_value()) {
+      AD_LOG_WARN << "Could not parse tensor of  at row " << i
                   << ". This item will be ignored for indexing.";
       continue;
     }
     std::map<size_t, float> distanceToRowLeft;
     for (size_t j = 0; j < params_.idTableRight_->size(); j++) {
       auto idRight = params_.idTableRight_->at(j, params_.rightJoinCol_);
-      auto optionalStringAndTypeRight =
-          ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(),
-                                                             idRight, {});
-      auto tensorDataRight =
-          ad_utility::TensorData::parseFromPair(optionalStringAndTypeRight);
+      auto tensorDataRight = ExportQueryExecutionTrees::idToTensorData<true>(
+          qec_->getIndex(), id, {});
       if (!tensorDataRight.has_value()) {
         continue;
       }

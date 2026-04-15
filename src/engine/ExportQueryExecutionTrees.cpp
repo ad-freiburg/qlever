@@ -610,6 +610,54 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
+template <bool removeQuotesAndAngleBrackets, typename EscapeFunction>
+std::optional<ad_utility::TensorData> ExportQueryExecutionTrees::idToTensorData(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    EscapeFunction&& escapeFunction) {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+
+  auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
+      -> std::optional<std::pair<std::string, const char*>> {
+    if (word.isIri()) {
+      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+        return std::pair{std::move(blankNodeString.value()), nullptr};
+      }
+    }
+    if constexpr (removeQuotesAndAngleBrackets) {
+      // TODO<joka921> Can we get rid of the string copying here?
+      return std::pair{
+          escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
+          nullptr};
+    }
+    return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+  };
+  std::optional<std::pair<std::string, const char*>> pair;
+  switch (datatype) {
+    case WordVocabIndex: {
+      auto& vocab = index.getVocab();
+      auto id_vocab = id.getVocabIndex();
+      return vocab.getTensorData(id_vocab);
+    }
+    case VocabIndex:
+    case LocalVocabIndex: {
+      pair = handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
+      break;
+    }
+    case EncodedVal:
+      pair = handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
+      break;
+    case TextRecordIndex:
+      pair = std::pair{
+          escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
+          nullptr};
+      break;
+    default:
+      pair = idToStringAndTypeForEncodedValue(id);
+  }
+  return ad_utility::TensorData::parseFromPair(pair);
+}
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
@@ -718,6 +766,18 @@ ExportQueryExecutionTrees::idToStringAndType<true, false, ql::identity>(
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, true, ql::identity>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    ql::identity&& escapeFunction);
+
+// ___________________________________________________________________________
+template std::optional<ad_utility::TensorData>
+ExportQueryExecutionTrees::idToTensorData<true, ql::identity>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    ql::identity&& escapeFunction);
+
+// ___________________________________________________________________________
+template std::optional<ad_utility::TensorData>
+ExportQueryExecutionTrees::idToTensorData<false, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
     ql::identity&& escapeFunction);
 

@@ -462,24 +462,11 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
 }
 std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  auto& vocab = context->_qec.getIndex().getVocab();
-  if (vocab.isTensorDataAvailable()) {
-    auto id_vocab = id.getVocabIndex();
-    return vocab.getTensorData(id_vocab);
-  }
-  auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType<true>(
-          context->_qec.getIndex(), id, context->_localVocab);
   try {
-    return ad_utility::TensorData::parseFromPair(optionalStringAndType);
-
+    return ExportQueryExecutionTrees::idToTensorData<true>(
+        context->_qec.getIndex(), id, context->_localVocab);
   } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id
-                 << " with string representation "
-                 << (optionalStringAndType.has_value()
-                         ? optionalStringAndType.value().first
-                         : "N/A")
-                 << "\n";
+    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id << "\n";
     AD_LOG_ERROR << "Error message: " << e.what() << "\n";
     return std::nullopt;
   }

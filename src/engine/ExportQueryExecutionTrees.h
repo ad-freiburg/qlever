@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "rdfTypes/TensorData.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
@@ -78,6 +79,13 @@ class ExportQueryExecutionTrees {
             bool returnOnlyLiterals = false,
             typename EscapeFunction = ql::identity>
   static std::optional<std::pair<std::string, const char*>> idToStringAndType(
+      const Index& index, Id id, const LocalVocab& localVocab,
+      EscapeFunction&& escapeFunction = EscapeFunction{});
+
+  // Specific wrapper for Data Tensors to access possible tensor vocabularies
+  template <bool removeQuotesAndAngleBrackets = false,
+            typename EscapeFunction = ql::identity>
+  static std::optional<ad_utility::TensorData> idToTensorData(
       const Index& index, Id id, const LocalVocab& localVocab,
       EscapeFunction&& escapeFunction = EscapeFunction{});
 
