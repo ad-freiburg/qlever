@@ -34,7 +34,7 @@ std::optional<EvaluatedTerm> instantiateTerm(
           return std::make_shared<const EvaluatedTermData>(
               absl::StrCat(t.prefix_, blankNodeRowId, t.suffix_), nullptr);
         } else {
-          static_assert(false, "Unhandled variant type");
+          static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
       },
       term);
