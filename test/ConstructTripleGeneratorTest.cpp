@@ -94,8 +94,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
 
   // Run the generator over a single table and collect StringTriples.
   std::vector<StringTriple> run(
-      Triples triples, VariableToColumnMap varMap,
-      std::shared_ptr<const Result> result, TableWithRange table,
+      Triples triples, VariableToColumnMap varMap, TableWithRange table,
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
     auto stringTriples = ConstructTripleGenerator::generateStringTriples(
         triples, varMap, index_, handle, singleTableRange(std::move(table)), 0);
@@ -124,7 +123,7 @@ TEST_F(ConstructTripleGeneratorTest, emptyTable) {
   auto table = makeRange(*result, 0, 0);
   auto triples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
-  EXPECT_TRUE(run(triples, {}, result, table).empty());
+  EXPECT_TRUE(run(triples, {}, table).empty());
 }
 
 // All-constants template: every result row emits one identical triple,
@@ -135,7 +134,7 @@ TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
   auto table = makeRange(*result, 0, 3);
   auto triples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
-  EXPECT_THAT(run(triples, {}, result, table),
+  EXPECT_THAT(run(triples, {}, table),
               ElementsAre(matchTriple("<s>", "<p>", "<o>"),
                           matchTriple("<s>", "<p>", "<o>"),
                           matchTriple("<s>", "<p>", "<o>")));
@@ -152,7 +151,7 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  EXPECT_THAT(run(triples, varMap, result, table),
+  EXPECT_THAT(run(triples, varMap, table),
               ElementsAre(matchTriple("<s>", "<p>", "<o>"),
                           matchTriple("<o>", "<p>", "<o>")));
 }
@@ -167,7 +166,7 @@ TEST_F(ConstructTripleGeneratorTest, undefDropsTriple) {
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  EXPECT_THAT(run(triples, varMap, result, table),
+  EXPECT_THAT(run(triples, varMap, table),
               ElementsAre(matchTriple("<s>", "<p>", "<o>"),
                           matchTriple("<o>", "<p>", "<o>")));
 }
@@ -184,7 +183,7 @@ TEST_F(ConstructTripleGeneratorTest, multipleTemplateTriples) {
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  EXPECT_THAT(run(triples, varMap, result, table),
+  EXPECT_THAT(run(triples, varMap, table),
               ElementsAre(matchTriple("<s>", "<p>", "<o1>"),
                           matchTriple("<s>", "<q>", "<o2>"),
                           matchTriple("<o>", "<p>", "<o1>"),
@@ -205,7 +204,7 @@ TEST_F(ConstructTripleGeneratorTest, blankNodeUsesCorrectRowId) {
   // row 1 of batch -> blankNodeRowId = 0 + 1 + 1 = 2
   auto triples = oneTriple(BlankNode{false, "node"}, Iri{"<p>"}, Iri{"<o>"});
 
-  EXPECT_THAT(run(triples, {}, result, table),
+  EXPECT_THAT(run(triples, {}, table),
               ElementsAre(matchTriple("_:u1_node", "<p>", "<o>"),
                           matchTriple("_:u2_node", "<p>", "<o>")));
 }
@@ -266,7 +265,7 @@ TEST_F(ConstructTripleGeneratorTest, viewSubrangeReadsCorrectRows) {
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  EXPECT_THAT(run(triples, varMap, result, table),
+  EXPECT_THAT(run(triples, varMap, table),
               ElementsAre(matchTriple("<p>", "<pred>", "<obj>"),
                           matchTriple("<o>", "<pred>", "<obj>")));
 }
@@ -283,7 +282,7 @@ TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  auto collected = run(triples, varMap, result, table);
+  auto collected = run(triples, varMap, table);
 
   ASSERT_EQ(collected.size(), N);
   for (const auto& t : collected) {
