@@ -78,17 +78,6 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                                                         variableColumns);
   IdCache cache = makeIdCache(tmpl);
 
-  // TODO<ms2144>: 1) I dont understand what
-  // CachingContinuableTransformInputRange is and why we need to use it here.
-  // TODO<ms2144>: 2) what does ad_utility::allView do and why do we need it
-  // here?
-  // TODO<ms2144>: 3) what does ad_utility::LoopControl::yieldAll do and why do
-  // we need it here?
-
-  // `tmpl` and `cache` are moved into the lambda because they are local
-  // variables that would be dangling references after `evaluateTables` returns.
-  // `index` is a long-lived reference (QEC-owned) so it is safe to capture by
-  // reference.
   return InputRangeTypeErased(ad_utility::CachingContinuableTransformInputRange(
       ad_utility::allView(std::move(rowIndices)),
       [tmpl = std::move(tmpl), &index, cancellationhandle,

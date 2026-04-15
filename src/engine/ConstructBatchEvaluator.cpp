@@ -33,13 +33,6 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 }
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTerm> ConstructBatchEvaluator::idToEvaluatedTerm(
-    const Index& index, Id id, const LocalVocab& localVocab) {
-  return stringAndTypeToEvaluatedTerm(
-      ql::exportIds::idToStringAndType(index, id, localVocab));
-}
-
-// _____________________________________________________________________________
 std::optional<EvaluatedTerm>
 ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
     std::optional<std::pair<std::string, const char*>> optStringAndType) {
