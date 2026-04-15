@@ -129,7 +129,7 @@ std::optional<TensorData> TensorDataVocabulary<V>::getTensorData(
   std::vector<uint8_t> buffer(offsetAndSize.size_);
 
   // Read into the buffer
-  tensorVocabFile_.read(buffer.data(), buffer.size(), offsetAndSize.offset_);
+  tensorVocabFile_.read(buffer.data(), buffer.size(), offsetAndSize.offset_ );
   // Deserialize the buffer into a `TensorData` object and return it
   return TensorData::deserialize(buffer);
 }

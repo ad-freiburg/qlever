@@ -109,7 +109,7 @@ TEST(TensorVocabularyTest, VocabularyGetTensorInfoFromUnderlyingTensorVocab) {
   auto wordCallback = vocabulary.makeWordWriterPtr("tensorVocabTest.dat");
   auto nonTensorIdx = (*wordCallback)("<http://example.com/abc>", true);
   static constexpr std::string_view exampleTensorLit =
-      R"("{\"data\":[0.0,0.0,1.0],\"shape\":[3],\"type":\"float32\"}")"
+      R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type":\"float32\"}")"
       "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>";
   auto exampleData =
       TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
@@ -134,7 +134,7 @@ TEST(TensorVocabularyTest, VocabularyGetTensorInfoFromUnderlyingTensorVocab) {
   (*ngWordCallback)("<http://example.com/abc>", true);
   ngWordCallback->finish();
   nonTensorVocab.readFromFile("nonTensorVocabTest.dat");
-  ASSERT_FALSE(nonTensorVocab.getGeoInfo(VocabIndex::make(0)).has_value());
+  ASSERT_FALSE(nonTensorVocab.getTensorData(VocabIndex::make(0)).has_value());
 }
 
 // _____________________________________________________________________________
@@ -161,7 +161,7 @@ TEST(TensorVocabularyTest, InvalidTensorVersion) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocabulary.readFromFile("tensorVocabTest2.dat"),
       ::testing::HasSubstr(
-          "The tensor vocab version of tensorVocabTest2.dat.tensors.te is 0"));
+          "The tensor vocab version of tensorVocabTest2.dat.tensors.tensors is 0"));
 }
 
 // _____________________________________________________________________________

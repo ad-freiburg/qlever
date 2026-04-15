@@ -107,7 +107,7 @@ class TensorDataVocabulary {
         underlyingWordWriter_;
     ad_utility::File tensorVocabFile_;
     size_t numInvalidTensors_ = 0;
-    size_t currentOffset_ = 0;
+    size_t currentOffset_ = sizeof(TENSOR_VOCAB_VERSION);
     // A vector to store the offsets for each tensor.
     ad_utility::MmapVector<Offset> offsets_;
 

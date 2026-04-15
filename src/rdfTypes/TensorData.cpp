@@ -65,7 +65,8 @@ std::pair<std::string, std::string> TensorData::toString() const {
   Writer<StringBuffer> writer(buffer);
   document.Accept(writer);
 
-  return {std::string(buffer.GetString()), TENSOR_LITERAL};
+  return {std::string(buffer.GetString()),
+          std::string(TENSOR_LITERAL)};
 }
 
 LiteralOrIri TensorData::toLiteral() const {

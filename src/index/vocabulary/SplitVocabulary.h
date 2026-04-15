@@ -334,7 +334,7 @@ struct GeoFilenameFunc {
 struct TensorDataSplitFunc {
   uint8_t operator()(std::string_view word) const {
     return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, TENSOR_LITERAL);
+           ql::ends_with(word, TENSOR_LITERAL_SUFFIX);
   }
 };
 
