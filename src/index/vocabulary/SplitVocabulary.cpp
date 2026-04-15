@@ -14,3 +14,11 @@ template class SplitVocabulary<
 template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
                                VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;
+
+template class SplitVocabulary<
+    TensorDataSplitFunc, TensorDataFilenameFunc,
+    CompressedVocabulary<VocabularyInternalExternal>,
+    TensorDataVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
+template class SplitVocabulary<TensorDataSplitFunc, TensorDataFilenameFunc,
+                               VocabularyInMemory,
+                               TensorDataVocabulary<VocabularyInMemory>>;

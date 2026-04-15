@@ -43,9 +43,10 @@ class PolymorphicVocabulary {
   using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
   using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
   using OnDiskCompressedGeoSplit = SplitGeoVocabulary<OnDiskCompressed>;
+  using OnDiskCompressedTensorSplit = SplitTensorVocabulary<OnDiskCompressed>;
   using Variant =
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
-                   InMemoryCompressed, OnDiskCompressedGeoSplit>;
+                   InMemoryCompressed, OnDiskCompressedGeoSplit, OnDiskCompressedTensorSplit>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;
@@ -158,6 +159,44 @@ class PolymorphicVocabulary {
         },
         vocab_);
   }
+
+
+  // Retrieve `TensorData` from an underlying vocabulary, if it is a
+  // `TensorDataVocabulary`.
+  std::optional<ad_utility::TensorData> getTensorData(uint64_t index) const {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::TensorData> {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesTensorData<T>) {
+            return vocab.getTensorData(index);
+          } else {
+            static_assert(NeverProvidesTensorData<T>);
+            return std::nullopt;
+          }
+        },
+        vocab_);
+  };
+
+  // Checks if any of the underlying vocabularies is a `TensorDataVocabulary`.
+  bool isTensorDataAvailable() const {
+    return std::visit(
+        [](const auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesTensorData<T>) {
+            return vocab.isTensorDataAvailable();
+          } else {
+            static_assert(NeverProvidesGeometryInfo<T>);
+            return false;
+          }
+        },
+        vocab_);
+  }
+
+
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.

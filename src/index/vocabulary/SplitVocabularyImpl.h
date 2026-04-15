@@ -163,4 +163,48 @@ bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
   }
 }
 
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+std::optional<ad_utility::TensorData> SplitVocabulary<
+    SF, SFN, S...>::getTensorData(uint64_t indexWithMarker) const {
+  // Visit the underlying vocabulary and retrieve the requested `TensorData`
+  // if it is a `TensorDataVocabulary`.
+  const auto& vocab = underlying_[getMarker(indexWithMarker)];
+  return std::visit(
+      [&](const auto& v) -> std::optional<ad_utility::TensorData> {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (ad_utility::isInstantiation<T, TensorDataVocabulary>) {
+          return v.getTensorData(getVocabIndex(indexWithMarker));
+        } else {
+          static_assert(NeverProvidesTensorData<T>);
+          return std::nullopt;
+        }
+      },
+      vocab);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+bool SplitVocabulary<SF, SFN, S...>::isTensorDataAvailable() {
+  // If any of the underlying vocabularies is a `TensorDataVocabulary`, then this
+  // `SplitVocabulary` is able to provide precomputed `TensorData`. The other
+  // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which
+  // could potentially hold a `TensorDataVocabulary` are forbidden here due to the
+  // constraints of this `SplitVocabulary` for its underlying vocabularies.
+  if constexpr (ad_utility::anyIsInstantiationOf<TensorDataVocabulary, S...>) {
+    return true;
+  } else {
+    // This assertion guarantees that none of the underlying vocabularies are
+    // able to provide precomputed `TensorData` (neither directly nor in a
+    // nested fashion). For more details and if it fails, see the definition of
+    // this concept in `VocabularyConstraints.h`.
+    static_assert(AllNeverProvideTensorData<S...>);
+    return false;
+  }
+}
+
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

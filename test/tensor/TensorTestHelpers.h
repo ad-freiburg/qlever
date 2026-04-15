@@ -11,12 +11,27 @@
 #include <fstream>
 
 #include "../util/GTestHelpers.h"
-#include "rdfTypes/TensorData.h"
 #include "libqlever/Qlever.h"
+#include "rdfTypes/TensorData.h"
 #include "util/Exception.h"
 
 namespace TensorTestHelpers {
+using namespace ad_utility;
+using namespace ::testing;
 
+// ____________________________________________________________________________
+inline auto tensorDataMatcher = liftOptionalMatcher<TensorData>(
+    [](TensorData expected) -> Matcher<TensorData> {
+      return AllOf(Property(&TensorData::dtype, Eq(expected.dtype())),
+                   Property(&TensorData::size, Eq(expected.size())),
+                   Property(&TensorData::tensorData,
+                            Pointwise(FloatEq(), expected.tensorData())));
+    });
+#define EXPECT_TENSOR_DATA(a, b) EXPECT_THAT(a, TensorTestHelpers::tensorDataMatcher(b))
+
+static constexpr std::string_view exampleTensorLit =
+      R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type":\"float32\"}")"
+      "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>";
 static constexpr std::string_view dummyTurtle = R"(
   <s3> <p1> "{\"data\":[1.0,1.0,-2.0],\"shape\":[3],\"type\":\"float32\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
   <s1> <p1> "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float32\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .

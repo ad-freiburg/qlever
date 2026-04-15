@@ -5,13 +5,9 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
-#include "nlohmann/json.hpp"
 #include "parser/LiteralOrIri.h"
-#include "util/Date.h"
-#include "util/Duration.h"
-#include "util/NBitInteger.h"
-#include "util/Serializer/Serializer.h"
 #include "rapidjson/document.h"
+#include "util/Date.h"
 
 namespace ad_utility {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -45,9 +41,10 @@ class TensorData {
   DType dtype() const { return dtype_; }
   static bool isBroadCastable(const TensorData& tensor1,
                               const TensorData& tensor2);
-
+  static std::optional<TensorData> fromLiteral(const std::string_view& literalString);
   static TensorData parseFromString(const std::string_view& dataString);
-  static TensorData parseFromJSON(rapidjson::Document& json, const std::string_view& dataString);
+  static TensorData parseFromJSON(rapidjson::Document& json,
+                                  const std::string_view& dataString);
   static std::optional<TensorData> parseFromPair(
       const std::optional<std::pair<std::string, const char*>>& pair);
 
@@ -59,6 +56,10 @@ class TensorData {
   static TensorData add(const TensorData& tensor1, const TensorData& tensor2);
   static TensorData subtract(const TensorData& tensor1,
                              const TensorData& tensor2);
+
+  std::vector<uint8_t> serialize() const;
+  static TensorData deserialize(
+      const std::vector<uint8_t>& buffer);
 };
 }  // namespace ad_utility
 #ifdef QLEVER_CPP_17

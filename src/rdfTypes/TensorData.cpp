@@ -1,9 +1,11 @@
 #include "rdfTypes/TensorData.h"
 
 #include <cmath>
+#include <nlohmann/detail/string_escape.hpp>
 #include <numeric>
 #include <sstream>
 
+#include "RdfEscaping.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/stringbuffer.h"
@@ -167,7 +169,7 @@ std::optional<TensorData> TensorData::parseFromPair(
   if (pair.has_value()) {
     auto type = pair.value().second;
     if (type == nullptr) {
-      return ad_utility::TensorData::parseFromString(pair.value().first);
+      return parseFromString(pair.value().first);
     }
     auto type_str = std::string(type);
     // if(type.end() == '>') {
@@ -175,9 +177,29 @@ std::optional<TensorData> TensorData::parseFromPair(
     //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
     // }
     if (type_str == TENSOR_LITERAL || type_str == TENSOR_NUMERIC_LITERAL) {
-      auto tensor = ad_utility::TensorData::parseFromString(pair.value().first);
+      auto tensor = parseFromString(pair.value().first);
     }
     return parseFromString(pair.value().first);
+  }
+  return std::nullopt;
+}
+std::optional<TensorData> TensorData::fromLiteral(
+    const std::string_view& literalString) {
+  auto literal =
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          std::string{literalString});
+  if (literal.hasDatatype()) {
+    auto dtype = asStringViewUnsafe(literal.getDatatype());
+    if (dtype == TENSOR_LITERAL || dtype == TENSOR_NUMERIC_LITERAL) {
+      try {
+        // Remove & unescape Pairs
+        auto unescaped = RdfEscaping::normalizeLiteralWithoutQuotes(
+            asStringViewUnsafe(literal.getContent()));
+        return parseFromString(asStringViewUnsafe(unescaped));
+      } catch (std::exception& e) {
+        return std::nullopt;
+      }
+    }
   }
   return std::nullopt;
 }
@@ -267,4 +289,70 @@ bool TensorData::isBroadCastable(const TensorData& tensor1,
     }
   }
   return true;
+}
+
+// ____________________________________________________________________________
+std::vector<uint8_t> TensorData::serialize() const {
+  // Serialize the tensor data into a byte vector. The format is as follows:
+  // [dtype (1 byte)][number of dimensions (8 bytes)][shape (8 bytes per
+  // dimension)][tensor data (4 bytes per float)]
+  std::vector<uint8_t> buffer;
+  buffer.push_back(static_cast<uint8_t>(dtype_));
+
+  uint64_t numDimensions = shape_.size();
+  buffer.insert(
+      buffer.end(), reinterpret_cast<uint8_t*>(&numDimensions),
+      reinterpret_cast<uint8_t*>(&numDimensions) + sizeof(numDimensions));
+
+  for (size_t dim : shape_) {
+    buffer.insert(buffer.end(), reinterpret_cast<uint8_t*>(&dim),
+                  reinterpret_cast<uint8_t*>(&dim) + sizeof(dim));
+  }
+
+  for (float value : tensorData_) {
+    buffer.insert(buffer.end(), reinterpret_cast<const uint8_t*>(&value),
+                  reinterpret_cast<const uint8_t*>(&value) + sizeof(value));
+  }
+
+  return buffer;
+}
+
+TensorData TensorData::deserialize(const std::vector<uint8_t>& buffer) {
+  if (buffer.size() < 1 + sizeof(uint64_t)) {
+    throw std::runtime_error{"Buffer too small to deserialize TensorData"};
+  }
+
+  DType dtype = static_cast<DType>(buffer[0]);
+
+  uint64_t numDimensions;
+  std::memcpy(&numDimensions, buffer.data() + 1, sizeof(numDimensions));
+
+  if (buffer.size() < 1 + sizeof(uint64_t) + numDimensions * sizeof(uint64_t)) {
+    throw std::runtime_error{
+        "Buffer too small to deserialize TensorData shape"};
+  }
+
+  std::vector<size_t> shape(numDimensions);
+  for (size_t i = 0; i < numDimensions; i++) {
+    uint64_t dim;
+    std::memcpy(&dim,
+                buffer.data() + 1 + sizeof(uint64_t) + i * sizeof(uint64_t),
+                sizeof(dim));
+    shape[i] = dim;
+  }
+
+  size_t expectedDataSize =
+      buffer.size() - (1 + sizeof(uint64_t) + numDimensions * sizeof(uint64_t));
+  if (expectedDataSize % sizeof(float) != 0) {
+    throw std::runtime_error{"Buffer size is not a multiple of float size"};
+  }
+  size_t numElements = expectedDataSize / sizeof(float);
+
+  std::vector<float> tensorData(numElements);
+  std::memcpy(
+      tensorData.data(),
+      buffer.data() + 1 + sizeof(uint64_t) + numDimensions * sizeof(uint64_t),
+      numElements * sizeof(float));
+
+  return TensorData(std::move(tensorData), std::move(shape), dtype);
 }

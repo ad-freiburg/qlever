@@ -195,7 +195,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
       pv,
       algo,
       dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
-      maxResults_.value_or((ssize_t)100),
+      maxResults_.value_or(static_cast<ssize_t>(100)),
       searchK_,
       nTrees_,
       rightCacheName_};

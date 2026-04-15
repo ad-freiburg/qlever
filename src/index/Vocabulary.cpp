@@ -255,6 +255,34 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
   }
 };
 
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::TensorData> Vocabulary<S, C, I>::getTensorData(
+    IndexType idx) const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesTensorData<S>) {
+    return vocabulary_.getUnderlyingVocabulary().getTensorData(idx.get());
+  } else {
+    static_assert(NeverProvidesTensorData<S>);
+    return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::isTensorDataAvailable() const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesTensorData<S>) {
+    return vocabulary_.getUnderlyingVocabulary().isTensorDataAvailable();
+  } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
+    return false;
+  }
+};
+
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
