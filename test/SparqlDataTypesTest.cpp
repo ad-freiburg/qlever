@@ -57,7 +57,7 @@ std::optional<std::string> evaluate(const GraphTerm& term,
 
   auto result = instantiateTerm(*preprocessed, batchResult, 0, rowOffset + row);
   if (!result) return std::nullopt;
-  return formatTerm(**result, true);
+  return formatTerm(**result, false);
 }
 }  // namespace
 
