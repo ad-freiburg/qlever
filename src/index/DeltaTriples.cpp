@@ -695,6 +695,7 @@ DeltaTriples::copyLocalVocab() const {
                         localVocab_.getOwnedLocalBlankNodeBlocks());
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 void DeltaTriples::fillFromOldDeltaTriples(
     const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
@@ -744,6 +745,7 @@ void DeltaTriples::fillFromOldDeltaTriples(
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
 }
+#endif
 
 // _____________________________________________________________________________
 std::array<std::vector<IdTriple<0>>, 4>

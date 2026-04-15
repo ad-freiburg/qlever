@@ -297,6 +297,7 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Fill this `DeltaTriples` instance with the difference between `oldState`
   // and `newState` and map the `Id`s to their new versions using the given
   // `idMapping`.
@@ -307,6 +308,7 @@ class DeltaTriples {
                        qlever::indexRebuilder::BlankNodeBlocks>& idMapping,
       uint64_t minBlankNodeIndex, CancellationHandle cancellationHandle,
       ad_utility::timer::TimeTracer& tracer);
+#endif
 
  private:
   // The proper state according to the template parameter. This will either

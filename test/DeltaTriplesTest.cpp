@@ -1049,6 +1049,7 @@ TEST_F(DeltaTriplesTest, vacuum) {
   EXPECT_EQ(result["internal"]["totalKept"], 0);
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
   auto cancellationHandle =
@@ -1179,3 +1180,4 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
                                          ::testing::Eq(Datatype::VocabIndex)),
                              newGraph));
 }
+#endif
