@@ -290,7 +290,6 @@ class SplitVocabulary {
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
 
-
   // Retrieve TensorData from an underlying vocabulary, if it is a
   // TensorDataVocabulary.
   std::optional<ad_utility::TensorData> getTensorData(
@@ -334,12 +333,14 @@ struct GeoFilenameFunc {
 struct TensorDataSplitFunc {
   uint8_t operator()(std::string_view word) const {
     return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, TENSOR_LITERAL_SUFFIX);
+           (ql::ends_with(word, TENSOR_LITERAL_SUFFIX) ||
+            ql::ends_with(word, TENSOR_NUMERIC_LITERAL_SUFFIX));
   }
 };
 
 // Split filename function for Tensor Data Literals: The vocabulary 0 is
-// saved under the base filename and Tensor Data literals are saved with a suffix
+// saved under the base filename and Tensor Data literals are saved with a
+// suffix
 // ".tensordata"
 struct TensorDataFilenameFunc {
   std::array<std::string, 2> operator()(std::string_view base) const {
@@ -361,6 +362,7 @@ template <class UnderlyingVocabulary>
 using SplitTensorVocabulary =
     SplitVocabulary<detail::splitVocabulary::TensorDataSplitFunc,
                     detail::splitVocabulary::TensorDataFilenameFunc,
-                    UnderlyingVocabulary, TensorDataVocabulary<UnderlyingVocabulary>>;
+                    UnderlyingVocabulary,
+                    TensorDataVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

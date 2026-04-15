@@ -89,7 +89,6 @@ INSTANTIATE_TEST_SUITE_P(
                      true},
         AlgDistParam{TensorSearchAlgorithm::FAISS,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
-                     "FaissEuclidean", true, true},
-
+                     "FaissEuclidean", true, true}
         ));
 }  // namespace

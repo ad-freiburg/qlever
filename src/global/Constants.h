@@ -225,6 +225,10 @@ static constexpr std::string_view TENSOR_LITERAL_SUFFIX =
     ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
                                 TENSOR_LITERAL,
                                 string_constants::detail::closeAngle>();
+static constexpr std::string_view TENSOR_NUMERIC_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
+                                TENSOR_NUMERIC_LITERAL,
+                                string_constants::detail::closeAngle>();
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
