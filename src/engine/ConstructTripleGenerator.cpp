@@ -44,7 +44,10 @@ ConstructTripleGenerator::evaluateTableWithRange(
   // this function returns. `table`, `tmpl`, `index`, and `cache` outlive the
   // returned range (owned by the caller) so they are captured by reference.
   auto computeBatch = [&table, &tmpl, &index, &cache, numRowsOfTable,
-                       firstRowOfTable, rowOffset](int batchIdx) {
+                       firstRowOfTable, rowOffset,
+                       cancellationHandle](int batchIdx) {
+    cancellationHandle->throwIfCancelled();
+
     const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
     const size_t batchEnd =
         std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
@@ -88,11 +91,14 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   // reference.
   return InputRangeTypeErased(ad_utility::CachingContinuableTransformInputRange(
       ad_utility::allView(std::move(rowIndices)),
-      [tmpl = std::move(tmpl), &index, cancellationhandle, rowOffset,
+      [tmpl = std::move(tmpl), &index, cancellationhandle,
+       accumulatedRows = rowOffset,
        cache = std::move(cache)](const TableWithRange& table) mutable {
+        const size_t tableRowOffset = accumulatedRows;
+        accumulatedRows += ql::ranges::distance(table.view_);
         return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
             evaluateTableWithRange(tmpl, index, cancellationhandle, table,
-                                   rowOffset, cache));
+                                   tableRowOffset, cache));
       }));
 }
 
