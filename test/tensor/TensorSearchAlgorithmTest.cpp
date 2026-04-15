@@ -32,12 +32,11 @@ using namespace TensorSearchTestHelpers;
 using namespace ad_utility::testing;
 using namespace TensorTestHelpers;
 
-
 TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
   auto param = GetParam();
 
   // // Build a small index with 6 vectors in 3 dimensions.
-  // const std::string basename = "_tensorFunctionalTestIndex";
+
   const size_t N = 20;
   auto qec = buildQec(makeVectorKg(
       N, N));  // identity vectors, so nearest neighbor should be self
@@ -59,9 +58,6 @@ TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
   // original subject (self is nearest neighbor because identical vector
   // exists in the dataset).
   expectSelfResult(idTable, varColMap, qec, param.reverse);
-
-  // Clean up generated files
-  // TensorTestHelpers::removeTestIndex(basename);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -78,5 +74,22 @@ INSTANTIATE_TEST_SUITE_P(
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot"},
         AlgDistParam{TensorSearchAlgorithm::FAISS,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
-                     "FaissEuclidean", true}));
+                     "FaissEuclidean", true},
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::COSINE_SIMILARITY, "NaiveCosine",
+                     false, true},
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
+                     "NaiveEuclidean", true, true},
+        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct",
+                     false, true},
+        AlgDistParam{TensorSearchAlgorithm::FAISS,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot", false,
+                     true},
+        AlgDistParam{TensorSearchAlgorithm::FAISS,
+                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
+                     "FaissEuclidean", true, true},
+
+        ));
 }  // namespace

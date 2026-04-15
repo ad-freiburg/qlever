@@ -71,16 +71,21 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
 
   for (size_t row = 0; row < restable.size(); row++) {
     auto id = restable.at(row, col);
-    auto optionalStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType<true>(index, id, {});
-    auto tensor = ad_utility::TensorData::parseFromPair(optionalStringAndType);
+    std::optional<ad_utility::TensorData> tensor = std::nullopt;
+    auto& vocab = index.getVocab();
+    if (vocab.isTensorDataAvailable()) {
+      auto id_vocab = id.getVocabIndex();
+      tensor = vocab.getTensorData(id_vocab);
+    } else {
+      auto optionalStringAndType =
+          ExportQueryExecutionTrees::idToStringAndType<true>(index, id, {});
+      tensor = ad_utility::TensorData::parseFromPair(optionalStringAndType);
+    }
     std::optional<std::vector<float>> tensorData;
     if (tensor.has_value()) {
       tensorData = tensor.value().tensorData();
-    } else if (optionalStringAndType.has_value()) {
-      AD_LOG_WARN << "Could not parse tensor of "
-                  << optionalStringAndType.value().first << " at row " << row
-                  << ". This item will be ignored for indexing.";
+    } else {
+      continue;
     }
 
     if (tensorData.has_value()) {
@@ -146,7 +151,7 @@ std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKey(
     const std::string& key) {
   auto lock = cache_.wlock();
   if (!lock->contains(key)) {
-    for (auto &k : lock->getAllNonpinnedKeys()) {
+    for (auto& k : lock->getAllNonpinnedKeys()) {
       AD_LOG_INFO << "We have key " << k << " though... \n";
     }
     throw std::runtime_error({absl::StrCat("Cannot find key \"", key, "\"")});

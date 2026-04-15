@@ -32,8 +32,8 @@
 
 #ifdef QLEVER_USE_TENSOR_BLAS
 extern "C" {
-  #include <cblas.h>
-  #include <openblas_config.h>
+#include <cblas.h>
+#include <openblas_config.h>
 }
 #endif
 #ifdef QLEVER_USE_TENSOR_PARALLEL
@@ -131,17 +131,24 @@ Result TensorSearchImpl::computeTensorSearchResultFaiss() {
       qec_->getIndex(), params_.config_);
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
     auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
+    std::optional<ad_utility::TensorData> left = std::nullopt;
+    auto& vocab = qec_->getIndex().getVocab();
 
-    auto optionalStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
-                                                           {});
-    auto tensorData =
-        ad_utility::TensorData::parseFromPair(optionalStringAndType);
-    if (!tensorData.has_value()) {
+    if (vocab.isTensorDataAvailable()) {
+      auto id_vocab = id.getVocabIndex();
+      left = vocab.getTensorData(id_vocab);
+    } else {
+      auto optionalStringAndType =
+          ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(),
+                                                             id, {});
+      auto tensorData =
+          ad_utility::TensorData::parseFromPair(optionalStringAndType);
+    }
+    if (!left.has_value()) {
       continue;
     }
     auto results =
-        faissIndex->findNN(tensorData.value(), params_.config_.maxResults_);
+        faissIndex->findNN(left.value(), params_.config_.maxResults_);
     for (const auto& nn : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
                           i, nn.first, Id::makeFromDouble(nn.second));

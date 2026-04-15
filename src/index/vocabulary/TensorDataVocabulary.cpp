@@ -93,10 +93,14 @@ template <typename V>
 void TensorDataVocabulary<V>::WordWriter::finishImpl() {
   // `WordWriterBase` ensures that this is not called twice and we thus do not
   // try to close the file handle twice
+  size_t numTensors = offsets_.size();
   offsets_.push_back(currentOffset_);
   offsets_.close();
   underlyingWordWriter_->finish();
   tensorVocabFile_.close();
+  AD_LOG_INFO << "Number of Tensors parsed " << numTensors << std::endl;
+  AD_LOG_INFO << "Number of invalid Tensors " << numInvalidTensors_
+              << std::endl;
 
   if (numInvalidTensors_ > 0) {
     AD_LOG_WARN << "Tensor preprocessing skipped " << numInvalidTensors_
@@ -129,7 +133,7 @@ std::optional<TensorData> TensorDataVocabulary<V>::getTensorData(
   std::vector<uint8_t> buffer(offsetAndSize.size_);
 
   // Read into the buffer
-  tensorVocabFile_.read(buffer.data(), buffer.size(), offsetAndSize.offset_ );
+  tensorVocabFile_.read(buffer.data(), buffer.size(), offsetAndSize.offset_);
   // Deserialize the buffer into a `TensorData` object and return it
   return TensorData::deserialize(buffer);
 }

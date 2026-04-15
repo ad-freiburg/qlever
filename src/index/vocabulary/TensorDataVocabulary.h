@@ -30,7 +30,6 @@ class TensorDataVocabulary {
   using Offset = uint64_t;
 
   UnderlyingVocabulary literals_;
-  size_t numTensors_ = 0;
 
   // The file in which the parsed tensor data is stored.
   ad_utility::File tensorVocabFile_;

@@ -104,12 +104,12 @@ inline std::vector<std::string> createRowVectorFromColumnVector(
 // Build a `QueryExecutionContext` from the given turtle, but set some memory
 // defaults to higher values to make it possible to test large geometric
 // literals. `vocabType` can be set
-inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
+inline auto buildQec(std::string turtleKg, bool useTensorVocab = false) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
   std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
-  if (useGeoVocab) {
+  if (useTensorVocab) {
     using enum ad_utility::VocabularyType::Enum;
-    vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
+    vocabType = ad_utility::VocabularyType{OnDiskCompressedTensorSplit};
   }
   config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
@@ -164,6 +164,7 @@ struct AlgDistParam {
   TensorDistanceAlgorithm dist;
   std::string name;
   bool reverse = false;
+  bool tensorVocab = false;
 };
 
 class TensorSearchFunctionalTest

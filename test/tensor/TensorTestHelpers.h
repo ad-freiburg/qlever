@@ -27,18 +27,23 @@ inline auto tensorDataMatcher = liftOptionalMatcher<TensorData>(
                    Property(&TensorData::tensorData,
                             Pointwise(FloatEq(), expected.tensorData())));
     });
-#define EXPECT_TENSOR_DATA(a, b) EXPECT_THAT(a, TensorTestHelpers::tensorDataMatcher(b))
+#define EXPECT_TENSOR_DATA(a, b) \
+  EXPECT_THAT(a, TensorTestHelpers::tensorDataMatcher(b))
 
 static constexpr std::string_view exampleTensorLit =
-      R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type":\"float32\"}")"
-      "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>";
+    R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type":\"float32\"}")"
+    "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>";
 static constexpr std::string_view dummyTurtle = R"(
+  <s1> <p2> <o1> .
   <s3> <p1> "{\"data\":[1.0,1.0,-2.0],\"shape\":[3],\"type\":\"float32\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
+  <s2> <p2> <o2> .
   <s1> <p1> "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float32\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
   <s2> <p1> "{\"data\":[1.0,1.0,3.0],\"shape\":[3],\"type\":\"float32\"}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
+  <s2> <p2> <o2> .
 )";
 // _____________________________________________________________________________
-inline void makeTestIndex(const std::string& basename, const std::string& kg) {
+inline void makeTestIndex(const std::string& basename, const std::string& kg,
+                          VocabularyType type) {
   // Write dummy turtle file
   auto ttlFilename = absl::StrCat(basename, ".ttl");
   {
@@ -48,6 +53,7 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 
   // Build index on dummy turtle file
   qlever::IndexBuilderConfig config;
+  config.vocabType_ = type;
   config.inputFiles_.emplace_back(ttlFilename, qlever::Filetype::Turtle);
   config.baseName_ = basename;
   qlever::Qlever::buildIndex(config);
@@ -67,7 +73,8 @@ inline void removeTestIndex(const std::string& basename) {
 }
 
 // _____________________________________________________________________________
-class TensorQueryTest : public ::testing::Test {
+template <typename T = ::testing::Test>
+class TensorQueryTest : public T {
  private:
   std::shared_ptr<qlever::Qlever> qlv_;
 
@@ -81,13 +88,7 @@ class TensorQueryTest : public ::testing::Test {
   }
 
   // ___________________________________________________________________________
-  void SetUp() override {
-    ad_utility::setGlobalLoggingStream(&log_);
-    makeTestIndex(testIndexBase_, getDummyTurtle());
-    qlever::EngineConfig config;
-    config.baseName_ = testIndexBase_;
-    qlv_ = std::make_shared<qlever::Qlever>(config);
-  }
+  void SetUp() override { qlv_ = nullptr; }
 
   // ___________________________________________________________________________
   void TearDown() override {
@@ -97,8 +98,16 @@ class TensorQueryTest : public ::testing::Test {
   }
 
   // ___________________________________________________________________________
-  qlever::Qlever& qlv() {
-    AD_CORRECTNESS_CHECK(qlv_ != nullptr);
+  qlever::Qlever& qlv(VocabularyType vocabType = VocabularyType(
+                          VocabularyType::Enum::OnDiskCompressed)) {
+    if (qlv_ == nullptr) {
+      // ad_utility::setGlobalLoggingStream(&log_);
+      ad_utility::setGlobalLoggingStream(&std::cout);
+      makeTestIndex(testIndexBase_, getDummyTurtle(), vocabType);
+      qlever::EngineConfig config;
+      config.baseName_ = testIndexBase_;
+      qlv_ = std::make_shared<qlever::Qlever>(config);
+    }
     return *qlv_;
   }
 

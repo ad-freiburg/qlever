@@ -2,14 +2,11 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 #include <gmock/gmock.h>
-#include <unicode/uchar.h>
+
 
 #include "../parser/SparqlAntlrParserTestHelpers.h"
-#include "../util/GTestHelpers.h"
-#include "../util/TripleComponentTestHelpers.h"
 #include "TensorTestHelpers.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "rdfTypes/TensorData.h"
 namespace {
 using namespace ad_utility;
 using namespace sparqlExpression;
@@ -19,10 +16,6 @@ using namespace sparqlParserTestHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
-using Var = Variable;
-auto iri = ad_utility::testing::iri;
-
-auto lit = ad_utility::testing::tripleComponentLiteral;
 // _____________________________________________________________________________
 TEST(TensorQueryCall, TensorCall) {
   using namespace m::builtInCall;
@@ -42,7 +35,13 @@ TEST(TensorQueryCall, TensorCall) {
   // TODO: also for the other tensor functions!
 }
 // _____________________________________________________________________________
-TEST_F(TensorQueryTest, TensorEnd2EndConstruction) {
+struct IndexParameter {
+  VocabularyType vocabType;
+};
+typedef TensorQueryTest<::testing::TestWithParam<IndexParameter>>
+    TensorQueryVocab;
+TEST_P(TensorQueryVocab, TensorEnd2EndConstruction) {
+  auto param = GetParam();
   std::string full_query = R"(
 PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
 PREFIX dtf: <https://w3id.org/rdf-tensor/functions#>
@@ -52,12 +51,12 @@ PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
       }
       ORDER BY DESC(?sim)      
       )";
-  auto query_plan = qlv().parseAndPlanQuery(full_query);
+  auto query_plan = qlv(param.vocabType).parseAndPlanQuery(full_query);
   auto [qet, qec, parsed] = std::move(query_plan);
   auto res = qet->getResult();
 
   auto results_query =
-      qlv().query(full_query, ad_utility::MediaType::sparqlJson);
+      qlv(param.vocabType).query(full_query, ad_utility::MediaType::sparqlJson);
   std::cout << results_query << std::endl;
   auto parsed_results = nlohmann::json::parse(results_query);
 
@@ -66,4 +65,14 @@ PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
                  .get<std::string>();
   EXPECT_FLOAT_EQ(std::stof(val), 1.0f);
 }
+INSTANTIATE_TEST_SUITE_P(
+    TensorQueryVocabVariant, TensorQueryVocab,
+    ::testing::Values(
+        IndexParameter{VocabularyType(VocabularyType::Enum::OnDiskCompressed)},
+        IndexParameter{
+            VocabularyType(VocabularyType::Enum::OnDiskCompressedTensorSplit)},
+        IndexParameter{
+            VocabularyType(VocabularyType::Enum::OnDiskCompressedGeoSplit)})
+
+);
 }  // namespace
