@@ -159,10 +159,10 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
-    auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
+    auto idLeft = params_.idTableLeft_->at(i, params_.leftJoinCol_);
 
     auto tensorData = ExportQueryExecutionTrees::idToTensorData<true>(
-        qec_->getIndex(), id, {});
+        qec_->getIndex(), idLeft, {});
     if (!tensorData.has_value()) {
       AD_LOG_WARN << "Could not parse tensor of  at row " << i
                   << ". This item will be ignored for indexing.";
@@ -172,7 +172,7 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
     for (size_t j = 0; j < params_.idTableRight_->size(); j++) {
       auto idRight = params_.idTableRight_->at(j, params_.rightJoinCol_);
       auto tensorDataRight = ExportQueryExecutionTrees::idToTensorData<true>(
-          qec_->getIndex(), id, {});
+          qec_->getIndex(), idRight, {});
       if (!tensorDataRight.has_value()) {
         continue;
       }
