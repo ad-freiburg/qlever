@@ -5,9 +5,12 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/ConstructTripleInstantiator.h"
+#include "engine/ConstructTypes.h"
+#include "engine/Result.h"
 #include "index/Index.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 
 using namespace std::string_literals;
@@ -19,18 +22,7 @@ struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
-  // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
-
-  ConstructQueryExportContext createContextForRow(size_t row,
-                                                  size_t rowOffset = 0) const {
-    return {row,
-            _resultTable.idTable(),
-            _resultTable.localVocab(),
-            _hashMap,
-            _index,
-            rowOffset};
-  }
 
   void setIdTable(IdTable&& table) {
     _resultTable =
@@ -39,13 +31,34 @@ struct ContextWrapper {
 };
 
 ContextWrapper prepareContext() { return {}; }
-}  // namespace
 
-namespace {
-constexpr auto evaluate = [](auto&&... args) {
-  return qlever::constructExport::ConstructQueryEvaluator::evaluateTerm(
-      AD_FWD(args)...);
-};
+// Evaluate a single CONSTRUCT template term.
+// (preprocessTerm -> evaluateBatch -> instantiateTerm -> formatTerm).
+// `row` is the IdTable row index; `rowOffset` shifts blank-node IDs.
+std::optional<std::string> evaluate(const GraphTerm& term,
+                                    const ContextWrapper& wrapper, size_t row,
+                                    PositionInTriple position,
+                                    size_t rowOffset = 0) {
+  using namespace qlever::constructExport;
+  auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
+      term, position, wrapper._hashMap);
+  if (!preprocessed) return std::nullopt;
+
+  BatchEvaluationResult batchResult;
+  batchResult.numRows_ = 1;
+
+  if (const auto* var = std::get_if<PrecomputedVariable>(&*preprocessed)) {
+    IdCache cache{100};
+    std::vector<size_t> cols{var->columnIndex_};
+    BatchEvaluationContext ctx{wrapper._resultTable.idTable(), row, row + 1};
+    batchResult = ConstructBatchEvaluator::evaluateBatch(
+        cols, ctx, wrapper._resultTable.localVocab(), wrapper._index, cache);
+  }
+
+  auto result = instantiateTerm(*preprocessed, batchResult, 0, rowOffset + row);
+  if (!result) return std::nullopt;
+  return formatTerm(**result, false);
+}
 }  // namespace
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
@@ -62,46 +75,51 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
 
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
   using enum PositionInTriple;
 
-  EXPECT_THAT(evaluate(blankNodeA, context0, SUBJECT), Optional("_:u0_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context0, PREDICATE), Optional("_:u0_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context0, OBJECT), Optional("_:u0_a"s));
-  EXPECT_THAT(evaluate(blankNodeB, context0, SUBJECT), Optional("_:g0_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context0, PREDICATE), Optional("_:g0_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context0, OBJECT), Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 0, SUBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 0, PREDICATE), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 0, OBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 0, SUBJECT), Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 0, PREDICATE), Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 0, OBJECT), Optional("_:g0_b"s));
 
-  ConstructQueryExportContext context10 = wrapper.createContextForRow(10);
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 10, SUBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 10, PREDICATE),
+              Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 10, OBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 10, SUBJECT), Optional("_:g10_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 10, PREDICATE),
+              Optional("_:g10_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 10, SUBJECT), Optional("_:g10_b"s));
 
-  EXPECT_THAT(evaluate(blankNodeA, context10, SUBJECT), Optional("_:u10_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context10, PREDICATE), Optional("_:u10_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context10, OBJECT), Optional("_:u10_a"s));
-  EXPECT_THAT(evaluate(blankNodeB, context10, SUBJECT), Optional("_:g10_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context10, PREDICATE), Optional("_:g10_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context10, SUBJECT), Optional("_:g10_b"s));
-
-  ConstructQueryExportContext context12 = wrapper.createContextForRow(7, 5);
-
-  EXPECT_THAT(evaluate(blankNodeA, context12, SUBJECT), Optional("_:u12_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context12, PREDICATE), Optional("_:u12_a"s));
-  EXPECT_THAT(evaluate(blankNodeA, context12, OBJECT), Optional("_:u12_a"s));
-  EXPECT_THAT(evaluate(blankNodeB, context12, SUBJECT), Optional("_:g12_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context12, PREDICATE), Optional("_:g12_b"s));
-  EXPECT_THAT(evaluate(blankNodeB, context12, SUBJECT), Optional("_:g12_b"s));
+  // rowOffset=5, row=7 → blankNodeRowId=12
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 7, SUBJECT, 5),
+              Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 7, PREDICATE, 5),
+              Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, wrapper, 7, OBJECT, 5),
+              Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 7, SUBJECT, 5),
+              Optional("_:g12_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 7, PREDICATE, 5),
+              Optional("_:g12_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, wrapper, 7, SUBJECT, 5),
+              Optional("_:g12_b"s));
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   BlankNode blankNode{false, "label"};
-  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedLabel = Optional("_:u42_label"s);
 
-  EXPECT_THAT(evaluate(blankNode, context, SUBJECT), expectedLabel);
-  EXPECT_THAT(evaluate(GraphTerm{blankNode}, context, SUBJECT), expectedLabel);
-  EXPECT_THAT(evaluate(GraphTerm{blankNode}, context, SUBJECT), expectedLabel);
+  EXPECT_THAT(evaluate(blankNode, wrapper, 42, SUBJECT), expectedLabel);
+  EXPECT_THAT(evaluate(GraphTerm{blankNode}, wrapper, 42, SUBJECT),
+              expectedLabel);
+  EXPECT_THAT(evaluate(GraphTerm{blankNode}, wrapper, 42, SUBJECT),
+              expectedLabel);
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
@@ -133,30 +151,26 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 
   std::string iriString{"<http://some-iri>"};
   Iri iri{iriString};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 0, OBJECT), Optional(iriString));
 
-  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
-
-  EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, wrapper, 1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Iri iri{"<http://some-iri>"};
-  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(evaluate(iri, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(iri, wrapper, 42, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iri}, wrapper, 42, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iri}, wrapper, 42, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
@@ -181,34 +195,33 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 
   std::string literalString{"true"};
   Literal literal{literalString};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_EQ(evaluate(literal, context0, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(literal, context0, PREDICATE), std::nullopt);
-  EXPECT_THAT(evaluate(literal, context0, OBJECT), Optional(literalString));
+  EXPECT_EQ(evaluate(literal, wrapper, 0, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(literal, wrapper, 0, PREDICATE), std::nullopt);
+  EXPECT_THAT(evaluate(literal, wrapper, 0, OBJECT), Optional(literalString));
 
-  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
-
-  EXPECT_EQ(evaluate(literal, context1337, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(literal, context1337, PREDICATE), std::nullopt);
-  EXPECT_THAT(evaluate(literal, context1337, OBJECT), Optional(literalString));
+  EXPECT_EQ(evaluate(literal, wrapper, 1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(literal, wrapper, 1337, PREDICATE), std::nullopt);
+  EXPECT_THAT(evaluate(literal, wrapper, 1337, OBJECT),
+              Optional(literalString));
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Literal literal{"some literal"};
-  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
-  EXPECT_EQ(evaluate(literal, context, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(literal, wrapper, 42, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(GraphTerm{literal}, wrapper, 42, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(GraphTerm{literal}, wrapper, 42, SUBJECT), std::nullopt);
 
   auto expectedString = Optional("some literal"s);
 
-  EXPECT_THAT(evaluate(literal, context, OBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);
+  EXPECT_THAT(evaluate(literal, wrapper, 42, OBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{literal}, wrapper, 42, OBJECT),
+              expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{literal}, wrapper, 42, OBJECT),
+              expectedString);
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
@@ -246,41 +259,33 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   wrapper.setIdTable(std::move(table));
 
   Variable variable{"?var"};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(variable, context0, SUBJECT), Optional("69"s));
-  EXPECT_THAT(evaluate(variable, context0, PREDICATE), Optional("69"s));
-  EXPECT_THAT(evaluate(variable, context0, OBJECT), Optional("69"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 0, SUBJECT), Optional("69"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 0, PREDICATE), Optional("69"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 0, OBJECT), Optional("69"s));
 
-  // Row offset should be ignored.
-  ConstructQueryExportContext context0b = wrapper.createContextForRow(0, 42);
+  // Row offset should be ignored for variables.
+  EXPECT_THAT(evaluate(variable, wrapper, 0, SUBJECT, 42), Optional("69"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 0, PREDICATE, 42), Optional("69"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 0, OBJECT, 42), Optional("69"s));
 
-  EXPECT_THAT(evaluate(variable, context0b, SUBJECT), Optional("69"s));
-  EXPECT_THAT(evaluate(variable, context0b, PREDICATE), Optional("69"s));
-  EXPECT_THAT(evaluate(variable, context0b, OBJECT), Optional("69"s));
-
-  ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
-
-  EXPECT_THAT(evaluate(variable, context1, SUBJECT), Optional("420"s));
-  EXPECT_THAT(evaluate(variable, context1, PREDICATE), Optional("420"s));
-  EXPECT_THAT(evaluate(variable, context1, OBJECT), Optional("420"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 1, SUBJECT), Optional("420"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 1, PREDICATE), Optional("420"s));
+  EXPECT_THAT(evaluate(variable, wrapper, 1, OBJECT), Optional("420"s));
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   auto wrapper = prepareContext();
 
   Variable variable{"?var"};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_EQ(evaluate(variable, context0, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(variable, context0, PREDICATE), std::nullopt);
-  EXPECT_EQ(evaluate(variable, context0, OBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 0, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 0, PREDICATE), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 0, OBJECT), std::nullopt);
 
-  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
-
-  EXPECT_EQ(evaluate(variable, context1337, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(variable, context1337, PREDICATE), std::nullopt);
-  EXPECT_EQ(evaluate(variable, context1337, OBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 1337, PREDICATE), std::nullopt);
+  EXPECT_EQ(evaluate(variable, wrapper, 1337, OBJECT), std::nullopt);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
@@ -294,15 +299,14 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   wrapper.setIdTable(std::move(table));
 
   Variable variableKnown{"?var"};
-  ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(variableKnown, context, SUBJECT), Optional("69"s));
-  EXPECT_THAT(evaluate(GraphTerm{variableKnown}, context, SUBJECT),
+  EXPECT_THAT(evaluate(variableKnown, wrapper, 0, SUBJECT), Optional("69"s));
+  EXPECT_THAT(evaluate(GraphTerm{variableKnown}, wrapper, 0, SUBJECT),
               Optional("69"s));
 
   Variable variableUnknown{"?unknownVar"};
 
-  EXPECT_EQ(evaluate(variableUnknown, context, SUBJECT), std::nullopt);
-  EXPECT_EQ(evaluate(GraphTerm{variableUnknown}, context, SUBJECT),
+  EXPECT_EQ(evaluate(variableUnknown, wrapper, 0, SUBJECT), std::nullopt);
+  EXPECT_EQ(evaluate(GraphTerm{variableUnknown}, wrapper, 0, SUBJECT),
             std::nullopt);
 }

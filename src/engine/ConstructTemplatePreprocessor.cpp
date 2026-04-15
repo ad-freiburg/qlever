@@ -11,8 +11,9 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/ConstructQueryEvaluator.h"
 #include "util/Algorithm.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 
 namespace qlever::constructExport {
@@ -20,16 +21,17 @@ namespace qlever::constructExport {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
-  return PrecomputedConstant{ConstructQueryEvaluator::evaluate(iri)};
+  return PrecomputedConstant{
+      std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr)};
 }
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
                                                  PositionInTriple role) {
-  auto opt = ConstructQueryEvaluator::evaluate(literal, role);
-  if (opt) {
-    return PrecomputedConstant{std::move(*opt)};
+  if (role == PositionInTriple::OBJECT) {
+    return PrecomputedConstant{
+        std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr)};
   }
   return std::nullopt;
 }
@@ -92,24 +94,28 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  ad_utility::HashSet<size_t> uniqueColumnsSet;
+  // Tracks which IdTable column indices have already been added to
+  // `result.uniqueVariableColumns_` to avoid duplicates.
+  ad_utility::HashSet<size_t> seenColumns;
 
   for (const auto& triple : templateTriples) {
     auto preprocessedTriple = preprocessTriple(triple, variableColumns);
     if (!preprocessedTriple) continue;
 
-    // Only collect variable column indices once the triple is known to be
-    // valid.
+    // Collect each unique IdTable column index.
+    // `PrecomputedVariable::columnIndex_` is kept as the original IdTable
+    // column index so that it matches the keys in
+    // `BatchEvaluationResult::variablesByColumn_`.
     for (const auto& term : *preprocessedTriple) {
-      if (auto* var = std::get_if<PrecomputedVariable>(&term)) {
-        uniqueColumnsSet.insert(var->columnIndex_);
+      if (const auto* var = std::get_if<PrecomputedVariable>(&term)) {
+        if (seenColumns.insert(var->columnIndex_).second) {
+          result.uniqueVariableColumns_.push_back(var->columnIndex_);
+        }
       }
     }
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 
-  result.uniqueVariableColumns_.assign(uniqueColumnsSet.begin(),
-                                       uniqueColumnsSet.end());
   return result;
 }
 
