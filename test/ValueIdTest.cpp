@@ -363,10 +363,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
-  auto str = LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "SomeValue"),
-      qec_->getLocalVocabContext()};
+  auto str = LocalVocabEntry::literalWithoutQuotes(
+      "SomeValue", qec_->getLocalVocabContext());
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");

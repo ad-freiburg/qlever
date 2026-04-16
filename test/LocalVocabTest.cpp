@@ -95,10 +95,8 @@ TEST(LocalVocab, constructionAndAccess) {
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
     std::string content{asStringViewUnsafe(testWords[i].getContent())};
-    auto illegalWord = LocalVocabEntry{
-        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-            content + "A"),
-        qec->getLocalVocabContext()};
+    auto illegalWord = LocalVocabEntry::literalWithoutQuotes(
+        content + "A", qec->getLocalVocabContext());
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
 

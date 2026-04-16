@@ -73,14 +73,12 @@ const auto& testContext() {
 
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri(
-          ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype)),
+      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype),
       testContext().qec->getLocalVocabContext()};
 };
 
 auto iriref = [](std::string_view s) {
-  return LocalVocabEntry{ad_utility::triple_component::LiteralOrIri(iri(s)),
-                         testContext().qec->getLocalVocabContext()};
+  return LocalVocabEntry{iri(s), testContext().qec->getLocalVocabContext()};
 };
 
 auto idOrLitOrStringVec =

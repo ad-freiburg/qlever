@@ -57,9 +57,8 @@ auto lit(std::string_view s) {
 Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
                             const std::string& word,
                             const LocalVocabContext& context) {
-  auto lit =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
-  auto value = localVocab.getIndexOrNullopt(LocalVocabEntry{lit, context});
+  auto value = localVocab.getIndexOrNullopt(
+      LocalVocabEntry::literalWithoutQuotes(lit, context));
   if (value.has_value()) {
     return ValueId::makeFromLocalVocabIndex(value.value());
   }

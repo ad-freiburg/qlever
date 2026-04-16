@@ -721,10 +721,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "a\"b\"c"),
-      index};
+  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 

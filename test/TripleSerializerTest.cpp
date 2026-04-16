@@ -33,11 +33,9 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                value),
-            qec->getLocalVocabContext()}));
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(value,
+                                              qec->getLocalVocabContext())));
   };
   std::vector<std::vector<Id>> ids;
 
@@ -154,11 +152,9 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                value),
-            qec->getLocalVocabContext()}));
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(value,
+                                              qec->getLocalVocabContext())));
   };
   std::vector<std::vector<Id>> ids;
 

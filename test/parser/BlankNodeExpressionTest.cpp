@@ -37,10 +37,10 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
 
   const auto& localVocabContext = context.qec->getLocalVocabContext();
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
-  vector.emplace_back(LocalVocabEntry{
-      LiteralOrIri{Literal::literalWithoutQuotes("Other")}, localVocabContext});
-  vector.emplace_back(LocalVocabEntry{
-      LiteralOrIri{Literal::literalWithoutQuotes("Test")}, localVocabContext});
+  vector.emplace_back(
+      LocalVocabEntry::literalWithoutQuotes("Other", localVocabContext));
+  vector.emplace_back(
+      LocalVocabEntry::literalWithoutQuotes("Test", localVocabContext));
   vector.emplace_back(
       LocalVocabEntry::fromIriref("<http://example.com>", localVocabContext));
 
