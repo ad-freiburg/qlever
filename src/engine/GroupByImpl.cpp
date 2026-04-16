@@ -1675,7 +1675,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, &result, evaluationContext, aggregationData,
-                    getIndex(), localVocab, allocator());
+                    getLocalVocabContext(), localVocab, allocator());
     }
   }
   runtimeInfo().addDetail("timeEvaluationAndResults",

@@ -407,7 +407,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
           });
     } else {
       auto [newLocalVocab, indices] = generateRandomLocalVocabAndIndicesVec(
-          qec->getIndex(), numInputRows, randomStringLength);
+          qec->getLocalVocabContext(), numInputRows, randomStringLength);
       localVocab = std::move(newLocalVocab);
 
       ql::ranges::transform(indices.begin(), indices.end(), otherValues.begin(),

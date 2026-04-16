@@ -82,7 +82,7 @@ EvaluationContext::getResultFromPreviousAggregate(const Variable& var) const {
 
 // _____________________________________________________________________________
 const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
-  return _qec.getIndex();
+  return _qec.getLocalVocabContext();
 }
 
 }  // namespace sparqlExpression

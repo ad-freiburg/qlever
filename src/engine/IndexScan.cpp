@@ -235,7 +235,7 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   if (it != prefilterVariablePairs.end()) {
     const auto& blockMetadataRanges =
         prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
+            it->first->evaluate(getLocalVocabContext(),
                                 getScanSpecAndBlocks().getBlockMetadataSpan(),
                                 colIndex),
             scanSpecAndBlocks_.blockMetadata_);
