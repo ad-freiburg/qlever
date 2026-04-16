@@ -34,7 +34,7 @@ class ActiveCounterGuard {
   ActiveCounterGuard& operator=(const ActiveCounterGuard&) = delete;
 
  private:
-  opentelemetry::metrics::UpDownCounter<int64_t>* counter_;
+  opentelemetry::metrics::UpDownCounter<int64_t>& counter_;
 };
 
 }  // namespace ad_utility::metrics

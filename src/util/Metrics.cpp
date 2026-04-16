@@ -58,10 +58,10 @@ void initialize(bool enabled, uint16_t port) {
 
 ActiveCounterGuard::ActiveCounterGuard(
     metrics_api::UpDownCounter<int64_t>& counter)
-    : counter_(&counter) {
-  counter_->Add(1);
+    : counter_(counter) {
+  counter_.Add(1);
 }
 
-ActiveCounterGuard::~ActiveCounterGuard() { counter_->Add(-1); }
+ActiveCounterGuard::~ActiveCounterGuard() { counter_.Add(-1); }
 
 }  // namespace ad_utility::metrics
