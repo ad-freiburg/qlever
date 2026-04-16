@@ -22,7 +22,7 @@ namespace qlever::constructExport {
 //
 // Two fundamentally different representations are used, distinguished by
 // whether `type` is null:
-// 1) type != nullptr: `str` represnents an encoded literal (directly encoded
+// 1) type != nullptr: `str` represents an encoded literal (directly encoded
 // into `ValueId`). `str` is the raw unquoted value (e.g. "42" for an xsd:int,
 // "3.14" for an xsd:decimal). `type` points to the compile-time XSD type string
 // constant (e.g. XSD_INT_TYPE).  Whether to emit the short form ("42") or the
