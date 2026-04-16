@@ -32,6 +32,7 @@ namespace qlever::constructExport {
 // `str` already holds the complete, ready-to-emit serialized
 // form (e.g. "<http://example.org/>", "\"hello\"@en"). No further formatting is
 // needed; the value is returned as-is for every format.
+// This is the legacy format returned by `ExportIds::idToStringAndType`.
 struct EvaluatedTermData {
   std::string str;
   const char* type;  // non-null iff encoded literal (case 1 above)
