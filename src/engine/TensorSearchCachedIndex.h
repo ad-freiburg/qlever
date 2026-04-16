@@ -30,11 +30,15 @@ class TensorSearchCachedIndex {
   std::optional<std::shared_ptr<faiss::IndexFlat>> quant_;
   std::optional<std::shared_ptr<faiss::IndexIVFFlat>> index_;
  public:
-  using FaissIndexToRow = ad_utility::HashMap<size_t, ValueId>;
+  using FaissIndexToRow = ad_utility::HashMap<size_t, size_t>;
 
-  using FaissResult = std::pair<size_t, float>;
+  struct FaissResult {
+      size_t idx;
+      float dist;
+      size_t row;
+  };
   std::vector<FaissResult> findNN(const ad_utility::TensorData& query,
-                                  size_t n) const;
+                                  size_t k) const;
 
  private:
   FaissIndexToRow tensorIndexToRow_;
@@ -63,7 +67,7 @@ class TensorSearchCachedIndex {
   // row index in the `IdTable` from which this index was created.
   // Note: For efficiency reasons (this might be called in a tight loop),
   // this function is inlined.
-  ValueId getRow(size_t faissIdx) const {
+  size_t getRow(size_t faissIdx) const {
     return tensorIndexToRow_.at(faissIdx);
   }
   const TensorSearchConfiguration& getConfig() const {return config_;}

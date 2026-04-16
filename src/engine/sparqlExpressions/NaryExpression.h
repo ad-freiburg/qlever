@@ -182,6 +182,8 @@ SparqlExpression::Ptr makeTensorSubtractExpression(SparqlExpression::Ptr child1,
                                                    SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorDotProductExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorEuclideanDistanceExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorCosineSimilarityExpression(SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorNormExpression(SparqlExpression::Ptr child);
 

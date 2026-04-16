@@ -102,8 +102,8 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
         index_ = std::make_shared<faiss::IndexIVFFlat>(
             quant_.value().get(), (int)tensorFirstDimShape, trees);
       }
+      tensorIndexToRow.emplace(row, tensorsToAdd.size());
       tensorsToAdd.emplace_back(row, tensorData.value());
-      tensorIndexToRow.emplace(row, id);
     }
   }
   // If we have an index, add all tensors to it. Otherwise, we can just return
@@ -153,7 +153,7 @@ std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKey(
 
 std::vector<TensorSearchCachedIndex::FaissResult>
 TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
-                                size_t n) const {
+                                size_t k) const {
   std::vector<FaissResult> result;
   auto firstDimShape =
       query.shape().size() > 0 ? (ssize_t)query.shape()[0] : -1;
@@ -168,15 +168,15 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
   if (!index_.has_value()) {
     return result;
   }
-  nnIndices.resize(n);
-  nnDistances.resize(n);
+  nnIndices.resize(k);
+  nnDistances.resize(k);
   //  If the user did not specify a search_k value, we use a default that is
   //  based on the number of items in the index based on a simple heuristic.
   size_t search_probe = config_.searchK_.value_or(
       std::min((size_t)std::sqrt(tensorIndexToRow_.size()),
                tensorIndexToRow_.size() - 1));
   index_.value()->nprobe = (int)search_probe;
-  index_.value()->search(1, query.tensorData().data(), n, nnDistances.data(),
+  index_.value()->search(1, query.tensorData().data(), k, nnDistances.data(),
                          nnIndices.data());
 
   AD_CORRECTNESS_CHECK(nnIndices.size() == nnDistances.size());
@@ -186,7 +186,9 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
       // number of indexed items is smaller than `n`. We ignore these results.
       continue;
     }
-    result.emplace_back(nnIndices[i], nnDistances[i]);
+    FaissResult res = {(size_t)nnIndices[i], nnDistances[i],
+                       tensorIndexToRow_.at(i)};
+    result.emplace_back(res);
   }
   return result;
 }

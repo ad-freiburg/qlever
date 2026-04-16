@@ -280,6 +280,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"subtract", &makeTensorSubtractExpression},
       {"cosineSimilarity", &makeTensorCosineSimilarityExpression},
       {"dotProduct", &makeTensorDotProductExpression},
+      {"euclideanDistance", &makeTensorEuclideanDistanceExpression},
   };
   if (checkPrefix(TENSOR_FUNCTION_PREFIX)) {
     if (ad_utility::contains(tensorUnaryFuncs, functionName)) {

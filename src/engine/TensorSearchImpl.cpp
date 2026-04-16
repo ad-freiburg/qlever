@@ -141,7 +141,7 @@ Result TensorSearchImpl::computeTensorSearchResultFaiss() {
         faissIndex->findNN(left.value(), params_.config_.maxResults_);
     for (const auto& nn : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
-                          i, nn.first, Id::makeFromDouble(nn.second));
+                          i, nn.row, Id::makeFromDouble(nn.dist));
     }
   }
 
@@ -182,17 +182,17 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
       distanceToRowLeft[j] = distance;
     }
     // sort indices by distance and take the closest ones
-    std::vector<std::pair<size_t, float>> sortedDistanceToRowLeft(
+    std::vector<std::pair<size_t, float>> sortedDistanceToRowRight(
         distanceToRowLeft.begin(), distanceToRowLeft.end());
-    std::sort(sortedDistanceToRowLeft.begin(), sortedDistanceToRowLeft.end(),
+    std::sort(sortedDistanceToRowRight.begin(), sortedDistanceToRowRight.end(),
               [](const auto& a, const auto& b) { return a.second > b.second; });
     for (size_t k = 0; k < std::min((size_t)params_.config_.maxResults_,
-                                    sortedDistanceToRowLeft.size());
+                                    sortedDistanceToRowRight.size());
          k++) {
       addResultTableEntry(
           &result, params_.idTableLeft_, params_.idTableRight_, i,
-          sortedDistanceToRowLeft[k].first,
-          Id::makeFromDouble(sortedDistanceToRowLeft[k].second));
+          sortedDistanceToRowRight[k].first,
+          Id::makeFromDouble(sortedDistanceToRowRight[k].second));
     }
   }
 

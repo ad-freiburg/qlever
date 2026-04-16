@@ -63,6 +63,10 @@ NARY_EXPRESSION(
     FV<NumericIdWrapper<BinaryFloatTensorFunctionImpl<&TensorData::dot>, true>,
        TensorValueGetter>);
 NARY_EXPRESSION(
+    TensorEuclideanDistanceExpression, 2,
+    FV<NumericIdWrapper<BinaryFloatTensorFunctionImpl<&TensorData::euclideanDistance>, true>,
+       TensorValueGetter>);
+NARY_EXPRESSION(
     TensorCosineSimilarityExpression, 2,
     FV<NumericIdWrapper<
            BinaryFloatTensorFunctionImpl<&TensorData::cosineSimilarity>, true>,
@@ -107,6 +111,10 @@ Expr makeTensorSubtractExpression(Expr child1, Expr child2) {
 Expr makeTensorDotProductExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorDotProductExpression>(std::move(child1),
                                                       std::move(child2));
+}
+Expr makeTensorEuclideanDistanceExpression(Expr child1, Expr child2) {
+  return std::make_unique<TensorEuclideanDistanceExpression>(std::move(child1),
+                                                            std::move(child2));
 }
 Expr makeTensorCosineSimilarityExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorCosineSimilarityExpression>(std::move(child1),

@@ -41,7 +41,8 @@ class TensorData {
   DType dtype() const { return dtype_; }
   static bool isBroadCastable(const TensorData& tensor1,
                               const TensorData& tensor2);
-  static std::optional<TensorData> fromLiteral(const std::string_view& literalString);
+  static std::optional<TensorData> fromLiteral(
+      const std::string_view& literalString);
   static TensorData parseFromString(const std::string_view& dataString);
   static TensorData parseFromJSON(rapidjson::Document& json,
                                   const std::string_view& dataString);
@@ -50,6 +51,8 @@ class TensorData {
 
   static float cosineSimilarity(const TensorData& tensor1,
                                 const TensorData& tensor2);
+  static float euclideanDistance(const TensorData& tensor1,
+                                 const TensorData& tensor2);
   static float norm(const TensorData& tensor);
 
   static float dot(const TensorData& tensor1, const TensorData& tensor2);
@@ -58,8 +61,7 @@ class TensorData {
                              const TensorData& tensor2);
 
   std::vector<uint8_t> serialize() const;
-  static TensorData deserialize(
-      const std::vector<uint8_t>& buffer);
+  static TensorData deserialize(const std::vector<uint8_t>& buffer);
 };
 }  // namespace ad_utility
 #ifdef QLEVER_CPP_17

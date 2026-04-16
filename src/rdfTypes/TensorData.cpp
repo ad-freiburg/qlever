@@ -217,6 +217,14 @@ float TensorData::cosineSimilarity(const TensorData& tensor1,
   if (norm1 == 0.0f || norm2 == 0.0f) return 0.0f;
   return inner / (norm1 * norm2);
 }
+float TensorData::euclideanDistance(const TensorData& tensor1,
+                                    const TensorData& tensor2) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+  }
+  auto diff = subtract(tensor1, tensor2);
+  return norm(diff);
+}
 
 float TensorData::norm(const TensorData& tensor) {
 #ifdef QLEVER_USE_TENSOR_BLAS
