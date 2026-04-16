@@ -100,9 +100,12 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
             (size_t)std::sqrt(restable.size()) + 1, restable.size() - 1));
         quant_ = fromDistanceAndSize(config_.dist_, (int)tensorFirstDimShape);
         index_ = std::make_shared<faiss::IndexIVFFlat>(
-            quant_.value().get(), (int)tensorFirstDimShape, trees);
+            quant_.value().get(), (int)tensorFirstDimShape, trees,
+            config_.dist_ == TensorDistanceAlgorithm::DOT_PRODUCT
+                ? faiss::METRIC_INNER_PRODUCT
+                : faiss::METRIC_L2);
       }
-      tensorIndexToRow.emplace(row, tensorsToAdd.size());
+      tensorIndexToRow.emplace(tensorsToAdd.size(), row);
       tensorsToAdd.emplace_back(row, tensorData.value());
     }
   }
@@ -114,12 +117,14 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
     // By default, the annoy indices are constructed lazily on the first query,
     // which then is slow.
     auto data = std::make_unique<float[]>(tensorsToAdd.size() * dimSize_);
+    auto ids = std::make_unique<faiss::idx_t[]>(tensorsToAdd.size());
     for (size_t i = 0; i < tensorsToAdd.size(); i++) {
       std::copy(tensorsToAdd[i].second.begin(), tensorsToAdd[i].second.end(),
                 data.get() + i * dimSize_);
+      ids[i] = (faiss::idx_t)tensorsToAdd[i].first;
     }
     index_.value()->train(tensorsToAdd.size(), data.get());
-    index_.value()->add(tensorsToAdd.size(), data.get());
+    index_.value()->add_with_ids(tensorsToAdd.size(), data.get(), ids.get());
   } else {
     AD_LOG_INFO << "No valid tensors found to build index.";
   }
@@ -187,7 +192,7 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
       continue;
     }
     FaissResult res = {(size_t)nnIndices[i], nnDistances[i],
-                       tensorIndexToRow_.at(i)};
+                       tensorIndexToRow_.at(nnIndices[i])};
     result.emplace_back(res);
   }
   return result;
