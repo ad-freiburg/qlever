@@ -80,21 +80,13 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
 // Result of preprocessing all CONSTRUCT template triples. Contains the
-// preprocessed triples and the unique variable column indices that need to be
-// evaluated for each row of the result-table.
+// preprocessed triples and the unique variable column indices (indices into the
+// `IdTable` that the variables in the construct template correspond to).
 struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
-  // The set of `IdTable` column indices that appear in the template triples,
-  // in order of first encounter. Each `PrecomputedVariable::columnIndex_`
-  // is the original `IdTable` column index and matches the keys in
-  // `BatchEvaluationResult::variablesByColumn_`.
+  // The dedupicated set of `IdTable` column indices that appear in the template
+  // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
-
-  // Returns the `IdTable` (the WHERE clause result table) column index for the
-  // given preprocessed variable.
-  size_t getIdTableColumnIndex(const PrecomputedVariable& var) const {
-    return uniqueVariableColumns_[var.columnIndex_];
-  }
 };
 
 // Result of instantiating a single template triple for a specific result table
