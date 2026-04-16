@@ -54,3 +54,33 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
 }
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
+    std::string s, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
+                                            const LocalVocabContext& ctx) {
+  return LocalVocabEntry{IriT::fromIriref(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::fromIrirefWithoutBrackets(
+    std::string_view view, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{IriT::fromIrirefWithoutBrackets(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
+    std::string_view view, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{LiteralT::literalWithoutQuotes(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
+    NormalizedStringView view, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
+}
