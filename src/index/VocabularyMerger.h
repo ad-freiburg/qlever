@@ -231,6 +231,8 @@ class VocabularyMerger {
       return entry_.iriOrLiteral();
     }
 
+    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
+
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
 
@@ -250,7 +252,7 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
+      void writeQueueWordsToIdMap(std::vector<QueueWord>& buffer,
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
@@ -261,12 +263,6 @@ class VocabularyMerger {
     lastTripleComponent_ = std::nullopt;
     idMaps_.clear();
   }
-
-  // Inner helper function for the parallel pipeline, which performs the actual
-  // write to the IdMaps. Format of argument is `<mapToWriteTo<internalId,
-  // globalId>>`.
-  void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
 // ____________________________________________________________________________
