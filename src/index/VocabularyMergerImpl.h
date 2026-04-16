@@ -80,9 +80,6 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
-  std::vector<QueueWord> sortedBuffer;
-  sortedBuffer.reserve(bufferSize_);
-
   // Some memory (that is hard to measure exactly) is used for the writing of
   // a batch of merged words, so we only give 80% of the total memory to the
   // merging. This is very approximate and should be investigated in more
@@ -93,21 +90,10 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
-  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
-    // Accumulate the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(currentWord));
-
-    if (sortedBuffer.size() >= bufferSize_) {
-      writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
-      sortedBuffer.clear();
-      sortedBuffer.reserve(bufferSize_);
-    }
+  for (std::vector<QueueWord>& currentWords : mergedWords) {
+    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
   }
 
-  // Handle remaining words in the buffer
-  if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
-  }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
   auto metaData = std::move(metaData_);
