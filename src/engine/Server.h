@@ -87,16 +87,22 @@ class Server {
   // server code.
   struct PlannedQuery {
    private:
+    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
+    // is destroyed after it. The `QueryExecutionTree` holds operations with
+    // raw `_executionContext` pointers to the QEC, and their lazy result
+    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
+    // last `shared_ptr` and is destroyed first, the QEC is freed while the
+    // operations still reference it.
+    std::shared_ptr<const QueryExecutionContext> qec_;
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
-    std::shared_ptr<const QueryExecutionContext> qec_;
 
    public:
     PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
                  const QueryExecutionContext& qec)
-        : parsedQuery_{std::move(pq)},
-          queryExecutionTree_{std::move(qet)},
-          qec_{qec.shared_from_this()} {
+        : qec_{qec.shared_from_this()},
+          parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)} {
       AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
     }
 

@@ -107,8 +107,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     // and advance the iterator. Return true if the range then is exhausted.
     auto push = [this, &sizeOfCurrentBlock, &exhausted](auto& itPair) {
       auto& it = itPair.first;
-      detail::pushSingleElement<moveElements, T, SizeGetter>(
-          buffer_, sizeOfCurrentBlock, *it);
+      pushSingleElement<moveElements, T, SizeGetter>(buffer_,
+                                                     sizeOfCurrentBlock, *it);
       ++it;
       return exhausted(itPair);
     };
@@ -188,8 +188,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     buffer_.reserve(blocksize_);
 
     while (it_ != range_.end()) {
-      detail::pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem,
-                                                             *it_);
+      pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem, *it_);
       ++it_;
       if (buffer_.size() >= blocksize_ || curMem >= maxMem_) {
         break;
@@ -215,7 +214,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 // recursion tree.
 CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
              typename ComparisonFuncT)(
-    requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
+    requires RandomAccessRangeOfRanges<R, T> CPP_and
         ValueSizeGetter<SizeGetter, T>
             CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
                                                  const T&, const T&>)
@@ -234,14 +233,14 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
   using ResultT = InputRangeTypeErased<std::vector<T>>;
 
   if (rangeOfRanges.size() == 1) {
-    return ResultT{detail::BatchToVector<T, moveElements, SizeGetter,
-                                         ql::ranges::range_value_t<R>>(
+    return ResultT{BatchToVector<T, moveElements, SizeGetter,
+                                 ql::ranges::range_value_t<R>>(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
   } else if (rangeOfRanges.size() == 2) {
     return ResultT{
-        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
-                                ql::ranges::range_value_t<R>,
-                                ql::ranges::range_value_t<R>, ComparisonFuncT>(
+        LazyBinaryMerge<T, moveElements, SizeGetter,
+                        ql::ranges::range_value_t<R>,
+                        ql::ranges::range_value_t<R>, ComparisonFuncT>(
             maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
             moveIf(rangeOfRanges[1]), comparison)};
   } else {
