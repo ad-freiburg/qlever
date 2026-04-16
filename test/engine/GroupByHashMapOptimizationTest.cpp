@@ -57,7 +57,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     using ad_utility::triple_component::LiteralOrIri;
     auto literal = LiteralOrIri::literalWithoutQuotes(string);
     return Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-        LocalVocabEntry{std::move(literal), qec_->getIndex()}));
+        LocalVocabEntry{std::move(literal), qec_->getLocalVocabContext()}));
   };
 };
 
@@ -88,7 +88,7 @@ TEST_F(GroupByHashMapOptimizationTest, AvgAggregationDataAggregatesCorrectly) {
   auto literal = LiteralOrIri::literalWithoutQuotes("non-numeric value");
   auto id =
       Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-          LocalVocabEntry{std::move(literal), qec_->getIndex()}));
+          LocalVocabEntry{std::move(literal), qec_->getLocalVocabContext()}));
   addValue(id);
   EXPECT_TRUE(calc().isUndefined());
 }
@@ -234,9 +234,9 @@ TEST_F(GroupByHashMapOptimizationTest,
     using ad_utility::triple_component::LiteralOrIri;
     auto literal =
         LiteralOrIri::literalWithoutQuotes(string, std::move(langTag));
-    addValue(
-        Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-            LocalVocabEntry{std::move(literal), qec_->getIndex()})));
+    addValue(Id::makeFromLocalVocabIndex(
+        localVocab_.getIndexAndAddIfNotContained(LocalVocabEntry{
+            std::move(literal), qec_->getLocalVocabContext()})));
   };
 
   data.reset();

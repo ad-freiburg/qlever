@@ -435,7 +435,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-      qec->getIndex()});
+      qec->getLocalVocabContext()});
   ValuesForTesting valuesForTesting{
       qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{}, std::move(localVocab)};

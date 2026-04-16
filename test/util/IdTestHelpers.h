@@ -42,7 +42,7 @@ inline auto LocalVocabId = [](std::integral auto v) {
   return Id::makeFromLocalVocabIndex(
       localVocab.wlock()->getIndexAndAddIfNotContained(
           LocalVocabEntry::literalWithoutQuotes(std::to_string(v),
-                                                qec->getIndex())));
+                                                qec->getLocalVocabContext())));
 };
 
 inline auto TextRecordId = [](const auto& t) {

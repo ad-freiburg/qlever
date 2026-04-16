@@ -179,9 +179,9 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
       [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
         std::this_thread::sleep_for(1ms);
         LocalVocab localVocab{};
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-            qec->getIndex()});
+        localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes("Test",
+                                                  qec->getLocalVocabContext()));
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
         co_yield {t2.clone(), LocalVocab{}};

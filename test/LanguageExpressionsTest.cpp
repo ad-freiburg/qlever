@@ -81,11 +81,11 @@ struct TestContext {
   };
 
   TestContext() {
-    const auto& index = qec->getIndex();
-    auto add = [this, &index](const std::string& s) {
+    const auto& localVocabContext = qec->getLocalVocabContext();
+    auto add = [this, &localVocabContext](const std::string& s) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromStringRepresentation(s, index)));
+              LocalVocabEntry::fromStringRepresentation(s, localVocabContext)));
     };
     locVocIri1 = add("<https:://some_example/iri>");
     locVocIri2 = add("<http://www.w3.org/2001/XMLSchema#integer>");
@@ -220,7 +220,7 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
   TestContext context;
   auto lve = [&context](const std::string& literal) {
-    return localVocabEntry(literal, context.qec->getIndex());
+    return localVocabEntry(literal, context.qec->getLocalVocabContext());
   };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       context,
@@ -233,7 +233,7 @@ TEST(LangExpression, testLangExpressionOnLiteralColumn) {
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
   TestContext context;
   auto lve = [&context](const std::string& literal) {
-    return localVocabEntry(literal, context.qec->getIndex());
+    return localVocabEntry(literal, context.qec->getLocalVocabContext());
   };
   testLanguageExpressions<getLangExpression, IdOrLocalVocabEntry>(
       context, {lve(""), lve(""), lve("de"), U, U, U, U, lve("")}, "?mixed");

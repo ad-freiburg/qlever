@@ -196,10 +196,10 @@ TEST(ExistsJoin, computeResult) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA =
-      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex());
-  LocalVocabEntry entryB =
-      LocalVocabEntry::fromStringRepresentation("\"b\"", qec->getIndex());
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -253,10 +253,10 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA =
-      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex());
-  LocalVocabEntry entryB =
-      LocalVocabEntry::fromStringRepresentation("\"b\"", qec->getIndex());
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);

@@ -25,8 +25,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
   LocalVocab localVocab;
   auto* qec = ad_utility::testing::getQec();
-  localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<bliBlaBlubb>", qec->getIndex()));
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      "<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -138,7 +138,7 @@ TEST(NamedResultCache, E2E) {
       ad_utility::triple_component::LiteralOrIri::iriref("<notInVocab>");
   auto notInVocab =
       Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{litOrIri, qec->getIndex()}));
+          LocalVocabEntry{litOrIri, qec->getLocalVocabContext()}));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTable(), matchesIdTable(expected));

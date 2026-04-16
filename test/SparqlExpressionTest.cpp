@@ -75,12 +75,12 @@ auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri(
           ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype)),
-      testContext().qec->getIndex()};
+      testContext().qec->getLocalVocabContext()};
 };
 
 auto iriref = [](std::string_view s) {
   return LocalVocabEntry{ad_utility::triple_component::LiteralOrIri(iri(s)),
-                         testContext().qec->getIndex()};
+                         testContext().qec->getLocalVocabContext()};
 };
 
 auto idOrLitOrStringVec =
@@ -781,7 +781,7 @@ TEST(SparqlExpression, stringOperators) {
                                                   dateDate, dateLYear, T, F},
                            IdOrLocalVocabEntry{LocalVocabEntry{
                                ad_utility::triple_component::Iri{},
-                               testContext().qec->getIndex()}}});
+                               testContext().qec->getLocalVocabContext()}}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -806,7 +806,7 @@ TEST(SparqlExpression, stringOperators) {
               lit("\t\n\r")},
           IdOrLocalVocabEntry{
               LocalVocabEntry{ad_utility::triple_component::Iri{},
-                              testContext().qec->getIndex()}}});
+                              testContext().qec->getLocalVocabContext()}}});
 
   // test with base iri
   checkIriOrUri(

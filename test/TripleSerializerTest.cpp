@@ -23,7 +23,7 @@ TEST(TripleSerializer, simpleExample) {
   ad_utility::serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getIndex());
+      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
   EXPECT_EQ(idsOut, ids);
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
 }
@@ -37,7 +37,7 @@ TEST(TripleSerializer, localVocabIsRemapped) {
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
             ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
                 value),
-            qec->getIndex()}));
+            qec->getLocalVocabContext()}));
   };
   std::vector<std::vector<Id>> ids;
 
@@ -46,7 +46,7 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   ad_utility::serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getIndex());
+      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
   EXPECT_EQ(idsOut, ids);
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
   EXPECT_THAT(localVocab.getAllWordsForTesting(),
@@ -73,7 +73,7 @@ TEST(TripleSerializer, blankNodesRemapper) {
   ad_utility::serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getIndex());
+      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
   // Blank nodes are now preserved (not remapped).
   EXPECT_EQ(ids, idsOut);
 
@@ -158,7 +158,7 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
             ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
                 value),
-            qec->getIndex()}));
+            qec->getLocalVocabContext()}));
   };
   std::vector<std::vector<Id>> ids;
 
@@ -173,8 +173,8 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::move(writer).data()};
 
-  auto [localVocabOut, mapping] =
-      ad_utility::detail::deserializeLocalVocab(reader, qec->getIndex());
+  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+      reader, qec->getLocalVocabContext());
   auto fromMapping = [&]() {
     return ::ranges::to<std::vector>(
         mapping | ql::views::values |
@@ -220,7 +220,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   LocalVocab localVocab;
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ad_utility::deserializeIds(tmpFile, qec->getIndex()),
+      ad_utility::deserializeIds(tmpFile, qec->getLocalVocabContext()),
       AllOf(HasSubstr(tmpFile.generic_string()),
             HasSubstr("cannot be opened for reading"),
             HasSubstr("(Permission denied)")),

@@ -59,7 +59,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   LocalVocab localVocab;
   [[maybe_unused]] auto local =
       localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-          "<http://example.org/test>", qec_->getIndex()));
+          "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -125,14 +125,14 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
-  const auto& index = qec_->getIndex();
+  const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/1>", index));
+      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/2>", index));
+      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
@@ -159,7 +159,7 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              qec_->getIndex());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
 
@@ -194,7 +194,7 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              qec_->getIndex());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);

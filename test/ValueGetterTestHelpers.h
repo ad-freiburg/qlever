@@ -235,8 +235,8 @@ class ValueGetterTester {
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(literal),
-                                                  testContext.qec->getIndex()));
+        LocalVocabEntry::fromStringRepresentation(
+            std::move(literal), testContext.qec->getLocalVocabContext()));
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
     EXPECT_THAT(res, expected);

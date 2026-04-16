@@ -87,7 +87,7 @@ TEST(ExternalValues, computeResult) {
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      LocalVocabEntry::fromIriref("<y>", testQec->getIndex()));
+      LocalVocabEntry::fromIriref("<y>", testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

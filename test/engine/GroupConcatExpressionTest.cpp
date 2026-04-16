@@ -56,12 +56,13 @@ void expectLiteralsAreConcatenatedTo(
 
   for (const auto& inputLiteral : literals) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{inputLiteral, qec->getIndex()});
+        LocalVocabEntry{inputLiteral, qec->getLocalVocabContext()});
     input.push_back({Id::makeFromLocalVocabIndex(idx)});
   }
-  expectIdsAreConcatenatedTo(
-      qec, distinct, input,
-      IdOrLocalVocabEntry{LocalVocabEntry{literal, qec->getIndex()}}, location);
+  expectIdsAreConcatenatedTo(qec, distinct, input,
+                             IdOrLocalVocabEntry{LocalVocabEntry{
+                                 literal, qec->getLocalVocabContext()}},
+                             location);
 }
 
 auto lit = [](std::string s) {
@@ -104,7 +105,8 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
                              ExpressionResult{Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"a\"", qec->getIndex()));
+      LocalVocabEntry::fromStringRepresentation("\"a\"",
+                                                qec->getLocalVocabContext()));
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

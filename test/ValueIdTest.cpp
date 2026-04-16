@@ -366,7 +366,7 @@ TEST_F(ValueIdTest, toDebugString) {
   auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
           "SomeValue"),
-      qec_->getIndex()};
+      qec_->getLocalVocabContext()};
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
@@ -416,7 +416,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a LocalVocabEntry with the same IRI
   auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri, qec_->getIndex()};
+  LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
   // The encoded ID should compare equal to the LocalVocabEntry ID
@@ -431,7 +431,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   auto encodedId2 = *encodedIdOpt2;
   auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2, qec_->getIndex()};
+  LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 
   EXPECT_EQ(encodedId2, localVocabId2)

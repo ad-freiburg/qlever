@@ -161,7 +161,7 @@ TEST_F(LoadTest, computeResult) {
               auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
                                     : LiteralOrIri{field.getIri()},
-                  testQec->getIndex()});
+                  testQec->getLocalVocabContext()});
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }

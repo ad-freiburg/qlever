@@ -52,7 +52,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   input.reserve(inputAsVector.size());
   for (auto& value : inputAsVector) {
     input.push_back(sparqlExpression::detail::promoteToLocalVocabEntry(
-        std::move(value), t.context._qec.getIndex()));
+        std::move(value), t.context._qec.getLocalVocabContext()));
   }
   auto d = std::make_unique<SingleUseExpression>(input.clone());
   t.context._endIndex = input.size();
@@ -61,7 +61,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   auto res = std::get<sparqlExpression::detail::PromoteToLocalVocabEntry<U>>(
       resAsVariant);
   EXPECT_EQ(res, sparqlExpression::detail::promoteToLocalVocabEntry(
-                     expectedResult, t.context._qec.getIndex()));
+                     expectedResult, t.context._qec.getLocalVocabContext()));
 };
 
 // Same as `testAggregate` above, but the input is specified as a variable.
@@ -166,10 +166,12 @@ TEST(AggregateExpression, min) {
   // IDs of one word from the vocabulary ("alpha") and two words
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
-  const auto& index = t.qec->getIndex();
-  LocalVocabEntry l1 = LocalVocabEntry::literalWithoutQuotes("alx", index);
+  const auto& localVocabContext = t.qec->getLocalVocabContext();
+  LocalVocabEntry l1 =
+      LocalVocabEntry::literalWithoutQuotes("alx", localVocabContext);
   Id alx = Id::makeFromLocalVocabIndex(&l1);
-  LocalVocabEntry l2 = LocalVocabEntry::literalWithoutQuotes("aalx", index);
+  LocalVocabEntry l2 =
+      LocalVocabEntry::literalWithoutQuotes("aalx", localVocabContext);
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
@@ -195,8 +197,8 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
-  LocalVocabEntry l =
-      LocalVocabEntry::literalWithoutQuotes("alx", t.qec->getIndex());
+  LocalVocabEntry l = LocalVocabEntry::literalWithoutQuotes(
+      "alx", t.qec->getLocalVocabContext());
   Id alx = Id::makeFromLocalVocabIndex(&l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are

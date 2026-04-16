@@ -58,7 +58,8 @@ auto lit(std::string_view s) {
 TEST(LocalVocab, constructionAndAccess) {
   auto* qec = ad_utility::testing::getQec();
   // Test collection of words.
-  TestWords testWords = getTestCollectionOfWords(1000, qec->getIndex());
+  TestWords testWords =
+      getTestCollectionOfWords(1000, qec->getLocalVocabContext());
 
   // Create empty local vocabulary.
   LocalVocab localVocab;
@@ -97,7 +98,7 @@ TEST(LocalVocab, constructionAndAccess) {
     auto illegalWord = LocalVocabEntry{
         ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
             content + "A"),
-        qec->getIndex()};
+        qec->getLocalVocabContext()};
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
 
@@ -123,7 +124,8 @@ TEST(LocalVocab, clone) {
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
   std::vector<LocalVocabIndex> indices;
-  auto inputWords = getTestCollectionOfWords(localVocabSize, qec->getIndex());
+  auto inputWords =
+      getTestCollectionOfWords(localVocabSize, qec->getLocalVocabContext());
   for (const auto& word : inputWords) {
     indices.push_back(localVocabOriginal.getIndexAndAddIfNotContained(word));
   }
@@ -160,18 +162,18 @@ TEST(LocalVocab, merge) {
   LocalVocab vocA;
   LocalVocab vocB;
   auto* qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
     return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
   };
-  indices.push_back(
-      vocA.getIndexAndAddIfNotContained(LocalVocabEntry{lit("oneA"), index}));
-  indices.push_back(
-      vocA.getIndexAndAddIfNotContained(LocalVocabEntry{lit("twoA"), index}));
-  indices.push_back(
-      vocA.getIndexAndAddIfNotContained(LocalVocabEntry{lit("oneB"), index}));
-  indices.push_back(
-      vocA.getIndexAndAddIfNotContained(LocalVocabEntry{lit("twoB"), index}));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      LocalVocabEntry{lit("oneA"), localVocabContext}));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      LocalVocabEntry{lit("twoA"), localVocabContext}));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      LocalVocabEntry{lit("oneB"), localVocabContext}));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      LocalVocabEntry{lit("twoB"), localVocabContext}));
 
   // Clone it and test that the clone contains the same words.
   auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
@@ -229,13 +231,13 @@ TEST(LocalVocab, propagation) {
           ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
     TestWords expectedWords;
-    const auto& index = testQec->getIndex();
-    auto toLitOrIri = [&index](const auto& word) {
+    const auto& localVocabContext = testQec->getLocalVocabContext();
+    auto toLitOrIri = [&localVocabContext](const auto& word) {
       using namespace ad_utility::triple_component;
       if (ql::starts_with(word, '<')) {
-        return LocalVocabEntry::fromIriref(word, index);
+        return LocalVocabEntry::fromIriref(word, localVocabContext);
       } else {
-        return LocalVocabEntry::literalWithoutQuotes(word, index);
+        return LocalVocabEntry::literalWithoutQuotes(word, localVocabContext);
       }
     };
     ql::ranges::transform(expectedWordsAsStrings,
@@ -438,10 +440,10 @@ TEST(LocalVocab, getBlankNodeIndex) {
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry::literalWithoutQuotes("test", index));
+      LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
@@ -458,10 +460,10 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   using ad_utility::triple_component::LiteralOrIri;
   using ::testing::UnorderedElementsAre;
   auto* qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry::literalWithoutQuotes("test", index));
+      LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();
@@ -487,35 +489,39 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   {
     LocalVocab original;
-    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index});
+    original.getIndexAndAddIfNotContained(
+        LocalVocabEntry{literal, localVocabContext});
     (void)original.clone();
-    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal, index}),
-              std::nullopt);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index}),
-        ad_utility::Exception);
+    EXPECT_NE(
+        original.getIndexOrNullopt(LocalVocabEntry{literal, localVocabContext}),
+        std::nullopt);
     EXPECT_THROW(original.getIndexAndAddIfNotContained(
-                     LocalVocabEntry{otherLiteral, index}),
+                     LocalVocabEntry{literal, localVocabContext}),
+                 ad_utility::Exception);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     LocalVocabEntry{otherLiteral, localVocabContext}),
                  ad_utility::Exception);
     EXPECT_EQ(original.size(), 1);
   }
   {
     LocalVocab original;
     LocalVocab other;
-    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index});
+    original.getIndexAndAddIfNotContained(
+        LocalVocabEntry{literal, localVocabContext});
     other.mergeWith(original);
-    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal, index}),
-              std::nullopt);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index}),
-        ad_utility::Exception);
+    EXPECT_NE(
+        original.getIndexOrNullopt(LocalVocabEntry{literal, localVocabContext}),
+        std::nullopt);
     EXPECT_THROW(original.getIndexAndAddIfNotContained(
-                     LocalVocabEntry{otherLiteral, index}),
+                     LocalVocabEntry{literal, localVocabContext}),
+                 ad_utility::Exception);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     LocalVocabEntry{otherLiteral, localVocabContext}),
                  ad_utility::Exception);
     EXPECT_EQ(original.size(), 1);
   }
@@ -525,7 +531,7 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
-  const auto& index = qec->getIndex();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;
@@ -533,20 +539,21 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   LocalVocabIndex encodedOther;
   {
     LocalVocab original;
-    encodedTest =
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index});
+    encodedTest = original.getIndexAndAddIfNotContained(
+        LocalVocabEntry{literal, localVocabContext});
     extender = original.getLifetimeExtender();
 
-    EXPECT_EQ(original.getIndexOrNullopt(LocalVocabEntry{literal, index}),
-              std::optional{encodedTest});
-
     EXPECT_EQ(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal, index}),
-        encodedTest);
+        original.getIndexOrNullopt(LocalVocabEntry{literal, localVocabContext}),
+        std::optional{encodedTest});
+
+    EXPECT_EQ(original.getIndexAndAddIfNotContained(
+                  LocalVocabEntry{literal, localVocabContext}),
+              encodedTest);
     EXPECT_EQ(original.size(), 1);
 
     encodedOther = original.getIndexAndAddIfNotContained(
-        LocalVocabEntry{otherLiteral, index});
+        LocalVocabEntry{otherLiteral, localVocabContext});
     EXPECT_EQ(original.size(), 2);
   }
   // The `extender` keeps the `LocalVocabIndex`es valid even though the

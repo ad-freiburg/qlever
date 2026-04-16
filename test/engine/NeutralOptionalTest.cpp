@@ -279,7 +279,8 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test\"", qec->getIndex()));
+      LocalVocabEntry::fromStringRepresentation("\"Test\"",
+                                                qec->getLocalVocabContext()));
 
   {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(

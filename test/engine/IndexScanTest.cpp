@@ -980,7 +980,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getIndex()});
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1167,11 +1167,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
-  const auto& index = qec_->getIndex();
+  const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), index});
+      LocalVocabEntry{iri("<e>"), localVocabContext});
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), index});
+      LocalVocabEntry{iri("<g>"), localVocabContext});
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1788,8 +1788,9 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
 
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
-    return makePrefilterVec(pr(
-        lt(LocalVocabEntry::fromIriref("<s2>", qec->getIndex())), Var{"?x"}));
+    return makePrefilterVec(
+        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+           Var{"?x"}));
   };
 
   // Test with different variable combinations
@@ -1891,7 +1892,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getIndex()});
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),

@@ -352,16 +352,16 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test1\"", qec->getIndex()));
+  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test2\"", qec->getIndex()));
+  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));

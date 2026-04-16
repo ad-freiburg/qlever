@@ -1480,9 +1480,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   const auto& table = result->idTable();
 
   auto getId = makeGetId(qec->getIndex());
-  const auto& index = qec->getIndex();
-  auto getLocalVocabId = [&result, &index](const std::string& word) {
-    return getLocalVocabIdFromVocab(result->localVocab(), word, index);
+  const auto& localVocabContext = qec->getLocalVocabContext();
+  auto getLocalVocabId = [&result,
+                          &localVocabContext](const std::string& word) {
+    return getLocalVocabIdFromVocab(result->localVocab(), word,
+                                    localVocabContext);
   };
 
   auto expected = makeIdTableFromVector(
@@ -1526,7 +1528,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   auto d = DoubleId;
   auto getLocalVocabId = [&result, qec](const std::string& word) {
     return getLocalVocabIdFromVocab(result->localVocab(), word,
-                                    qec->getIndex());
+                                    qec->getLocalVocabContext());
   };
 
   auto expected = makeIdTableFromVector(
@@ -2535,11 +2537,13 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   ASSERT_EQ(resultPairs.size(), 2);
   const auto& [idTable0, localVocab0] = resultPairs.at(0);
   EXPECT_EQ(localVocab0.size(), 2);
-  auto localVocabIndex0 = localVocab0.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"1\"", qec->getIndex()));
+  auto localVocabIndex0 =
+      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"1\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex0.has_value());
-  auto localVocabIndex1 = localVocab0.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"2\"", qec->getIndex()));
+  auto localVocabIndex1 =
+      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"2\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex1.has_value());
   EXPECT_EQ(idTable0,
             makeIdTableFromVector(
@@ -2550,8 +2554,9 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
 
   const auto& [idTable1, localVocab1] = resultPairs.at(1);
   EXPECT_EQ(localVocab1.size(), 1);
-  auto localVocabIndex2 = localVocab1.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"3\"", qec->getIndex()));
+  auto localVocabIndex2 =
+      localVocab1.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"3\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex2.has_value());
   EXPECT_EQ(idTable1,
             makeIdTableFromVector(
@@ -2568,8 +2573,8 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
   LocalVocab dummy{};
-  dummy.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"dummy\"", qec->getIndex()));
+  dummy.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{Variable{"?x"}}, true,
@@ -2601,7 +2606,8 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
     EXPECT_TRUE(
         localVocab
             .getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
-                std::string{expected.at(expectedIndex)}, qec->getIndex()))
+                std::string{expected.at(expectedIndex)},
+                qec->getLocalVocabContext()))
             .has_value());
     expectedIndex++;
   }
@@ -2822,8 +2828,8 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   // Acquire the local vocab index for a given string representation if present.
   auto makeEntry = [this](std::string string, const LocalVocab& localVocab) {
     return localVocab.getIndexOrNullopt(
-        LocalVocabEntry::fromStringRepresentation(std::move(string),
-                                                  qec_->getIndex()));
+        LocalVocabEntry::fromStringRepresentation(
+            std::move(string), qec_->getLocalVocabContext()));
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {

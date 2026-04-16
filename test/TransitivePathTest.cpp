@@ -1030,9 +1030,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   // the cache (Currently the indexes used for testing are `static` which should
   // be changed in the future).
   LocalVocab localVocab;
-  auto id = Id::makeFromLocalVocabIndex(
-      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-          Literal::literalWithoutQuotes(literal), qec->getIndex()}));
+  auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::literalWithoutQuotes(literal,
+                                            qec->getLocalVocabContext())));
   auto sub = makeIdTableFromVector({
       {id, id},
   });
