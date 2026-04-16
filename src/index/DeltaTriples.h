@@ -299,15 +299,20 @@ class DeltaTriples {
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Fill this `DeltaTriples` instance with the difference between `oldState`
-  // and `newState` and map the `Id`s to their new versions using the given
-  // `idMapping`.
+  // and `newState` from an "old" index and map the `Id`s to their new versions
+  // using the given `idMapping` to match the "new" index associated with this
+  // instance of `DeltaTriples`.
   void fillFromOldDeltaTriples(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
-      const std::tuple<qlever::indexRebuilder::InsertionPositions,
-                       qlever::indexRebuilder::LocalVocabMapping,
-                       qlever::indexRebuilder::BlankNodeBlocks>& idMapping,
+      const qlever::indexRebuilder::MappingInformation& idMapping,
       uint64_t minBlankNodeIndex, CancellationHandle cancellationHandle,
       ad_utility::timer::TimeTracer& tracer);
+
+ private:
+  // Helper function to perform the actual `Id` remapping where applicable.
+  static void remapId(
+      const qlever::indexRebuilder::MappingInformation& idMapping,
+      uint64_t minBlankNodeIndex, Id& id);
 #endif
 
  private:
@@ -361,11 +366,30 @@ class DeltaTriples {
   void eraseTripleInAllPermutations(
       typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
 
+  class DeltaTripleDifference {
+    std::array<std::vector<IdTriple<0>>, 4> data_;
+
+   public:
+    DeltaTripleDifference(std::vector<IdTriple<0>> inserted,
+                          std::vector<IdTriple<0>> deleted,
+                          std::vector<IdTriple<0>> internalInserted,
+                          std::vector<IdTriple<0>> internalDeleted);
+
+    // Run `func` on all `Id` references contained in `data_`.
+    template <typename Func>
+    void remapIds(Func func);
+
+    // Provides access to the corresponding entry in `data_`.
+    template <bool isInternal, bool insertOrDelete>
+    std::vector<IdTriple<0>>& triples();
+  };
+
   // Compute which delta triples have been added since `oldState`.
-  static std::array<std::vector<IdTriple<0>>, 4> computeDeltaTripleDifference(
+  static DeltaTripleDifference computeDeltaTripleDifference(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
 
   friend class DeltaTriplesManager;
+  FRIEND_TEST(DeltaTriplesTest, remapId);
 };
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding

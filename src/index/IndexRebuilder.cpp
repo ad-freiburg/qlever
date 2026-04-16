@@ -343,9 +343,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 
 // _____________________________________________________________________________
 namespace qlever {
-std::tuple<indexRebuilder::InsertionPositions,
-           indexRebuilder::LocalVocabMapping, indexRebuilder::BlankNodeBlocks>
-materializeToIndex(
+indexRebuilder::MappingInformation materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
@@ -367,7 +365,7 @@ materializeToIndex(
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  const auto& [insertionPositions, localVocabMapping] =
+  auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;

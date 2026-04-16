@@ -1049,7 +1049,87 @@ TEST_F(DeltaTriplesTest, vacuum) {
   EXPECT_EQ(result["internal"]["totalKept"], 0);
 }
 
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, remapId) {
+  qlever::indexRebuilder::MappingInformation idMapping;
+  LocalVocabEntry entry{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "<test>")};
+  Id id;
+
+  id = Id::makeFromInt(69);
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromInt(69));
+
+  id = Id::makeFromLocalVocabIndex(&entry);
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromLocalVocabIndex(&entry));
+
+  id = Id::makeFromLocalVocabIndex(&entry);
+  idMapping.localVocabMapping_.emplace(id.getBits(), Id::makeFromInt(42));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromInt(42));
+
+  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337)));
+
+  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337));
+  idMapping.blankNodeBlocks_.push_back(1);
+  DeltaTriples::remapId(idMapping, 330, id);
+  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(337)));
+
+  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(37));
+  DeltaTriples::remapId(idMapping, 330, id);
+  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(37)));
+
+  id = Id::makeFromVocabIndex(VocabIndex::make(10));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(10)));
+
+  id = Id::makeFromVocabIndex(VocabIndex::make(10));
+  idMapping.insertionPositions_.push_back(VocabIndex::make(5));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(11)));
+
+  id = Id::makeFromVocabIndex(VocabIndex::make(5));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(6)));
+
+  id = Id::makeFromVocabIndex(VocabIndex::make(4));
+  DeltaTriples::remapId(idMapping, 0, id);
+  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(4)));
+}
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+namespace {
+qlever::indexRebuilder::MappingInformation simulateRebuild(
+    const std::vector<LocalVocabIndex>& originalVocab,
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        blankNodeBlocks) {
+  qlever::indexRebuilder::MappingInformation idMapping;
+  Id firstNewEntry =
+      Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
+  Id secondNewEntry =
+      Id::fromBits(originalVocab.at(1)->positionInVocab().upperBound_.get());
+
+  idMapping.insertionPositions_.push_back(firstNewEntry.getVocabIndex());
+  idMapping.insertionPositions_.push_back(secondNewEntry.getVocabIndex());
+  ql::ranges::sort(idMapping.insertionPositions_);
+  idMapping.localVocabMapping_.emplace(
+      Id::makeFromLocalVocabIndex(originalVocab.at(0)).getBits(),
+      firstNewEntry);
+  idMapping.localVocabMapping_.emplace(
+      Id::makeFromLocalVocabIndex(originalVocab.at(1)).getBits(),
+      secondNewEntry);
+  idMapping.blankNodeBlocks_.emplace_back(
+      blankNodeBlocks.at(0).blockIndices_.at(0));
+  return idMapping;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
   auto cancellationHandle =
@@ -1098,27 +1178,8 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
   // existing one suffices.
   DeltaTriples newDeltaTriples(testQec->getIndex());
   ad_utility::timer::TimeTracer tracer{"testFillFromOldDeltaTriples"};
-  std::tuple<qlever::indexRebuilder::InsertionPositions,
-             qlever::indexRebuilder::LocalVocabMapping,
-             qlever::indexRebuilder::BlankNodeBlocks>
-      idMapping;
-
-  Id firstNewEntry =
-      Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
-  Id secondNewEntry =
-      Id::fromBits(originalVocab.at(1)->positionInVocab().upperBound_.get());
-
-  std::get<0>(idMapping).push_back(firstNewEntry.getVocabIndex());
-  std::get<0>(idMapping).push_back(secondNewEntry.getVocabIndex());
-  ql::ranges::sort(std::get<0>(idMapping));
-  std::get<1>(idMapping).emplace(
-      Id::makeFromLocalVocabIndex(originalVocab.at(0)).getBits(),
-      firstNewEntry);
-  std::get<1>(idMapping).emplace(
-      Id::makeFromLocalVocabIndex(originalVocab.at(1)).getBits(),
-      secondNewEntry);
-  std::get<2>(idMapping).emplace_back(
-      blankNodeBlocks.at(0).blockIndices_.at(0));
+  qlever::indexRebuilder::MappingInformation idMapping =
+      simulateRebuild(originalVocab, blankNodeBlocks);
 
   newDeltaTriples.fillFromOldDeltaTriples(
       *originalSnapshot, *newSnapshot, idMapping,

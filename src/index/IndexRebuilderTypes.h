@@ -21,6 +21,12 @@ using OwnedBlocks = std::vector<OwnedBlocksEntry>;
 using InsertionPositions = std::vector<VocabIndex>;
 using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
 using BlankNodeBlocks = std::vector<uint64_t>;
+
+struct MappingInformation {
+  InsertionPositions insertionPositions_;
+  LocalVocabMapping localVocabMapping_;
+  BlankNodeBlocks blankNodeBlocks_;
+};
 }  // namespace qlever::indexRebuilder
 
 #endif  // QLEVER_SRC_INDEX_INDEXREBUILDERTYPES_H
