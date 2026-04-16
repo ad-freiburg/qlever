@@ -45,7 +45,9 @@ ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
+  decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx)
+                           .subspan(ctx.firstRow_, ctx.numRows());
+
   const size_t numRows = ctx.numRows();
 
   // Build a `(Id, rowInBatch)` index vector and sort by `Id`. This ensures
@@ -55,7 +57,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   std::vector<std::pair<Id, size_t>> sortedIndices;
   sortedIndices.reserve(numRows);
   for (size_t i = 0; i < numRows; ++i) {
-    sortedIndices.emplace_back(col[ctx.firstRow_ + i], i);
+    sortedIndices.emplace_back(col[i], i);
   }
   ql::ranges::sort(sortedIndices, [](const auto& a, const auto& b) {
     return a.first < b.first;
