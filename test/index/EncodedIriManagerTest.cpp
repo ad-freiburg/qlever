@@ -157,6 +157,7 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
+// _____________________________________________________________________________
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
   auto testNumber = [](uint64_t number, ad_utility::source_location l =
                                             AD_CURRENT_SOURCE_LOC()) {
@@ -173,6 +174,39 @@ TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
     testNumber(intGenerator());
   }
 }
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, getIndexOfPrefix) {
+  {
+    auto manager = EncodedIriManager();
+    // No custom prefixes so only need to test the hardcoded ones.
+    for (const auto& [i, fixedPrefix] :
+         ranges::views::enumerate(AlwaysOnPrefixes::value)) {
+      EXPECT_THAT(manager.getIndexOfPrefix(fixedPrefix),
+                  testing::Optional(testing::Eq(i)));
+    }
+    EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
+                testing::Eq(std::nullopt));
+  }
+  {
+    std::vector<std::string> customPrefixes = {"http://qlever.dev"};
+    auto manager = EncodedIriManager(customPrefixes);
+    // Create a list of all prefixes, including the hardcoded ones, for testing
+    // the function.
+    auto allPrefixes = customPrefixes;
+    for (auto prefix : AlwaysOnPrefixes::value) {
+      allPrefixes.emplace_back(prefix);
+    }
+    ql::ranges::sort(allPrefixes);
+    for (const auto& [i, prefix] : ranges::views::enumerate(allPrefixes)) {
+      EXPECT_THAT(manager.getIndexOfPrefix(prefix),
+                  testing::Optional(testing::Eq(i)));
+    }
+    EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
+                testing::Eq(std::nullopt));
+  }
+}
+
 // _____________________________________________________________________________
 struct TestHardcodedPrefixes {
   static constexpr std::array<std::string_view, 1> value = {
