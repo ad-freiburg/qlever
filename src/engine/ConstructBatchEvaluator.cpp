@@ -50,25 +50,21 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
 
   const size_t numRows = ctx.numRows();
 
-  // Build a `(Id, rowInBatch)` index vector and sort by `Id`. This ensures
+  // Build a `(rowInBatch, Id)` index vector and sort by `Id`. This ensures
   // that `VocabIndex` IDs form a contiguous, sorted block (see
   // `idsToStringAndType`), converting vocabulary lookups from random-access
   // reads to sequential reads for I/O locality.
-  std::vector<std::pair<Id, size_t>> sortedIndices;
-  sortedIndices.reserve(numRows);
-  for (size_t i = 0; i < numRows; ++i) {
-    sortedIndices.emplace_back(col[i], i);
-  }
-  ql::ranges::sort(sortedIndices, [](const auto& a, const auto& b) {
-    return a.first < b.first;
-  });
+  std::vector<std::pair<std::ptrdiff_t, Id>> sortedIndices =
+      ::ranges::to_vector(::ranges::views::enumerate(col));
+
+  ql::ranges::sort(sortedIndices, {}, ad_utility::second);
 
   // Phase 1: check the cache for each sorted ID. Scatter hits directly to
   // `result`; collect misses for batch resolution.
   EvaluatedVariableValues result(numRows);
   std::vector<Id> missIds;
   std::vector<size_t> missRows;
-  for (const auto& [id, rowInBatch] : sortedIndices) {
+  for (const auto& [rowInBatch, id] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
       result[rowInBatch] = cached.value();
