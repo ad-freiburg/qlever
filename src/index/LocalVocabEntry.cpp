@@ -68,12 +68,6 @@ LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
 }
 
 // _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromIrirefWithoutBrackets(
-    std::string_view view, const LocalVocabContext& ctx) {
-  return LocalVocabEntry{IriT::fromIrirefWithoutBrackets(view), ctx};
-}
-
-// _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithoutQuotes(view), ctx};

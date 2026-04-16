@@ -72,10 +72,8 @@ struct TestContext {
     const auto& index = qec->getIndex();
     auto addLocalLiteral = [this, &index](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
-          this->localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-              ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                  s),
-              index}));
+          this->localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry ::literalWithoutQuotes(s, index)));
     };
 
     auto addLocalIri = [this, &index](std::string_view s) {

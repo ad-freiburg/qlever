@@ -73,11 +73,9 @@ void GroupConcatAggregationData::addValueImpl(
     return ValueId::makeUndefined();
   }
   using namespace ad_utility::triple_component;
-  auto localVocabIndex =
-      localVocab->getIndexAndAddIfNotContained(LocalVocabEntry{
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(currentValue_)),
-          context});
+  auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
+      LocalVocabEntry::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(currentValue_), context));
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
 }
 

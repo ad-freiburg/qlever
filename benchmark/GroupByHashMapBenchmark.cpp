@@ -91,7 +91,7 @@ auto generateRandomLocalVocabAndIndicesVec = [](const LocalVocabContext&
     }
     using namespace ad_utility::triple_component;
     indices.push_back(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(str), context}));
+        LocalVocabEntry::literalWithoutQuotes(str, context)));
   }
 
   return std::make_pair(std::move(localVocab), indices);

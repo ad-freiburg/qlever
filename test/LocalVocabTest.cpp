@@ -42,9 +42,8 @@ TestWords getTestCollectionOfWords(size_t size,
   using namespace ad_utility::triple_component;
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
-    testCollectionOfWords.push_back(LocalVocabEntry{
-        LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)),
-        context});
+    testCollectionOfWords.push_back(LocalVocabEntry::literalWithoutQuotes(
+        std::to_string(i * 7635475567ULL), context));
   }
   return testCollectionOfWords;
 }
@@ -236,7 +235,7 @@ TEST(LocalVocab, propagation) {
       if (ql::starts_with(word, '<')) {
         return LocalVocabEntry::fromIriref(word, index);
       } else {
-        return LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(word), index};
+        return LocalVocabEntry::literalWithoutQuotes(word, index);
       }
     };
     ql::ranges::transform(expectedWordsAsStrings,
@@ -442,7 +441,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   const auto& index = qec->getIndex();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test"), index});
+      LocalVocabEntry::literalWithoutQuotes("test", index));
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
@@ -462,7 +461,7 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   const auto& index = qec->getIndex();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test"), index});
+      LocalVocabEntry::literalWithoutQuotes("test", index));
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();

@@ -167,13 +167,9 @@ TEST(AggregateExpression, min) {
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
   const auto& index = t.qec->getIndex();
-  LocalVocabEntry l1{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
-      index};
+  LocalVocabEntry l1 = LocalVocabEntry::literalWithoutQuotes("alx", index);
   Id alx = Id::makeFromLocalVocabIndex(&l1);
-  LocalVocabEntry l2{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx"),
-      index};
+  LocalVocabEntry l2 = LocalVocabEntry::literalWithoutQuotes("aalx", index);
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
@@ -199,10 +195,8 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
-  const auto& index = t.qec->getIndex();
-  LocalVocabEntry l{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx"),
-      index};
+  LocalVocabEntry l =
+      LocalVocabEntry::literalWithoutQuotes("alx", t.qec->getIndex());
   Id alx = Id::makeFromLocalVocabIndex(&l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are

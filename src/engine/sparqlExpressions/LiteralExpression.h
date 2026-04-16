@@ -56,8 +56,7 @@ class LiteralExpression : public SparqlExpression {
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
                          : IdOrLocalVocabEntry{LocalVocabEntry{
-                               ad_utility::triple_component::LiteralOrIri{s},
-                               context->getLocalVocabContext()}};
+                               s, context->getLocalVocabContext()}};
       auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));

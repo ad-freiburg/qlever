@@ -159,11 +159,9 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
   TestContext context;
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vector{context.context._allocator};
   const auto& index = context.qec->getIndex();
-  vector.emplace_back(LocalVocabEntry{
-      LiteralOrIri{Literal::literalWithoutQuotes("T1")}, index});
+  vector.emplace_back(LocalVocabEntry::literalWithoutQuotes("T1", index));
   vector.emplace_back(Id::makeUndefined());
-  vector.emplace_back(LocalVocabEntry{
-      LiteralOrIri{Literal::literalWithoutQuotes("T2")}, index});
+  vector.emplace_back(LocalVocabEntry::literalWithoutQuotes("T2", index));
 
   auto expression0 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(

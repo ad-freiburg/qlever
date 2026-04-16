@@ -428,7 +428,7 @@ class ConcatExpression : public detail::VariadicExpression {
       if (!literal.has_value()) {
         return Id::makeUndefined();
       }
-      return LocalVocabEntry{LiteralOrIri(std::move(literal.value())),
+      return LocalVocabEntry{std::move(literal.value()),
                              ctx->getLocalVocabContext()};
     };
 

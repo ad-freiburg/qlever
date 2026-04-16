@@ -94,9 +94,6 @@ class alignas(16) LocalVocabEntry
   static LocalVocabEntry fromIriref(std::string_view view,
                                     const LocalVocabContext& ctx);
 
-  static LocalVocabEntry fromIrirefWithoutBrackets(
-      std::string_view view, const LocalVocabContext& ctx);
-
   static LocalVocabEntry literalWithoutQuotes(std::string_view view,
                                               const LocalVocabContext& ctx);
 

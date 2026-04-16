@@ -37,8 +37,7 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "U:0");
   auto* qec = ad_utility::testing::getQec();
-  idOrString = LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("bimm"),
-                               qec->getIndex()};
+  idOrString = LocalVocabEntry::literalWithoutQuotes("bimm", qec->getIndex());
   // Clear the stringstream.
   str.str({});
   PrintTo(idOrString, &str);

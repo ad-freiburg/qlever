@@ -15,8 +15,8 @@ using namespace sparqlExpression::detail;
 TEST(SparqlExpressionGenerators, makeStringResultGetter) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
-  auto literal = LocalVocabEntry{
-      LiteralOrIri::literalWithoutQuotes("Test String"), qec->getIndex()};
+  auto literal =
+      LocalVocabEntry::literalWithoutQuotes("Test String", qec->getIndex());
   LocalVocab localVocab{};
 
   auto function = makeStringResultGetter(&localVocab);
@@ -31,8 +31,8 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
 TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
-  auto literal = LocalVocabEntry{
-      LiteralOrIri::literalWithoutQuotes("Test String"), qec->getIndex()};
+  auto literal =
+      LocalVocabEntry::literalWithoutQuotes("Test String", qec->getIndex());
   LocalVocab localVocab{};
 
   auto result = idOrLiteralOrIriToId(literal, &localVocab);
