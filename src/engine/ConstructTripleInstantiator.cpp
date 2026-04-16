@@ -56,8 +56,8 @@ std::vector<EvaluatedTriple> instantiateBatch(
                                blankNodeRowId);
       };
       auto subject = instantiate(0);
-      auto predicate = instantiate(0);
-      auto object = instantiate(0);
+      auto predicate = instantiate(1);
+      auto object = instantiate(2);
       if (subject && predicate && object) {
         triples.emplace_back(EvaluatedTriple{*subject, *predicate, *object});
       }
