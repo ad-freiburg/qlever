@@ -15,6 +15,7 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
+#include "util/VariantRangeFilter.h"
 
 namespace qlever::constructExport {
 
@@ -102,15 +103,15 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     auto preprocessedTriple = preprocessTriple(triple, variableColumns);
     if (!preprocessedTriple) continue;
 
-    // Collect each unique IdTable column index.
-    // `PrecomputedVariable::columnIndex_` is kept as the original IdTable
+    // Collect each unique `IdTable` column index.
+    // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`
     // column index so that it matches the keys in
     // `BatchEvaluationResult::variablesByColumn_`.
-    for (const auto& term : *preprocessedTriple) {
-      if (const auto* var = std::get_if<PrecomputedVariable>(&term)) {
-        if (seenColumns.insert(var->columnIndex_).second) {
-          result.uniqueVariableColumns_.push_back(var->columnIndex_);
-        }
+    for (const PrecomputedVariable& var :
+         ad_utility::filterRangeOfVariantsByType<PrecomputedVariable>(
+             *preprocessedTriple)) {
+      if (seenColumns.insert(var.columnIndex_).second) {
+        result.uniqueVariableColumns_.push_back(var.columnIndex_);
       }
     }
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));

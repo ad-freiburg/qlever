@@ -21,7 +21,7 @@ namespace qlever::constructExport {
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
-    size_t rowInBatch, size_t blankNodeRowId) {
+    size_t rowIdxInBatch, size_t rowIdxTotal) {
   return std::visit(
       [&](const auto& t) -> std::optional<EvaluatedTerm> {
         using T = std::decay_t<decltype(t)>;
@@ -29,10 +29,10 @@ std::optional<EvaluatedTerm> instantiateTerm(
         if constexpr (std::is_same_v<T, PrecomputedConstant>) {
           return t.evaluatedTerm_;
         } else if constexpr (std::is_same_v<T, PrecomputedVariable>) {
-          return batchResult.getVariable(t.columnIndex_, rowInBatch);
+          return batchResult.getVariable(t.columnIndex_, rowIdxInBatch);
         } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
           return std::make_shared<const EvaluatedTermData>(
-              absl::StrCat(t.prefix_, blankNodeRowId, t.suffix_), nullptr);
+              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr);
         } else {
           static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
@@ -43,21 +43,23 @@ std::optional<EvaluatedTerm> instantiateTerm(
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t blankNodeBaseId) {
+    const BatchEvaluationResult& batchResult, size_t batchOffset) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
-    const size_t blankNodeRowId = blankNodeBaseId + rowInBatch;
+    const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (const auto& triple : tmpl.preprocessedTriples_) {
-      auto subject =
-          instantiateTerm(triple[0], batchResult, rowInBatch, blankNodeRowId);
-      auto predicate =
-          instantiateTerm(triple[1], batchResult, rowInBatch, blankNodeRowId);
-      auto object =
-          instantiateTerm(triple[2], batchResult, rowInBatch, blankNodeRowId);
+      auto instantiate = [&triple, &batchResult, rowInBatch,
+                          blankNodeRowId](size_t pos) {
+        return instantiateTerm(triple[pos], batchResult, rowInBatch,
+                               blankNodeRowId);
+      };
+      auto subject = instantiate(0);
+      auto predicate = instantiate(0);
+      auto object = instantiate(0);
       if (subject && predicate && object) {
-        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
+        triples.emplace_back(EvaluatedTriple{*subject, *predicate, *object});
       }
     }
   }
@@ -66,19 +68,22 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
 // _____________________________________________________________________________
 std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
-  if (term.type == nullptr) {
+  if (term.rdfTermDataType == nullptr) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
-    return term.str;
+    return term.rdfTermString;
   }
   const char* i = XSD_INT_TYPE;
   const char* d = XSD_DECIMAL_TYPE;
   const char* b = XSD_BOOLEAN_TYPE;
-  // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") never use short form.
-  if (!includeDataType && (term.type == i || term.type == d ||
-                           (term.type == b && term.str.length() > 1))) {
-    return term.str;
+  // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") always include the
+  // datatype.
+  if (!includeDataType &&
+      (term.rdfTermDataType == i || term.rdfTermDataType == d ||
+       (term.rdfTermDataType == b && term.rdfTermString.length() > 1))) {
+    return term.rdfTermString;
   }
-  return absl::StrCat("\"", term.str, "\"^^<", term.type, ">");
+  return absl::StrCat("\"", term.rdfTermString, "\"^^<", term.rdfTermDataType,
+                      ">");
 }
 
 // _____________________________________________________________________________
@@ -98,13 +103,12 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
   if (format == turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
     // are used as-is, avoiding an unnecessary string copy.
-    if (ql::starts_with(o, "\"")) {
+    if (ql::starts_with(o, '"')) {
       return absl::StrCat(
-          std::move(s), " ", std::move(p), " ",
+          s, " ", p, " ",
           RdfEscaping::validRDFLiteralFromNormalized(std::move(o)), " .\n");
     }
-    return absl::StrCat(std::move(s), " ", std::move(p), " ", std::move(o),
-                        " .\n");
+    return absl::StrCat(s, " ", p, " ", o, " .\n");
 
   } else if (format == csv) {
     return absl::StrCat(RdfEscaping::escapeForCsv(std::move(s)), ",",
@@ -119,6 +123,7 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
   }
 }
 
+// _____________________________________________________________________________
 StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
                                 bool includeDataType) {
   const auto& [subject, predicate, object] = evaluatedTriple;
