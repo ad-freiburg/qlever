@@ -908,7 +908,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                          deltaTriples.localVocab()
                              .getIndexOrNullopt(
                                  LocalVocabEntry::fromStringRepresentation(
-                                     "<test>", index))
+                                     "<test>", localVocabContext))
                              .value()),
                      Id::makeFromBool(true)}})));
     std::vector<IdTriple<>> deletedTriples;
@@ -922,7 +922,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                          deltaTriples.localVocab()
                              .getIndexOrNullopt(
                                  LocalVocabEntry::fromStringRepresentation(
-                                     "<other>", index))
+                                     "<other>", localVocabContext))
                              .value()),
                      Id::makeFromBool(false)}})));
   }

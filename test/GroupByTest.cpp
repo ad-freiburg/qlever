@@ -58,7 +58,7 @@ Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
                             const std::string& word,
                             const LocalVocabContext& context) {
   auto value = localVocab.getIndexOrNullopt(
-      LocalVocabEntry::literalWithoutQuotes(lit, context));
+      LocalVocabEntry::literalWithoutQuotes(word, context));
   if (value.has_value()) {
     return ValueId::makeFromLocalVocabIndex(value.value());
   }
