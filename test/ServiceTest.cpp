@@ -207,13 +207,11 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
-          auto get =
-              [this, &localVocabs](
-                  const std::string& s) -> std::optional<LocalVocabIndex> {
+          auto get = [this, &localVocabs](
+                         std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
               auto index = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry::fromStringRepresentation(
-                      s, testQec->getIndex()));
+                  LocalVocabEntry::fromIriref(s, testQec->getIndex()));
               if (index.has_value()) {
                 return index;
               }
@@ -382,9 +380,9 @@ TEST_F(ServiceTest, computeResult) {
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
     const auto& index = testQec->getIndex();
-    auto get = [&localVocab, &index](const std::string& s) {
+    auto get = [&localVocab, &index](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          LocalVocabEntry::fromStringRepresentation(s, index));
+          LocalVocabEntry::fromIriref(s, index));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");

@@ -1789,7 +1789,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
     return makePrefilterVec(pr(
-        lt(LocalVocabEntry::fromStringRepresentation("<s2>", qec->getIndex())),
+        lt(LocalVocabEntry::fromIriref("<s2>", qec->getIndex())),
         Var{"?x"}));
   };
 

@@ -299,10 +299,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
-    auto LVI = [&localVocab, qec](const std::string& iri) {
+    auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromStringRepresentation(iri, qec->getIndex())));
+              LocalVocabEntry::fromIriref(iri, qec->getIndex())));
     };
 
     expectComputeGraphUpdateQuads(

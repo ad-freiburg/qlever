@@ -277,9 +277,9 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry1 =
-            LocalVocabEntry::fromStringRepresentation("<a2>", index);
+            LocalVocabEntry::fromIriref("<a2>", index);
         LocalVocabEntry entry2 =
-            LocalVocabEntry::fromStringRepresentation("<d2>", index);
+            LocalVocabEntry::fromIriref("<d2>", index);
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(

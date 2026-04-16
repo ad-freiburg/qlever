@@ -42,7 +42,7 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
   vector.emplace_back(LocalVocabEntry{
       LiteralOrIri{Literal::literalWithoutQuotes("Test")}, index});
   vector.emplace_back(
-      LocalVocabEntry::fromStringRepresentation("<http://example.com>", index));
+      LocalVocabEntry::fromIriref("<http://example.com>", index));
 
   auto expression4 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(

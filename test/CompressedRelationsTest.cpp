@@ -1120,7 +1120,7 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry =
-            LocalVocabEntry::fromStringRepresentation("<zzz>", index);
+            LocalVocabEntry::fromIriref("<zzz>", index);
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,

@@ -26,8 +26,7 @@ TEST(NamedResultCache, basicWorkflow) {
   LocalVocab localVocab;
   auto* qec = ad_utility::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("<bliBlaBlubb>",
-                                                qec->getIndex()));
+      LocalVocabEntry::fromIriref("<bliBlaBlubb>", qec->getIndex()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =

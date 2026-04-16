@@ -57,9 +57,9 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
   LocalVocab localVocab;
-  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("<http://example.org/test>",
-                                                qec_->getIndex()));
+  [[maybe_unused]] auto local =
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<http://example.org/test>", qec_->getIndex()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -127,12 +127,12 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   const auto& index = qec_->getIndex();
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
-      "<http://example.org/1>", index));
+  vocab1.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromIriref("<http://example.org/1>", index));
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
-      "<http://example.org/2>", index));
+  vocab2.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromIriref("<http://example.org/2>", index));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),

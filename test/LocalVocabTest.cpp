@@ -234,7 +234,7 @@ TEST(LocalVocab, propagation) {
     auto toLitOrIri = [&index](const auto& word) {
       using namespace ad_utility::triple_component;
       if (ql::starts_with(word, '<')) {
-        return LocalVocabEntry::fromStringRepresentation(word, index);
+        return LocalVocabEntry::fromIriref(word, index);
       } else {
         return LocalVocabEntry{LiteralOrIri::literalWithoutQuotes(word), index};
       }

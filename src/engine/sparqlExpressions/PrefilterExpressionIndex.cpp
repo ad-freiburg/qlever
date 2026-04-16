@@ -456,6 +456,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
+  using LVE = LocalVocabEntry;
   LocalVocab localVocab{};
   auto prefixQuoted =
       absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
@@ -465,7 +466,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LocalVocabEntry::fromStringRepresentation("<>", context), localVocab);
+      LVE::fromStringRepresentation("<>", context), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
@@ -680,11 +681,12 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
+  using LVE = LocalVocabEntry;
   // Remark: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we
   // use its corresponding ValueId later on as a lower bound.
   return make<GreaterThanExpression>(
-             LocalVocabEntry::fromStringRepresentation("<>", context))
+             LVE::fromStringRepresentation("<>", context))
       ->evaluateImpl(context, idRange, blockRange, isNegated_);
 }
 
@@ -694,6 +696,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
+  using LVE = LocalVocabEntry;
+
   // For pre-filtering LITERAL related ValueIds we use the ValueId representing
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
@@ -702,8 +706,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   auto inlinedRanges =
       getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
   auto nonInlinedRanges =
-      make<LessThanExpression>(
-          LocalVocabEntry::fromStringRepresentation("<>", context))
+      make<LessThanExpression>(LVE::fromStringRepresentation("<>", context))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
 
   if (isNegated_) {

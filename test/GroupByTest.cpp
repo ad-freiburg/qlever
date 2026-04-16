@@ -195,12 +195,12 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // Create an input result table with a local vocabulary.
   auto localVocab = std::make_shared<LocalVocab>();
-  localVocab->getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("<local1>", _index));
-  localVocab->getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("<local2>", _index));
-  localVocab->getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("<local3>", _index));
+  auto iriref = [this](std::string_view s) {
+    return LocalVocabEntry::fromIriref(s, _index);
+  };
+  localVocab->getIndexAndAddIfNotContained(iriref("<local1>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local2>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local3>"));
 
   IdTable inputData(6, makeAllocator());
   // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.

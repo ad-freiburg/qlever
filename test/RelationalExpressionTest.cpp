@@ -752,12 +752,10 @@ TEST(RelationalExpression, VariableAndConstant) {
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
   testWithExplicitIdResult<GT>(
-      IdOrLocalVocabEntry{
-          LocalVocabEntry::fromStringRepresentation("<xa>", qec->getIndex())},
+      IdOrLocalVocabEntry{LocalVocabEntry::fromIriref("<xa>", qec->getIndex())},
       Variable{"?mixed"}, {U, U, B(true)});
   testWithExplicitIdResult<LT>(
-      IdOrLocalVocabEntry{
-          LocalVocabEntry::fromStringRepresentation("<u>", qec->getIndex())},
+      IdOrLocalVocabEntry{LocalVocabEntry::fromIriref("<u>", qec->getIndex())},
       Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
@@ -886,8 +884,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(
       mixed,
-      IdOrLocalVocabEntry{
-          LocalVocabEntry::fromStringRepresentation("<z>", qec->getIndex())},
+      IdOrLocalVocabEntry{LocalVocabEntry::fromIriref("<z>", qec->getIndex())},
       {{{2, 3}}});
 }
 

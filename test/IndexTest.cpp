@@ -710,8 +710,7 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz =
-        LocalVocabEntry::fromStringRepresentation("<zzz>", indexImpl);
+    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
     LocalVocabEntry literal =
         LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
