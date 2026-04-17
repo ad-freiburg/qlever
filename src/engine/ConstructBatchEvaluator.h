@@ -91,7 +91,7 @@ class ConstructBatchEvaluator {
       size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
-  // convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
+  // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
   static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
       std::optional<std::pair<std::string, const char*>> optStringAndType);
 };

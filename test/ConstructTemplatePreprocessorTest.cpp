@@ -18,8 +18,8 @@ namespace qlever::constructExport {
 // `PrintTo` overloads so gmock shows human-readable output instead of raw
 // bytes.
 void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
-  *os << "PrecomputedConstant{str: \"" << c.evaluatedTerm_->rdfTermString
-      << "\", type: \"" << c.evaluatedTerm_->rdfTermDataType << "\"}";
+  *os << "PrecomputedConstant{str: \"" << c.evaluatedTerm_->rdfTermString_
+      << "\", type: \"" << c.evaluatedTerm_->rdfTermDataType_ << "\"}";
 }
 void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
   *os << "PrecomputedVariable{" << v.columnIndex_ << "}";

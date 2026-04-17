@@ -28,7 +28,7 @@ using ::testing::Pointee;
 // `expected`.
 static constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(
-      Pointee(Field(&EvaluatedTermData::rdfTermString, Eq(expected))));
+      Pointee(Field(&EvaluatedTermData::rdfTermString_, Eq(expected))));
 };
 
 static const EvaluatedVariableValues& getColumn(

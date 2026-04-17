@@ -54,8 +54,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // that `VocabIndex` IDs form a contiguous, sorted block (see
   // `idsToStringAndType`), converting vocabulary lookups from random-access
   // reads to sequential reads for I/O locality.
-  std::vector<std::pair<std::ptrdiff_t, Id>> sortedIndices =
-      ::ranges::to_vector(::ranges::views::enumerate(col));
+  auto sortedIndices = ::ranges::to_vector(::ranges::views::enumerate(col));
 
   ql::ranges::sort(sortedIndices, {}, ad_utility::second);
 
@@ -67,8 +66,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // in `missRows`.
   std::vector<Id> missIds;
   // For each entry in `missIds`, the batch row indices that hold that `Id`.
-  // Multiple rows may share the same `Id`, hence `vector<vector<size_t>>`.
-  std::vector<std::vector<size_t>> missRows;
+  std::vector<absl::InlinedVector<size_t, 3>> missRows;
   for (const auto& [rowInBatch, id] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
@@ -86,13 +84,13 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // precondition for sequential VocabIndex I/O.
   auto missResolved =
       ql::exportIds::idsToStringAndType(index, missIds, localVocab);
-  for (size_t i = 0; i < missIds.size(); ++i) {
-    auto evaluated =
-        idCache.getOrCompute(missIds[i], [&missResolved, i](const Id&) {
-          return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-              std::move(missResolved[i]));
-        });
-    for (size_t row : missRows[i]) {
+  for (auto&& [id, resolved, rows] :
+       ::ranges::views::zip(missIds, missResolved, missRows)) {
+    const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
+      return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+          std::move(resolved));
+    });
+    for (size_t row : rows) {
       result[row] = evaluated;
     }
   }

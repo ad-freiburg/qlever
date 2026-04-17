@@ -59,7 +59,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
       auto predicate = instantiate(1);
       auto object = instantiate(2);
       if (subject && predicate && object) {
-        triples.emplace_back(EvaluatedTriple{*subject, *predicate, *object});
+        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
       }
     }
   }
@@ -68,9 +68,9 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
 // _____________________________________________________________________________
 std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
-  if (term.rdfTermDataType == nullptr) {
+  if (term.rdfTermDataType_ == nullptr) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
-    return term.rdfTermString;
+    return term.rdfTermString_;
   }
   const char* i = XSD_INT_TYPE;
   const char* d = XSD_DECIMAL_TYPE;
@@ -78,11 +78,11 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
   // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") always include the
   // datatype.
   if (!includeDataType &&
-      (term.rdfTermDataType == i || term.rdfTermDataType == d ||
-       (term.rdfTermDataType == b && term.rdfTermString.length() > 1))) {
-    return term.rdfTermString;
+      (term.rdfTermDataType_ == i || term.rdfTermDataType_ == d ||
+       (term.rdfTermDataType_ == b && term.rdfTermString_.length() > 1))) {
+    return term.rdfTermString_;
   }
-  return absl::StrCat("\"", term.rdfTermString, "\"^^<", term.rdfTermDataType,
+  return absl::StrCat("\"", term.rdfTermString_, "\"^^<", term.rdfTermDataType_,
                       ">");
 }
 
