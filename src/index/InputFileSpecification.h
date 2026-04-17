@@ -9,6 +9,7 @@
 #include <string>
 
 #include "backports/three_way_comparison.h"
+#include "util/Iterators.h"
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
@@ -16,7 +17,16 @@ enum class Filetype { Turtle, NQuad };
 
 // Specify a single input file or stream for the index builder.
 struct InputFileSpecification {
-  std::string filename_;
+  struct Filename {
+    std::string filename_;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Filename, filename_);
+  };
+
+  struct FileContents {
+    ad_utility::InputRangeTypeErased<std::string> fileContents_;
+  };
+
+  std::variant<Filename, FileContents> contentsOrFilename_;
   Filetype filetype_;
   // All triples that don't have a dedicated graph (either because the input
   // format is N-Triples or Turtle, or because the corresponding line in the
@@ -34,18 +44,23 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(InputFileSpecification, filename_,
-                                              filetype_, defaultGraph_,
-                                              parseInParallel_,
+  /*
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(InputFileSpecification,
+                                              contentsOrFilename_, filetype_,
+                                              defaultGraph_, parseInParallel_,
                                               parseInParallelSetExplicitly_)
+                                              */
+
+  std::string filenameOrContentDescriptor() const {
+    if (std::holds_alternative<Filename>(contentsOrFilename_)) {
+      return absl::StrCat("file with name: ",
+                          std::get<Filename>(contentsOrFilename_).filename_);
+    } else {
+      return "file with directly specified contents";
+    }
+  }
 };
 
-// TODO<joka921> Better name.
-struct InputFileSpecificationWithFileContent {
-  std::string fileContents_;
-  Filetype filetype_;
-  std::optional<std::string> defaultGraph_;
-};
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H

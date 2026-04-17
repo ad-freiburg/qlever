@@ -15,8 +15,7 @@
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
-  ad_utility::data_structures::ThreadSafeQueue<
-      qlever::InputFileSpecificationWithFileContent>
+  ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
       queue{20};
   ad_utility::JThread serverThread_;
   unsigned short port = 9874;
@@ -61,9 +60,10 @@ class InputFileServer {
                                    : std::optional{std::string{it->value()}};
       }();
 
-      qlever::InputFileSpecificationWithFileContent spec{
-          std::move(request.body()), qlever::Filetype::Turtle,
-          std::move(graph)};
+      qlever::InputFileSpecification spec{
+          qlever::InputFileSpecification::FileContents{
+              std::move(request.body())},
+          qlever::Filetype::Turtle, std::move(graph)};
       auto status = queue.pushIfNotFull(std::move(spec));
       switch (status) {
         using enum decltype(queue)::Status;
@@ -109,8 +109,7 @@ class InputFileServer {
     isRunning_ = true;
   }
 
-  using FileRange =
-      cppcoro::generator<qlever::InputFileSpecificationWithFileContent>;
+  using FileRange = cppcoro::generator<qlever::InputFileSpecification>;
   FileRange getFiles() {
     auto cleanup = absl::Cleanup{[]() {
       AD_LOG_INFO << "InputFileServer::getFiles was finished..." << std::endl;
