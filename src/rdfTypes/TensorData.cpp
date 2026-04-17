@@ -10,6 +10,7 @@
 #include "rapidjson/error/en.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include "util/Log.h"
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
 using namespace rapidjson;
@@ -65,8 +66,7 @@ std::pair<std::string, std::string> TensorData::toString() const {
   Writer<StringBuffer> writer(buffer);
   document.Accept(writer);
 
-  return {std::string(buffer.GetString()),
-          std::string(TENSOR_LITERAL)};
+  return {std::string(buffer.GetString()), std::string(TENSOR_LITERAL)};
 }
 
 LiteralOrIri TensorData::toLiteral() const {
@@ -78,6 +78,7 @@ TensorData TensorData::parseFromString(const std::string_view& dataString) {
   // add the kParseStopWhenDoneFlag be a bit more robust in parsing
   Document document;
   document.Parse<kParseStopWhenDoneFlag>(dataString.data(), dataString.size());
+  // AD_LOG_INFO << "Parsing tensor data from string: " << dataString << std::endl;
   if (document.HasParseError()) {
     ssize_t offset = document.GetErrorOffset();
     size_t contextLowerBound = std::max(static_cast<ssize_t>(0), offset - 10);

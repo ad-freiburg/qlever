@@ -616,45 +616,21 @@ std::optional<ad_utility::TensorData> ExportQueryExecutionTrees::idToTensorData(
     EscapeFunction&& escapeFunction) {
   using enum Datatype;
   auto datatype = id.getDatatype();
-
-  auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
-      -> std::optional<std::pair<std::string, const char*>> {
-    if (word.isIri()) {
-      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
-        return std::pair{std::move(blankNodeString.value()), nullptr};
+  switch (datatype) {
+    case WordVocabIndex:
+    case VocabIndex: {
+      auto& vocab = index.getVocab();
+      if (vocab.isTensorDataAvailable()) {
+        return vocab.getTensorData(id.getVocabIndex());
       }
     }
-    if constexpr (removeQuotesAndAngleBrackets) {
-      // TODO<joka921> Can we get rid of the string copying here?
-      return std::pair{
-          escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-          nullptr};
-    }
-    return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
-  };
-  std::optional<std::pair<std::string, const char*>> pair;
-  switch (datatype) {
-    case WordVocabIndex: {
-      auto& vocab = index.getVocab();
-      auto id_vocab = id.getVocabIndex();
-      return vocab.getTensorData(id_vocab);
-    }
-    case VocabIndex:
-    case LocalVocabIndex: {
-      pair = handleIriOrLiteral(
-          getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
-      break;
-    }
-    case EncodedVal:
-      pair = handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
-      break;
-    case TextRecordIndex:
-      pair = std::pair{
-          escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
-          nullptr};
-      break;
     default:
-      pair = idToStringAndTypeForEncodedValue(id);
+      break;
+  }
+  auto pair = idToStringAndType<removeQuotesAndAngleBrackets, false>(
+      index, id, localVocab, std::forward<EscapeFunction>(escapeFunction));
+  if (!pair.has_value()) {
+    return std::nullopt;
   }
   return ad_utility::TensorData::parseFromPair(pair);
 }
@@ -827,7 +803,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
         b["xml:lang"] = entitystr.substr(quotePos + 2);
       } else if (quotePos < entitystr.size() - 2 &&
                  // TODO<joka921> This can be a `AD_CONTRACT_CHECK` once the
-                 // fulltext index vocabulary is stored in a consistent format.
+                 // fulltext index vocabulary is stored in a consistent
+                 // format.
                  entitystr[quotePos + 1] == '^') {
         AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
         std::string_view datatype{entitystr};
@@ -1016,7 +993,8 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
           append("<literal datatype=\""sv, escape(datatype), "\">"sv,
                  escape(innerValue), "</literal>"sv);
         } else {
-          // A plain literal that contains neither a language tag nor a datatype
+          // A plain literal that contains neither a language tag nor a
+          // datatype
           append("<literal>"sv, escape(innerValue), "</literal>"sv);
         }
       }
@@ -1176,7 +1154,8 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   throw std::runtime_error(
-      "The binary export of QLever results is not yet implemented, please have "
+      "The binary export of QLever results is not yet implemented, please "
+      "have "
       "a little patience");
 }
 
@@ -1259,7 +1238,8 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
         static constexpr std::string_view prefix =
             "\n !!!!>># An error has occurred while exporting the query "
             "result. Unfortunately due to limitations in the HTTP 1.1 "
-            "protocol, there is no better way to report this than to append it "
+            "protocol, there is no better way to report this than to append "
+            "it "
             "to the incomplete result. The error message was:\n";
         return LoopControl::breakWithValue(
             absl::StrCat(prefix, exceptionMessage.value()));
@@ -1269,8 +1249,8 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
 
 void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
-  // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
-  // to do
+  // See the comment in `QueryPlanner::createExecutionTrees` on why this is
+  // safe to do
   if (qet.supportsLimit()) {
     limitOffsetClause._offset = 0;
   }
