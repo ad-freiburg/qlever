@@ -15,6 +15,8 @@
 
 namespace prefilterExpressions {
 
+using LVE = LocalVocabEntry;
+
 // HELPER FUNCTIONS
 //______________________________________________________________________________
 // Create and return `std::unique_ptr<PrefilterExpression>(args...)`.
@@ -456,7 +458,6 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
-  using LVE = LocalVocabEntry;
   LocalVocab localVocab{};
   auto prefixQuoted =
       absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
@@ -681,7 +682,6 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  using LVE = LocalVocabEntry;
   // Remark: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we
   // use its corresponding ValueId later on as a lower bound.
@@ -696,8 +696,6 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  using LVE = LocalVocabEntry;
-
   // For pre-filtering LITERAL related ValueIds we use the ValueId representing
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
