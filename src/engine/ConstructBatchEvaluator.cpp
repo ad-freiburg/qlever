@@ -84,7 +84,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // precondition for sequential VocabIndex I/O.
   auto missResolved =
       ql::exportIds::idsToStringAndType(index, missIds, localVocab);
-  for (auto&& [id, resolved, rows] :
+  for (auto& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
