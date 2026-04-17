@@ -10,7 +10,8 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "global/Constants.h"
+#include "index/ExportIds.h"
+#include "index/IndexImpl.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -96,10 +97,63 @@ std::string TripleComponent::toRdfLiteral() const {
     return getIri().toStringRepresentation();
   } else {
     EncodedIriManager ev;
-    auto [value, type] =
-        ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
-            toValueIdIfNotString(&ev).value())
-            .value();
+    auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
+                             toValueIdIfNotString(&ev).value())
+                             .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");
   }
+}
+
+// _____________________________________________________________________________
+std::variant<Id, std::pair<VocabIndex, VocabIndex>>
+TripleComponent::toValueIdOrBounds(const IndexImpl& index) const {
+  AD_CONTRACT_CHECK(!isString());
+  std::optional<Id> vid = toValueIdIfNotString(&index.encodedIriManager());
+  if (vid != std::nullopt) {
+    return vid.value();
+  }
+  AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+  const std::string& content = isLiteral()
+                                   ? getLiteral().toStringRepresentation()
+                                   : getIri().toStringRepresentation();
+  auto [lower, upper] = index.getVocab().getPositionOfWord(content);
+  if (lower != upper) {
+    return Id::makeFromVocabIndex(lower);
+  }
+  return std::pair(lower, upper);
+}
+
+// _____________________________________________________________________________
+std::optional<Id> TripleComponent::toValueId(const IndexImpl& index) const {
+  auto idOrBounds = toValueIdOrBounds(index);
+  if (auto* id = std::get_if<Id>(&idOrBounds)) {
+    return *id;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+Id TripleComponent::toValueId(const IndexImpl& index,
+                              LocalVocab& localVocab) && {
+  auto idOrBounds = toValueIdOrBounds(index);
+  if (const auto* id = std::get_if<Id>(&idOrBounds)) {
+    return *id;
+  }
+  using Bounds = std::pair<VocabIndex, VocabIndex>;
+  AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
+  auto [lower, upper] = std::get<Bounds>(idOrBounds);
+  // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
+  // which we look up in (and potentially add to) our local vocabulary.
+  AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  auto moveWord = [&]() {
+    if (isLiteral()) {
+      return LiteralOrIri{std::move(getLiteral())};
+    } else {
+      return LiteralOrIri{std::move(getIri())};
+    }
+  };
+  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
+                      Id::makeFromVocabIndex(upper))));
 }

@@ -19,6 +19,8 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using SpaceSeparatedStrings =
+      ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE
@@ -54,6 +56,7 @@ struct RuntimeParameters {
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
+  SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
   Bool throwOnUnboundVariables_{false, "throw-on-unbound-variables"};
 
@@ -134,6 +137,35 @@ struct RuntimeParameters {
   // If the input size exceeds this threshold, external sort is used.
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
+
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+      true, "enable-materialized-view-query-rewrite"};
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  SpaceSeparatedStrings serviceAllowedIriPrefixes_{
+      {}, "service-allowed-iri-prefixes"};
+
+  // If set to true, then all queries and operations created afterward will
+  // neither read from nor write to QLever's subtree cache. This can be used to
+  // debug caching issues, and to get rid of the overhead of caching (in
+  // particular the computation of cache keys) when caching is not required.
+  Bool disableCaching_{false, "disable-caching"};
+
+  // Configure the amount of threads to compress and write blocks per
+  // permutation. A value of 0 indicates that the number of threads should be
+  // determined automatically based on the number of available hardware threads.
+  // Even though this influences the logic of regular index building,
+  // `qlever-index`doesn't expose a CLI flag to set this parameter.
+  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
+
+  // Only blocks of this size or larger will be considered for vacuuming.
+  SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

@@ -13,8 +13,8 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -123,7 +123,7 @@ CPP_template(typename Serializer)(
 CPP_template(typename Range, typename Serializer)(
     requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
                                                          Range&& range) {
-  if constexpr (std::ranges::contiguous_range<std::decay_t<Range>>) {
+  if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {
     ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>

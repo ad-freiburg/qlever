@@ -106,13 +106,13 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
-  indexScan->applyLimit(limitOffset);
+  indexScan->applyLimitOffset(limitOffset);
 
   // `ValuesForTesting` doesn't support stripping columns natively.
   auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1, 2}}),
       Vars{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
-  valuesForTesting->applyLimit(limitOffset);
+  valuesForTesting->applyLimitOffset(limitOffset);
 
   auto strippedIndex = QueryExecutionTree::makeTreeWithStrippedColumns(
       indexScan, {Variable{"?s"}});
@@ -132,4 +132,35 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
                 ->getRootOperation()
                 ->getLimitOffset(),
             limitOffset);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, strippingColumnsIsNoOpWhenAllVariablesAreKept) {
+  using Vars = std::vector<std::optional<Variable>>;
+  Vars vars{std::nullopt, std::nullopt, std::nullopt};
+  auto* qec = getQec();
+
+  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      Vars{Variable{"?x1"}, Variable{"?x2"}});
+
+  EXPECT_EQ(QueryExecutionTree::makeTreeWithStrippedColumns(
+                valuesForTesting, {Variable{"?x1"}, Variable{"?x2"}}),
+            valuesForTesting);
+
+  EXPECT_EQ(QueryExecutionTree::makeTreeWithStrippedColumns(
+                valuesForTesting,
+                {Variable{"?x1"}, Variable{"?x2"}, Variable{"?x3"}}),
+            valuesForTesting);
+
+  auto valuesForTestingNoVars = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{}}), Vars{});
+
+  EXPECT_EQ(QueryExecutionTree::makeTreeWithStrippedColumns(
+                valuesForTestingNoVars, {}),
+            valuesForTestingNoVars);
+
+  EXPECT_EQ(QueryExecutionTree::makeTreeWithStrippedColumns(
+                valuesForTestingNoVars, {Variable{"?x"}}),
+            valuesForTestingNoVars);
 }

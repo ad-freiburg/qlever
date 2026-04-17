@@ -9,7 +9,6 @@
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/GroupConcatHelper.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -72,11 +71,11 @@ struct CountAggregationData {
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
 template <valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
-  sparqlExpression::IdOrLiteralOrIri currentValue_;
+  sparqlExpression::IdOrLocalVocabEntry currentValue_;
   bool firstValueSet_ = false;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
+  void addValue(const sparqlExpression::IdOrLocalVocabEntry& value,
                 const sparqlExpression::EvaluationContext* ctx) {
     if (!firstValueSet_) {
       currentValue_ = value;
@@ -144,7 +143,6 @@ struct GroupConcatAggregationData {
   bool first_ = true;
   std::string currentValue_;
   std::string_view separator_;
-  std::optional<std::string> langTag_;
 
   // _____________________________________________________________________________
   template <typename T>
@@ -170,10 +168,10 @@ struct GroupConcatAggregationData {
 
 // Data to perform SAMPLE aggregation using the HashMap optimization.
 struct SampleAggregationData {
-  std::optional<sparqlExpression::IdOrLiteralOrIri> value_ = std::nullopt;
+  std::optional<sparqlExpression::IdOrLocalVocabEntry> value_ = std::nullopt;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
+  void addValue(const sparqlExpression::IdOrLocalVocabEntry& value,
                 [[maybe_unused]] const sparqlExpression::EvaluationContext*) {
     if (!value_.has_value()) {
       value_.emplace(value);

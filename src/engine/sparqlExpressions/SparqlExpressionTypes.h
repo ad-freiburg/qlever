@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
+#include <boost/mp11.hpp>
 #include <vector>
 
 #include "backports/keywords.h"
@@ -93,12 +94,16 @@ class VectorWithMemoryLimit
 static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 
-// A class to store the results of expressions that can yield strings or IDs as
-// their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings.
-using IdOrLiteralOrIri = std::variant<ValueId, LocalVocabEntry>;
+// The result of an expression that can yield an ID or a string (for example
+// IF and COALESCE). `IdOrLocalVocabEntry` is the fully resolved type used in
+// `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
+// helpers can return without needing vocab position bounds; it gets promoted
+// to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLiteralOrIri =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -107,7 +112,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrLiteralOrIri, ValueId>;
+using ConstantTypes = std::tuple<IdOrLocalVocabEntry, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -244,7 +249,7 @@ CPP_template(typename T, typename LocalVocabT)(
     constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
+  } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
     return std::visit(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
@@ -335,6 +340,34 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
+// Implementation of the `ValueGetterPack` (see below).
+namespace valueGetterPack::detail {
+template <size_t N, typename>
+struct ValueGetterPackImpl;
+
+template <size_t N, typename... ValueGetters>
+struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
+  static_assert(sizeof...(ValueGetters) == 1 || N == sizeof...(ValueGetters));
+  using type = std::conditional_t<
+      sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
+      // `mp_repeat_c` repeats the first argument (a tuple of a single
+      // `ValueGetter` in our case) N times, and then concatenates it (into a
+      // tuple of N-times the same `ValueGetter`.
+      boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
+};
+}  // namespace valueGetterPack::detail
+
+// In the SPARQL expression module, an N-ary operation can either specify `N`
+// different value getters (one for each argument), or a single value getter
+// (the same for each arguments). The following helper function takes the `N` as
+// well as a `std::tuple<ValueGetters...>` where either there have to be `N`
+// value getters in the tuple, or only a single value getter. The result is then
+// always a tuple of `N` value getters, (created by repeating the single value
+// getter n-times if necessary).
+template <size_t N, typename T>
+using ValueGetterPack =
+    typename valueGetterPack::detail::ValueGetterPackImpl<N, T>::type;
+
 // Class for an operation used in a `SparqlExpression`, consisting of the
 // function for computing the operation and the value getters for the operands.
 // The number of operands is fixed.
@@ -365,9 +398,7 @@ struct Operation {
  public:
   constexpr static size_t N = NumOperands;
   using Function = typename FunctionAndValueGettersT::Function;
-  using ValueGetters = std::conditional_t<
-      NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
-      OriginalValueGetters>;
+  using ValueGetters = ValueGetterPack<N, OriginalValueGetters>;
   Function _function;
   ValueGetters _valueGetters{};
   std::tuple<SpecializedFunctions...> _specializedFunctions{};
@@ -388,6 +419,44 @@ CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
+
+// Helper to check if an `ExpressionResult` variant holds a constant.
+// Used by the type erased expression.
+inline bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
+// Helper type to convert the type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry`. For other types, the type is unchanged.
+template <typename T>
+using PromoteToLocalVocabEntry =
+    std::conditional_t<std::is_same_v<T, IdOrLiteralOrIri>, IdOrLocalVocabEntry,
+                       T>;
+
+// Helper functor to upgrade the variant type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
+// For other types, the functor just returns the input as is.
+struct PromoteToLocalVocabEntryT {
+  template <typename T>
+  decltype(auto) operator()(T&& value) const {
+    if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
+      return std::visit(ad_utility::OverloadCallOperator{
+                            [](Id id) -> IdOrLocalVocabEntry { return id; },
+                            [](auto&& literalOrIri) -> IdOrLocalVocabEntry {
+                              return {LocalVocabEntry{AD_FWD(literalOrIri)}};
+                            }},
+                        AD_FWD(value));
+    } else {
+      return AD_FWD(value);
+    }
+  }
+};
+
+constexpr PromoteToLocalVocabEntryT promoteToLocalVocabEntry{};
 
 }  // namespace detail
 }  // namespace sparqlExpression

@@ -110,7 +110,6 @@ class Index {
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
-  [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
@@ -122,9 +121,6 @@ class Index {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
   [[nodiscard]] size_t getCardinality(
       Id id, Permutation::Enum permutation,
       const LocatedTriplesState& locatedTriplesState) const;

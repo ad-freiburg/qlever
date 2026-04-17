@@ -12,13 +12,13 @@
 #include <string>
 #include <vector>
 
-#include "engine/Engine.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
@@ -48,6 +48,7 @@ class Server {
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  FRIEND_TEST(IndexRebuilder, serverIntegration);
   friend serverTestHelpers::SimulateHttpRequest;
 
  public:
@@ -61,14 +62,16 @@ class Server {
   //! Initialize the server.
   void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false);
+                  bool persistUpdates = false,
+                  std::vector<std::string> preloadMaterializedViews = {});
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run(const std::string& indexBaseName, bool useText,
            bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false);
+           bool persistUpdates = false,
+           std::vector<std::string> preloadMaterializedViews = {});
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -78,9 +81,37 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
+  // As the `QueryExecutionTree` stores a raw pointer to the
+  // `QueryExecutionContext`, We additionally store the context as a
+  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
+  // server code.
   struct PlannedQuery {
+   private:
+    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
+    // is destroyed after it. The `QueryExecutionTree` holds operations with
+    // raw `_executionContext` pointers to the QEC, and their lazy result
+    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
+    // last `shared_ptr` and is destroyed first, the QEC is freed while the
+    // operations still reference it.
+    std::shared_ptr<const QueryExecutionContext> qec_;
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
+
+   public:
+    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+                 const QueryExecutionContext& qec)
+        : qec_{qec.shared_from_this()},
+          parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)} {
+      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+    }
+
+    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+    ParsedQuery& parsedQuery() { return parsedQuery_; }
+    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
+    const QueryExecutionTree& queryExecutionTree() const {
+      return queryExecutionTree_;
+    }
   };
 
  private:
@@ -110,6 +141,10 @@ class Server {
 
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
+
+  // Indicates if an index rebuild is currently in progress so that we prevent
+  // triggering this twice.
+  std::atomic_bool rebuildInProgress_{false};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -347,6 +382,11 @@ class Server {
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
+
+  // Trigger an index rebuild with `indexBaseName` as the base name for the new
+  // index. This assumes that the access token has already been checked and no
+  // other build is currently in progress.
+  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

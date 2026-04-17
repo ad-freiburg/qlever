@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <algorithm>
 #include <string>
@@ -260,4 +260,29 @@ TEST(Iterator, IteratorRange) {
   EXPECT_EQ(**beg, 1);
   EXPECT_EQ(beg[3], v.begin() + 3);
   EXPECT_EQ(*beg[3], 7);
+}
+
+// _____________________________________________________________________________
+TEST(Iterator, IteratorForAssigmentOperator) {
+  std::vector<int> resultVector;
+
+  ad_utility::IteratorForAssigmentOperator iterator{
+      [&resultVector](int value) { resultVector.push_back(value); }};
+
+  *iterator = 3;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3));
+  *iterator = 62;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62));
+
+  // These should do nothing
+  ++iterator;
+  (void)iterator++;
+
+  *iterator = 1023;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62, 1023));
+
+  // Typical usage pattern:
+  std::vector<int> otherValues{1337, 42};
+  ql::ranges::copy(otherValues, iterator);
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62, 1023, 1337, 42));
 }

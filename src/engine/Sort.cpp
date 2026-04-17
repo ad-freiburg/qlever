@@ -12,11 +12,11 @@
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -86,7 +86,7 @@ Result Sort::computeResult(bool requestLaziness) {
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),
                                    std::move(input), requestLaziness);
@@ -134,7 +134,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
 
-  Engine::sort(idTable, sortColumnIndices_);
+  IdTableUtils::sort(idTable, sortColumnIndices_);
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.
@@ -182,7 +182,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   }
   while (it != end) {
     checkCancellation();
-    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+    if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
                                         Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));

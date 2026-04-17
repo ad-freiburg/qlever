@@ -1,6 +1,11 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
+// Copyright 2020-2026 The QLever Authors, in particular:
+//
+// 2020 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Operation.h"
 
@@ -8,9 +13,12 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -208,11 +216,19 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          // TODO<RobinTF> Distinguish between failed and cancelled.
-          runtimeInfo().status_ =
-              failed ? RuntimeInformation::failed
-                     : RuntimeInformation::lazilyMaterializedCompleted;
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
+            switch (state) {
+              case FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case CANCELLED:
+                return RuntimeInformation::cancelled;
+              default:
+                AD_CORRECTNESS_CHECK(state == FAILED);
+                return RuntimeInformation::failed;
+            }
+          }();
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
@@ -337,6 +353,14 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      if (computationMode == ComputationMode::ONLY_IF_CACHED) {
+        return nullptr;
+      }
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -696,6 +720,12 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
@@ -757,6 +787,18 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
+void Operation::getExternalValues(
+    std::vector<ExternalValues*>& externalValues) {
+  // Recursively process all children. This is the correct behavior for all
+  // classes except `ExternalValues` itself, which overrides this
+  // method.
+  for (auto* child : getChildren()) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    child->getRootOperation()->getExternalValues(externalValues);
+  }
+}
+
+// _____________________________________________________________________________
 bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
@@ -782,6 +824,17 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::coversVariables(
+    const std::vector<const Variable*>& variables) const {
+  const auto& varToCol = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
+    return varToCol.contains(*v) &&
+           varToCol.at(*v).mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  });
 }
 
 // _____________________________________________________________________________

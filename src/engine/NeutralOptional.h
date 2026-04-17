@@ -36,8 +36,7 @@ class NeutralOptional : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
   bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;

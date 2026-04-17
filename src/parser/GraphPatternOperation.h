@@ -15,6 +15,7 @@
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
+#include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
@@ -80,7 +81,26 @@ struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
+
+  // Collect all the `Variable`s present in this `BasicGraphPattern` and add
+  // them to a `HashSet`.
+  void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
+
+// Helper for a special use case: Extract all variables present in the first
+// `BasicGraphPattern` contained in a vector of `GraphPatternOperation`s.
+//
+// For example: If the vector contains a `BIND`, followed by two
+// `BasicGraphPattern`s, this would return the variables from the first of the
+// two `BasicGraphPattern`s.
+//
+// It is used for skipping some graph patterns in
+// `MaterializedViewQueryAnalysis.cpp`.
+//
+// IMPORTANT: This function does not consider variables that are contained in
+// other types of `GraphPatternOperation`s.
+ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
 
 /// A `Values` clause
 struct Values {
@@ -213,7 +233,7 @@ using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery>;
+                 MaterializedViewQuery, ExternalValuesQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

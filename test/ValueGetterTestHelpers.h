@@ -12,9 +12,9 @@
 
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
-#include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
@@ -306,6 +306,9 @@ using GeoPointOrWktTester =
                       GeoPointOrWkt>;
 using IntValueGetterTester =
     ValueGetterTester<sparqlExpression::detail::IntValueGetter, int64_t>;
+using NumericOrDateValueGetterTester =
+    ValueGetterTester<sparqlExpression::detail::NumericOrDateValueGetter,
+                      sparqlExpression::detail::NumericOrDateValue>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {

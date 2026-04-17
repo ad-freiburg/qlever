@@ -125,18 +125,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::PSO), 0, 1);
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(POS), 1, 0);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OPS), 1,
+        col0IdTag);
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OSP), 0,
+        col0IdTag);
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
@@ -160,6 +160,25 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // Remove previous index files. This is necessary because if we previously
+  // built the same index without patterns or all 6 permutations, we wouldn't
+  // overwrite the patterns or the missing permutations. This would lead to a
+  // false positive when we later check that the patterns or the missing
+  // permutations are not present, because they would actually be present from
+  // the previous index build.
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+    if (!entry.is_regular_file()) continue;
+
+    std::string name = entry.path().filename().string();
+
+    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+        ql::starts_with(name, indexBasename + ".index") ||
+        ql::starts_with(name, indexBasename + ".internal.index") ||
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+      ad_utility::deleteFile(entry.path());
+    }
+  }
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =
@@ -215,6 +234,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      throw std::runtime_error("The text index is not available in C++17 mode");
+#else
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
@@ -263,6 +285,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
+#endif
     }
   }
   if (!c.usePatterns || !c.loadAllPermutations) {
@@ -330,7 +353,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
     std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
-    std::unique_ptr<QueryExecutionContext> qec_ =
+    std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
@@ -358,7 +381,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<MaterializedViewsManager>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  qec->getIndex().getImpl().setGlobalIndexOnlyForTesting();
   return qec;
 }
 
@@ -382,8 +405,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static const EncodedIriManager encodedIriManager;
-    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
+    auto id = literalOrIri.toValueId(index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

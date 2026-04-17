@@ -5,8 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_IDTESTHELPERS_H
 #define QLEVER_TEST_UTIL_IDTESTHELPERS_H
 
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/Synchronized.h"
 
 // Lambdas to simply create an `Id` with a given value and type during unit
@@ -45,6 +45,11 @@ inline auto TextRecordId = [](const auto& t) {
 inline auto WordVocabId = [](const auto& t) {
   return Id::makeFromWordVocabIndex(WordVocabIndex ::make(t));
 };
+
+inline auto GeoPointId = [](const GeoPoint& v) {
+  return Id::makeFromGeoPoint(v);
+};
+
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_UTIL_IDTESTHELPERS_H

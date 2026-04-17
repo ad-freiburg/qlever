@@ -123,12 +123,12 @@ class LazyGroupByRange
                               currentGroupBlock_);
       groupSplitAcrossTables_ = false;
     } else {
-      // This processes the whole block in batches if possible
-      IdTableStatic<OUT_WIDTH> table =
-          std::move(resultTable_).toStatic<OUT_WIDTH>();
-      parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
-                                       blockStart, blockEnd,
-                                       &currentLocalVocab_, groupByCols_);
+      // This processes the whole block in batches if possible.
+      IdTableStatic<OUT_WIDTH> table{
+          std::move(resultTable_).template toStatic<OUT_WIDTH>()};
+      parent_->template processBlock<OUT_WIDTH>(
+          table, aggregates_, evaluationContext, blockStart, blockEnd,
+          &currentLocalVocab_, groupByCols_);
       resultTable_ = std::move(table).toDynamic();
     }
   }
@@ -813,9 +813,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  const auto& vocabulary = getIndex().getVocab();
-  std::optional<Id> col0Id =
-      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }
@@ -1274,7 +1272,7 @@ void GroupByImpl::extractValues(
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
-    for (sparqlExpression::IdOrLiteralOrIri val : generator) {
+    for (sparqlExpression::IdOrLocalVocabEntry val : generator) {
       *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
           std::move(val), *localVocab);
       ++targetIterator;

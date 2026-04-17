@@ -93,7 +93,7 @@ class BlankNodeExpression : public SparqlExpression {
       evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
     std::string_view blankNodePrefix = "un";
 
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->size();
     result.reserve(numElements);
 
@@ -173,6 +173,11 @@ class BlankNodeExpression : public SparqlExpression {
     }
     return absl::StrCat("#BlankNode#", label_.value()->getCacheKey(map), "_",
                         cacheBreaker_++);
+  }
+
+  // The version of `BNODE()` without arguments always returns a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return !label_.has_value();
   }
 
  private:

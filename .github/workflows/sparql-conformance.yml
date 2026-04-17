@@ -16,17 +16,17 @@ jobs:
       cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: "recursive"
           path: qlever-code
       - name: Checkout sparql-test-suite-files
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: "w3c/rdf-tests"
           path: sparql-test-suite
       - name: Checkout qlever-test-suite
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: "ad-freiburg/sparql-conformance"
           path: qlever-test-suite
@@ -50,14 +50,14 @@ jobs:
         run: mkdir ${{github.workspace}}/qlever-code/build
       - name: Configure CMake
         run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
-      - name: Build IndexBuilderMain
-        run: cmake --build ${{github.workspace}}/qlever-code/build --target IndexBuilderMain --config ${{env.build-type}} -- -j $(nproc)
-      - name: Build ServerMain
-        run: cmake --build ${{github.workspace}}/qlever-code/build --target ServerMain  --config ${{env.build-type}} -- -j $(nproc)
+      - name: Build qlever-index
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-index --config ${{env.build-type}} -- -j $(nproc)
+      - name: Build qlever-server
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-server  --config ${{env.build-type}} -- -j $(nproc)
       - name: Execute test suite
         run: |
           cd qlever-test-suite
-          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost http-graph-store sparql
+          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost http-graph-store sparql qlever-server qlever-index
           python testsuite.py extract
           python testsuite.py ${{ github.sha }}
           cd ..

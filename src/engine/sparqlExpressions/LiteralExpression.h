@@ -24,7 +24,7 @@ class LiteralExpression : public SparqlExpression {
   // make the `const` evaluate function threadsafe and lock-free.
   // TODO<joka921> Make this unnecessary by completing multiple small groups at
   // once during the GROUP BY.
-  mutable std::atomic<IdOrLiteralOrIri*> cachedResult_ = nullptr;
+  mutable std::atomic<IdOrLocalVocabEntry*> cachedResult_ = nullptr;
 
  public:
   // ___________________________________________________________________________
@@ -52,14 +52,12 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      const auto& index = context->_qec.getIndex();
-      std::optional<Id> id =
-          tc.toValueId(index.getVocab(), index.encodedIriManager());
-      IdOrLiteralOrIri result =
-          id.has_value()
-              ? IdOrLiteralOrIri{id.value()}
-              : IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{s}};
-      auto ptrForCache = std::make_unique<IdOrLiteralOrIri>(result);
+      std::optional<Id> id = tc.toValueId(context->_qec.getIndex());
+      IdOrLocalVocabEntry result =
+          id.has_value() ? IdOrLocalVocabEntry{id.value()}
+                         : IdOrLocalVocabEntry{LocalVocabEntry{
+                               ad_utility::triple_component::LiteralOrIri{s}}};
+      auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
       context->cancellationHandle_->throwIfCancelled();
@@ -126,6 +124,33 @@ class LiteralExpression : public SparqlExpression {
   // ___________________________________________________________________________
   bool isConstantExpression() const override {
     return !std::is_same_v<T, ::Variable>;
+  }
+
+  // ___________________________________________________________________________
+  bool isResultAlwaysDefined(
+      const VariableToColumnMap& varColMap) const override {
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      // For variables, check if they are in the map and always defined
+      auto it = varColMap.find(_value);
+      if (it == varColMap.end()) {
+        return false;
+      }
+      return it->second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    } else if constexpr (std::is_same_v<T, ValueId>) {
+      // ValueId is defined if it's not undefined
+      return !_value.isUndefined();
+    } else if constexpr (std::is_same_v<T, TripleComponent::Literal> ||
+                         std::is_same_v<T, TripleComponent::Iri>) {
+      // Literals and IRIs are always defined
+      return true;
+    } else {
+      static_assert(std::is_same_v<T, VectorWithMemoryLimit<ValueId>>);
+      // We could iterate through the vector, but as this expression is
+      // currently only used as an implementation detail of `GroupBy` and this
+      // interface is never used there, we save the complexity for now.
+      return false;
+    }
   }
 
  protected:
@@ -239,19 +264,10 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
-// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
-// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
-// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
-// from `LiteralExpression<ValueId>` will be returned.
 inline std::optional<IdOrLocalVocabEntry>
-getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
-                                            bool stringAndIriOnly = false) {
+getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child) {
   using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
-    auto idType = idExpr->value().getDatatype();
-    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
-      return std::nullopt;
-    }
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {

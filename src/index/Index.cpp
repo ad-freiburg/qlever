@@ -42,20 +42,8 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 }
 
 // ____________________________________________________________________________
-auto Index::getTextVocab() const -> const TextVocab& {
-  return pimpl_->getTextVocab();
-}
-
-// ____________________________________________________________________________
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
-    const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________

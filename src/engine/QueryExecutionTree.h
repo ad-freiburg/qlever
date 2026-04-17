@@ -108,11 +108,11 @@ class QueryExecutionTree {
   }
 
   // The implementation of this method calls
-  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
-  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
-  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  // `Operation::getUpdatedQueryExecutionTreeWithPrefilterApplied()` for the
+  // root operation. Only `<PrefilterExpression, Variable>` pairs are passed,
+  // where the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
@@ -209,7 +209,7 @@ class QueryExecutionTree {
   // `True`.
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::set<Variable>& variables,
+      const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
@@ -240,13 +240,13 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const {
+  bool supportsLimitOffset() const {
     return getRootOperation()->supportsLimitOffset();
   }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
     getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.

@@ -47,7 +47,7 @@ class UuidExpressionImpl : public SparqlExpression {
 
  public:
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
     ad_utility::UuidGenerator uuidGen;
@@ -66,6 +66,11 @@ class UuidExpressionImpl : public SparqlExpression {
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return FuncKey(randId_);
+  }
+
+  // The result of `UUID`/`STRUUID` is always a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
   }
 
  private:
