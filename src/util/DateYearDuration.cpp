@@ -342,7 +342,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
@@ -406,21 +406,17 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     //  `DayTimeDuration` + `DayTimeDuration` => `DayTimeDuration`.
     const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
-    return DateYearOrDuration{
-        ownDuration -
-        (DayTimeDuration(DayTimeDuration::Type::Positive, 0) - otherDuration)};
+    return DateYearOrDuration{ownDuration + otherDuration};
   } else if (isDate() && rhs.isDayTimeDuration()) {
     //  `Date` + `DayTimeDuration` => `Date`.
     const Date& ownDate = getDateUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
 
-    std::optional<Date> difference =
-        ownDate -
-        (DayTimeDuration(DayTimeDuration::Type::Positive, 0) - otherDuration);
-    if (!difference.has_value()) {
+    std::optional<Date> sum = ownDate + otherDuration;
+    if (!sum.has_value()) {
       return std::nullopt;
     } else {
-      return DateYearOrDuration{difference.value()};
+      return DateYearOrDuration{sum.value()};
     }
   } else if (isLongYear() && rhs.isLongYear()) {
     //  `LargeYear` + `LargeYear` => `LargeYear` or `Date`.

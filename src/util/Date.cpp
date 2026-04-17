@@ -109,14 +109,45 @@ std::optional<DateYearOrDuration> Date::operator-(
 }
 
 // _____________________________________________________________________________
+std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
+  auto epochLhs = toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Milliseconds newDate =
+      epochLhs.value() +
+      std::chrono::nanoseconds(totalMillisecondsRhs *
+                               1'000'000);  // milliseconds to nanoseconds
+  return makeFromEpoch(newDate, getTimeZone());
+}
+
+// _____________________________________________________________________________
+std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
+  auto epochLhs = toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Nanoseconds newDate =
+      epochLhs.value() +
+      std::chrono::nanoseconds(totalMillisecondsRhs *
+                               1'000'000);  // milliseconds to nanoseconds
+  return makeFromEpoch(newDate, getTimeZone());
+}
+
+// _____________________________________________________________________________
 std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
   auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
+    // If getHour returns -1 the date does not specify time, therefore just
+    // assume 0 hours.
+    auto hour = std::max(getHour(), 0);
     Date::Milliseconds result =
-        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
+        sys_days(date) + hours{hour - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<milliseconds>(
             second);  // Here all times are converted to a UTC time.

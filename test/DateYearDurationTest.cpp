@@ -736,7 +736,7 @@ TEST(DateYearOrDuration, isLongYear) {
   EXPECT_FALSE(year.isLongYear());
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(DateYearOrDuration, Subtraction) {
   {
