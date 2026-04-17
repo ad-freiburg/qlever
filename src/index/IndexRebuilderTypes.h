@@ -22,10 +22,12 @@ using InsertionPositions = std::vector<VocabIndex>;
 using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
 using BlankNodeBlocks = std::vector<uint64_t>;
 
+// Helper struct that groups together data required to map ids to a new index.
 struct MappingInformation {
   InsertionPositions insertionPositions_;
   LocalVocabMapping localVocabMapping_;
   BlankNodeBlocks blankNodeBlocks_;
+  uint64_t minBlankNodeIndex_;
 };
 }  // namespace qlever::indexRebuilder
 

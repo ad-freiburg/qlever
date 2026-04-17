@@ -298,21 +298,26 @@ class DeltaTriples {
   copyLocalVocab() const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  // Fill this `DeltaTriples` instance with the difference between `oldState`
-  // and `newState` from an "old" index and map the `Id`s to their new versions
-  // using the given `idMapping` to match the "new" index associated with this
-  // instance of `DeltaTriples`.
+  // When you have built a new index and loaded it, which created this instance
+  // of `DeltaTriples`, you can call this function with the following arguments:
+  // `oldState`: The snapshot that was used to start the rebuild.
+  // `newState`: The snapshot of the old index of the current point in time.
+  // `idMapping`: The mapping produced by the rebuild process.
+  // Under these conditions this will fill this instance of `DeltaTriples` with
+  // just the triples that were added during the index build and map them to
+  // their proper ids in the new index.
   void fillFromOldDeltaTriples(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
       const qlever::indexRebuilder::MappingInformation& idMapping,
-      uint64_t minBlankNodeIndex, CancellationHandle cancellationHandle,
+      CancellationHandle cancellationHandle,
       ad_utility::timer::TimeTracer& tracer);
 
  private:
-  // Helper function to perform the actual `Id` remapping where applicable.
+  // Remap the id from the "old" index to the "new" index using the given
+  // `idMapping`. If the `Id` can't be remapped, this means that is was added
+  // after the mapping was created and will be left unchanged.
   static void remapId(
-      const qlever::indexRebuilder::MappingInformation& idMapping,
-      uint64_t minBlankNodeIndex, Id& id);
+      const qlever::indexRebuilder::MappingInformation& idMapping, Id& id);
 #endif
 
  private:
@@ -367,13 +372,11 @@ class DeltaTriples {
       typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
 
   class DeltaTripleDifference {
-    std::array<std::vector<IdTriple<0>>, 4> data_;
+    std::array<Triples, 4> data_;
 
    public:
-    DeltaTripleDifference(std::vector<IdTriple<0>> inserted,
-                          std::vector<IdTriple<0>> deleted,
-                          std::vector<IdTriple<0>> internalInserted,
-                          std::vector<IdTriple<0>> internalDeleted);
+    DeltaTripleDifference(Triples inserted, Triples deleted,
+                          Triples internalInserted, Triples internalDeleted);
 
     // Run `func` on all `Id` references contained in `data_`.
     template <typename Func>
@@ -381,7 +384,7 @@ class DeltaTriples {
 
     // Provides access to the corresponding entry in `data_`.
     template <bool isInternal, bool insertOrDelete>
-    std::vector<IdTriple<0>>& triples();
+    Triples& triples();
   };
 
   // Compute which delta triples have been added since `oldState`.

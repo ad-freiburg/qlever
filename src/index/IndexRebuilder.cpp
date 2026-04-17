@@ -434,7 +434,7 @@ indexRebuilder::MappingInformation materializeToIndex(
 
 #undef REBUILD_LOG_INFO
   return {std::move(insertionPositions), std::move(localVocabMapping),
-          std::move(blankNodeBlocks)};
+          std::move(blankNodeBlocks), minBlankNodeIndex};
 }
 
 }  // namespace qlever

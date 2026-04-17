@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "./DeltaTriplesTestHelpers.h"
+#include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -1051,54 +1052,33 @@ TEST_F(DeltaTriplesTest, vacuum) {
 
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, remapId) {
+  auto I = &Id::makeFromInt;
+  auto V = &makeVocabId;
+  auto B = &makeBlankNodeId;
   qlever::indexRebuilder::MappingInformation idMapping;
-  LocalVocabEntry entry{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          "<test>")};
-  Id id;
+  Id entryId = makeLocalVocabId(10101010);
+  auto remap = [&idMapping](Id id) {
+    DeltaTriples::remapId(idMapping, id);
+    return id;
+  };
 
-  id = Id::makeFromInt(69);
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromInt(69));
+  EXPECT_EQ(remap(I(69)), I(69));
+  EXPECT_EQ(remap(entryId), entryId);
+  idMapping.localVocabMapping_.emplace(entryId.getBits(), I(42));
+  EXPECT_EQ(remap(entryId), I(42));
 
-  id = Id::makeFromLocalVocabIndex(&entry);
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromLocalVocabIndex(&entry));
-
-  id = Id::makeFromLocalVocabIndex(&entry);
-  idMapping.localVocabMapping_.emplace(id.getBits(), Id::makeFromInt(42));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromInt(42));
-
-  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337)));
-
-  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337));
+  idMapping.minBlankNodeIndex_ = 0;
+  EXPECT_EQ(remap(B(1337)), B(1337));
   idMapping.blankNodeBlocks_.push_back(1);
-  DeltaTriples::remapId(idMapping, 330, id);
-  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(337)));
+  idMapping.minBlankNodeIndex_ = 330;
+  EXPECT_EQ(remap(B(1337)), B(337));
+  EXPECT_EQ(remap(B(37)), B(37));
 
-  id = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(37));
-  DeltaTriples::remapId(idMapping, 330, id);
-  EXPECT_EQ(id, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(37)));
-
-  id = Id::makeFromVocabIndex(VocabIndex::make(10));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(10)));
-
-  id = Id::makeFromVocabIndex(VocabIndex::make(10));
+  EXPECT_EQ(remap(V(10)), V(10));
   idMapping.insertionPositions_.push_back(VocabIndex::make(5));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(11)));
-
-  id = Id::makeFromVocabIndex(VocabIndex::make(5));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(6)));
-
-  id = Id::makeFromVocabIndex(VocabIndex::make(4));
-  DeltaTriples::remapId(idMapping, 0, id);
-  EXPECT_EQ(id, Id::makeFromVocabIndex(VocabIndex::make(4)));
+  EXPECT_EQ(remap(V(10)), V(11));
+  EXPECT_EQ(remap(V(5)), V(6));
+  EXPECT_EQ(remap(V(4)), V(4));
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -1108,7 +1088,8 @@ qlever::indexRebuilder::MappingInformation simulateRebuild(
     const std::vector<LocalVocabIndex>& originalVocab,
     const std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        blankNodeBlocks) {
+        blankNodeBlocks,
+    uint64_t minBlankNodeIndex) {
   qlever::indexRebuilder::MappingInformation idMapping;
   Id firstNewEntry =
       Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
@@ -1126,6 +1107,7 @@ qlever::indexRebuilder::MappingInformation simulateRebuild(
       secondNewEntry);
   idMapping.blankNodeBlocks_.emplace_back(
       blankNodeBlocks.at(0).blockIndices_.at(0));
+  idMapping.minBlankNodeIndex_ = minBlankNodeIndex;
   return idMapping;
 }
 }  // namespace
@@ -1149,9 +1131,7 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
                     {"<a> <upp> <newval>", "<anon> <x> 42", "<C> <next> <D>"}));
   deltaTriples.insertTriples(
       cancellationHandle,
-      {IdTriple<0>{std::array{
-          x, anon, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337)),
-          graph}}});
+      {IdTriple<0>{std::array{x, anon, makeBlankNodeId(1337), graph}}});
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(index, localVocab, {"<a> <next> <b>"}));
 
@@ -1167,9 +1147,7 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
       makeIdTriples(index, localVocab, {"<anon> <x> \"neverseenbefore\"@en"}));
   deltaTriples.insertTriples(
       cancellationHandle,
-      {IdTriple<0>{std::array{
-          anon, x, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1338)),
-          graph}}});
+      {IdTriple<0>{std::array{anon, x, makeBlankNodeId(1338), graph}}});
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(index, localVocab, {"<C> <next> <D>"}));
   auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
@@ -1178,12 +1156,11 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
   // existing one suffices.
   DeltaTriples newDeltaTriples(testQec->getIndex());
   ad_utility::timer::TimeTracer tracer{"testFillFromOldDeltaTriples"};
-  qlever::indexRebuilder::MappingInformation idMapping =
-      simulateRebuild(originalVocab, blankNodeBlocks);
+  qlever::indexRebuilder::MappingInformation idMapping = simulateRebuild(
+      originalVocab, blankNodeBlocks, index.getBlankNodeManager()->minIndex_);
 
   newDeltaTriples.fillFromOldDeltaTriples(
-      *originalSnapshot, *newSnapshot, idMapping,
-      index.getBlankNodeManager()->minIndex_, std::move(cancellationHandle),
+      *originalSnapshot, *newSnapshot, idMapping, std::move(cancellationHandle),
       tracer);
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
