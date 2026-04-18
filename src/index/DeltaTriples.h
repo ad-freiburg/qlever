@@ -298,26 +298,21 @@ class DeltaTriples {
   copyLocalVocab() const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  // When you have built a new index and loaded it, which created this instance
-  // of `DeltaTriples`, you can call this function with the following arguments:
-  // `oldState`: The snapshot that was used to start the rebuild.
-  // `newState`: The snapshot of the old index of the current point in time.
-  // `idMapping`: The mapping produced by the rebuild process.
-  // Under these conditions this will fill this instance of `DeltaTriples` with
-  // just the triples that were added during the index build and map them to
-  // their proper ids in the new index.
-  void fillFromOldDeltaTriples(
+  // Compute the diff between `oldState` (the snapshot used to start the index
+  // rebuild) and `newState` (the current snapshot), remap the IDs using
+  // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  void addFromSnapshotDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
-      const qlever::indexRebuilder::MappingInformation& idMapping,
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
       CancellationHandle cancellationHandle,
       ad_utility::timer::TimeTracer& tracer);
 
  private:
-  // Remap the id from the "old" index to the "new" index using the given
-  // `idMapping`. If the `Id` can't be remapped, this means that is was added
+  // Remap the `Id` from the old index to the new index using the given
+  // `idMapping`. If the `Id` can't be remapped, this means that it was added
   // after the mapping was created and will be left unchanged.
   static void remapId(
-      const qlever::indexRebuilder::MappingInformation& idMapping, Id& id);
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
 #endif
 
  private:
@@ -371,12 +366,14 @@ class DeltaTriples {
   void eraseTripleInAllPermutations(
       typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
 
-  class DeltaTripleDifference {
+  // The difference between two `LocatedTriplesState` snapshots, split into
+  // inserted/deleted and internal/external triples.
+  class LocatedTriplesDiff {
     std::array<Triples, 4> data_;
 
    public:
-    DeltaTripleDifference(Triples inserted, Triples deleted,
-                          Triples internalInserted, Triples internalDeleted);
+    LocatedTriplesDiff(Triples inserted, Triples deleted,
+                       Triples internalInserted, Triples internalDeleted);
 
     // Run `func` on all `Id` references contained in `data_`.
     template <typename Func>
@@ -387,8 +384,9 @@ class DeltaTriples {
     Triples& triples();
   };
 
-  // Compute which delta triples have been added since `oldState`.
-  static DeltaTripleDifference computeDeltaTripleDifference(
+  // Compute which located triples are present in `newState` but not in
+  // `oldState`.
+  static LocatedTriplesDiff computeLocatedTriplesDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
 
   friend class DeltaTriplesManager;

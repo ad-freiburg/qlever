@@ -22,8 +22,9 @@ using InsertionPositions = std::vector<VocabIndex>;
 using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
 using BlankNodeBlocks = std::vector<uint64_t>;
 
-// Helper struct that groups together data required to map ids to a new index.
-struct MappingInformation {
+// Helper struct that groups together the data required to remap IDs from the
+// old index to the new index after a rebuild.
+struct IndexRebuildMapping {
   InsertionPositions insertionPositions_;
   LocalVocabMapping localVocabMapping_;
   BlankNodeBlocks blankNodeBlocks_;

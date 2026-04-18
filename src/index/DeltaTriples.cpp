@@ -697,15 +697,15 @@ DeltaTriples::copyLocalVocab() const {
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-void DeltaTriples::fillFromOldDeltaTriples(
+void DeltaTriples::addFromSnapshotDiff(
     const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
-    const qlever::indexRebuilder::MappingInformation& idMapping,
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
     CancellationHandle cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
-  tracer.beginTrace("computeDeltaTripleDifference");
-  auto difference = computeDeltaTripleDifference(oldState, newState);
+  tracer.beginTrace("computeLocatedTriplesDiff");
+  auto difference = computeLocatedTriplesDiff(oldState, newState);
   difference.remapIds([&idMapping](Id& id) { remapId(idMapping, id); });
-  tracer.endTrace("computeDeltaTripleDifference");
+  tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");
   auto addTriples = [this, &cancellationHandle, &difference, &tracer](
                         auto isInternal, auto insertOrDelete) {
@@ -725,7 +725,7 @@ void DeltaTriples::fillFromOldDeltaTriples(
 
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE void DeltaTriples::remapId(
-    const qlever::indexRebuilder::MappingInformation& idMapping, Id& id) {
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
                minBlankNodeIndex] = idMapping;
   auto type = id.getDatatype();
@@ -759,15 +759,16 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
 #endif
 
 // _____________________________________________________________________________
-DeltaTriples::DeltaTripleDifference::DeltaTripleDifference(
-    Triples inserted, Triples deleted, Triples internalInserted,
-    Triples internalDeleted)
+DeltaTriples::LocatedTriplesDiff::LocatedTriplesDiff(Triples inserted,
+                                                     Triples deleted,
+                                                     Triples internalInserted,
+                                                     Triples internalDeleted)
     : data_{std::move(inserted), std::move(deleted),
             std::move(internalInserted), std::move(internalDeleted)} {}
 
 // ____________________________________________________________________________
 template <typename Func>
-void DeltaTriples::DeltaTripleDifference::remapIds(Func func) {
+void DeltaTriples::LocatedTriplesDiff::remapIds(Func func) {
   ql::ranges::for_each(data_, [&func](auto& triples) {
     ql::ranges::for_each(triples, [&func](auto& triple) {
       ql::ranges::for_each(triple.ids(), func);
@@ -777,26 +778,26 @@ void DeltaTriples::DeltaTripleDifference::remapIds(Func func) {
 
 // ____________________________________________________________________________
 template <bool isInternal, bool insertOrDelete>
-DeltaTriples::Triples& DeltaTriples::DeltaTripleDifference::triples() {
+DeltaTriples::Triples& DeltaTriples::LocatedTriplesDiff::triples() {
   size_t index =
       (isInternal ? 2 : 0) + (1 - static_cast<size_t>(insertOrDelete));
   return data_.at(index);
 }
 
 // _____________________________________________________________________________
-DeltaTriples::DeltaTripleDifference DeltaTriples::computeDeltaTripleDifference(
+DeltaTriples::LocatedTriplesDiff DeltaTriples::computeLocatedTriplesDiff(
     const LocatedTriplesState& oldState, const LocatedTriplesState& newState) {
   auto computeDifference = [&oldState, &newState](
                                auto isInternal, Permutation::Enum permutation) {
     return newState.getLocatedTriplesForPermutation<isInternal>(permutation)
-        .computeDeltaTripleDifference(
+        .computeDiff(
             oldState.getLocatedTriplesForPermutation<isInternal>(permutation));
   };
   auto [insertions, deletions] =
       computeDifference(std::bool_constant<false>{}, Permutation::SPO);
   auto [internalInsertions, internalDeletions] =
       computeDifference(std::bool_constant<true>{}, Permutation::PSO);
-  return DeltaTripleDifference{std::move(insertions), std::move(deletions),
-                               std::move(internalInsertions),
-                               std::move(internalDeletions)};
+  return LocatedTriplesDiff{std::move(insertions), std::move(deletions),
+                            std::move(internalInsertions),
+                            std::move(internalDeletions)};
 }

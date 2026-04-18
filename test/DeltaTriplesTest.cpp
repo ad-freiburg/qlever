@@ -1064,7 +1064,7 @@ TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
   auto V = &makeVocabId;
   auto B = &makeBlankNodeId;
-  qlever::indexRebuilder::MappingInformation idMapping;
+  qlever::indexRebuilder::IndexRebuildMapping idMapping;
   Id entryId = makeLocalVocabId(10101010);
   auto remap = [&idMapping](Id id) {
     DeltaTriples::remapId(idMapping, id);
@@ -1093,13 +1093,13 @@ TEST_F(DeltaTriplesTest, remapId) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 namespace {
-qlever::indexRebuilder::MappingInformation simulateRebuild(
+qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
     const std::vector<LocalVocabIndex>& originalVocab,
     const std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
         blankNodeBlocks,
     uint64_t minBlankNodeIndex) {
-  qlever::indexRebuilder::MappingInformation idMapping;
+  qlever::indexRebuilder::IndexRebuildMapping idMapping;
   Id firstNewEntry =
       Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
   Id secondNewEntry =
@@ -1122,7 +1122,7 @@ qlever::indexRebuilder::MappingInformation simulateRebuild(
 }  // namespace
 
 // _____________________________________________________________________________
-TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
+TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   DeltaTriples deltaTriples(testQec->getIndex());
@@ -1164,13 +1164,13 @@ TEST_F(DeltaTriplesTest, fillFromOldDeltaTriples) {
   // Technically you'd use a rebuilt index for this, but for testing the
   // existing one suffices.
   DeltaTriples newDeltaTriples(testQec->getIndex());
-  ad_utility::timer::TimeTracer tracer{"testFillFromOldDeltaTriples"};
-  qlever::indexRebuilder::MappingInformation idMapping = simulateRebuild(
+  ad_utility::timer::TimeTracer tracer{"testAddFromSnapshotDiff"};
+  qlever::indexRebuilder::IndexRebuildMapping idMapping = simulateRebuild(
       originalVocab, blankNodeBlocks, index.getBlankNodeManager()->minIndex_);
 
-  newDeltaTriples.fillFromOldDeltaTriples(
-      *originalSnapshot, *newSnapshot, idMapping, std::move(cancellationHandle),
-      tracer);
+  newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
+                                      idMapping, std::move(cancellationHandle),
+                                      tracer);
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
   auto locatedTriples =

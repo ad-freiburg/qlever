@@ -1070,7 +1070,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
 }
 
 // _____________________________________________________________________________
-TEST_F(LocatedTriplesTest, computeDeltaTripleDifference) {
+TEST_F(LocatedTriplesTest, computeDiff) {
   auto I = &Id::makeFromInt;
   std::vector<LocatedTriple> locatedTriples;
   locatedTriples.push_back(
@@ -1091,7 +1091,7 @@ TEST_F(LocatedTriplesTest, computeDeltaTripleDifference) {
       LocatedTriple{2, IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}}, false});
 
   auto newTriples = makeLocatedTriplesPerBlock(locatedTriples);
-  auto result = newTriples.computeDeltaTripleDifference(originalTriples);
+  auto result = newTriples.computeDiff(originalTriples);
   EXPECT_THAT(result,
               ::testing::ElementsAre(
                   ::testing::ElementsAre(

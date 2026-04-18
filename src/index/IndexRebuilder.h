@@ -55,7 +55,7 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // caller.
 // Return the datastructures used for mapping to be used in further
 // post-processing.
-indexRebuilder::MappingInformation materializeToIndex(
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,

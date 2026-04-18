@@ -513,8 +513,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
 }
 
 // _____________________________________________________________________________
-std::array<std::vector<IdTriple<0>>, 2>
-LocatedTriplesPerBlock::computeDeltaTripleDifference(
+std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
     const LocatedTriplesPerBlock& oldBlocks) const {
   std::array<std::vector<IdTriple<0>>, 2> result;
   auto addTriple = [&result](const IdTriple<0>& triple, bool insertion) {

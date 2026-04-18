@@ -343,7 +343,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 
 // _____________________________________________________________________________
 namespace qlever {
-indexRebuilder::MappingInformation materializeToIndex(
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
