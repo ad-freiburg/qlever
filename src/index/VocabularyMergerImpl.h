@@ -80,11 +80,6 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
-  std::vector<QueueWord> sortedBuffer;
-  sortedBuffer.reserve(bufferSize_);
-
-  std::future<void> writeFuture;
-
   // Some memory (that is hard to measure exactly) is used for the writing of
   // a batch of merged words, so we only give 80% of the total memory to the
   // merging. This is very approximate and should be investigated in more
@@ -95,42 +90,10 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
-  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
-    // Accumulate the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(currentWord));
-
-    if (sortedBuffer.size() >= bufferSize_) {
-      // Wait for the (asynchronous) writing of the last batch of words, and
-      // trigger the (again asynchronous) writing of the next batch.
-      auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
-                        &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdMap(buffer, wordCallback, lessThan,
-                                     progressBar);
-      };
-      sortedBuffer.clear();
-      sortedBuffer.reserve(bufferSize_);
-      // wait for the last batch
-
-      AD_LOG_TIMING << "A new batch of words is ready" << std::endl;
-      // First wait for the last batch to finish, that way there will be no
-      // race conditions.
-      if (writeFuture.valid()) {
-        writeFuture.get();
-      }
-      writeFuture = std::async(writeTask);
-      // we have moved away our buffer, start over
-    }
+  for (std::vector<QueueWord>& currentWords : mergedWords) {
+    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
   }
 
-  // wait for the active write tasks to finish
-  if (writeFuture.valid()) {
-    writeFuture.get();
-  }
-
-  // Handle remaining words in the buffer
-  if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
-  }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
   auto metaData = std::move(metaData_);
@@ -144,16 +107,10 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
-                           C& wordCallback, const L& lessThan,
+    writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
+                           const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
-
-  // Smaller grained buffer for the actual inner write.
-  auto bufSize = bufferSize_ / 5;
-  std::future<void> writeFut;
-  std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
-  writeBuffer.reserve(bufSize);
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
@@ -165,8 +122,9 @@ CPP_template_def(typename C, typename L)(
                     << lastTripleComponent_->iriOrLiteral() << " and "
                     << top.iriOrLiteral() << std::endl;
       }
-      lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
+      lastTripleComponent_ =
+          TripleComponentWithIndex{std::move(top.iriOrLiteral()),
+                                   top.isExternal(), metaData_.numWordsTotal()};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -179,7 +137,7 @@ CPP_template_def(typename C, typename L)(
       } else {
         nextWord.index_ =
             wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
+        metaData_.addWord(nextWord.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
         AD_LOG_INFO << progressBar.getProgressString() << std::flush;
@@ -196,36 +154,8 @@ CPP_template_def(typename C, typename L)(
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
-    writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
-
-    if (writeBuffer.size() >= bufSize) {
-      auto task = [this, buffer = std::move(writeBuffer)]() {
-        this->doActualWrite(buffer);
-      };
-      if (writeFut.valid()) {
-        writeFut.get();
-      }
-      writeFut = std::async(task);
-      writeBuffer.clear();
-      writeBuffer.reserve(bufSize);
-    }
-  }
-
-  if (writeFut.valid()) {
-    writeFut.get();
-  }
-
-  if (!writeBuffer.empty()) {
-    doActualWrite(writeBuffer);
-  }
-}
-
-// ____________________________________________________________________________
-inline void VocabularyMerger::doActualWrite(
-    const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
-  for (const auto& [id, value] : buffer) {
-    idMaps_[id].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
+    idMaps_[top.partialFileId_].push_back(
+        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
   }
 }
 
