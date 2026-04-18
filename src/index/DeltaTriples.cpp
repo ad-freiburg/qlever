@@ -20,6 +20,7 @@
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
@@ -692,4 +693,111 @@ DeltaTriples::copyLocalVocab() const {
           [](const LocalVocabEntry& entry) { return &entry; }));
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
+}
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
+void DeltaTriples::addFromSnapshotDiff(
+    const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
+    CancellationHandle cancellationHandle,
+    ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("computeLocatedTriplesDiff");
+  auto difference = computeLocatedTriplesDiff(oldState, newState);
+  difference.remapIds([&idMapping](Id& id) { remapId(idMapping, id); });
+  tracer.endTrace("computeLocatedTriplesDiff");
+  tracer.beginTrace("insertDiffedTriples");
+  auto addTriples = [this, &cancellationHandle, &difference, &tracer](
+                        auto isInternal, auto insertOrDelete) {
+    modifyTriplesImpl<isInternal, insertOrDelete>(
+        cancellationHandle,
+        std::move(difference.triples<isInternal, insertOrDelete>()), tracer);
+  };
+  using namespace ad_utility::use_value_identity;
+  addTriples(vi<false>, vi<true>);
+  addTriples(vi<false>, vi<false>);
+  addTriples(vi<true>, vi<true>);
+  addTriples(vi<true>, vi<false>);
+  tracer.endTrace("insertDiffedTriples");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
+}
+
+// _____________________________________________________________________________
+AD_ALWAYS_INLINE void DeltaTriples::remapId(
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+  const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
+               minBlankNodeIndex] = idMapping;
+  auto type = id.getDatatype();
+  if (type == Datatype::VocabIndex) {
+    id = qlever::indexRebuilder::remapVocabId(id, insertionPositions);
+  } else if (type == Datatype::LocalVocabIndex) {
+    auto it = localVocabMapping.find(id.getBits());
+    // If we have a mapping, this means that the new index used this to make a
+    // vocab index out of it and we have to do the same. If we don't have a
+    // mapping it will remain a local vocab index that is then copied into the
+    // delta triples vocabulary and remapped then.
+    if (it != localVocabMapping.end()) {
+      id = it->second;
+    }
+  } else if (type == Datatype::BlankNodeIndex) {
+    auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
+        id, blankNodeBlocks, minBlankNodeIndex);
+    // If we have a mapping for the given blank node index, this means that the
+    // block was remapped by the index rebuild. We might potentially map blank
+    // node indices that were added after the mapping was created, but still
+    // fall into the same allocation blocks. This is not a problem, since any
+    // blank node ids that get allocated outside the interval [0,
+    // minBlankNodeIndex) will get remapped on insertion. If we don't have a
+    // mapping this means we don't have a mapping and keep the value as-is so it
+    // gets remapped when inserted into the delta triples.
+    if (value.has_value()) {
+      id = value.value();
+    }
+  }
+}
+#endif
+
+// _____________________________________________________________________________
+DeltaTriples::LocatedTriplesDiff::LocatedTriplesDiff(Triples inserted,
+                                                     Triples deleted,
+                                                     Triples internalInserted,
+                                                     Triples internalDeleted)
+    : data_{std::move(inserted), std::move(deleted),
+            std::move(internalInserted), std::move(internalDeleted)} {}
+
+// ____________________________________________________________________________
+template <typename Func>
+void DeltaTriples::LocatedTriplesDiff::remapIds(Func func) {
+  ql::ranges::for_each(data_, [&func](auto& triples) {
+    ql::ranges::for_each(triples, [&func](auto& triple) {
+      ql::ranges::for_each(triple.ids(), func);
+    });
+  });
+}
+
+// ____________________________________________________________________________
+template <bool isInternal, bool insertOrDelete>
+DeltaTriples::Triples& DeltaTriples::LocatedTriplesDiff::triples() {
+  size_t index =
+      (isInternal ? 2 : 0) + (1 - static_cast<size_t>(insertOrDelete));
+  return data_.at(index);
+}
+
+// _____________________________________________________________________________
+DeltaTriples::LocatedTriplesDiff DeltaTriples::computeLocatedTriplesDiff(
+    const LocatedTriplesState& oldState, const LocatedTriplesState& newState) {
+  auto computeDifference = [&oldState, &newState](
+                               auto isInternal, Permutation::Enum permutation) {
+    return newState.getLocatedTriplesForPermutation<isInternal>(permutation)
+        .computeDiff(
+            oldState.getLocatedTriplesForPermutation<isInternal>(permutation));
+  };
+  auto [insertions, deletions] =
+      computeDifference(std::bool_constant<false>{}, Permutation::SPO);
+  auto [internalInsertions, internalDeletions] =
+      computeDifference(std::bool_constant<true>{}, Permutation::PSO);
+  return LocatedTriplesDiff{std::move(insertions), std::move(deletions),
+                            std::move(internalInsertions),
+                            std::move(internalDeletions)};
 }
