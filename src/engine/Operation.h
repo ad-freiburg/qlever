@@ -548,6 +548,10 @@ class Operation {
   // of the result).
   virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
 
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.

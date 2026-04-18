@@ -36,8 +36,8 @@ using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
+  auto* qec = ad_utility::testing::getQec();
   {
-    auto* qec = ad_utility::testing::getQec();
     IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                    makeAllocator()};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
@@ -67,7 +67,6 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
       rightSorted.push_back(right);
       ++idx;
     }
-    auto qec = ad_utility::testing::getQec();
     auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, inputA.clone(), varsLeft, false, std::move(leftSorted));
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -409,8 +408,11 @@ TEST(OptionalJoin, gallopingJoin) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -438,7 +440,6 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
                                             {4, 2, 1, U, U},
                                             {2, 8, 1, U, U}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
     OptionalJoin optionalJoin{
         qec,
@@ -469,8 +470,11 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -495,7 +499,6 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   auto expected1 = makeIdTableFromVector({{3, 8, 2, 6, 12}, {4, 8, 2, 6, 12}});
   auto expected2 = makeIdTableFromVector({{4, 2, 1, U, U}, {2, 8, 1, U, U}});
 
-  auto* qec = ad_utility::testing::getQec();
   OptionalJoin optionalJoin{
       qec,
       ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -1035,8 +1038,9 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   // payload.
   std::vector<Result::IdTableVocabPair> tAndV;
 
-  auto i = [](int i) {
-    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">"))};
+  auto i = [&qec2](int i) {
+    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">")),
+                           qec2->getLocalVocabContext()};
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
