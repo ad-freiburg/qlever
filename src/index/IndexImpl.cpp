@@ -49,12 +49,8 @@ constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
-                     bool registerSingleton)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {
-  if (registerSingleton) {
-    globalSingletonIndex_ = this;
-  }
   deltaTriples_.emplace(*this);
 }
 

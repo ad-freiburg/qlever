@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "index/Index.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
@@ -57,13 +58,27 @@ auto U = Id::makeUndefined();
 using Ids = std::vector<Id>;
 using IdOrLocalVocabEntryVec = std::vector<IdOrLocalVocabEntry>;
 
+// All the helper functions `testUnaryExpression` etc. below internally evaluate
+// the given expressions using the `TestContext` class, so it is possible to use
+// IDs from the global and local vocab of this class to test expressions. For
+// example `testContext().x` is the ID of the entity `<x>` in the vocabulary of
+// the index on which the expressions will be evaluated. For details see the
+// `TestContext` class. Note: The indirection via a function is necessary
+// because otherwise the `gtest_discover_test` step of the CMake build fails for
+// some reason.
+const auto& testContext() {
+  static TestContext ctx{};
+  return ctx;
+}
+
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
-  return ad_utility::triple_component::LiteralOrIri(
-      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype));
+  return LocalVocabEntry{
+      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype),
+      testContext().qec->getLocalVocabContext()};
 };
 
 auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
+  return LocalVocabEntry{iri(s), testContext().qec->getLocalVocabContext()};
 };
 
 auto idOrLitOrStringVec =
@@ -83,19 +98,6 @@ auto geoLit = [](std::string_view content) {
   return IdOrLocalVocabEntry{
       lit(content, "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")};
 };
-
-// All the helper functions `testUnaryExpression` etc. below internally evaluate
-// the given expressions using the `TestContext` class, so it is possible to use
-// IDs from the global and local vocab of this class to test expressions. For
-// example `testContext().x` is the ID of the entity `<x>` in the vocabulary of
-// the index on which the expressions will be evaluated. For details see the
-// `TestContext` class. Note: The indirection via a function is necessary
-// because otherwise the `gtest_discover_test` step of the CMake build fails for
-// some reason.
-const auto& testContext() {
-  static TestContext ctx{};
-  return ctx;
-}
 
 // Test allocator (the inputs to our `SparqlExpression`s are
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
@@ -776,7 +778,8 @@ TEST(SparqlExpression, stringOperators) {
                 std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
                                                   dateDate, dateLYear, T, F},
                            IdOrLocalVocabEntry{LocalVocabEntry{
-                               ad_utility::triple_component::Iri{}}}});
+                               ad_utility::triple_component::Iri{},
+                               testContext().qec->getLocalVocabContext()}}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -800,7 +803,8 @@ TEST(SparqlExpression, stringOperators) {
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
           IdOrLocalVocabEntry{
-              LocalVocabEntry{ad_utility::triple_component::Iri{}}}});
+              LocalVocabEntry{ad_utility::triple_component::Iri{},
+                              testContext().qec->getLocalVocabContext()}}});
 
   // test with base iri
   checkIriOrUri(
@@ -1454,11 +1458,10 @@ TEST(SparqlExpression, testToBooleanExpression) {
 
   checkGetBoolean(
       IdOrLocalVocabEntryVec(
-          {sparqlExpression::detail::LiteralOrIri{
-               iri("<http://example.org/z>")},
-           lit("string"), lit("-10.2E3"), lit("+33.3300"), lit("0.0"), lit("0"),
-           lit("0E1"), lit("1.5"), lit("1"), lit("1E0"), lit("13"),
-           lit("2002-10-10T17:00:00Z"), lit("false"), lit("true"), T, F,
+          {iriref("<http://example.org/z>"), lit("string"), lit("-10.2E3"),
+           lit("+33.3300"), lit("0.0"), lit("0"), lit("0E1"), lit("1.5"),
+           lit("1"), lit("1E0"), lit("13"), lit("2002-10-10T17:00:00Z"),
+           lit("false"), lit("true"), T, F,
            lit("0", absl::StrCat("^^<", XSD_PREFIX.second, "boolean>")), I(0),
            I(1), I(-1), D(0.0), D(1.0), D(-1.0),
            // The SPARQL compliance tests for the boolean conversion functions
