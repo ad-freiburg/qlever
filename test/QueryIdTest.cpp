@@ -9,8 +9,10 @@
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
-using ::testing::ContainerEq;
+using ::testing::Field;
 using ::testing::IsEmpty;
+using ::testing::Pair;
+using ::testing::UnorderedElementsAre;
 
 TEST(QueryId, checkIdEqualityRelation) {
   auto queryIdOne = QueryId::idFromString("some-id");
@@ -143,7 +145,7 @@ TEST(QueryRegistry, verifyCancellationHandleIsNullptrIfNotPresent) {
 // _____________________________________________________________________________
 
 TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
-  using MapType = ad_utility::HashMap<QueryId, std::string>;
+  using ActiveQueryInfo = QueryRegistry::ActiveQueryInfo;
   QueryRegistry registry{};
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
@@ -151,19 +153,26 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
   {
     auto queryId1 = registry.uniqueId("my-query");
 
-    EXPECT_THAT(registry.getActiveQueries(),
-                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
+    EXPECT_THAT(
+        registry.getActiveQueries(),
+        UnorderedElementsAre(Pair(queryId1.toQueryId(),
+                                  Field(&ActiveQueryInfo::query, "my-query"))));
 
     {
       auto queryId2 = registry.uniqueId("other-query");
 
       EXPECT_THAT(registry.getActiveQueries(),
-                  ContainerEq(MapType{{queryId1.toQueryId(), "my-query"},
-                                      {queryId2.toQueryId(), "other-query"}}));
+                  UnorderedElementsAre(
+                      Pair(queryId1.toQueryId(),
+                           Field(&ActiveQueryInfo::query, "my-query")),
+                      Pair(queryId2.toQueryId(),
+                           Field(&ActiveQueryInfo::query, "other-query"))));
     }
 
-    EXPECT_THAT(registry.getActiveQueries(),
-                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
+    EXPECT_THAT(
+        registry.getActiveQueries(),
+        UnorderedElementsAre(Pair(queryId1.toQueryId(),
+                                  Field(&ActiveQueryInfo::query, "my-query"))));
   }
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());

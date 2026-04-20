@@ -502,8 +502,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("dump-active-queries");
     logCommand(cmd, "dump active queries");
     nlohmann::json json;
-    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(key)] = std::move(value);
+    for (auto& [key, info] : queryRegistry_.getActiveQueries()) {
+      auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             info.startedAt.time_since_epoch())
+                             .count();
+      json[nlohmann::json(key)] = {
+          {"query", std::move(info.query)},
+          {"started_at", startedAtMs},
+      };
     }
     response = createJsonResponse(json, request);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
