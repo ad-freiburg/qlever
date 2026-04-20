@@ -620,6 +620,26 @@ TEST(Date, Subtraction) {
 #endif
 
 // _____________________________________________________________________________
+TEST(Date, toEpochInt) {
+  Date date = Date(1970, 1, 1, 0, 0, 0);
+  auto result = date.toEpochInt();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), 0);
+  date = Date(1999, 1, 1, 10, 12, 0);
+  result = date.toEpochInt();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), 915'185'520);
+  date = Date(1949, 2, 11, 10, 12, 0);
+  result = date.toEpochInt();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), -659'108'880);
+  // Invalid date
+  date = Date(1998, 2, 30, 10, 12, 0);
+  result = date.toEpochInt();
+  ASSERT_FALSE(result.has_value());
+}
+
+// _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
   Date date = Date(1970, 1, 1, 0, 0, 0);  // No `TimeZone` given.
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());

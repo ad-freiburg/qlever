@@ -353,6 +353,7 @@ class Date {
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
   std::optional<Seconds> toEpoch() const;
+  int64_t toEpochInt() const;
 
   // From a Unix Epoch timestamp, construct the corresponding `Date`.
   static Date makeFromEpoch(Seconds timestamp, TimeZone tz);
