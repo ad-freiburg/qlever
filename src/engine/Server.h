@@ -20,6 +20,7 @@
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -145,6 +146,15 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
+
+  // Metrics instruments — created in run() from the global MeterProvider.
+  // No-op instruments are used when metrics are disabled.
+  std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
+      activeQueries_;
+  std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
+      activeUpdates_;
+  std::unique_ptr<opentelemetry::metrics::Histogram<double>> queryDuration_;
+  std::unique_ptr<opentelemetry::metrics::Histogram<double>> updateDuration_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
