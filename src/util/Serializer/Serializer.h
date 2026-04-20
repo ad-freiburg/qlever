@@ -7,8 +7,10 @@
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 
+#include <array>
 #include <stdexcept>
 
+#include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 
@@ -276,6 +278,77 @@ CPP_template(typename T,
                                   std::is_enum_v<std::decay_t<T>>))
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
+}
+
+// Implementation of `usesAlignedSerialization` defined below.
+namespace detail {
+template <typename S, typename = void>
+struct UsesAlignedSerializationImpl : std::false_type {};
+
+template <typename S>
+struct UsesAlignedSerializationImpl<
+    S, std::enable_if_t<std::is_convertible_v<
+           decltype(S::UsesAlignedSerialization), bool>>> {
+  static constexpr bool value = S::UsesAlignedSerialization;
+};
+
+}  // namespace detail
+
+// Type trait to check whether a serializer opts into aligned serialization.
+// A serializer opts in by defining a `static constexpr bool
+// UsesAlignedSerialization` member set to `true`.
+template <typename S>
+constexpr bool usesAlignedSerialization =
+    detail::UsesAlignedSerializationImpl<std::decay_t<S>>::value;
+
+// Concept for serializers that support zero-copy reads by providing direct
+// access to the underlying buffer.
+// Note: The concept currently only checks for the existence of the functions,
+// but leaves the return types unchecked, because the syntax in C++17 mode for
+// those checks is very very verbose.
+template <typename S>
+CPP_requires(zeroCopyReadSerializerRequires,
+             requires(S s,
+                      size_t numBytes)(s.getSpanToBytes(numBytes),
+                                       s.getCurrentPosition(), s.skip(numBytes),
+                                       concepts::requires_<ReadSerializer<S>>));
+
+template <typename S>
+CPP_concept ZeroCopyReadSerializer =
+    ReadSerializer<S> && usesAlignedSerialization<S> &&
+    CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+
+// Align the current write position to the alignment requirement of type `T`.
+// This adds padding bytes (zeros) if necessary. If the serializer does not use
+// aligned serialization, this is a no-op.
+CPP_template(typename T, typename S)(
+    requires WriteSerializer<S>) void alignForType(S& serializer) {
+  if constexpr (usesAlignedSerialization<S>) {
+    size_t currentPos = serializer.getCurrentPosition();
+    static constexpr size_t alignment = alignof(T);
+    size_t padding = alignment - (currentPos % alignment);
+    if (padding > 0) {
+      // Use a static array to avoid dynamic allocation for padding.
+      // 64 bytes should cover all practical alignment requirements.
+      std::array<char, alignment> zeros = {0};
+      serializer.serializeBytes(zeros.data(), padding);
+    }
+  }
+}
+
+// Skip bytes to align the current read position to the alignment requirement
+// of type `T`. If the serializer does not use aligned serialization, this is a
+// no-op.
+CPP_template(typename T, typename S)(
+    requires ReadSerializer<S>) void alignForType(S& serializer) {
+  if constexpr (usesAlignedSerialization<S>) {
+    size_t currentPos = serializer.getCurrentPosition();
+    size_t alignment = alignof(T);
+    size_t padding = alignment - (currentPos % alignment);
+    if (padding > 0) {
+      serializer.skip(padding);
+    }
+  }
 }
 
 }  // namespace ad_utility::serialization

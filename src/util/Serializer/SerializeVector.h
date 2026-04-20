@@ -27,6 +27,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    ad_utility::serialization::alignForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -67,6 +68,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    ad_utility::serialization::alignForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -74,6 +76,27 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
       serializer | el;
     }
   }
+}
+
+// Read a span of trivially copyable values from the serializer without copying
+// them. The pointer of the span will point into the serializers internal
+// buffer. Can only be called if a `span` or `vector` of the same type was
+// written to the serializer at its current position.
+CPP_template(typename T, typename S)(
+    requires ZeroCopyReadSerializer<S> CPP_and TriviallySerializable<T>)
+    std::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
+  std::size_t size;
+  serializer >> size;
+  alignForType<T>(serializer);
+  auto bytes = serializer.getSpanToBytes(size * sizeof(T));
+  AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
+  AD_CORRECTNESS_CHECK(
+      reinterpret_cast<std::uintptr_t>(bytes.data()) % alignof(T) == 0);
+  // TODO<C++23> Technically this is undefined behavior for types other than
+  // `char` without calling `start_lifetime_as_array` or memcopying the data,
+  // But no compiler implements this as of now, and it has been working in
+  // practice forever.
+  return std::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
 }
 
 /// Incrementally serialize a std::vector to disk without materializing it.
@@ -93,6 +116,7 @@ CPP_template(typename T, typename Serializer)(
     // `_size` does not have the correct value yet. The correct size will be set
     // in the finish() method.
     _serializer << _size;
+    alignForType<T>(_serializer);
   }
 
   void push(const T& element) {
