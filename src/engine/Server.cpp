@@ -295,7 +295,8 @@ auto Server::setupCancellationHandle(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    std::string_view operationName, std::string_view operationSPARQL,
+    std::shared_ptr<Index> index, std::string_view operationName,
+    std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender& messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk) {
@@ -326,7 +327,7 @@ auto Server::prepareOperation(
       << "\n"
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   auto qec = std::make_shared<QueryExecutionContext>(
-      index(), &cache_, allocator_, sortPerformanceEstimator_,
+      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, &materializedViewsManager_, std::ref(messageSender),
       pinSubtrees, pinResult);
 
@@ -363,9 +364,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
-  // TODO<RobinTF> Only acquire index once here and pass to all places that use
-  // it.
-  // TODO<RobinTF> Also fix wrapper type of the shared pointer.
+  // Acquire the current index exactly once for the whole request so that a
+  // concurrent rebuild that swaps in a new index does not change which
+  // instance is observed between the helpers called below.
+  auto index = this->index();
 
   // Log some basic information about the request. Start with an empty line so
   // that in a low-traffic scenario (or when the query processing is very fast),
@@ -422,7 +424,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
-    response = createJsonResponse(composeStatsJson(), request);
+    response = createJsonResponse(composeStatsJson(*index), request);
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
     logCommand(cmd, "get cache statistics");
     response = createJsonResponse(composeCacheStatsJson(), request);
@@ -450,15 +452,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Conan setup.
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [this] {
+        [index] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          auto counts =
-              this->index()->deltaTriplesManager().modify<DeltaTriplesCount>(
-                  [](auto& deltaTriples) {
-                    deltaTriples.clear();
-                    return deltaTriples.getCounts();
-                  });
+          auto counts = index->deltaTriplesManager().modify<DeltaTriplesCount>(
+              [](auto& deltaTriples) {
+                deltaTriples.clear();
+                return deltaTriples.getCounts();
+              });
           return counts;
         },
         handle);
@@ -483,10 +484,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [this, handle] {
+        [index, handle] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          return this->index()->deltaTriplesManager().modify<nlohmann::json>(
+          return index->deltaTriplesManager().modify<nlohmann::json>(
               [handle](auto& deltaTriples) {
                 return deltaTriples.vacuum(handle);
               });
@@ -501,7 +502,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
-        createOkResponse(index()->getIndexId(), request, MediaType::textPlain);
+        createOkResponse(index->getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
     requireValidAccessToken("dump-active-queries");
     logCommand(cmd, "dump active queries");
@@ -612,8 +613,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("index-description");
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
-    index()->setKbName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(), request);
+    index->setKbName(std::string{description.value()});
+    response = createJsonResponse(composeStatsJson(*index), request);
   }
 
   // Set description of text index.
@@ -621,8 +622,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("text-description");
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
-    index()->setTextName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(), request);
+    index->setTextName(std::string{description.value()});
+    response = createJsonResponse(composeStatsJson(*index), request);
   }
 
   // Set one or several of the runtime parameters.
@@ -644,7 +645,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery, this](
+       &requestTimer, &plannedQuery, &index, this](
           std::vector<ParsedQuery> operations, std::string operationName,
           const std::string operationString,
           std::function<bool(const ParsedQuery&)> expectedOperation,
@@ -660,7 +661,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         createMessageSender(queryHub_, request, operationString);
 
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, operationString, messageSender,
+        prepareOperation(index, operationName, operationString, messageSender,
                          parameters, timeLimit.value(), accessTokenOk);
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
@@ -668,9 +669,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           msg, ad_utility::truncateOperationString(operationString)));
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      co_return co_await processUpdate(
-          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
+      co_return co_await processUpdate(index, std::move(operations),
+                                       requestTimer, tracer, cancellationHandle,
+                                       qec, std::move(request), send,
+                                       timeLimit.value(), plannedQuery);
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
       ParsedQuery query = std::move(operations[0]);
@@ -681,11 +683,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           std::move(request), send, timeLimit.value(), plannedQuery);
     }
   };
-  auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
-        &index()->encodedIriManager(), query.query_, query.datasetClauses_);
+        &index->encodedIriManager(), query.query_, query.datasetClauses_);
     auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL query", std::move(query.query_),
@@ -694,7 +696,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "following update was sent instead of an query: ",
         dummy);
   };
-  auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
@@ -702,7 +704,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index()->getBlankNodeManager(), &index()->encodedIriManager(),
+        index->getBlankNodeManager(), &index->encodedIriManager(),
         update.update_, update.datasetClauses_);
     tracer->endTrace("parsing");
     return visitOperation(
@@ -714,12 +716,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
-       this](GraphStoreOperation operation) -> Awaitable<void> {
+       &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(
-            std::move(operation), request, *index_.load());
+        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
+                                                        request, *index);
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -833,30 +835,29 @@ nlohmann::json Server::composeErrorResponseJson(
 }
 
 // _____________________________________________________________________________
-nlohmann::json Server::composeStatsJson() const {
-  auto index = index_.load();
+nlohmann::json Server::composeStatsJson(const Index& index) {
   json result;
-  result["name-index"] = index->getKbName();
-  result["git-hash-index"] = index->getGitShortHash();
+  result["name-index"] = index.getKbName();
+  result["git-hash-index"] = index.getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
-  result["num-permutations"] = (index->hasAllPermutations() ? 6 : 2);
-  result["num-predicates-normal"] = index->numDistinctPredicates().normal;
-  result["num-predicates-internal"] = index->numDistinctPredicates().internal;
-  if (index->hasAllPermutations()) {
-    result["num-subjects-normal"] = index->numDistinctSubjects().normal;
-    result["num-subjects-internal"] = index->numDistinctSubjects().internal;
-    result["num-objects-normal"] = index->numDistinctObjects().normal;
-    result["num-objects-internal"] = index->numDistinctObjects().internal;
+  result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
+  result["num-predicates-normal"] = index.numDistinctPredicates().normal;
+  result["num-predicates-internal"] = index.numDistinctPredicates().internal;
+  if (index.hasAllPermutations()) {
+    result["num-subjects-normal"] = index.numDistinctSubjects().normal;
+    result["num-subjects-internal"] = index.numDistinctSubjects().internal;
+    result["num-objects-normal"] = index.numDistinctObjects().normal;
+    result["num-objects-internal"] = index.numDistinctObjects().internal;
   }
 
-  auto numTriples = index->numTriples();
+  auto numTriples = index.numTriples();
   result["num-triples-normal"] = numTriples.normal;
   result["num-triples-internal"] = numTriples.internal;
-  result["name-text-index"] = index->getTextName();
-  result["num-text-records"] = index->getNofTextRecords();
-  result["num-word-occurrences"] = index->getNofWordPostings();
-  result["num-entity-occurrences"] = index->getNofEntityPostings();
+  result["name-text-index"] = index.getTextName();
+  result["num-text-records"] = index.getNofTextRecords();
+  result["num-word-occurrences"] = index.getNofWordPostings();
+  result["num-entity-occurrences"] = index.getNofEntityPostings();
   return result;
 }
 
@@ -1166,16 +1167,16 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 
 // ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
-    const PlannedQuery& plannedUpdate,
+    const Index& index, const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      *index_.load(), plannedUpdate.parsedQuery(), qet, deltaTriples,
-      cancellationHandle, tracer);
+  UpdateMetadata updateMetadata =
+      ExecuteUpdate::executeUpdate(index, plannedUpdate.parsedQuery(), qet,
+                                   deltaTriples, cancellationHandle, tracer);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
@@ -1194,7 +1195,7 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        std::vector<ParsedQuery>&& updates,
+        std::shared_ptr<Index> index, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -1218,12 +1219,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, outerTracer, &metadatas]() {
+      [this, index, &requestTimer, &cancellationHandle, &updates, &qec,
+       &timeLimit, &plannedUpdate, outerTracer, &metadatas]() {
         outerTracer->endTrace("waitingForUpdateThread");
-        return index_.load()->deltaTriplesManager().modify<json>(
-            [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
-             &timeLimit, &qec, &metadatas](DeltaTriples& deltaTriples) {
+        return index->deltaTriplesManager().modify<json>(
+            [this, &index, &cancellationHandle, &plannedUpdate, &updates,
+             &requestTimer, &timeLimit, &qec,
+             &metadatas](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
@@ -1248,13 +1250,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->processUpdateImpl(
-                    plannedUpdate.value(), cancellationHandle, deltaTriples,
-                    tracer);
+                    *index, plannedUpdate.value(), cancellationHandle,
+                    deltaTriples, tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    *index_.load(),
+                    *index,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree(),
                     updateMetadata, tracer));
@@ -1482,12 +1484,12 @@ void Server::writeMaterializedView(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
-  auto index = index_.load();
+  auto index = this->index();
   auto parsedQuery = SparqlParser::parseQuery(
       &index->encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
-      index, &cache_, allocator_, sortPerformanceEstimator_, &namedResultCache_,
-      &materializedViewsManager_);
+      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_, &materializedViewsManager_);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
@@ -1502,7 +1504,7 @@ void Server::writeMaterializedView(
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto index = index_.load();
+  auto index = this->index();
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
   auto coroutine = computeInNewThread(
@@ -1534,7 +1536,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
       updateThreadPool_,
       [this, oldIndex = std::move(index), newIndex = std::move(newIndex),
        &handle, oldSnapshot = std::move(oldSnapshot),
-       mapping = std::move(mapping)] {
+       mapping = std::move(mapping)]() mutable {
         auto newSnapshot = oldIndex->deltaTriplesManager()
                                .getCurrentLocatedTriplesSharedState();
         newIndex->deltaTriplesManager().modify<void>(
@@ -1548,7 +1550,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         // filename.
         // TODO<RobinTF> add this function
         // oldIndex->removeOnDestruction();
-        index_ = std::move(newIndex);
+        *index_.wlock() = std::move(newIndex);
       },
       handle);
   co_await std::move(swapRoutine);
