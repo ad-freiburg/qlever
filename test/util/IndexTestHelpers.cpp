@@ -349,13 +349,13 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
   // `Context`.
   struct Context {
     TypeErasedCleanup cleanup_;
-    std::unique_ptr<Index> index_;
+    std::shared_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
     std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
             materializedViewsManager_.get());
   };
@@ -375,7 +375,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                        ad_utility::deleteFile(indexFilename, false);
                      }
                    }},
-                   std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
+                   std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                    std::make_unique<QueryResultCache>(),
                    std::make_unique<NamedResultCache>(),
                    std::make_unique<MaterializedViewsManager>()});

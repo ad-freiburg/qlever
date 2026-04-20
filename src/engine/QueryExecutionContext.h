@@ -103,7 +103,7 @@ class QueryExecutionContext
  public:
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
-      const Index& index, QueryResultCache* const cache,
+      std::shared_ptr<const Index> index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
@@ -115,7 +115,7 @@ class QueryExecutionContext
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
-  [[nodiscard]] const Index& getIndex() const { return _index; }
+  [[nodiscard]] const Index& getIndex() const { return *_index; }
 
   const LocatedTriplesState& locatedTriplesState() const {
     AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
@@ -213,14 +213,14 @@ class QueryExecutionContext
   // header.
   static bool areWebSocketUpdatesEnabled();
   static std::chrono::milliseconds websocketUpdateInterval();
-  const Index& _index;
+  std::shared_ptr<const Index> _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
   LocatedTriplesSharedState locatedTriplesSharedState_{
-      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
+      _index->deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

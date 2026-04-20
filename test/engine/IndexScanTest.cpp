@@ -562,9 +562,10 @@ TEST(IndexScan, getResultSizeOfScan) {
 
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
-  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
-                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
-  auto getId = makeGetId(index);
+  auto index = std::make_shared<Index>(
+      makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                    "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
+  auto getId = makeGetId(*index);
   auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
@@ -589,7 +590,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   // Since the rough estimate doesn't know if the delta triples are inserts or
   // deletions, the estimate remains the same regardless of the delta triples.
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
@@ -600,7 +601,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
@@ -609,7 +610,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,

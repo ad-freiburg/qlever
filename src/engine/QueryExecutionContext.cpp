@@ -22,7 +22,7 @@ std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
 
 // _____________________________________________________________________________
 QueryExecutionContext::QueryExecutionContext(
-    const Index& index, QueryResultCache* const cache,
+    std::shared_ptr<const Index> index, QueryResultCache* const cache,
     ad_utility::AllocatorWithLimit<Id> allocator,
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
@@ -31,7 +31,7 @@ QueryExecutionContext::QueryExecutionContext(
     const bool pinResult, const DisableCaching disableCaching)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
-      _index(index),
+      _index(std::move(index)),
       _subtreeCache(cache),
       _allocator(std::move(allocator)),
       _sortPerformanceEstimator(sortPerformanceEstimator),

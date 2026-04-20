@@ -20,7 +20,7 @@ Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
-      index_{allocator_},
+      index_{std::make_shared<Index>(allocator_)},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -35,19 +35,19 @@ Qlever::Qlever(const EngineConfig& config)
       });
 
   // Load the index from disk.
-  index_.usePatterns() = enablePatternTrick_;
-  index_.loadAllPermutations() = !config.onlyPsoAndPos_;
-  index_.doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+  index_->usePatterns() = enablePatternTrick_;
+  index_->loadAllPermutations() = !config.onlyPsoAndPos_;
+  index_->doNotLoadPermutations() = config.doNotLoadPermutations_;
+  index_->createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
-    index_.addTextFromOnDiskIndex();
+    index_->addTextFromOnDiskIndex();
   }
 
   materializedViewsManager_.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index_.numTriples().normalAndInternal_() *
+      allocator_, index_->numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 }
 
@@ -186,7 +186,7 @@ Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
       false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
-      &index_.getImpl().encodedIriManager(), std::move(query), {});
+      &index_->getImpl().encodedIriManager(), std::move(query), {});
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qecPtr.get(), handle};
   qp.setEnablePatternTrick(enablePatternTrick_);

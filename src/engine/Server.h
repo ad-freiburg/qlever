@@ -73,8 +73,8 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  std::shared_ptr<Index> index() { return index_; }
+  std::shared_ptr<const Index> index() const { return index_.load(); }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -124,7 +124,9 @@ class Server {
   MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  // Atomic for shared pointers is implemented via a mutex, not lock free, but
+  // it is good enough for us.
+  std::atomic<std::shared_ptr<Index>> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
