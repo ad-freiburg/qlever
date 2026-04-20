@@ -403,7 +403,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // to set up the global index state
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = EncodedIriManager(prefixes);
+  config.encodedPrefixesWithoutAngleBrackets = prefixes;
   auto qec = getQec(config);
   const auto& encodedIriManager = qec->getIndex().encodedIriManager();
 

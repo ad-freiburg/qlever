@@ -918,7 +918,7 @@ TEST(IndexImpl, graphNameManagerIntegration) {
                                  "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "2> . <http://example.org/1> <b> <c> <2> .")};
   c.indexType = qlever::Filetype::NQuad;
-  c.encodedIriManager = EncodedIriManager({"http://example.org"});
+  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org"};
   auto qec = getQec(c);
   const auto graphManager = qec->getIndex().graphNameManager();
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);

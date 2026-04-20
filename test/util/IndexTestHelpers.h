@@ -66,7 +66,8 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
-  std::optional<EncodedIriManager> encodedIriManager = std::nullopt;
+  std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
+      std::nullopt;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -83,7 +84,7 @@ struct TestIndexConfig {
                       c.blocksizePermutations, c.createTextIndex,
                       c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedIriManager);
+                      c.indexType, c.encodedPrefixesWithoutAngleBrackets);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,

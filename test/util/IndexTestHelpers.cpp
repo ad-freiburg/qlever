@@ -222,15 +222,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
-    if (c.encodedIriManager.has_value()) {
-      // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !ql::ends_with(prefix, '>'));
-        prefixes.push_back(prefix.substr(1));
-      }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
