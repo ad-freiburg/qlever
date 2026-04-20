@@ -79,7 +79,17 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  // Set encoded IRI prefixes with the new unified interface.
+  if (!config.prefixesForIdEncodedIris_.empty()) {
+    index.getImpl().setPrefixesForEncodedValues(
+        config.prefixesForIdEncodedIris_);
+  }
+
+  // Handle deprecated bit pattern interface for backward compatibility.
+  if (!config.prefixesForIdEncodedIrisWithBitPattern_.empty()) {
+    index.getImpl().setPrefixesForEncodedValuesWithBitPattern(
+        config.prefixesForIdEncodedIrisWithBitPattern_);
+  }
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
