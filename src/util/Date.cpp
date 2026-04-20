@@ -127,6 +127,20 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 }
 
 // _____________________________________________________________________________
+int64_t Date::toEpochInt() const {
+  std::optional<Date::Nanoseconds> result = toEpoch();
+  if (!result.has_value()) {
+    return -1;  // Invalid date.
+  } else {
+    // First convert the timepoint to its duration representation and then cast
+    // to total seconds.
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               result.value().time_since_epoch())
+        .count();
+  }
+}
+
+// _____________________________________________________________________________
 Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
   // Shift the timestamp according to the given `TimeZone`offset.

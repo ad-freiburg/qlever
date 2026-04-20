@@ -98,6 +98,8 @@ struct ExtractTimeComponentImpl {
 };
 
 //______________________________________________________________________________
+using ExtractEpoch =
+    ExtractTimeComponentImpl<&Date::toEpochInt, &Id::makeFromInt>;
 using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
 using ExtractMinutes =
     ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
@@ -111,6 +113,7 @@ NARY_EXPRESSION(TimezoneStrExpression, 1,
                 FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
                 FV<ExtractTimezoneDurationFormat, DateValueGetter>);
+NARY_EXPRESSION(ToEpochExpression, 1, FV<ExtractEpoch, DateValueGetter>);
 NARY_EXPRESSION(HoursExpression, 1, FV<ExtractHours, DateValueGetter>);
 NARY_EXPRESSION(MinutesExpression, 1, FV<ExtractMinutes, DateValueGetter>);
 NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
@@ -147,6 +150,10 @@ SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child) {
 
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child) {
   return std::make_unique<TimezoneDurationExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<ToEpochExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
