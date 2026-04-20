@@ -597,6 +597,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
+  auto ForInfoOrHigher = [](auto matcher) {
+    if constexpr (LOGLEVEL < INFO) {
+      return testing::_;
+    } else {
+      return matcher;
+    }
+  };
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
@@ -607,7 +614,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(ForInfoOrHigher(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -615,9 +623,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(ForInfoOrHigher(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -630,9 +638,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(ForInfoOrHigher(HasSubstr("singleFile.ttl")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -642,9 +650,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(ForInfoOrHigher(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -657,7 +665,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(ForInfoOrHigher(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
