@@ -75,8 +75,7 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
   const char* i = XSD_INT_TYPE;
   const char* d = XSD_DECIMAL_TYPE;
   const char* b = XSD_BOOLEAN_TYPE;
-  // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") always include the
-  // datatype.
+
   if (!includeDataType &&
       (term.rdfTermDataType_ == i || term.rdfTermDataType_ == d ||
        (term.rdfTermDataType_ == b && term.rdfTermString_.length() > 1))) {
