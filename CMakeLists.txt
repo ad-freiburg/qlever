@@ -234,6 +234,15 @@ else ()
     endif ()
 endif ()
 
+### io_uring (optional, for batch vocabulary I/O)
+pkg_check_modules(URING QUIET liburing)
+if (URING_FOUND)
+    MESSAGE(STATUS "Found liburing, enabling io_uring support")
+    add_compile_definitions(QLEVER_HAS_IO_URING)
+    include_directories(${URING_INCLUDE_DIRS})
+    link_libraries(${URING_LIBRARIES})
+endif ()
+
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)
@@ -532,6 +541,9 @@ qlever_target_link_libraries(LibQLeverExample parser engine util index qlever ab
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(VocabularyBatchLookupBenchmarkMain src/VocabularyBatchLookupBenchmarkMain.cpp)
+qlever_target_link_libraries(VocabularyBatchLookupBenchmarkMain index parser ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

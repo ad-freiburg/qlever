@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+#include "util/Generator.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -11,6 +13,67 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
     return std::string{fromInternal.value()};
   }
   return externalVocab_[i];
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
+    ql::span<const size_t> indices) const {
+  // Step 1: Look up all indices in the internal (RAM) vocabulary.
+  auto internalResult = internalVocab_.lookupBatch(indices);
+
+  // Step 2: Identify which indices were not found in the internal vocabulary.
+  std::vector<size_t> missingIndices;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    if (!(*internalResult)[i].has_value()) {
+      missingIndices.push_back(indices[i]);
+    }
+  }
+
+  // Step 3: Look up the missing indices in the external (disk) vocabulary.
+  VocabBatchLookupResult externalResult;
+  if (!missingIndices.empty()) {
+    externalResult = externalVocab_.lookupBatch(missingIndices);
+  }
+
+  // Step 4: Combine results. We need a struct that keeps both the internal and
+  // external results alive, since our string_views point into their memory.
+  struct CombinedData {
+    decltype(internalResult) internal;
+    VocabBatchLookupResult external;
+    std::vector<std::string_view> views;
+    ql::span<std::string_view> span;
+  };
+
+  auto combined = std::make_shared<CombinedData>();
+  combined->internal = std::move(internalResult);
+  combined->external = std::move(externalResult);
+  combined->views.resize(indices.size());
+
+  size_t externalIdx = 0;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    if ((*combined->internal)[i].has_value()) {
+      combined->views[i] = (*combined->internal)[i].value();
+    } else {
+      combined->views[i] = (*combined->external)[externalIdx++];
+    }
+  }
+
+  combined->span = ql::span<std::string_view>{combined->views};
+  auto* spanPtr = &combined->span;
+  return VocabBatchLookupResult(std::move(combined), spanPtr);
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput VocabularyInternalExternal::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  auto gen =
+      [](const VocabularyInternalExternal* self,
+         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
+    for (auto& batch : input) {
+      co_yield self->lookupBatch(batch);
+    }
+  }(this, std::move(input));
+  return VocabLookupOutput{std::move(gen)};
 }
 
 // _____________________________________________________________________________
