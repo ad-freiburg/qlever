@@ -36,6 +36,17 @@ enum class ComputationMode {
   LAZY_IF_SUPPORTED
 };
 
+enum class LimitOffsetSupport {
+  // `LIMIT` and `OFFSET` have to be applied externally and cannot be used to
+  // optimize child operations.
+  NO,
+  // `LIMIT` and `OFFSET` have to be applied externally but the operation can
+  // also optimize child operations if they support it.
+  PARTIAL,
+  // `LIMIT` and `OFFSET` are applied directly to this operation.
+  YES
+};
+
 class Operation {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -294,17 +305,24 @@ class Operation {
     return false;
   }
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
+  // Return the level of support this operation has for `LIMIT` and `OFFSET`.
+  // `YES` means the operation directly applies `LIMIT`/`OFFSET` to its result.
+  // `PARTIAL` means the operation can propagate `LIMIT`/`OFFSET` to its
+  // children for optimization, but does not apply it itself.
+  // `NO` means the operation does not support `LIMIT`/`OFFSET` at all.
+  [[nodiscard]] virtual LimitOffsetSupport supportsLimitOffset() const {
+    return LimitOffsetSupport::NO;
+  }
 
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
+  // way.
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
+    // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
+    // after the computation of the result. Make sure to also override
+    // `supportsLimitOffset()` if this function is overridden, otherwise the
+    // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
   // This function is called when the operation's result is requested to be
@@ -347,6 +365,16 @@ class Operation {
   }
 
   const auto& getLimitOffset() const { return limitOffset_; }
+
+  // Directly set the `limitOffset_` without merging and without calling
+  // `onLimitOffsetChanged`. The only intended use case is to restore a
+  // previously set limit/offset that was removed by a cloning/rewriting
+  // operation (e.g. column stripping). In almost all other cases, use
+  // `applyLimitOffset` instead.
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    limitOffset_ = limitOffsetClause;
+  }
 
  private:
   // Actual implementation of `clone()` without extra checks.
@@ -468,7 +496,7 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimitOffset() == true`, then the operation does
+  // operation. If `supportsLimitOffset() == LimitOffsetSupport::YES`, then the
   // already track the limit stats correctly and there's no need to keep track
   // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
   // be handled.
