@@ -102,6 +102,8 @@ class EncodedIriManagerImpl {
       std::vector<std::string> prefixesWithoutAngleBrackets) {
     // Add hardcoded prefixes.
     for (const auto& prefix : HardcodedPrefixes) {
+      AD_CONTRACT_CHECK(
+          !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
       prefixesWithoutAngleBrackets.emplace_back(prefix);
     }
     if (prefixesWithoutAngleBrackets.empty()) {
