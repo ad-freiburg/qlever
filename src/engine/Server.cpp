@@ -363,6 +363,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
+  // TODO<RobinTF> Only acquire index once here and pass to all places that use
+  // it.
+  // TODO<RobinTF> Also fix wrapper type of the shared pointer.
 
   // Log some basic information about the request. Start with an empty line so
   // that in a low-traffic scenario (or when the query processing is very fast),
@@ -1515,21 +1518,15 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         auto mapping = qlever::materializeToIndex(
             *index, indexBaseName, currentSnapshot, localVocabCopy, ownedBlocks,
             handle, logFileName);
-        struct Helper {
-          Index index_;
-          ~Helper() { /*index_.removeFiles();*/
-          }
-        };
-        auto helper = std::make_shared<Helper>(Index{allocator_});
-        auto& newIndex = helper->index_;
-        newIndex.usePatterns() = index->usePatterns();
-        newIndex.loadAllPermutations() = index->loadAllPermutations();
-        newIndex.createFromOnDiskIndex(indexBaseName,
-                                       index->deltaTriplesManager().persists());
+        auto newIndex = std::make_shared<Index>(allocator_);
+        newIndex->usePatterns() = index->usePatterns();
+        newIndex->loadAllPermutations() = index->loadAllPermutations();
+        newIndex->createFromOnDiskIndex(
+            indexBaseName, index->deltaTriplesManager().persists());
         // TODO<RobinTF> properly handle `materializedViewsManager_` and
         // `newIndex->addTextFromOnDiskIndex()` .
         return {std::move(currentSnapshot), std::move(mapping),
-                std::shared_ptr<Index>{std::move(helper), &newIndex}};
+                std::move(newIndex)};
       },
       handle);
   auto [oldSnapshot, mapping, newIndex] = co_await std::move(coroutine);
@@ -1547,6 +1544,10 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
               deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot,
                                                mapping, handle, tracer);
             });
+        // TODO<RobinTF> persist delta triples if applicable using better
+        // filename.
+        // TODO<RobinTF> add this function
+        // oldIndex->removeOnDestruction();
         index_ = std::move(newIndex);
       },
       handle);
