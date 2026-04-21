@@ -23,6 +23,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
+#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
@@ -73,11 +74,17 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  std::shared_ptr<Index> index() { return indexAndViews_.rlock()->index_; }
+  std::shared_ptr<const Index> index() const {
+    return indexAndViews_.rlock()->index_;
+  }
+
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return indexAndViews_.rlock()->materializedViewsManager_;
+  }
 
   // Get server statistics.
-  json composeStatsJson() const;
+  static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
@@ -121,10 +128,16 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
+  // so that an index rebuild can atomically swap both in, while other threads
+  // continue to read the previous instances via the `shared_ptr`s they hold.
+  struct IndexAndViews {
+    std::shared_ptr<Index> index_;
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
+  };
+  ad_utility::Synchronized<IndexAndViews> indexAndViews_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
@@ -230,7 +243,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          std::shared_ptr<Index> index, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -250,8 +263,9 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Prepare the execution of an operation
-  auto prepareOperation(std::string_view operationName,
+  //  Prepare the execution of an operation.
+  auto prepareOperation(std::shared_ptr<Index> index,
+                        std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
@@ -286,7 +300,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
+      const Index& index, const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =

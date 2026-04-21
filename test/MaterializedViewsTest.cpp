@@ -791,7 +791,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
     server.initialize(testIndexBase_, false, true, true, false,
                       {"testViewForServerPreload"});
-    EXPECT_TRUE(server.materializedViewsManager_.isViewLoaded(
+    EXPECT_TRUE(server.materializedViewsManager()->isViewLoaded(
         "testViewForServerPreload"));
   }
 

@@ -261,6 +261,10 @@ class DeltaTriples {
   // `writeToDisk` will be a nullop.
   void setPersists(std::optional<std::string> filename);
 
+  // Return true if `setPersists()` has been called with a non-nullopt filename,
+  // false otherwise.
+  bool persists() const;
+
   // Write the delta triples to disk to persist them between restarts.
   void writeToDisk() const;
 
@@ -440,6 +444,9 @@ class DeltaTriplesManager {
              std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
                              OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
+
+  // Call `DeltaTriples::persists()`.
+  bool persists() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

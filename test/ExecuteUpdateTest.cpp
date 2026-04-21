@@ -75,18 +75,19 @@ TEST(ExecuteUpdate, executeUpdate) {
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        Index index = ad_utility::testing::makeTestIndex(
-            "ExecuteUpdate_executeUpdate", indexConfig);
+        auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate", indexConfig));
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
-        expectExecuteUpdateHelper(update, qec, index);
-        index.deltaTriplesManager().modify<void>(
+                                  materializedViewsManager);
+        expectExecuteUpdateHelper(update, qec, *index);
+        index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
               EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
             });
@@ -94,20 +95,21 @@ TEST(ExecuteUpdate, executeUpdate) {
   // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails_ =
       [&expectExecuteUpdateHelper](
-          Index& index, const std::string& update,
+          std::shared_ptr<Index> index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
+                                  materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            expectExecuteUpdateHelper(update, qec, index), messageMatcher);
+            expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
   {
     auto expectExecuteUpdateFails =
@@ -115,9 +117,10 @@ TEST(ExecuteUpdate, executeUpdate) {
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
             source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
+          auto index =
+              std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+                  "ExecuteUpdate_executeUpdate",
+                  ad_utility::testing::TestIndexConfig()));
           expectExecuteUpdateFails_(index, update, messageMatcher,
                                     sourceLocation);
         };
