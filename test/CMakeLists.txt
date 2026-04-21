@@ -444,8 +444,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
 addLinkAndDiscoverTest(ProgressBarTest util)
 
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
-
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)

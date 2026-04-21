@@ -305,23 +305,23 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(ItemMapArray& map) {
+inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
   ItemVec els;
   std::vector<size_t> offsets;
   size_t totalEls =
       std::accumulate(map.begin(), map.end(), 0,
                       [&offsets](const auto& x, const auto& y) mutable {
                         offsets.push_back(x);
-                        return x + y.map_.size();
+                        return x + y.map_.map_.size();
                       });
   els.resize(totalEls);
   std::vector<std::future<void>> futures;
   size_t i = 0;
-  for (auto& singleMap : map) {
+  for (const auto& singleMap : map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+          ql::ranges::transform(singleMap.map_.map_, els.begin() + offsets[i],
                                 [](auto& el) -> T {
                                   return {el.first, std::move(el.second)};
                                 });

@@ -517,9 +517,9 @@ class IndexImpl {
    * @param items Contains our unsorted vocabulary. Maps words to their local
    * ids within this vocabulary.
    */
-  std::future<void> writeNextPartialVocabulary(
+  void writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, auto localIds,
+      const ItemMapArray& items, auto localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   // Return a Turtle parser that parses the given file. The parser will be
