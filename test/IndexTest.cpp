@@ -916,9 +916,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
 TEST(IndexImpl, graphNameManagerIntegration) {
   TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
-                                 "2> . <http://example.org/1> <b> <c> <2> .")};
+                                 "2> . <a> <b> <c> <http://example.org/1> .")};
   c.indexType = qlever::Filetype::NQuad;
-  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org"};
+  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   auto qec = getQec(c);
   const auto graphManager = qec->getIndex().graphNameManager();
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
