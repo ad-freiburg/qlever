@@ -573,13 +573,13 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
 
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
 
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};

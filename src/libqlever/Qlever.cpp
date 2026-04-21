@@ -43,7 +43,7 @@ Qlever::Qlever(const EngineConfig& config)
     index_->addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager_.setOnDiskBase(config.baseName_);
+  materializedViewsManager_->setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
@@ -182,7 +182,7 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_, [](std::string) {}, false,
+      &namedResultCache_, materializedViewsManager_, [](std::string) {}, false,
       false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
@@ -219,18 +219,18 @@ void IndexBuilderConfig::validate() const {
 
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  materializedViewsManager_.writeViewToDisk(
+  materializedViewsManager_->writeViewToDisk(
       std::move(name), parseAndPlanQuery(std::move(query)));
 }
 
 // ___________________________________________________________________________
 bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
-  return materializedViewsManager_.isViewLoaded(name);
+  return materializedViewsManager_->isViewLoaded(name);
 }
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  materializedViewsManager_.loadView(name);
+  materializedViewsManager_->loadView(name);
 }
 
 }  // namespace qlever

@@ -197,7 +197,8 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   std::shared_ptr<Index> index_;
   mutable NamedResultCache namedResultCache_;
-  mutable MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
 

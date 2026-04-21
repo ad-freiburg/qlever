@@ -26,7 +26,7 @@ QueryExecutionContext::QueryExecutionContext(
     ad_utility::AllocatorWithLimit<Id> allocator,
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
-    MaterializedViewsManager* materializedViewsManager,
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     std::function<void(std::string)> updateCallback, const bool pinSubtrees,
     const bool pinResult, const DisableCaching disableCaching)
     : _pinSubtrees(pinSubtrees),
@@ -37,7 +37,7 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
-      materializedViewsManager_(materializedViewsManager) {
+      materializedViewsManager_(std::move(materializedViewsManager)) {
   disableCaching_ = [disableCaching]() {
     if (disableCaching == DisableCaching::True) {
       return true;
@@ -51,7 +51,7 @@ QueryExecutionContext::QueryExecutionContext(
   }();
   AD_CORRECTNESS_CHECK(cache != nullptr);
   AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
-  AD_CORRECTNESS_CHECK(materializedViewsManager != nullptr);
+  AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
 }
 
 // _____________________________________________________________________________

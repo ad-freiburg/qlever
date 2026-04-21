@@ -74,8 +74,14 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  std::shared_ptr<Index> index() { return *index_.rlock(); }
-  std::shared_ptr<const Index> index() const { return *index_.rlock(); }
+  std::shared_ptr<Index> index() { return indexAndViews_.rlock()->index_; }
+  std::shared_ptr<const Index> index() const {
+    return indexAndViews_.rlock()->index_;
+  }
+
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return indexAndViews_.rlock()->materializedViewsManager_;
+  }
 
   // Get server statistics.
   static json composeStatsJson(const Index& index);
@@ -122,12 +128,16 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  // Guarded by a shared mutex so that an index rebuild can atomically swap in
-  // a new `Index` while other threads continue to read the previous instance.
-  ad_utility::Synchronized<std::shared_ptr<Index>> index_;
+  // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
+  // so that an index rebuild can atomically swap both in, while other threads
+  // continue to read the previous instances via the `shared_ptr`s they hold.
+  struct IndexAndViews {
+    std::shared_ptr<Index> index_;
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
+  };
+  ad_utility::Synchronized<IndexAndViews> indexAndViews_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;

@@ -185,14 +185,15 @@ class OperationTestFixture : public testing::Test {
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager =
+      std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -489,14 +490,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
                     TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -519,14 +520,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       "ensureFailedStatusIsSetWhenGeneratorIsCancelled", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{
       &context, []() -> Result::Generator {
@@ -557,14 +558,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -607,14 +608,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
                     TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {

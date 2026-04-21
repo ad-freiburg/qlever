@@ -352,12 +352,12 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::shared_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
-    std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_.get());
+            materializedViewsManager_);
   };
 
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
@@ -378,7 +378,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                    std::make_unique<QueryResultCache>(),
                    std::make_unique<NamedResultCache>(),
-                   std::make_unique<MaterializedViewsManager>()});
+                   std::make_shared<MaterializedViewsManager>()});
   }
   return contextMap.at(c).qec_.get();
 }

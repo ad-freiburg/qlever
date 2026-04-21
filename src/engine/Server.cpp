@@ -62,7 +62,9 @@ Server::Server(unsigned short port, size_t numThreads,
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
                  }},
-      index_{std::make_shared<Index>(allocator_)},
+      indexAndViews_{
+          IndexAndViews{std::make_shared<Index>(allocator_),
+                        std::make_shared<MaterializedViewsManager>()}},
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
@@ -96,14 +98,15 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     index->addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager_.setOnDiskBase(indexBaseName);
+  auto manager = this->materializedViewsManager();
+  manager->setOnDiskBase(indexBaseName);
 
   // Preload materialized views as requested by the user. This is done in a
   // try-catch block to prevent an exception during loading of a view from
   // blocking the server start.
   for (const auto& viewName : preloadMaterializedViews) {
     try {
-      materializedViewsManager_.loadView(viewName);
+      manager->loadView(viewName);
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -328,8 +331,8 @@ auto Server::prepareOperation(
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   auto qec = std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_, std::ref(messageSender),
-      pinSubtrees, pinResult);
+      &namedResultCache_, this->materializedViewsManager(),
+      std::ref(messageSender), pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
@@ -589,7 +592,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
-    materializedViewsManager_.loadView(name.value());
+    this->materializedViewsManager()->loadView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
@@ -1485,19 +1488,20 @@ void Server::writeMaterializedView(
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
   auto index = this->index();
+  auto manager = this->materializedViewsManager();
   auto parsedQuery = SparqlParser::parseQuery(
       &index->encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_);
+      &namedResultCache_, manager);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
       std::move(plan.queryExecutionTree()));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  materializedViewsManager_.writeViewToDisk(
-      name, {qet, qec, std::move(plan.parsedQuery())}, memoryLimit);
+  manager->writeViewToDisk(name, {qet, qec, std::move(plan.parsedQuery())},
+                           memoryLimit);
 }
 
 // _____________________________________________________________________________
@@ -1505,6 +1509,22 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto index = this->index();
+  auto oldManager = this->materializedViewsManager();
+  // Warn if state that won't carry over to the rebuilt index was previously
+  // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
+  // with a fresh, empty `MaterializedViewsManager`.
+  if (index->getNofTextRecords() > 0) {
+    AD_LOG_WARN << "A text index was loaded for the current index, but text "
+                   "search will no longer work after the rebuild completes. "
+                   "Restart the server to re-enable text search."
+                << std::endl;
+  }
+  if (oldManager->hasLoadedViews()) {
+    AD_LOG_WARN << "Materialized views were loaded for the current index, but "
+                   "they will no longer be available after the rebuild "
+                   "completes. Restart the server to reload them."
+                << std::endl;
+  }
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
   auto coroutine = computeInNewThread(
@@ -1512,7 +1532,8 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
       [this, index, &handle, &indexBaseName]()
           -> std::tuple<LocatedTriplesSharedState,
                         qlever::indexRebuilder::IndexRebuildMapping,
-                        std::shared_ptr<Index>> {
+                        std::shared_ptr<Index>,
+                        std::shared_ptr<MaterializedViewsManager>> {
         auto logFileName = indexBaseName + ".rebuild-index-log.txt";
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
             index->deltaTriplesManager()
@@ -1525,17 +1546,19 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         newIndex->loadAllPermutations() = index->loadAllPermutations();
         newIndex->createFromOnDiskIndex(
             indexBaseName, index->deltaTriplesManager().persists());
-        // TODO<RobinTF> properly handle `materializedViewsManager_` and
-        // `newIndex->addTextFromOnDiskIndex()` .
+        auto newManager = std::make_shared<MaterializedViewsManager>();
+        newManager->setOnDiskBase(indexBaseName);
         return {std::move(currentSnapshot), std::move(mapping),
-                std::move(newIndex)};
+                std::move(newIndex), std::move(newManager)};
       },
       handle);
-  auto [oldSnapshot, mapping, newIndex] = co_await std::move(coroutine);
+  auto [oldSnapshot, mapping, newIndex, newManager] =
+      co_await std::move(coroutine);
   auto swapRoutine = computeInNewThread(
       updateThreadPool_,
       [this, oldIndex = std::move(index), newIndex = std::move(newIndex),
-       &handle, oldSnapshot = std::move(oldSnapshot),
+       newManager = std::move(newManager), &handle,
+       oldSnapshot = std::move(oldSnapshot),
        mapping = std::move(mapping)]() mutable {
         auto newSnapshot = oldIndex->deltaTriplesManager()
                                .getCurrentLocatedTriplesSharedState();
@@ -1550,7 +1573,9 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         // filename.
         // TODO<RobinTF> add this function
         // oldIndex->removeOnDestruction();
-        *index_.wlock() = std::move(newIndex);
+        auto lock = indexAndViews_.wlock();
+        lock->index_ = std::move(newIndex);
+        lock->materializedViewsManager_ = std::move(newManager);
       },
       handle);
   co_await std::move(swapRoutine);

@@ -107,7 +107,7 @@ class QueryExecutionContext
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
-      MaterializedViewsManager* materializedViewsManager,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
@@ -251,7 +251,7 @@ class QueryExecutionContext
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
-  MaterializedViewsManager* materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
   bool disableCaching_ = false;
