@@ -46,7 +46,7 @@ static constexpr auto matchesPrecomputedConstant = [](const auto& value) {
   // only match the string, not the type field.
   return ::testing::VariantWith<PrecomputedConstant>(
       AD_FIELD(PrecomputedConstant, evaluatedTerm_,
-               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString,
+               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString_,
                                            std::string(value)))));
 };
 
