@@ -1,6 +1,12 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de), UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -42,11 +48,14 @@ struct ContextWrapper {
 
 ContextWrapper prepareContext() { return {}; }
 
-// Evaluate a single CONSTRUCT template term.
-// (preprocessTerm -> evaluateBatch -> instantiateTerm -> formatTerm).
-// This method takes a `GraphTerm` (`GraphtTerm` objects are what the CONSTRUCT
-// template is composed of) and evaluates it to the string representation of the
-// TODO<ms2144>: explain what is going on here.
+// Test helper that simulates the CONSTRUCT export pipeline for a single
+// `GraphTerm` in isolation. The real pipeline (in `ConstructTripleGenerator`)
+// operates on whole preprocessed templates and batches of result rows; there
+// is no production API for evaluating a single `GraphTerm` to its string
+// representation. This function manually stitches together the individual
+// pipeline stages (preprocessTerm -> evaluateBatch -> instantiateTerm ->
+// formatTerm) with a synthetic single-row batch, so that tests can verify
+// each `GraphTerm` variant independently.
 std::optional<std::string> evaluate(
     const GraphTerm& term, const ConstructQueryExportContext& exportCtx,
     PositionInTriple position) {
