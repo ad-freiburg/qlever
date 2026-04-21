@@ -346,6 +346,16 @@ class DeltaTriples {
   void rewriteLocalVocabEntriesAndBlankNodes(Triples& triples);
   FRIEND_TEST(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes);
 
+  // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
+  // argument are iterators for each list, as returned by the method
+  // `locateTripleInAllPermutations` above.
+  //
+  // NOTE: The iterators are invalid afterward. That is OK, as long as we also
+  // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
+  // which stores these iterators.
+  template <bool isInternal>
+  void eraseTripleInAllPermutations(const LocatedTriple& lt);
+
   // The difference between two `LocatedTriplesState` snapshots, split into
   // inserted/deleted and internal/external triples.
   class LocatedTriplesDiff {

@@ -118,7 +118,8 @@ nlohmann::json DeltaTriples::vacuum(
               [&triples, &triplesToHandlesMap, this, &isInternal](size_t i) {
                 auto it = triplesToHandlesMap.find(triples[i]);
                 AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
-                this->eraseTripleInAllPermutations<isInternal>(it->second);
+                // TODO: fix
+                // this->eraseTripleInAllPermutations<isInternal>(it->second);
                 triplesToHandlesMap.erase(it);
               },
               [&cancellationHandle]() {
@@ -177,6 +178,16 @@ void DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     cancellationHandle->throwIfCancelled();
     tracer.endTrace("addToLocatedTriples");
     tracer.endTrace(Permutation::toString(permutation));
+  }
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
+void DeltaTriples::eraseTripleInAllPermutations(const LocatedTriple& lt) {
+  auto& lts = locatedTriples_->getLocatedTriples<isInternal>();
+  // Erase for all permutations.
+  for (auto permutation : Permutation::all<isInternal>()) {
+    lts[static_cast<int>(permutation)].erase(lt.blockIndex_, lt);
   }
 }
 
