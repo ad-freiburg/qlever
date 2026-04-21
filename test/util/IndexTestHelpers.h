@@ -90,7 +90,8 @@ struct TestIndexConfig {
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType, encodedIriManager)
+      scoringMetric, bAndKParam, indexType, vocabularyType,
+      encodedPrefixesWithoutAngleBrackets)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
