@@ -28,6 +28,7 @@ struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
+  // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row,
@@ -174,7 +175,7 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
   EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
 
-  ConstructQueryExportContext context1337 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
   EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
@@ -294,7 +295,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(evaluate(variable, context0b, PREDICATE), Optional("69"s));
   EXPECT_THAT(evaluate(variable, context0b, OBJECT), Optional("69"s));
 
-  ConstructQueryExportContext context1 = wrapper.createContextForRow(0, 42);
+  ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
 
   EXPECT_THAT(evaluate(variable, context1, SUBJECT), Optional("420"s));
   EXPECT_THAT(evaluate(variable, context1, PREDICATE), Optional("420"s));
@@ -305,13 +306,13 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   auto wrapper = prepareContext();
 
   Variable variable{"?var"};
-  ConstructQueryExportContext context0 = wrapper.createContextForRow(0, 42);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(evaluate(variable, context0, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(variable, context0, PREDICATE), std::nullopt);
   EXPECT_EQ(evaluate(variable, context0, OBJECT), std::nullopt);
 
-  ConstructQueryExportContext context1337 = wrapper.createContextForRow(0, 42);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_EQ(evaluate(variable, context1337, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(variable, context1337, PREDICATE), std::nullopt);
