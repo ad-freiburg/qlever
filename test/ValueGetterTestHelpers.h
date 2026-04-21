@@ -12,9 +12,9 @@
 
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
-#include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
@@ -234,11 +234,9 @@ class ValueGetterTester {
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
-    auto litOrIri =
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            literal);
-    auto idx =
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
+    auto idx = localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(
+            std::move(literal), testContext.qec->getLocalVocabContext()));
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
     EXPECT_THAT(res, expected);

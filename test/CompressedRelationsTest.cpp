@@ -1052,7 +1052,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
 
   auto getId = [&index](std::string_view iri) {
     return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
-        .toValueId(index.getVocab(), index.encodedIriManager())
+        .toValueId(index)
         .value();
   };
   auto a = getId("<a>");
@@ -1122,9 +1122,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       "ensureDummyBlockWith6ColumnsDoesntCauseIssues",
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
-      [cancellationHandle](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry{
-            ad_utility::triple_component::Iri::fromIriref("<zzz>")};
+      [cancellationHandle, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry = LocalVocabEntry::fromIriref("<zzz>", index);
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,

@@ -55,10 +55,10 @@ auto lit(std::string_view s) {
 
 // Helper function to get the local vocab ID for a given word.
 Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
-                            const std::string& word) {
-  auto lit =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
-  auto value = localVocab.getIndexOrNullopt(lit);
+                            const std::string& word,
+                            const LocalVocabContext& context) {
+  auto value = localVocab.getIndexOrNullopt(
+      LocalVocabEntry::literalWithoutQuotes(word, context));
   if (value.has_value()) {
     return ValueId::makeFromLocalVocabIndex(value.value());
   }
@@ -194,8 +194,8 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // Create an input result table with a local vocabulary.
   auto localVocab = std::make_shared<LocalVocab>();
-  constexpr auto iriref = [](const std::string& s) {
-    return ad_utility::triple_component::LiteralOrIri::iriref(s);
+  auto iriref = [this](std::string_view s) {
+    return LocalVocabEntry::fromIriref(s, _index);
   };
   localVocab->getIndexAndAddIfNotContained(iriref("<local1>"));
   localVocab->getIndexAndAddIfNotContained(iriref("<local2>"));
@@ -1479,8 +1479,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   const auto& table = result->idTable();
 
   auto getId = makeGetId(qec->getIndex());
-  auto getLocalVocabId = [&result](const std::string& word) {
-    return getLocalVocabIdFromVocab(result->localVocab(), word);
+  const auto& localVocabContext = qec->getLocalVocabContext();
+  auto getLocalVocabId = [&result,
+                          &localVocabContext](const std::string& word) {
+    return getLocalVocabIdFromVocab(result->localVocab(), word,
+                                    localVocabContext);
   };
 
   auto expected = makeIdTableFromVector(
@@ -1522,8 +1525,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
 
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
-  auto getLocalVocabId = [&result](const std::string& word) {
-    return getLocalVocabIdFromVocab(result->localVocab(), word);
+  auto getLocalVocabId = [&result, qec](const std::string& word) {
+    return getLocalVocabIdFromVocab(result->localVocab(), word,
+                                    qec->getLocalVocabContext());
   };
 
   auto expected = makeIdTableFromVector(
@@ -1726,7 +1730,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // The join cannot have a `LIMIT` or `OFFSET` for this optimization.
     auto join =
         makeExecutionTree<Join>(qec, xyzScanSortedByX, xyzScanSortedByX, 0, 0);
-    join->applyLimit({1});
+    join->applyLimitOffset({1});
     GroupByImpl joinHasLimitAndOffset{qec, variablesOnlyX, aliasesCountX,
                                       std::move(join)};
     EXPECT_EQ(std::nullopt,
@@ -1855,21 +1859,21 @@ TEST_F(GroupByOptimizations,
   // LIMIT OR OFFSET should prevent this optimization.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({3});
+    clone->applyLimitOffset({3});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({std::nullopt, 1});
+    clone->applyLimitOffset({std::nullopt, 1});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({3, 1});
+    clone->applyLimitOffset({3, 1});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
@@ -1877,7 +1881,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({1, 2});
+    clone->applyLimitOffset({1, 2});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1886,7 +1890,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({100, 2});
+    clone->applyLimitOffset({100, 2});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The 15 elements should be reduced by 2.
@@ -1894,7 +1898,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1904,7 +1908,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyScan->clone();
-    clone->applyLimit({1, 2});
+    clone->applyLimitOffset({1, 2});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1913,7 +1917,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimit({100, 2});
+    clone->applyLimitOffset({100, 2});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1922,7 +1926,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimit({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000});
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -2006,7 +2010,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   auto getId = makeGetId(qec->getIndex());
   {
     auto clone = xyScan->clone();
-    clone->applyLimit({1, 3});
+    clone->applyLimitOffset({1, 3});
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("<x>"), I(1)}}));
@@ -2015,7 +2019,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // Group by object.
   {
     auto clone = yxScan->clone();
-    clone->applyLimit({2, 2});
+    clone->applyLimitOffset({2, 2});
     GroupByImpl groupBy{qec, variablesOnlyY, aliasesCountY, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable(
@@ -2025,7 +2029,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // LIMIT 0 edge case
   {
     auto clone = xyScan->clone();
-    clone->applyLimit({0, 1});
+    clone->applyLimitOffset({0, 1});
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
   }
@@ -2118,7 +2122,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   auto V = VocabId;
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({8, 3});
+    clone->applyLimitOffset({8, 3});
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2127,7 +2131,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({0, 1});
+    clone->applyLimitOffset({0, 1});
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2135,7 +2139,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimit({8, 3});
+    clone->applyLimitOffset({8, 3});
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountNotExisting,
                         std::move(clone)};
 
@@ -2532,11 +2536,13 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   ASSERT_EQ(resultPairs.size(), 2);
   const auto& [idTable0, localVocab0] = resultPairs.at(0);
   EXPECT_EQ(localVocab0.size(), 2);
-  auto localVocabIndex0 = localVocab0.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"1\""));
+  auto localVocabIndex0 =
+      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"1\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex0.has_value());
-  auto localVocabIndex1 = localVocab0.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"2\""));
+  auto localVocabIndex1 =
+      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"2\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex1.has_value());
   EXPECT_EQ(idTable0,
             makeIdTableFromVector(
@@ -2547,8 +2553,9 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
 
   const auto& [idTable1, localVocab1] = resultPairs.at(1);
   EXPECT_EQ(localVocab1.size(), 1);
-  auto localVocabIndex2 = localVocab1.getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation("\"3\""));
+  auto localVocabIndex2 =
+      localVocab1.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+          "\"3\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex2.has_value());
   EXPECT_EQ(idTable1,
             makeIdTableFromVector(
@@ -2559,15 +2566,14 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
 // _____________________________________________________________________________
 TEST(GroupBy, localVocabIsProperlyCloned) {
   // Regression test for https://github.com/ad-freiburg/qlever/issues/2445
-  using Lit = ad_utility::triple_component::Literal;
   auto* qec = getQec();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
   LocalVocab dummy{};
-  dummy.getIndexAndAddIfNotContained(
-      LocalVocabEntry{Lit::fromStringRepresentation("\"dummy\"")});
+  dummy.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{Variable{"?x"}}, true,
@@ -2598,8 +2604,9 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
     EXPECT_EQ(localVocab.size(), 2);
     EXPECT_TRUE(
         localVocab
-            .getIndexOrNullopt(LocalVocabEntry{Lit::fromStringRepresentation(
-                std::string{expected.at(expectedIndex)})})
+            .getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+                std::string{expected.at(expectedIndex)},
+                qec->getLocalVocabContext()))
             .has_value());
     expectedIndex++;
   }
@@ -2818,9 +2825,10 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto result = groupBy.computeResultOnlyForTesting(GetParam());
 
   // Acquire the local vocab index for a given string representation if present.
-  auto makeEntry = [](std::string string, const LocalVocab& localVocab) {
-    return localVocab.getIndexOrNullopt(sparqlExpression::detail::LiteralOrIri{
-        L::fromStringRepresentation(std::move(string))});
+  auto makeEntry = [this](std::string string, const LocalVocab& localVocab) {
+    return localVocab.getIndexOrNullopt(
+        LocalVocabEntry::fromStringRepresentation(
+            std::move(string), qec_->getLocalVocabContext()));
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {

@@ -13,11 +13,12 @@
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
 #include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/IndexRebuilderTypes.h"
+#include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/LruCache.h"
@@ -103,9 +104,9 @@ class DeltaTriples {
   // `shared_ptr` so that we can easily convert them to a
   // `LocatedTriplesSnapshot`.
   std::shared_ptr<LocatedTriplesState> locatedTriples_ =
-      std::make_shared<LocatedTriplesState>(
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
           LocatedTriplesPerBlockAllPermutations<false>{},
-          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0);
+          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0});
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -182,6 +183,13 @@ class DeltaTriples {
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
+
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
@@ -281,6 +289,24 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Compute the diff between `oldState` (the snapshot used to start the index
+  // rebuild) and `newState` (the current snapshot), remap the IDs using
+  // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  void addFromSnapshotDiff(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
+      CancellationHandle cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer);
+
+ private:
+  // Remap the `Id` from the old index to the new index using the given
+  // `idMapping`. If the `Id` can't be remapped, this means that it was added
+  // after the mapping was created and will be left unchanged.
+  static void remapId(
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
+#endif
+
  private:
   // The proper state according to the template parameter. This will either
   // return a reference to `triplesSetsInternal_` or
@@ -320,7 +346,31 @@ class DeltaTriples {
   void rewriteLocalVocabEntriesAndBlankNodes(Triples& triples);
   FRIEND_TEST(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes);
 
+  // The difference between two `LocatedTriplesState` snapshots, split into
+  // inserted/deleted and internal/external triples.
+  class LocatedTriplesDiff {
+    std::array<Triples, 4> data_;
+
+   public:
+    LocatedTriplesDiff(Triples inserted, Triples deleted,
+                       Triples internalInserted, Triples internalDeleted);
+
+    // Run `func` on all `Id` references contained in `data_`.
+    template <typename Func>
+    void remapIds(Func func);
+
+    // Provides access to the corresponding entry in `data_`.
+    template <bool isInternal, bool insertOrDelete>
+    Triples& triples();
+  };
+
+  // Compute which located triples are present in `newState` but not in
+  // `oldState`.
+  static LocatedTriplesDiff computeLocatedTriplesDiff(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
+
   friend class DeltaTriplesManager;
+  FRIEND_TEST(DeltaTriplesTest, remapId);
 };
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding

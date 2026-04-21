@@ -49,12 +49,8 @@ constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
-                     bool registerSingleton)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {
-  if (registerSingleton) {
-    globalSingletonIndex_ = this;
-  }
   deltaTriples_.emplace(*this);
 }
 
@@ -333,7 +329,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
   std::string pleaseUseParallelParsingOption =
-      "please use the command-line option --parse-parallel or -p";
+      "please use the command-line option --parallel-parsing or -p";
   // Parallel parsing specified in the `settings.json` file. This is deprecated
   // for a single input stream and forbidden for multiple input streams.
   if (parallelParsingSpecifiedViaJson.has_value()) {
@@ -996,7 +992,6 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
-  globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
@@ -1687,25 +1682,6 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(
-    const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
-  // permutations, but this internal predicate should never appear in subjects
-  // or objects anyway.
-  // TODO<joka921> Find out what the effect of this special case is for the
-  // query planning.
-  if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
-    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-  }
-  if (std::optional<Id> relId =
-          comp.toValueId(getVocab(), encodedIriManager())) {
-    return getCardinality(relId.value(), permutation, locatedTriplesState);
-  }
-  return 0;
-}
-
-// ___________________________________________________________________________
 RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
   return vocab_[id];
 }
@@ -1727,7 +1703,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
+  if (auto keyId = key.toValueId(*this)) {
     auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
@@ -1958,8 +1934,9 @@ namespace {
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
     const Permutation& permutation, auto customAction) {
-  return std::packaged_task{[&counter, &permutation, &locatedTriplesSharedState,
-                             customAction = std::move(customAction)]() {
+  return std::packaged_task<void()>{[&counter, &permutation,
+                                     &locatedTriplesSharedState,
+                                     customAction = std::move(customAction)]() {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};

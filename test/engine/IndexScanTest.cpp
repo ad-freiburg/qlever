@@ -29,11 +29,6 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -159,9 +154,7 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
-            .value());
+    column.push_back(entry.toValueId(qec->getIndex()).value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -179,9 +172,7 @@ void testLazyScanWithColumnThrows(
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
-            .value());
+    column.push_back(entry.toValueId(qec->getIndex()).value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -991,7 +982,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1178,10 +1170,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
-  auto indexE =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<e>")});
-  auto indexG =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<g>")});
+  const auto& localVocabContext = qec_->getLocalVocabContext();
+  auto indexE = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<e>"), localVocabContext});
+  auto indexG = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<g>"), localVocabContext});
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1797,8 +1790,10 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       dynamic_cast<IndexScan&>(*baseScanTree->getRootOperation());
 
   // Create prefilter condition: ?x < <s2>
-  auto prefilterPairs = []() {
-    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  auto prefilterPairs = [&qec]() {
+    return makePrefilterVec(
+        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+           Var{"?x"}));
   };
 
   // Test with different variable combinations
@@ -1899,7 +1894,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -2133,4 +2129,18 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
     EXPECT_TRUE(localVocab.empty());
     EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, additionalVariablesInDescriptor) {
+  auto* qec = getQec();
+  IndexScan scan1{qec, Permutation::PSO,
+                  SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}}};
+  EXPECT_EQ(scan1.getDescriptor(), "IndexScan PSO ?s ?p ?o");
+
+  IndexScan scan2{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{
+          Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
+  EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }
