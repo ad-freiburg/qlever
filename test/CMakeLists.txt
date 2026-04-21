@@ -226,6 +226,8 @@ addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
+addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
+
 addLinkAndDiscoverTest(PathSearchTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)
@@ -294,7 +296,7 @@ addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
-addLinkAndDiscoverTest(CompressorStreamTest engine)
+addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
 
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
@@ -505,6 +507,9 @@ addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
+
+addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
+addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 

@@ -501,7 +501,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    std::erase(selectedColumnIndices, std::nullopt);
+    ql::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -870,7 +870,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimit()) {
+  if (qet.supportsLimitOffset()) {
     limitOffsetClause._offset = 0;
   }
 }

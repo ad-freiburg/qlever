@@ -135,6 +135,7 @@ using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
 using ::ranges::integral;
 using ::ranges::invocable;
+using ::ranges::output_iterator;
 using ::ranges::random_access_iterator;
 using ::ranges::regular_invocable;
 using ::ranges::same_as;

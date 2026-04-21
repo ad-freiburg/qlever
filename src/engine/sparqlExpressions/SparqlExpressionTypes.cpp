@@ -9,7 +9,7 @@
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
   std::visit(
       [&os](const auto& s) {
         using T = std::decay_t<decltype(s)>;
@@ -78,6 +78,11 @@ EvaluationContext::getResultFromPreviousAggregate(const Variable& var) const {
   AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
   return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
+}
+
+// _____________________________________________________________________________
+const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
+  return _qec.getLocalVocabContext();
 }
 
 }  // namespace sparqlExpression

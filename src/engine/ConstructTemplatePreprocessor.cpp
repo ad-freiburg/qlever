@@ -55,23 +55,21 @@ ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
     const VariableToColumnMap& variableColumns) {
-  return std::visit(
-      [&role,
-       &variableColumns](const auto& t) -> std::optional<PreprocessedTerm> {
-        using T = std::decay_t<decltype(t)>;
-        if constexpr (std::is_same_v<T, Iri>) {
-          return preprocessIri(t);
-        } else if constexpr (std::is_same_v<T, Literal>) {
-          return preprocessLiteral(t, role);
-        } else if constexpr (std::is_same_v<T, Variable>) {
-          return preprocessVariable(t, variableColumns);
-        } else if constexpr (std::is_same_v<T, BlankNode>) {
-          return preprocessBlankNode(t);
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>);
-        }
-      },
-      term);
+  return term.visit([&role, &variableColumns](
+                        const auto& t) -> std::optional<PreprocessedTerm> {
+    using T = std::decay_t<decltype(t)>;
+    if constexpr (std::is_same_v<T, Iri>) {
+      return preprocessIri(t);
+    } else if constexpr (std::is_same_v<T, Literal>) {
+      return preprocessLiteral(t, role);
+    } else if constexpr (std::is_same_v<T, Variable>) {
+      return preprocessVariable(t, variableColumns);
+    } else if constexpr (std::is_same_v<T, BlankNode>) {
+      return preprocessBlankNode(t);
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  });
 }
 
 // _____________________________________________________________________________
