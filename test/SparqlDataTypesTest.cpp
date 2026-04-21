@@ -61,6 +61,8 @@ std::optional<std::string> evaluate(
     const GraphTerm& term, const ConstructQueryExportContext& exportCtx,
     PositionInTriple position) {
   using namespace qlever::constructExport;
+  auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
+
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns);
   if (!preprocessed) return std::nullopt;
@@ -71,14 +73,14 @@ std::optional<std::string> evaluate(
   if (const auto* var = std::get_if<PrecomputedVariable>(&*preprocessed)) {
     IdCache cache{1};
     std::vector<size_t> cols{var->columnIndex_};
-    BatchEvaluationContext ctx{exportCtx.idTable_, exportCtx._rowOffset,
-                               exportCtx._rowOffset + 1};
+    BatchEvaluationContext ctx{exportCtx.idTable_,
+                               exportCtx.resultTableRowIndex_,
+                               exportCtx.resultTableRowIndex_ + 1};
     batchResult = ConstructBatchEvaluator::evaluateBatch(
         cols, ctx, exportCtx.localVocab_, exportCtx._qecIndex, cache);
   }
 
-  auto result =
-      instantiateTerm(*preprocessed, batchResult, 0, exportCtx._rowOffset);
+  auto result = instantiateTerm(*preprocessed, batchResult, 0, rowIdx);
   if (!result) return std::nullopt;
   return formatTerm(**result, false);
 }
