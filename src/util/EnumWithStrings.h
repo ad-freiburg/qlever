@@ -14,6 +14,7 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
+#include <boost/program_options.hpp>
 #include <ostream>
 #include <stdexcept>
 #include <string_view>
@@ -38,11 +39,10 @@ namespace ad_utility {
 // - using enum Enum (not required, but makes conversion easier).
 
 //  Note: for convenient definition of constants, in the derived classes you can
-//  either put in a
-// `using enum` statement, or manually define static constants of the derived
-// type. The latter have the advantage, that you directly get constants of the
-// derived type, and not of the underlying enum. For example usages, see
-// `CompressionAlgorithm.h`  and `VocabularyType.h`.
+//  either put in a `using enum` statement, or manually define static constants
+//  of the derived type. The latter has the advantage, that you directly get
+//  constants of the derived type, and not of the underlying enum. For example
+//  usages, see `VocabularyType.h`.
 
 // a generic base class, used to detect instantiations of `EnumWithStrings` at
 // compile time
@@ -51,8 +51,7 @@ struct EnumWithStringsBaseTag {};
 CPP_template(typename Derived,
              typename Enum)(requires std::is_enum_v<Enum>) class EnumWithStrings
     : public EnumWithStringsBaseTag {
- public:
- protected:
+ private:
   Enum value_{};
 
  public:
@@ -78,8 +77,8 @@ CPP_template(typename Derived,
   EnumWithStrings() noexcept { check(); };
   // Deliberately implicit, s.t. we can directly construct from the underlying
   // enum.
-  explicit(false) EnumWithStrings(Enum value) : value_{value} { check(); }
-  explicit(false) operator Enum() const { return value_; }
+  QL_EXPLICIT(false) EnumWithStrings(Enum value) : value_{value} { check(); }
+  QL_EXPLICIT(false) operator Enum() const { return value_; }
 
   // Access to the underlying enum, e.g. for switch-case statements.
   constexpr Enum value() const { return value_; }
@@ -144,6 +143,26 @@ CPP_template(typename Derived,
   // equality and other comparisons are handled by the implicit conversion to
   // the underlying enum.
 };
+
+// The following function enables enables support for the `EnumWithStrings`
+// classes within `boost::program_options`. The values are parsed via the
+// `fromString` method.
+CPP_template(typename E)(
+    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
+                               E>) void validate(boost::any& v,
+                                                 const std::vector<std::string>&
+                                                     values,
+                                                 E*, int) {
+  // First parse as the command line argument as a string.
+  // Note: `validate` stores the result in `v`.
+  std::string* dummy = nullptr;
+  using namespace boost::program_options;
+  boost::program_options::validate(v, values, dummy, 0);
+
+  // Convert from string to enum.
+  AD_CONTRACT_CHECK(!v.empty());
+  v = E::fromString(boost::any_cast<std::string>(v));
+}
 
 }  // namespace ad_utility
 

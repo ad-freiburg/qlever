@@ -515,4 +515,4 @@ addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
 addLinkAndDiscoverTest(ExportIdsTest index engine parser)
 
-addLinkAndDiscoverTestNoLibs(EnumWithStringsTest)
+addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
