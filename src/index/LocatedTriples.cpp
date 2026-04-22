@@ -437,23 +437,30 @@ void BlockSortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
 // ____________________________________________________________________________
 void BlockSortedLocatedTriplesVector::erase(
     std::vector<LocatedTriple> toDelete) {
-  AD_CONTRACT_CHECK(isClean());
   ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
+  erase(ql::span{toDelete});
+}
 
-  auto delIt = toDelete.begin();
+// ____________________________________________________________________________
+void BlockSortedLocatedTriplesVector::erase(
+    ql::span<LocatedTriple> sortedTriples) {
+  AD_CONTRACT_CHECK(isClean());
+
+  auto delIt = sortedTriples.begin();
   LocatedTripleCompare comp;
 
-  for (size_t i = 0; i < blocks_.size() && delIt != toDelete.end(); ++i) {
+  for (size_t i = 0; i < blocks_.size() && delIt != sortedTriples.end(); ++i) {
     auto delEnd = delIt;
     if (i + 1 < blocks_.size()) {
-      delEnd = std::upper_bound(delIt, toDelete.end(), blocks_[i].back(), comp);
+      delEnd =
+          std::upper_bound(delIt, sortedTriples.end(), blocks_[i].back(), comp);
     } else {
-      delEnd = toDelete.end();
+      delEnd = sortedTriples.end();
     }
 
     if (delIt != delEnd) {
-      auto subrange = ql::ranges::subrange(delIt, delEnd);
-      SortedLocatedTriplesVector::eraseSortedSubRange(blocks_[i], subrange);
+      SortedLocatedTriplesVector::eraseSortedSubRange(
+          blocks_[i], ql::ranges::subrange(delIt, delEnd));
     }
     delIt = delEnd;
   }
@@ -805,6 +812,32 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex, const LocatedTriple& lt) {
   block.erase(lt);
   if (block.empty()) {
     map_.erase(blockIndex);
+  }
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::erase(ql::span<LocatedTriple> sortedTriples) {
+  AD_CORRECTNESS_CHECK(
+      ql::ranges::is_sorted(sortedTriples, {}, &LocatedTriple::triple_));
+
+  auto it = sortedTriples.begin();
+  while (it != sortedTriples.end()) {
+    size_t blockIndex = it->blockIndex_;
+    auto groupEnd = std::find_if_not(it, sortedTriples.end(),
+                                     [blockIndex](const LocatedTriple& lt) {
+                                       return lt.blockIndex_ == blockIndex;
+                                     });
+
+    auto blockIter = map_.find(blockIndex);
+    AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
+                      " is not contained");
+    auto& block = blockIter->second;
+    block.erase(ql::span(it, groupEnd));
+    if (block.empty()) {
+      map_.erase(blockIndex);
+    }
+
+    it = groupEnd;
   }
 }
 

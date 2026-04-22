@@ -306,6 +306,7 @@ class BlockSortedLocatedTriplesVector {
 
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
+  void erase(ql::span<LocatedTriple> sortedTriples);
 
   size_t size() const;
   bool empty() const;
@@ -410,6 +411,7 @@ class LocatedTriplesPerBlock {
   // NOTE: `updateAugmentedMetadata()` must be called to update the block
   // metadata.
   void erase(size_t blockIndex, const LocatedTriple& lt);
+  void erase(ql::span<LocatedTriple> sortedTriples);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriplesForTesting() const;

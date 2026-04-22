@@ -113,14 +113,26 @@ nlohmann::json DeltaTriples::vacuum(
         auto removeTriples = [this, &cancellationHandle, &isInternal](
                                  const std::vector<IdTriple<0>>& triples,
                                  auto& triplesToHandlesMap) {
+          // Erase located triples
+          for (auto permutation : Permutation::all<isInternal>()) {
+            const auto& perm = index_.getPermutation(permutation);
+            // insertOrDelete doesn't matter
+            auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+                triples, perm.metaData().blockData(), perm.keyOrder(), true,
+                cancellationHandle);
+            ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
+            LocatedTriplesPerBlock& lts =
+                locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
+                    permutation);
+            lts.erase(ql::span{locatedTriples});
+          }
+
+          // Remove from handles map.
           ad_utility::chunkedForLoop<10'000>(
               0, triples.size(),
-              [&triples, &triplesToHandlesMap, this, &isInternal](size_t i) {
-                auto it = triplesToHandlesMap.find(triples[i]);
-                AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
-                // TODO: fix
-                // this->eraseTripleInAllPermutations<isInternal>(it->second);
-                triplesToHandlesMap.erase(it);
+              [&triples, &triplesToHandlesMap](size_t i) {
+                AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triples[i]) ==
+                                     1);
               },
               [&cancellationHandle]() {
                 cancellationHandle->throwIfCancelled();
@@ -404,7 +416,8 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   });
   tracer.endTrace("removeExistingTriples");
   tracer.beginTrace("removeInverseTriples");
-  ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
+  ql::ranges::for_each(triples, [&inverseMap](const IdTriple<0>& triple) {
+    // TODO: can we collapse this into a single erase?
     auto handle = inverseMap.find(triple);
     if (handle != inverseMap.end()) {
       inverseMap.erase(triple);
