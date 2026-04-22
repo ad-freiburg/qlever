@@ -246,7 +246,7 @@ struct LangtagAndTriple {
  * reference
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t NumThreads, typename IndexPtr>
+template <typename IndexPtr>
 auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
   using OptionalIds =
       std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
@@ -309,6 +309,7 @@ auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
 
   // setup a tuple with one lambda function per map in the itemArray
   // (the first lambda will assign ids according to itemArray[1]...
+  constexpr size_t NumThreads = std::tuple_size_v<ItemMapArray>;
   return ad_tuple_helpers::setupTupleFromCallable<NumThreads>(
       itemMapLamdaCreator);
 }
