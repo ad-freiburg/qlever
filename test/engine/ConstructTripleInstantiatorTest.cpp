@@ -22,18 +22,6 @@ using ::testing::UnorderedElementsAre;
 
 //______________________________________________________________________________
 
-// Helper to build a minimal BatchEvaluationResult for testing.
-BatchEvaluationResult makeBatchResult(
-    std::vector<std::pair<size_t, EvaluatedVariableValues>> columns,
-    size_t numRows) {
-  BatchEvaluationResult result;
-  result.numRows_ = numRows;
-  for (auto& [col, vals] : columns) {
-    result.variablesByColumn_.emplace(col, std::move(vals));
-  }
-  return result;
-}
-
 EvaluatedTerm makeTerm(std::string str, const char* type = nullptr) {
   return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
@@ -67,7 +55,7 @@ static constexpr auto matchesEvaluatedTriple = [](const auto& s, const auto& p,
 TEST(InstantiateTerm, PrecomputedConstantIsReturnedAsIs) {
   auto term = makeTerm("<http://example.org/subject>");
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 1);
+  auto batchResult = BatchEvaluationResult{{}, 1};
 
   auto result = instantiateTerm(preprocessed, batchResult, 0, 0);
 
@@ -78,7 +66,7 @@ TEST(InstantiateTerm, PrecomputedConstantIsReturnedAsIs) {
 TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
   auto term = makeTerm("<http://example.org/subject>");
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 5);
+  auto batchResult = BatchEvaluationResult{{}, 5};
 
   auto result0 = instantiateTerm(preprocessed, batchResult, 0, 0);
   auto result3 = instantiateTerm(preprocessed, batchResult, 3, 100);
@@ -92,8 +80,7 @@ TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
 TEST(InstantiateTerm, PrecomputedVariableBound) {
   auto term = makeTerm("<http://example.org/value>");
   EvaluatedVariableValues vals = {std::nullopt, term, std::nullopt};
-  BatchEvaluationResult batchResult =
-      makeBatchResult({{2, std::move(vals)}}, 3);
+  auto batchResult = BatchEvaluationResult{{{2, std::move(vals)}}, 3};
 
   PreprocessedTerm preprocessed = PrecomputedVariable{2};
   auto result = instantiateTerm(preprocessed, batchResult, 1, 99);
@@ -104,8 +91,7 @@ TEST(InstantiateTerm, PrecomputedVariableBound) {
 
 TEST(InstantiateTerm, PrecomputedVariableUnbound) {
   EvaluatedVariableValues vals = {std::nullopt, std::nullopt};
-  BatchEvaluationResult batchResult =
-      makeBatchResult({{0, std::move(vals)}}, 2);
+  auto batchResult = BatchEvaluationResult{{{0, std::move(vals)}}, 2};
 
   PreprocessedTerm preprocessed = PrecomputedVariable{0};
   auto result = instantiateTerm(preprocessed, batchResult, 1, 1);
@@ -114,7 +100,7 @@ TEST(InstantiateTerm, PrecomputedVariableUnbound) {
 }
 
 TEST(InstantiateTerm, PrecomputedBlankNodeUsesRowIdxTotal) {
-  BatchEvaluationResult batchResult = makeBatchResult({}, 1);
+  auto batchResult = BatchEvaluationResult{{}, 1};
   PreprocessedTerm preprocessed = PrecomputedBlankNode{"_:g", "_label"};
 
   auto result = instantiateTerm(preprocessed, batchResult, 0, 42);
@@ -124,7 +110,7 @@ TEST(InstantiateTerm, PrecomputedBlankNodeUsesRowIdxTotal) {
 
 TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
   // rowIdxTotal drives blank node ID, not rowIdxInBatch.
-  BatchEvaluationResult batchResult = makeBatchResult({}, 5);
+  auto batchResult = BatchEvaluationResult{{}, 5};
   PreprocessedTerm preprocessed = PrecomputedBlankNode{"_:u", "_x"};
 
   auto r0 = instantiateTerm(preprocessed, batchResult, 0, 7);
@@ -138,7 +124,7 @@ TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
 
 TEST(InstantiateBatch, EmptyTemplate) {
   PreprocessedConstructTemplate tmpl;
-  BatchEvaluationResult batchResult = makeBatchResult({}, 3);
+  auto batchResult = BatchEvaluationResult{{}, 3};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
 
@@ -152,7 +138,7 @@ TEST(InstantiateBatch, EmptyBatch) {
   PreprocessedConstructTemplate tmpl;
   tmpl.preprocessedTriples_ = {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 0);
+  auto batchResult = BatchEvaluationResult{{}, 0};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
 
@@ -166,7 +152,7 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
   PreprocessedConstructTemplate tmpl;
   tmpl.preprocessedTriples_ = {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 3);
+  auto batchResult = BatchEvaluationResult{{}, 3};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
 
@@ -182,8 +168,7 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
   // column 0: [bound, unbound, bound]
   EvaluatedVariableValues vals = {makeTerm("<http://a>"), std::nullopt,
                                   makeTerm("<http://c>")};
-  BatchEvaluationResult batchResult =
-      makeBatchResult({{0, std::move(vals)}}, 3);
+  auto batchResult = BatchEvaluationResult{{{0, vals}}, 3};
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
   PreprocessedConstructTemplate tmpl;
@@ -206,7 +191,7 @@ TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
   tmpl.preprocessedTriples_ = {{PrecomputedBlankNode{"_:g", ""},
                                 PrecomputedConstant{p},
                                 PrecomputedConstant{o}}};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 2);
+  auto batchResult = BatchEvaluationResult{{}, 2};
 
   auto result = instantiateBatch(tmpl, batchResult, /*batchOffset=*/5);
 
@@ -227,7 +212,7 @@ TEST(InstantiateBatch, MultipleTriples) {
                                 PrecomputedConstant{o1}},
                                {PrecomputedConstant{s}, PrecomputedConstant{p2},
                                 PrecomputedConstant{o2}}};
-  BatchEvaluationResult batchResult = makeBatchResult({}, 2);
+  auto batchResult = BatchEvaluationResult{{}, 2};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
 
@@ -243,84 +228,66 @@ TEST(InstantiateBatch, MultipleTriples) {
 
 //______________________________________________________________________________
 
-TEST(FormatTerm, dataTypeNullIncludeDataType) {
+static constexpr auto testTermFormatting =
+    [](const std::string& rdfTermString, const char* rdfTermDataType,
+       const std::string& expectedStringWhenIncludeDataType,
+       const std::string& expectedStringWhenNotIncludeDataType) {
+      auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
+      EXPECT_EQ(expectedStringWhenIncludeDataType, formatTerm(term, true));
+      EXPECT_EQ(expectedStringWhenNotIncludeDataType, formatTerm(term, false));
+    };
+
+TEST(FormatTerm, dataTypeNull) {
   // By the definition of `EvaluatedTermData`, if `rdfTermDataType_`==`nullptr`,
   // then `rdfTermString_` is expected to already hold the value of the rdf term
   // string include the complete serialized form (including the appended
   // datatype string via ^^).
-  std::string rdfTermString = "1^^xsd::integer";
-  const char* rdfTermDataType = nullptr;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
+
   // Setting `includeDataType` = true instructs `formatTerm` to append the
   // datataype string (which is contained in `rdfTermDataType`) to the string
   // representing the rdf term (`rdfTermString`). But if
   // `rdfTermDataType` == nullptr, then we expect `rdfTermString` to already
   // be appended with its dataType. Thus, the value of `includeDataType` is
   // ignored.
-  bool includeDataType = true;
-  EXPECT_EQ("1^^xsd::integer", formatTerm(term, includeDataType));
+  testTermFormatting("1^^xsd:integer", nullptr, "1^^xsd:integer",
+                     "1^^xsd:integer");
 }
 
-TEST(FormatTerm, dataTypeNullDontIncludeDataType) {
-  std::string rdfTermString = "1^^xsd::integer";
-  const char* rdfTermDataType = nullptr;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = false;
-  EXPECT_EQ("1^^xsd::integer", formatTerm(term, includeDataType));
+TEST(FormatTerm, XSD_INT_TYPE) {
+  testTermFormatting("1", XSD_INT_TYPE,
+                     "\"1\"^^<http://www.w3.org/2001/XMLSchema#int>", "1");
 }
 
-TEST(FormatTerm, IntIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_INT_TYPE;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = true;
-  auto expected = "\"1\"^^<http://www.w3.org/2001/XMLSchema#int>";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
+TEST(FormatTerm, XSD_DECIMAL_TYPE) {
+  testTermFormatting("1", XSD_DECIMAL_TYPE,
+                     "\"1\"^^<http://www.w3.org/2001/XMLSchema#decimal>", "1");
 }
 
-TEST(FormatTerm, IntDontIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_INT_TYPE;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = false;
-  auto expected = "1";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
+TEST(FormatTerm, XSD_BOOLEAN_TYPE) {
+  testTermFormatting("1", XSD_BOOLEAN_TYPE,
+                     "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                     "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+  testTermFormatting("0", XSD_BOOLEAN_TYPE,
+                     "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                     "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+  testTermFormatting("true", XSD_BOOLEAN_TYPE,
+                     "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                     "true");
+  testTermFormatting("false", XSD_BOOLEAN_TYPE,
+                     "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                     "false");
 }
 
-TEST(FormatTerm, DecimalIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_DECIMAL_TYPE;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = true;
-  auto expected = "\"1\"^^<http://www.w3.org/2001/XMLSchema#decimal>";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
-}
-
-TEST(FormatTerm, DecimalDontIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_DECIMAL_TYPE;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = false;
-  auto expected = "1";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
-}
-
-TEST(FormatTerm, StringIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_STRING;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = true;
-  auto expected = "\"1\"^^<http://www.w3.org/2001/XMLSchema#string>";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
-}
-
-TEST(FormatTerm, StringDontIncludeDataType) {
-  std::string rdfTermString = "1";
-  const char* rdfTermDataType = XSD_STRING;
-  auto term = EvaluatedTermData{rdfTermString, rdfTermDataType};
-  bool includeDataType = false;
-  auto expected = "\"1\"^^<http://www.w3.org/2001/XMLSchema#string>";
-  EXPECT_EQ(expected, formatTerm(term, includeDataType));
+TEST(FormatTerm, XSD_DOUBLE_TYPE) {
+  testTermFormatting("1.0", XSD_DOUBLE_TYPE,
+                     "\"1.0\"^^<http://www.w3.org/2001/XMLSchema#double>",
+                     "\"1.0\"^^<http://www.w3.org/2001/XMLSchema#double>");
+  testTermFormatting("INF", XSD_DOUBLE_TYPE,
+                     "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>",
+                     "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>");
+  testTermFormatting("false", XSD_DOUBLE_TYPE,
+                     "\"false\"^^<http://www.w3.org/2001/XMLSchema#double>",
+                     "\"false\"^^<http://www.w3.org/2001/XMLSchema#double>");
 }
 
 //______________________________________________________________________________

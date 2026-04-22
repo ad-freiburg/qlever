@@ -142,9 +142,6 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
       }
     }
     if (word.isIri()) {
-      // this does not assume that the rdf term (`word`) is a blank node string.
-      // if `blankNodeString` == nullopt, then we know that word is not a blank
-      // node string, and we continue after the if statement.
       if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
         return std::pair{std::move(blankNodeString.value()), nullptr};
       }

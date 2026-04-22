@@ -24,7 +24,7 @@ namespace qlever::constructExport {
 // whether `rdfTermDataType_` is null:
 // 1) `rdfTermDataType_` != nullptr: `rdfTermString_` represents an encoded
 // literal (directly encoded into `ValueId`). `rdfTermString_` is the raw
-// unquoted value (e.g. "42" for an xsd:int, "3.14" for an xsd:decimal). `type`
+// unquoted value (e.g. `42` for an xsd:int, `3.14` for an xsd:decimal). `type`
 // points to the compile-time XSD type string constant (e.g. XSD_INT_TYPE).
 // Whether to emit the short form ("42") or the fully-qualified form
 // ("\"42\"^^<xsd:integer>") is decided at formatting time by `formatTerm`.
@@ -32,8 +32,7 @@ namespace qlever::constructExport {
 // vocabulary-indexed literal. `rdfTermString_` already holds the complete,
 // ready-to-emit serialized form (e.g. "<http://example.org/>", "\"hello\"@en").
 // No further formatting is needed; the value is returned as-is for every
-// format. This is the legacy format returned by `ExportIds::idToStringAnd
-// Type`.
+// format. This is the legacy format returned by `ExportIds::idToStringAndType`.
 struct EvaluatedTermData {
   std::string rdfTermString_;
   const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
