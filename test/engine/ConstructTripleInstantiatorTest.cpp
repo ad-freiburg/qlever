@@ -26,10 +26,6 @@ EvaluatedTerm makeTerm(std::string str, const char* type = nullptr) {
   return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
-EvaluatedTriple makeTriple(EvaluatedTerm s, EvaluatedTerm p, EvaluatedTerm o) {
-  return EvaluatedTriple{std::move(s), std::move(p), std::move(o)};
-}
-
 // Matches an `EvaluatedTerm` (shared_ptr<const EvaluatedTermData>) by
 // dereferencing it and checking both fields. `type` uses pointer equality,
 // matching the compile-time constants (e.g. XSD_INT_TYPE) or nullptr.
@@ -293,22 +289,22 @@ TEST(FormatTerm, XSD_DOUBLE_TYPE) {
 //______________________________________________________________________________
 
 TEST(FormatTriple, TurtleIriObject) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("<http://s> <http://p> <http://o> .\n",
             formatTriple(triple, ad_utility::MediaType::turtle));
 }
 
 TEST(FormatTriple, TurtleLiteralObject) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("\"hello\""));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"hello\"")};
   EXPECT_EQ("<http://s> <http://p> \"hello\" .\n",
             formatTriple(triple, ad_utility::MediaType::turtle));
 }
 
 TEST(FormatTriple, CsvSimpleTerms) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("<http://s>,<http://p>,<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::csv));
 }
@@ -317,29 +313,29 @@ TEST(FormatTriple, CSVUsesCSVEscaping) {
   // check whether literals that contain special characters of CSV are escaped
   // correctly (i.e. whether `RdfEscaping::escapeForCsv` is used for the term
   // strings.)
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("val,uee"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("val,uee")};
   EXPECT_EQ("<http://s>,<http://p>,\"val,uee\"\n",
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
 TEST(FormatTriple, CsvCommaInSubject) {
-  auto triple = makeTriple(makeTerm("sub,ject"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("sub,ject"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("\"sub,ject\",<http://p>,<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
 TEST(FormatTriple, CsvCommaInPredicate) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("pred,icate"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("pred,icate"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("<http://s>,\"pred,icate\",<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
 TEST(FormatTriple, TsvSimpleTerms) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("<http://s>\t<http://p>\t<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
@@ -348,37 +344,37 @@ TEST(FormatTriple, TsvObjectWithTab) {
   // check whether literals that contain special characters of TSV are escaped
   // correctly (i.e. whether `RdfEscaping::escapeForTsv` is used for the term
   // strings.)
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("val\tueu"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("val\tueu")};
   EXPECT_EQ("<http://s>\t<http://p>\tval ueu\n",
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
 TEST(FormatTriple, TsvTabInSubject) {
-  auto triple = makeTriple(makeTerm("sub\tject"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("sub\tject"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("sub ject\t<http://p>\t<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
 TEST(FormatTriple, TsvTabInPredicate) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("pred\ticate"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("pred\ticate"),
+                                makeTerm("<http://o>")};
   EXPECT_EQ("<http://s>\tpred icate\t<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
 TEST(FormatTriple, UnsupportedMediaType) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
 //______________________________________________________________________________
 
 TEST(CreateStringTriple, ReturnsFormattedTerms) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
   auto result = createStringTriple(triple);
   EXPECT_EQ(result.subject_, "<http://s>");
   EXPECT_EQ(result.predicate_, "<http://p>");
