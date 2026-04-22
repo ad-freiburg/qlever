@@ -764,10 +764,6 @@ class RdfMultifileParser : public RdfParserBase {
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS};
-
-  // The number of parsers that have started, but not yet finished. This is
-  // needed to detect the complete parsing.
-  std::atomic<size_t> numActiveParsers_ = 0;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

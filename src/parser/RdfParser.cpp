@@ -1350,6 +1350,7 @@ RdfMultifileParser::RdfMultifileParser(
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
   using namespace qlever;
+
   // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
   auto parseFile = [this, encodedIriManager](
@@ -1368,28 +1369,26 @@ RdfMultifileParser::RdfMultifileParser(
       }
     } catch (...) {
       finishedBatchQueue_.pushException(std::current_exception());
-      return;
-    }
-    if (numActiveParsers_.fetch_sub(1) == 1) {
-      // We are the last parser, we have to notify the downstream code that the
-      // input has been parsed completely.
-      finishedBatchQueue_.finish();
     }
   };
 
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files, bufferSize, this, parseFile]() {
     for (const auto& file : files) {
-      numActiveParsers_++;
       bool active =
           parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.
-        return;
+        break;
       }
     }
+    // Every input has been fed into the `parsingQueue_`. After the call to
+    // `finish()` returns, the parsing has completed and all the results have
+    // been pushed into the `finishedBatchQueue`, which we then also finish to
+    // inform the consuming code, that there will be no more parse results.
     parsingQueue_.finish();
+    finishedBatchQueue_.finish();
   };
   feederThread_ = ad_utility::JThread{makeParsers};
 }
