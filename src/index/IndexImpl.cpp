@@ -472,10 +472,10 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 namespace {
-template <typename T, std::size_t N, typename Factory>
+template <std::size_t N, typename Factory>
 auto makeArray(Factory&& f) {
   return [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    return std::array<T, N>{f(Is)...};
+    return std::array{f(Is)...};
   }(std::make_index_sequence<N>{});
 }
 }  // namespace
@@ -515,7 +515,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
   numTriplesParsedTimer.stop();
 
-  auto itemArray = makeArray<ItemMapManager, NUM_PARALLEL_ITEM_MAPS>(
+  auto itemArray = makeArray<NUM_PARALLEL_ITEM_MAPS>(
       [linesPerPartial, &comp = vocab_.getCaseComparator()](size_t j) {
         ItemMapManager manager{j * 100 * linesPerPartial, &comp};
         // This `reserve` is for a guaranteed upper bound that stays the same

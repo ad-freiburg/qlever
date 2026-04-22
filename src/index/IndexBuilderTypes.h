@@ -309,9 +309,8 @@ auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
 
   // setup a tuple with one lambda function per map in the itemArray
   // (the first lambda will assign ids according to itemArray[1]...
-  constexpr size_t NumThreads = std::tuple_size_v<ItemMapArray>;
-  return ad_tuple_helpers::setupTupleFromCallable<NumThreads>(
-      itemMapLamdaCreator);
+  return ad_tuple_helpers::setupTupleFromCallable<
+      std::tuple_size_v<ItemMapArray>>(itemMapLamdaCreator);
 }
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
