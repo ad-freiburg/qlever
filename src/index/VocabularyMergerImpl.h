@@ -299,6 +299,9 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   };
 
   for (const auto& [word, idAndSplitVal] : els) {
+    // When merging the vocabulary, we need the actual word, the (internal) id
+    // we have assigned to this word, and the information, whether this word
+    // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
     byteBuffer << word;
     byteBuffer << splitVal.isExternalized_;
