@@ -251,9 +251,9 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 }
 
 // ________________________________________________________________________________________________________
-template <typename T>
 inline void writeMappedIdsToExtVec(
-    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {

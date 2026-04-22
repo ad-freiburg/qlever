@@ -225,8 +225,8 @@ struct LangtagAndTriple {
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
  *
- * return a tuple of <NumThreads> lambda functions, each lambda does the
- * following
+ * return a tuple of lambda functions, one for each item in `itemArray`, each
+ * lambda does the following
  *
  * given an index idx, returns a lambda that
  * - Takes a triple and a language tag

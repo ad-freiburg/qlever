@@ -500,6 +500,13 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
 
+  constexpr size_t OVERLAP = 3;
+  size_t index = 0;
+
+  // Each of these futures corresponds to the processing and writing of one
+  // batch of triples and partial vocabulary.
+  std::array<std::future<void>, OVERLAP> writePartialVocabularyFuture;
+
   // Show progress and statistics for the number of triples parsed, in
   // particular, the average processing time for a batch of 10M triples (see
   // `DEFAULT_PROGRESS_BAR_BATCH_SIZE`).
@@ -515,18 +522,25 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
   numTriplesParsedTimer.stop();
 
-  auto itemArray = makeArray<NUM_PARALLEL_ITEM_MAPS>(
-      [linesPerPartial, &comp = vocab_.getCaseComparator()](size_t j) {
-        ItemMapManager manager{j * 100 * linesPerPartial, &comp};
-        // This `reserve` is for a guaranteed upper bound that stays the same
-        // during the whole index building.
-        manager.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
-        return manager;
+  std::array<std::vector<std::array<Id, NumColumnsIndexBuilding>>, OVERLAP>
+      localWriters;
+  auto itemArrays = makeArray<OVERLAP>(
+      [linesPerPartial, &comp = vocab_.getCaseComparator()](size_t) {
+        return makeArray<NUM_PARALLEL_ITEM_MAPS>(
+            [linesPerPartial, &comp](size_t j) {
+              ItemMapManager manager{j * 100 * linesPerPartial, &comp};
+              // This `reserve` is for a guaranteed upper bound that stays the
+              // same during the whole index building.
+              manager.map_.map_.reserve(5 * linesPerPartial /
+                                        NUM_PARALLEL_ITEM_MAPS);
+              return manager;
+            });
       });
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
+    auto& localWriter = localWriters.at(index);
+    auto& itemArray = itemArrays.at(index);
 
     {
       for (auto& manager : itemArray) {
@@ -569,16 +583,34 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
       parser->printAndResetQueueStatistics();
     }
 
-    writeNextPartialVocabulary(numTriplesParsed, numFiles,
-                               actualCurrentPartialSize, itemArray,
-                               std::move(localWriter), &idTriples);
+    // wait until sorting the last partial vocabulary has finished
+    // to control the number of threads and the amount of memory used at the
+    // same time. typically sorting is finished before we reach again here so
+    // it is not a bottleneck.
+    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
+    auto& nextFuture = writePartialVocabularyFuture.at(index);
+    if (nextFuture.valid()) {
+      nextFuture.get();
+    }
+    AD_LOG_TIMING
+        << "Time spent waiting for the writing of a previous vocabulary: "
+        << sortFutureTimer.msecs().count() << "ms." << std::endl;
+    nextFuture = writeNextPartialVocabulary(numTriplesParsed, numFiles,
+                                            actualCurrentPartialSize, itemArray,
+                                            localWriter, &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
+    index = (index + 1) % OVERLAP;
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  for (auto& future : writePartialVocabularyFuture) {
+    if (future.valid()) {
+      future.get();
+    }
+  }
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
@@ -1491,9 +1523,10 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 }
 
 // ___________________________________________________________________________
-void IndexImpl::writeNextPartialVocabulary(
+std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    const ItemMapArray& items, auto localIds,
+    const ItemMapArray& items,
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
@@ -1501,59 +1534,64 @@ void IndexImpl::writeNextPartialVocabulary(
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
-  std::future<void> resultFuture;
   std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
-  auto vec = [&]() {
-    ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-    return vocabMapsToVector(items);
-  }();
-  const auto identicalPred = [&c = vocab_.getCaseComparator()](const auto& a,
-                                                               const auto& b) {
-    return c(a.second.splitVal_, b.second.splitVal_,
-             decltype(vocab_)::SortLevel::TOTAL);
-  };
-  {
-    ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-    sortVocabVector(&vec, identicalPred, true);
-  }
-  auto mapping = [&]() {
-    ad_utility::TimeBlockAndLog l{"creating internal mapping"};
-    return createInternalMapping(vec);
-  }();
-  AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
-  // since now adjacent duplicates also have the same Ids, it suffices to
-  // compare those
-  {
-    ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
-    vec.erase(std::unique(vec.begin(), vec.end(),
-                          [](const auto& a, const auto& b) {
-                            return a.second.id_ == b.second.id_;
-                          }),
-              vec.end());
-  }
-  // The writing to the external vector has to be done in order, to
-  // make the update from local to global ids work.
+  auto lambda = [&localIds, globalWritePtr, &items,
+                 &c = vocab_.getCaseComparator(), partialFilename,
+                 numFiles]() mutable {
+    auto vec = [&]() {
+      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
+      return vocabMapsToVector(items);
+    }();
+    const auto identicalPred = [&c](const auto& a, const auto& b) {
+      return c(a.second.splitVal_, b.second.splitVal_,
+               decltype(vocab_)::SortLevel::TOTAL);
+    };
+    {
+      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
+      sortVocabVector(&vec, identicalPred, true);
+    }
+    auto mapping = [&]() {
+      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
+      return createInternalMapping(vec);
+    }();
+    AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
+    // since now adjacent duplicates also have the same Ids, it suffices to
+    // compare those
+    {
+      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
+      vec.erase(std::unique(vec.begin(), vec.end(),
+                            [](const auto& a, const auto& b) {
+                              return a.second.id_ == b.second.id_;
+                            }),
+                vec.end());
+    }
+    // The writing to the external vector has to be done in order, to
+    // make the update from local to global ids work.
 
-  auto writeTriplesFuture = std::async(
-      std::launch::async, [&globalWritePtr, &localIds, &mapping, &numFiles]() {
-        globalWritePtr->withWriteLockAndOrdered(
-            [&](auto& writerPtr) {
-              writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-            },
-            numFiles);
-      });
-  {
-    ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
-    writePartialVocabularyToFile(vec, partialFilename);
-  }
-  AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
-  vec.clear();
-  {
-    ad_utility::TimeBlockAndLog l{"writing to global file"};
-    writeTriplesFuture.get();
-  }
+    auto writeTriplesFuture = std::async(
+        std::launch::async,
+        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+          globalWritePtr->withWriteLockAndOrdered(
+              [&](auto& writerPtr) {
+                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+              },
+              numFiles);
+        });
+    {
+      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
+      writePartialVocabularyToFile(vec, partialFilename);
+    }
+    AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
+    vec.clear();
+    {
+      ad_utility::TimeBlockAndLog l{"writing to global file"};
+      writeTriplesFuture.get();
+    }
+  };
+
+  return std::async(std::launch::async, std::move(lambda));
 }
 
 // ____________________________________________________________________________
