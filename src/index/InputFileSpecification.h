@@ -5,18 +5,28 @@
 #ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 #define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
-#include "backports/three_way_comparison.h"
+#include "parser/ParallelBuffer.h"
+
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
 enum class Filetype { Turtle, NQuad };
 
-// Specify a single input file or stream for the index builder.
+// A factory that, when called, creates a ready-to-use `ParallelBuffer`.
+using ParallelBufferFactory = std::function<std::unique_ptr<ParallelBuffer>()>;
+
+// Specify a single input file or stream for the index builder. The source of
+// bytes is either a filename or a factory that produces a `ParallelBuffer`.
 struct InputFileSpecification {
-  std::string filename_;
+  // The byte source: either a filename or a factory.
+  std::variant<std::string, ParallelBufferFactory> source_;
+
   Filetype filetype_;
   // All triples that don't have a dedicated graph (either because the input
   // format is N-Triples or Turtle, or because the corresponding line in the
@@ -34,10 +44,26 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(InputFileSpecification, filename_,
-                                              filetype_, defaultGraph_,
-                                              parseInParallel_,
-                                              parseInParallelSetExplicitly_)
+  // Return the filename if this spec is filename-based, or an empty string
+  // for factory-based specs.
+  const std::string& filename() const {
+    static const std::string empty{};
+    if (std::holds_alternative<std::string>(source_)) {
+      return std::get<std::string>(source_);
+    }
+    return empty;
+  }
+
+  // Create and return a `ParallelBuffer` for this spec. For filename-based
+  // specs, a `ParallelFileBuffer` with the given `blocksize` is returned. For
+  // factory-based specs, the factory is called (ignoring `blocksize`).
+  std::unique_ptr<ParallelBuffer> getParallelBuffer(size_t blocksize) const {
+    if (std::holds_alternative<std::string>(source_)) {
+      return std::make_unique<ParallelFileBuffer>(
+          blocksize, std::get<std::string>(source_));
+    }
+    return std::get<ParallelBufferFactory>(source_)();
+  }
 };
 }  // namespace qlever
 

@@ -6,7 +6,9 @@
 #include "util/StringUtils.h"
 
 // _________________________________________________________________________
-void ParallelFileBuffer::open(const std::string& filename) {
+ParallelFileBuffer::ParallelFileBuffer(size_t blocksize,
+                                       const std::string& filename)
+    : ParallelBuffer{blocksize} {
   file_.open(filename, "r");
   eof_ = false;
   buf_.resize(blocksize_);
@@ -76,7 +78,7 @@ std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
   // Get the block of data read asynchronously after the previous call
   // to `getNextBlock`.
-  auto rawInput = rawBuffer_.getNextBlock();
+  auto rawInput = rawBuffer_->getNextBlock();
 
   // If there was no more data, return the remainder or `std::nullopt` if
   // it is empty.
@@ -102,7 +104,7 @@ ParallelBufferWithEndRegex::getNextBlock() {
   // last block (then `getNextBlock` will return `std::nullopt`, and we simply
   // concatenate it to the remainder).
   if (!endPosition) {
-    if (rawBuffer_.getNextBlock()) {
+    if (rawBuffer_->getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
           "The regex ", endRegexAsString_,
           " which marks the end of a statement was not found in the current "

@@ -560,6 +560,17 @@ class RdfStreamParser : public Parser {
  public:
   // Default construction needed for tests
   explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
+
+  // Construct a parser that reads from an already-opened `ParallelBuffer`.
+  explicit RdfStreamParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+                           const EncodedIriManager* ev,
+                           TripleComponent defaultGraphIri =
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : Parser{ev, std::move(defaultGraphIri)} {
+    initialize(std::move(rawBuffer));
+  }
+
+  // Convenience constructor that opens `filename` with the given `bufferSize`.
   explicit RdfStreamParser(
       const std::string& filename, const EncodedIriManager* ev,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
@@ -568,13 +579,13 @@ class RdfStreamParser : public Parser {
       : Parser{ev, std::move(defaultGraphIri)} {
     AD_LOG_DEBUG << "Initialize RDF parsing from uncompressed file or stream "
                  << filename << std::endl;
-    initialize(filename, bufferSize);
+    initialize(
+        std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename));
   }
 
   bool getLineImpl(TurtleTriple* triple) override;
 
-  void initialize(const std::string& filename,
-                  ad_utility::MemorySize bufferSize);
+  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
 
   size_t getParsePosition() const override {
     return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
@@ -620,6 +631,15 @@ class RdfParallelParser : public Parser {
   // Default construction needed for tests
   explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
 
+  // Construct a parser that reads from an already-opened `ParallelBuffer`.
+  RdfParallelParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+                    const EncodedIriManager* ev,
+                    const TripleComponent& defaultGraphIri =
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : Parser{ev, defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
+    initialize(std::move(rawBuffer));
+  }
+
   // If the `sleepTimeForTesting` is set, then after the initialization the
   // parser will sleep for the specified time before parsing each batch s.t.
   // certain corner cases can be tested.
@@ -633,7 +653,8 @@ class RdfParallelParser : public Parser {
         << "Initialize parallel Turtle Parsing from uncompressed file or "
            "stream "
         << filename << std::endl;
-    initialize(filename, bufferSize);
+    initialize(
+        std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename));
   }
 
   // Construct a parser from a file and a given default graph iri.
@@ -641,7 +662,8 @@ class RdfParallelParser : public Parser {
                     ad_utility::MemorySize bufferSize,
                     const TripleComponent& defaultGraphIri)
       : Parser{ev, defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
-    initialize(filename, bufferSize);
+    initialize(
+        std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename));
   }
 
   // inherit the wrapper overload
@@ -656,8 +678,7 @@ class RdfParallelParser : public Parser {
     parallelParser_.resetTimers();
   }
 
-  void initialize(const std::string& filename,
-                  ad_utility::MemorySize bufferSize);
+  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
 
   size_t getParsePosition() const override {
     // TODO: can we really define this position here?

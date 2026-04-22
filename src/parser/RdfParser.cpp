@@ -971,8 +971,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const std::string& filename,
-                                    ad_utility::MemorySize bufferSize) {
+void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
@@ -986,9 +985,8 @@ void RdfStreamParser<T>::initialize(const std::string& filename,
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      bufferSize.getBytes(), "([\\r\\n]+)");
-  fileBuffer_->open(filename);
-  byteVec_.resize(bufferSize.getBytes());
+      std::move(rawBuffer), "([\\r\\n]+)");
+  byteVec_.resize(fileBuffer_->getBlocksize());
   // decompress the first block and initialize Tokenizer
   if (auto res = fileBuffer_->getNextBlock(); res) {
     byteVec_ = std::move(res.value());
@@ -1185,12 +1183,11 @@ void RdfParallelParser<T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::initialize(const std::string& filename,
-                                      ad_utility::MemorySize bufferSize) {
+void RdfParallelParser<T>::initialize(
+    std::unique_ptr<ParallelBuffer> rawBuffer) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
+      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
-  fileBuffer_->open(filename);
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
@@ -1302,7 +1299,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     }
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
-      [&filename = file.filename_, &bufferSize, &graph, ev](
+      [&file, &bufferSize, &graph, ev](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
@@ -1311,7 +1308,8 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(filename, ev, bufferSize, graph());
+        return std::make_unique<Parser>(
+            file.getParallelBuffer(bufferSize.getBytes()), ev, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
