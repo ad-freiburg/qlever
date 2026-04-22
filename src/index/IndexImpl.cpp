@@ -515,99 +515,104 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
   numTriplesParsedTimer.stop();
 
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
-  while (!parserExhausted) {
-    size_t actualCurrentPartialSize = 0;
+  {
+    ad_utility::CachingMemoryResource cachingMemoryResource;
+    ItemAlloc itemAlloc(&cachingMemoryResource);
+    while (!parserExhausted) {
+      size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
+      std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
 
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
+      std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS>
+          itemArray;
 
-    {
-      auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
-          parserBatchSize_,
-          // when called, returns an optional to the next triple. If
-          // `linesPerPartial` triples were parsed, return std::nullopt. when
-          // the parser is unable to deliver triples, set parserExhausted to
-          // true and return std::nullopt. this is exactly the behavior we need,
-          // as a first step in the parallel Pipeline.
-          ParserBatcher(parser, linesPerPartial,
-                        [&]() { parserExhausted = true; }),
-          // get the Ids for the original triple and the possibly added language
-          // Tag triples using the provided HashMaps via itemArray. See
-          // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
-                                                  &(vocab_.getCaseComparator()),
-                                                  this, itemAlloc));
+      {
+        auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
+            parserBatchSize_,
+            // when called, returns an optional to the next triple. If
+            // `linesPerPartial` triples were parsed, return std::nullopt. when
+            // the parser is unable to deliver triples, set parserExhausted to
+            // true and return std::nullopt. this is exactly the behavior we
+            // need, as a first step in the parallel Pipeline.
+            ParserBatcher(parser, linesPerPartial,
+                          [&]() { parserExhausted = true; }),
+            // get the Ids for the original triple and the possibly added
+            // language Tag triples using the provided HashMaps via itemArray.
+            // See documentation of the function for more details
+            getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
+                &itemArray, linesPerPartial, &(vocab_.getCaseComparator()),
+                this, itemAlloc));
 
-      while (auto opt = p.getNextValue()) {
-        numTriplesParsedTimer.cont();
-        for (const auto& innerOpt : opt.value()) {
-          if (innerOpt) {
-            actualCurrentPartialSize++;
-            localWriter.push_back(innerOpt.value());
+        while (auto opt = p.getNextValue()) {
+          numTriplesParsedTimer.cont();
+          for (const auto& innerOpt : opt.value()) {
+            if (innerOpt) {
+              actualCurrentPartialSize++;
+              localWriter.push_back(innerOpt.value());
+            }
+          }
+          numTriplesParsed++;
+          if (progressBar.update()) {
+            AD_LOG_INFO << progressBar.getProgressString() << std::flush;
           }
         }
-        numTriplesParsed++;
-        if (progressBar.update()) {
-          AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+        AD_LOG_TIMING << "WaitTimes for Pipeline in msecs\n";
+        for (const auto& t : p.getWaitingTime()) {
+          AD_LOG_TIMING
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t)
+                     .count()
+              << " msecs" << std::endl;
         }
-      }
-      AD_LOG_TIMING << "WaitTimes for Pipeline in msecs\n";
-      for (const auto& t : p.getWaitingTime()) {
-        AD_LOG_TIMING
-            << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
-            << " msecs" << std::endl;
+
+        parser->printAndResetQueueStatistics();
       }
 
-      parser->printAndResetQueueStatistics();
+      // localWriter.finish();
+      // wait until sorting the last partial vocabulary has finished
+      // to control the number of threads and the amount of memory used at the
+      // same time. typically sorting is finished before we reach again here so
+      // it is not a bottleneck.
+      ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
+      if (writePartialVocabularyFuture[0].valid()) {
+        writePartialVocabularyFuture[0].get();
+      }
+      AD_LOG_TIMING
+          << "Time spent waiting for the writing of a previous vocabulary: "
+          << sortFutureTimer.msecs().count() << "ms." << std::endl;
+      auto moveMap = [](std::optional<ItemMapManager>&& el) {
+        return std::move(el.value()).moveMap();
+      };
+      std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
+          ad_utility::transformArray(std::move(itemArray), moveMap);
+      auto oldItemPtr =
+          std::make_unique<ItemMapArray>(std::move(convertedMaps));
+      for (auto it = writePartialVocabularyFuture.begin() + 1;
+           it < writePartialVocabularyFuture.end(); ++it) {
+        *(it - 1) = std::move(*it);
+      }
+      writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
+          writeNextPartialVocabulary(
+              numTriplesParsed, numFiles, actualCurrentPartialSize,
+              std::move(oldItemPtr), std::move(localWriter), &idTriples);
+      numFiles++;
+      // Save the information how many triples this partial vocabulary actually
+      // deals with we will use this later for mapping from partial to global
+      // ids
+      actualPartialSizes.push_back(actualCurrentPartialSize);
     }
-
-    // localWriter.finish();
-    // wait until sorting the last partial vocabulary has finished
-    // to control the number of threads and the amount of memory used at the
-    // same time. typically sorting is finished before we reach again here so
-    // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
-    if (writePartialVocabularyFuture[0].valid()) {
-      writePartialVocabularyFuture[0].get();
+    AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+    for (auto& future : writePartialVocabularyFuture) {
+      if (future.valid()) {
+        future.get();
+      }
     }
-    AD_LOG_TIMING
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs().count() << "ms." << std::endl;
-    auto moveMap = [](std::optional<ItemMapManager>&& el) {
-      return std::move(el.value()).moveMap();
-    };
-    std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
-        ad_utility::transformArray(std::move(itemArray), moveMap);
-    auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    for (auto it = writePartialVocabularyFuture.begin() + 1;
-         it < writePartialVocabularyFuture.end(); ++it) {
-      *(it - 1) = std::move(*it);
-    }
-    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
-        writeNextPartialVocabulary(
-            numTriplesParsed, numFiles, actualCurrentPartialSize,
-            std::move(oldItemPtr), std::move(localWriter), &idTriples);
-    numFiles++;
-    // Save the information how many triples this partial vocabulary actually
-    // deals with we will use this later for mapping from partial to global
-    // ids
-    actualPartialSizes.push_back(actualCurrentPartialSize);
+    AD_LOG_INFO
+        << "Number of triples created (including QLever-internal ones): "
+        << (*idTriples.wlock())->size() << " [may contain duplicates]"
+        << std::endl;
+    AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
+                << std::endl;
   }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  for (auto& future : writePartialVocabularyFuture) {
-    if (future.valid()) {
-      future.get();
-    }
-  }
-  AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
-              << (*idTriples.wlock())->size() << " [may contain duplicates]"
-              << std::endl;
-  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
-              << std::endl;
-
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 

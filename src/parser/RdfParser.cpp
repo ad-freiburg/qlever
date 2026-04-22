@@ -1397,8 +1397,13 @@ RdfMultifileParser::RdfMultifileParser(
 RdfMultifileParser::~RdfMultifileParser() {
   ad_utility::ignoreExceptionIfThrows(
       [this] {
+        // Note the order of these calls is important, see the constructor that
+        // sets up the `feederThread_`.
         parsingQueue_.finish();
         finishedBatchQueue_.finish();
+        if (feederThread_.joinable()) {
+          feederThread_.join();
+        }
       },
       "During the destruction of an RdfMultifileParser");
 }

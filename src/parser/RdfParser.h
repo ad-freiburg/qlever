@@ -751,11 +751,10 @@ class RdfMultifileParser : public RdfParserBase {
   ~RdfMultifileParser() override;
 
  private:
-  // A thread that feeds the file specifications to the actual parser threads.
-  ad_utility::JThread feederThread_;
   // The buffer for the finished batches.
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
       finishedBatchQueue_{10};
+
   // This queue manages its own worker threads. Each task consists of a single
   // file that is to be parsed. The parsed results are then pushed to the
   // `finishedBatchQueue_` above. Note: It is important, that the
@@ -764,6 +763,9 @@ class RdfMultifileParser : public RdfParserBase {
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS};
+
+  // A thread that feeds the file specifications to the actual parser threads.
+  ad_utility::JThread feederThread_;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H
