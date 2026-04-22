@@ -92,4 +92,4 @@ TEST(EnumWithStrings, BoostProgramOptions) {
   }
 }
 
-#endif __wasm__
+#endif  // __wasm__
