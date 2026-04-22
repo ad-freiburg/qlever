@@ -519,7 +519,7 @@ class IndexImpl {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      const ItemMapArray& items,
+      std::unique_ptr<ItemMapArray> items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 

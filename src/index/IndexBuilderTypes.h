@@ -72,9 +72,16 @@ struct LocalVocabIndexAndSplitVal {
 // and manage the memory separately, s.t. we can deallocate all the strings of a
 // single phase at once as soon as we are finished with them.
 
+// Allocator type for the hash map
+using ItemAlloc = ql::pmr::polymorphic_allocator<
+    std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
+
 // The actual hash map type.
 using ItemMap =
-    ad_utility::HashMap<std::string_view, LocalVocabIndexAndSplitVal>;
+    ad_utility::HashMap<std::string_view, LocalVocabIndexAndSplitVal,
+                        absl::DefaultHashContainerHash<std::string_view>,
+                        absl::DefaultHashContainerEq<std::string_view>,
+                        ItemAlloc>;
 
 // A vector that stores the same values as the hash map.
 using ItemVec =
@@ -100,8 +107,6 @@ class MonotonicBuffer {
     ql::ranges::copy(input, ptr);
     return {ptr, input.size()};
   }
-
-  void reset() { buffer_->release(); }
 };
 
 // The hash map (which only stores pointers) together with the `MonotonicBuffer`
@@ -110,7 +115,7 @@ struct ItemMapAndBuffer {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
-  ItemMapAndBuffer() = default;
+  explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
   // Note: For older boost versions + compilers, we unfortunately cannot default
   // copy constructor because
   // 1. In older boost versions, the move operations of the polymorphic
@@ -126,6 +131,8 @@ struct ItemMapAndBuffer {
   ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
 };
 
+using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
+
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
  * Ids are assigned in an adjacent range starting with a configurable
@@ -133,8 +140,10 @@ struct ItemMapAndBuffer {
  */
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
- private:
-  void init() {
+  /// Construct by assigning the minimum ID that should be returned by the map.
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
+                          ItemAlloc alloc)
+      : map_(alloc), minId_(minId), comparator_(cmp) {
     // Precompute the mapping from the `specialIds` to their norma IDs in the
     // vocabulary. This makes resolving such IRIs much cheaper.
     for (const auto& [specialIri, specialId] : qlever::specialIds()) {
@@ -144,12 +153,9 @@ struct alignas(256) ItemMapManager {
     }
   }
 
- public:
-  /// Construct by assigning the minimum ID that should be returned by the map.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
-      : minId_(minId), comparator_(cmp) {
-    init();
-  }
+  /// Move the held HashMap out as soon as we are done inserting and only need
+  /// the actual vocabulary.
+  ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
@@ -195,24 +201,7 @@ struct alignas(256) ItemMapManager {
   ad_utility::HashMap<Id, Id> specialIdMapping_;
   uint64_t minId_;
   const TripleComponentComparator* comparator_;
-
-  void reset() {
-    // Use erase to keep the buffer.
-    specialIdMapping_.erase(specialIdMapping_.begin(), specialIdMapping_.end());
-    map_.map_.erase(map_.map_.begin(), map_.map_.end());
-    map_.buffer_.reset();
-
-    init();
-
-    // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
-    // This is not necessary for the actual QLever code, but certain unit
-    // tests currently fail without it.
-    getId(TripleComponent{
-        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
-  }
 };
-
-using ItemMapArray = std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS>;
 
 /// Combines a triple (three strings) together with the (possibly empty)
 /// language tag of its object.
@@ -225,8 +214,8 @@ struct LangtagAndTriple {
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
  *
- * return a tuple of lambda functions, one for each item in `itemArray`, each
- * lambda does the following
+ * return a tuple of lambda functions, one per map in `itemArray`, each lambda
+ * does the following
  *
  * given an index idx, returns a lambda that
  * - Takes a triple and a language tag
@@ -244,10 +233,34 @@ struct LangtagAndTriple {
  * @param itemArray These Maps are used for assigning the ids. Their lifetime
  * must exceed that of this function's return value, since they are captured by
  * reference
+ * @param maxNumberOfTriples The maximum total number of triples that will be
+ * processed by all the lambdas together. Needed to correctly setup the Id
+ * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
 template <typename IndexPtr>
-auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
+auto getIdMapLambdas(std::array<std::optional<ItemMapManager>,
+                                NUM_PARALLEL_ITEM_MAPS>& itemArray,
+                     size_t maxNumberOfTriples,
+                     const TripleComponentComparator* comp, IndexPtr* indexPtr,
+                     ItemAlloc alloc) {
+  // that way the different ids won't interfere
+  for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
+    itemArray[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
+    // This `reserve` is for a guaranteed upper bound that stays the same during
+    // the whole index building. That's why we use the `CachingMemoryResource`
+    // as an underlying memory pool for the allocator of the hash map to make
+    // the allocation and deallocation of these hash maps (that are newly
+    // created for each batch) much cheaper (see `CachingMemoryResource.h` and
+    // `IndexImpl.cpp`).
+    itemArray[j]->map_.map_.reserve(5 * maxNumberOfTriples /
+                                    NUM_PARALLEL_ITEM_MAPS);
+    // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
+    // This is not necessary for the actual QLever code, but certain unit tests
+    // currently fail without it.
+    itemArray[j]->getId(TripleComponent{
+        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
+  }
   using OptionalIds =
       std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
 
@@ -260,7 +273,7 @@ auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = itemArray[idx],
+    return [&map = *itemArray[idx],
             indexPtr](QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
@@ -309,8 +322,8 @@ auto getIdMapLambdas(ItemMapArray& itemArray, IndexPtr* indexPtr) {
 
   // setup a tuple with one lambda function per map in the itemArray
   // (the first lambda will assign ids according to itemArray[1]...
-  return ad_tuple_helpers::setupTupleFromCallable<
-      std::tuple_size_v<ItemMapArray>>(itemMapLamdaCreator);
+  return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
+      itemMapLamdaCreator);
 }
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
