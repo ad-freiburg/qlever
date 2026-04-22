@@ -356,6 +356,20 @@ TEST(FormatTriple, CSVUsesCSVEscaping) {
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
+TEST(FormatTriple, CsvCommaInSubject) {
+  auto triple = makeTriple(makeTerm("sub,ject"), makeTerm("<http://p>"),
+                           makeTerm("<http://o>"));
+  EXPECT_EQ("\"sub,ject\",<http://p>,<http://o>\n",
+            formatTriple(triple, ad_utility::MediaType::csv));
+}
+
+TEST(FormatTriple, CsvCommaInPredicate) {
+  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("pred,icate"),
+                           makeTerm("<http://o>"));
+  EXPECT_EQ("<http://s>,\"pred,icate\",<http://o>\n",
+            formatTriple(triple, ad_utility::MediaType::csv));
+}
+
 TEST(FormatTriple, TsvSimpleTerms) {
   auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
                            makeTerm("<http://o>"));
@@ -373,26 +387,6 @@ TEST(FormatTriple, TsvObjectWithTab) {
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
-TEST(FormatTriple, UnsupportedMediaType) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
-  EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-TEST(FormatTriple, CsvCommaInSubject) {
-  auto triple = makeTriple(makeTerm("sub,ject"), makeTerm("<http://p>"),
-                           makeTerm("<http://o>"));
-  EXPECT_EQ("\"sub,ject\",<http://p>,<http://o>\n",
-            formatTriple(triple, ad_utility::MediaType::csv));
-}
-
-TEST(FormatTriple, CsvCommaInPredicate) {
-  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("pred,icate"),
-                           makeTerm("<http://o>"));
-  EXPECT_EQ("<http://s>,\"pred,icate\",<http://o>\n",
-            formatTriple(triple, ad_utility::MediaType::csv));
-}
-
 TEST(FormatTriple, TsvTabInSubject) {
   auto triple = makeTriple(makeTerm("sub\tject"), makeTerm("<http://p>"),
                            makeTerm("<http://o>"));
@@ -405,6 +399,12 @@ TEST(FormatTriple, TsvTabInPredicate) {
                            makeTerm("<http://o>"));
   EXPECT_EQ("<http://s>\tpred icate\t<http://o>\n",
             formatTriple(triple, ad_utility::MediaType::tsv));
+}
+
+TEST(FormatTriple, UnsupportedMediaType) {
+  auto triple = makeTriple(makeTerm("<http://s>"), makeTerm("<http://p>"),
+                           makeTerm("<http://o>"));
+  EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
 //______________________________________________________________________________
