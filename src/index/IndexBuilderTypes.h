@@ -255,11 +255,6 @@ auto getIdMapLambdas(std::array<std::optional<ItemMapManager>,
     // `IndexImpl.cpp`).
     itemArray[j]->map_.map_.reserve(5 * maxNumberOfTriples /
                                     NUM_PARALLEL_ITEM_MAPS);
-    // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
-    // This is not necessary for the actual QLever code, but certain unit tests
-    // currently fail without it.
-    itemArray[j]->getId(TripleComponent{
-        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
   using OptionalIds =
       std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
