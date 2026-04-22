@@ -311,7 +311,7 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-ItemVec vocabMapsToVector(ItemMapArray& map);
+ItemVec vocabMapsToVector(const ItemMapArray& map);
 
 // _____________________________________________________________________________________________________________
 /**
