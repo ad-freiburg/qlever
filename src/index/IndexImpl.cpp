@@ -541,11 +541,24 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
     auto& localWriter = localWriters.at(index);
     auto& itemArray = itemArrays.at(index);
+    auto& nextFuture = writePartialVocabularyFuture.at(index);
+    
+    // wait until sorting the last partial vocabulary has finished
+    // to control the number of threads and the amount of memory used at the
+    // same time. typically sorting is finished before we reach again here so
+    // it is not a bottleneck.
+    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
+    if (nextFuture.valid()) {
+      nextFuture.get();
+    }
+    AD_LOG_TIMING
+        << "Time spent waiting for the writing of a previous vocabulary: "
+        << sortFutureTimer.msecs().count() << "ms." << std::endl;
+    for (auto& manager : itemArray) {
+      manager.reset();
+    }
 
     {
-      for (auto& manager : itemArray) {
-        manager.reset();
-      }
       auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
           parserBatchSize_,
           // when called, returns an optional to the next triple. If
@@ -583,18 +596,6 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
       parser->printAndResetQueueStatistics();
     }
 
-    // wait until sorting the last partial vocabulary has finished
-    // to control the number of threads and the amount of memory used at the
-    // same time. typically sorting is finished before we reach again here so
-    // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
-    auto& nextFuture = writePartialVocabularyFuture.at(index);
-    if (nextFuture.valid()) {
-      nextFuture.get();
-    }
-    AD_LOG_TIMING
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs().count() << "ms." << std::endl;
     nextFuture = writeNextPartialVocabulary(numTriplesParsed, numFiles,
                                             actualCurrentPartialSize, itemArray,
                                             localWriter, &idTriples);
