@@ -18,10 +18,18 @@
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
+#include "util/FlattenIterator.h"
 #include "util/HashMap.h"
+#include "util/MergeInputRange.h"
 #include "util/TimeTracer.h"
 
 class Permutation;
+
+namespace ad_benchmark {
+class EnsureIntegrationBenchmark;
+class ZipMergeIteratorBenchmark;
+class InsertBatchBenchmark;
+}  // namespace ad_benchmark
 
 struct NumAddedAndDeleted {
   size_t numAdded_;
@@ -91,7 +99,7 @@ struct LocatedTriple {
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
                                               triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
@@ -113,7 +121,205 @@ struct LocatedTripleCompare {
     return x.triple_ < y.triple_;
   }
 };
-using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
+
+// Data structure for `LocatedTriples` optimized for sorted access.
+// The `LocatedTriples` are stored in a vector sorted by the triple. Newly
+// inserted triples are sorted on access. Only the last inserted `LocatedTriple`
+// for a triple is retained, so the last operation for a triple is retained.
+class SortedLocatedTriplesVector {
+  using storage = std::vector<LocatedTriple>;
+  storage triples_ = {};
+  size_t numItemsLargePart_ = 0;
+  bool smallPartIsSorted_ = true;
+
+  // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
+  // triple.
+  void sortAndMergeParts();
+  void sortSmallPart();
+
+  // For the range `rangeToSort` contained in `triples` sort it by triple and
+  // keep the last `LocatedTriple` for each triple.
+  CPP_template(typename R)(
+      requires ql::ranges::range<
+          R>) static void sortAndRemoveDuplicates(std::vector<LocatedTriple>&
+                                                      triples,
+                                                  R&& rangeToSort) {
+    // Stable sort ensures that the operations for each triple are not
+    // reordered. Older `LocatedTriple`s are before newer ones.
+    ql::ranges::stable_sort(rangeToSort, {}, &LocatedTriple::triple_);
+    // We want to keep the last `LocatedTriple` for elements with the same
+    // triple. The first element on the reverse iterators is exactly this last
+    // element.
+    auto freedReverse = ql::ranges::unique(ql::views::reverse(rangeToSort), {},
+                                           &LocatedTriple::triple_);
+    // `unique` was on a reversed range so the freed range is also reversed.
+    // Reverse it again to obtain the forward range of the erase element.
+    auto toFree = ql::views::reverse(freedReverse);
+    // Delete the freed up space which is at the beginning of `rangeToSort`.
+    triples.erase(toFree.begin(), toFree.end());
+  }
+
+  // Whether the items are all sorted and deduplicated. Items can only be read
+  // if `isClean` is true.
+  bool isClean() const { return smallPartIsSorted_; }
+
+  friend class ad_benchmark::EnsureIntegrationBenchmark;
+  friend class ad_benchmark::ZipMergeIteratorBenchmark;
+  friend class ad_benchmark::InsertBatchBenchmark;
+  friend class BlockSortedLocatedTriplesVector;
+  FRIEND_TEST(SortedVectorTest, sortedVector);
+
+ public:
+  SortedLocatedTriplesVector() = default;
+
+  static SortedLocatedTriplesVector fromSorted(
+      std::vector<LocatedTriple> sortedTriples);
+
+  // Consolidates the stored items after inserts. `consolidate` must be called
+  // before any access after inserting new items. After calling `consolidate`
+  // `isClean` will be true.
+  void consolidate(double threshold = 0.25);
+
+  void insert(LocatedTriple lt);
+
+  using iterator = ad_utility::detail::ZipMergeIteratorImpl<
+      storage::iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
+  using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
+      storage::const_iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
+  using const_reverse_iterator = storage::const_reverse_iterator;
+
+  iterator begin();
+  const_iterator begin() const;
+  iterator end();
+  const_iterator end() const;
+
+  LocatedTriple& back();
+  const LocatedTriple& back() const;
+
+  void erase(const LocatedTriple& elem);
+  void erase(std::vector<LocatedTriple> toDelete);
+  CPP_template(typename R)(
+      requires ql::ranges::range<
+          R>) static void eraseSortedSubRange(std::vector<LocatedTriple>&
+                                                  triples,
+                                              R&& toDelete) {
+    auto out = triples.begin();
+    auto triple = triples.begin();
+    auto deletion = toDelete.begin();
+    LocatedTripleCompare comp;
+
+    while (triple != triples.end() && deletion != toDelete.end()) {
+      // triple < deletion
+      if (comp(*triple, *deletion)) {
+        if (out != triple) {
+          *out = std::move(*triple);
+        }
+        ++out;
+        ++triple;
+      }
+      // deletion < triple
+      else if (comp(*deletion, *triple)) {
+        // TODO: this would mean that on element is being deleted that is not in
+        // the list. see `erase` for consistency
+        ++deletion;
+        // triple == deletion
+      } else {
+        ++triple;
+        ++deletion;
+      }
+    }
+
+    auto newEnd = std::move(triple, triples.end(), out);
+    triples.erase(newEnd, triples.end());
+  }
+
+  size_t size() const;
+  bool empty() const;
+
+  bool operator==(const SortedLocatedTriplesVector& other) const {
+    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(other.isClean());
+    return triples_ == other.triples_;
+  }
+};
+static_assert(std::ranges::range<SortedLocatedTriplesVector>);
+
+// Variant of `SortedLocatedTriplesVector` that stores triples across multiple
+// sorted, non-overlapping blocks. Blocks are dynamically split when they exceed
+// a target size. After consolidation, each block is fully sorted and iteration
+// is plain sequential vector traversal with no merge comparisons.
+class BlockSortedLocatedTriplesVector {
+  using Block = std::vector<LocatedTriple>;
+
+  std::vector<Block> blocks_;
+  std::vector<LocatedTriple> pending_;
+  size_t totalSize_ = 0;
+
+  static constexpr size_t kTargetBlockSize = 16384;
+
+  // Find the block index where `lt` belongs by binary search on block
+  // boundaries (each block's last element).
+  size_t findBlock(const LocatedTriple& lt) const;
+
+  // Split block at `blockIdx` into kTargetBlockSize-sized pieces if it exceeds
+  // kTargetBlockSize.
+  void splitIfNeeded(size_t blockIdx);
+
+  // Remove empty blocks from `blocks_`.
+  void removeEmptyBlocks();
+
+  // Merge sorted `pending` elements into an existing sorted `block` with
+  // last-wins deduplication on equal triples.
+  static void mergeIntoBlock(Block& block, ql::span<LocatedTriple> pending);
+
+  bool isClean() const { return pending_.empty(); }
+
+  friend class ad_benchmark::EnsureIntegrationBenchmark;
+  friend class ad_benchmark::ZipMergeIteratorBenchmark;
+  friend class ad_benchmark::InsertBatchBenchmark;
+  FRIEND_TEST(BlockSortedVectorTest, internals);
+
+ public:
+  BlockSortedLocatedTriplesVector() = default;
+
+  static BlockSortedLocatedTriplesVector fromSorted(
+      std::vector<LocatedTriple> sortedTriples);
+
+  void consolidate(double threshold = 0.25);
+
+  void insert(LocatedTriple lt);
+
+  using iterator =
+      ad_utility::detail::FlattenIterator<std::vector<Block>::iterator,
+                                          Block::iterator>;
+  using const_iterator =
+      ad_utility::detail::FlattenIterator<std::vector<Block>::const_iterator,
+                                          Block::const_iterator>;
+
+  iterator begin();
+  const_iterator begin() const;
+  iterator end();
+  const_iterator end() const;
+
+  LocatedTriple& back();
+  const LocatedTriple& back() const;
+
+  void erase(const LocatedTriple& elem);
+  void erase(std::vector<LocatedTriple> toDelete);
+  void erase(ql::span<LocatedTriple> sortedTriples);
+
+  size_t size() const;
+  bool empty() const;
+
+  bool operator==(const BlockSortedLocatedTriplesVector& other) const {
+    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(other.isClean());
+    return ql::ranges::equal(*this, other);
+  }
+};
+static_assert(std::ranges::range<BlockSortedLocatedTriplesVector>);
+
+using LocatedTriples = BlockSortedLocatedTriplesVector;
 
 // This operator is only for debugging and testing. It returns a
 // human-readable representation.
@@ -123,9 +329,6 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 // located triples for a permutation.
 class LocatedTriplesPerBlock {
  private:
-  // The total number of `LocatedTriple` objects stored (for all blocks).
-  size_t numTriples_ = 0;
-
   // For each block with a non-empty set of located triples, the located triples
   // in that block.
   ad_utility::HashMap<size_t, LocatedTriples> map_;
@@ -160,7 +363,7 @@ class LocatedTriplesPerBlock {
   // small, this estimate is usually fine. We could get better estimates in
   // constant time by maintaining a counter for each of these two numbers in
   // `LocatedTriplesPerBlock` and update these counters for each update
-  // operatoin. However, note that that would still be an estimate because at
+  // operation. However, note that that would still be an estimate because at
   // this point we do not know whether an insertion or deletion is actually
   // effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
@@ -198,29 +401,27 @@ class LocatedTriplesPerBlock {
     return map_.contains(blockIndex);
   }
 
-  // Add `locatedTriples` to the `LocatedTriplesPerBlock` and return handles to
-  // where they were added (`LocatedTriples` is a sorted set, see above). Using
-  // these handles, we can easily remove the `locatedTriples` from the set again
-  // when we need to.
-  //
-  // PRECONDITION: The `locatedTriples` must not already exist in
-  // `LocatedTriplesPerBlock`.
-  std::vector<LocatedTriples::iterator> add(
-      ql::span<const LocatedTriple> locatedTriples,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
+  void add(std::vector<LocatedTriple> locatedTriples,
+           ad_utility::timer::TimeTracer& tracer =
+               ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
   //
   // NOTE: `updateAugmentedMetadata()` must be called to update the block
   // metadata.
-  void erase(size_t blockIndex, LocatedTriples::iterator iter);
+  void erase(size_t blockIndex, const LocatedTriple& lt);
+  void erase(ql::span<LocatedTriple> sortedTriples);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
-  size_t numTriples() const { return numTriples_; }
+  size_t numTriplesForTesting() const;
 
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
+
+  // Sort the located triples in all blocks. Must be called before any sorted
+  // access (begin/end/size/mergeTriples/updateAugmentedMetadata).
+  void consolidateAllBlocks();
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
@@ -247,7 +448,6 @@ class LocatedTriplesPerBlock {
   // Remove all located triples.
   void clear() {
     map_.clear();
-    numTriples_ = 0;
     augmentedMetadata_.reset();
   }
 
