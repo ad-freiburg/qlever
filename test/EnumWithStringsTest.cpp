@@ -54,6 +54,9 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
   EXPECT_THROW(V::fromString("not-a-valid-type"), std::runtime_error);
 }
 
+// The WebAssembly/Emscripten build currently doesn't properly link
+// `boost::program_options`.
+#ifndef __wasm__
 // _____________________________________________________________________________
 TEST(EnumWithStrings, BoostProgramOptions) {
   namespace po = boost::program_options;
@@ -88,3 +91,5 @@ TEST(EnumWithStrings, BoostProgramOptions) {
         ::testing::HasSubstr("is not a valid vocabulary type"));
   }
 }
+
+#endif __wasm__
