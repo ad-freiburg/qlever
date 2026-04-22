@@ -370,7 +370,6 @@ class Date {
   // `LargeYear`.
   static DateYearOrDuration makeFromEpoch(Milliseconds timestamp, TimeZone tz);
 #endif
-
   static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };
