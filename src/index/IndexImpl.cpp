@@ -544,7 +544,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(itemArray, this));
+          getIdMapLambdas(itemArray, this));
 
       while (auto opt = p.getNextValue()) {
         numTriplesParsedTimer.cont();
