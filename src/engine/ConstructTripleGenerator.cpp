@@ -37,13 +37,17 @@ ConstructTripleGenerator::evaluateTableWithRange(
   const size_t numBatches =
       (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
-  // this lambda computes the result for a batch of the `TableWithRange`.
+  // this lambda computes the result for a single batch of the `TableWithRange`.
   // `numRowsOfTable`, `firstRowOfTable`, and `rowOffset` are captured by value
   // because they are stack-local to this function and would be dangling
   // references if captured by `[&]` and the returned range is iterated after
-  // this function returns. `table`, `tmpl`, `index`, and `cache` outlive the
-  // returned range (owned by the caller) so they are captured by reference.
-  auto computeBatch = [&table, &tmpl, &index, &cache, numRowsOfTable,
+  // this function returns. `table` is captured by value (it is just two
+  // reference_wrappers + an iota_view) so the returned range does
+  // not dangle if the caller's `table` object goes out of scope while the range
+  // is still alive; the underlying IdTable and LocalVocab still need to outlive
+  // the range. `tmpl`, `index`, and `cache` are captured by reference because
+  // they are owned by the caller of `evaluateTables` and outlive the range.
+  auto computeBatch = [table, &tmpl, &index, &cache, numRowsOfTable,
                        firstRowOfTable, rowOffset,
                        cancellationHandle](int batchIdx) {
     cancellationHandle->throwIfCancelled();
