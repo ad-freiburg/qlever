@@ -520,7 +520,7 @@ class IndexImpl {
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       const ItemMapArray& items,
-      const std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds,
+      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   // Return a Turtle parser that parses the given file. The parser will be

@@ -522,43 +522,23 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
   numTriplesParsedTimer.stop();
 
-  std::array<std::vector<std::array<Id, NumColumnsIndexBuilding>>, OVERLAP>
-      localWriters;
-  auto itemArrays = makeArray<OVERLAP>(
-      [linesPerPartial, &comp = vocab_.getCaseComparator()](size_t) {
-        return makeArray<NUM_PARALLEL_ITEM_MAPS>(
-            [linesPerPartial, &comp](size_t j) {
-              ItemMapManager manager{j * 100 * linesPerPartial, &comp};
-              // This `reserve` is for a guaranteed upper bound that stays the
-              // same during the whole index building.
-              manager.map_.map_.reserve(5 * linesPerPartial /
-                                        NUM_PARALLEL_ITEM_MAPS);
-              return manager;
-            });
+  auto itemArray = makeArray<NUM_PARALLEL_ITEM_MAPS>(
+      [linesPerPartial, &comp = vocab_.getCaseComparator()](size_t j) {
+        ItemMapManager manager{j * 100 * linesPerPartial, &comp};
+        // This `reserve` is for a guaranteed upper bound that stays the
+        // same during the whole index building.
+        manager.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
+        return manager;
       });
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    auto& localWriter = localWriters.at(index);
-    auto& itemArray = itemArrays.at(index);
-    auto& nextFuture = writePartialVocabularyFuture.at(index);
-    
-    // wait until sorting the last partial vocabulary has finished
-    // to control the number of threads and the amount of memory used at the
-    // same time. typically sorting is finished before we reach again here so
-    // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
-    if (nextFuture.valid()) {
-      nextFuture.get();
-    }
-    AD_LOG_TIMING
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs().count() << "ms." << std::endl;
-    for (auto& manager : itemArray) {
-      manager.reset();
-    }
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
 
     {
+      for (auto& manager : itemArray) {
+        manager.reset();
+      }
       auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
           parserBatchSize_,
           // when called, returns an optional to the next triple. If
@@ -596,9 +576,21 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
       parser->printAndResetQueueStatistics();
     }
 
+    auto& nextFuture = writePartialVocabularyFuture.at(index);
+    // wait until sorting the last partial vocabulary has finished
+    // to control the number of threads and the amount of memory used at the
+    // same time. typically sorting is finished before we reach again here so
+    // it is not a bottleneck.
+    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
+    if (nextFuture.valid()) {
+      nextFuture.get();
+    }
+    AD_LOG_TIMING
+        << "Time spent waiting for the writing of a previous vocabulary: "
+        << sortFutureTimer.msecs().count() << "ms." << std::endl;
     nextFuture = writeNextPartialVocabulary(numTriplesParsed, numFiles,
                                             actualCurrentPartialSize, itemArray,
-                                            localWriter, &idTriples);
+                                            std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
@@ -1527,7 +1519,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     const ItemMapArray& items,
-    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
@@ -1537,14 +1529,14 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
+  auto vec = [&]() {
+    ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
+    return vocabMapsToVector(items);
+  }();
 
-  auto lambda = [&localIds, globalWritePtr, &items,
-                 &c = vocab_.getCaseComparator(), partialFilename,
-                 numFiles]() mutable {
-    auto vec = [&]() {
-      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(items);
-    }();
+  auto lambda = [localIds = std::move(localIds), globalWritePtr,
+                 vec = std::move(vec), &c = vocab_.getCaseComparator(),
+                 partialFilename, numFiles]() mutable {
     const auto identicalPred = [&c](const auto& a, const auto& b) {
       return c(a.second.splitVal_, b.second.splitVal_,
                decltype(vocab_)::SortLevel::TOTAL);
@@ -1572,8 +1564,8 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     // make the update from local to global ids work.
 
     auto writeTriplesFuture = std::async(
-        std::launch::async,
-        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+        std::launch::async, [globalWritePtr, localIds = std::move(localIds),
+                             mapping = std::move(mapping), &numFiles]() {
           globalWritePtr->withWriteLockAndOrdered(
               [&](auto& writerPtr) {
                 writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
