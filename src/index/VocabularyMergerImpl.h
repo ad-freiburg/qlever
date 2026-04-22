@@ -251,9 +251,9 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 }
 
 // ________________________________________________________________________________________________________
-template <typename T>
 inline void writeMappedIdsToExtVec(
-    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
@@ -281,11 +281,23 @@ inline void writeMappedIdsToExtVec(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
-  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  byteBuffer.reserve(1'000'000'000);
+
+  static constexpr size_t flushThreshold = 16ULL * 1024 * 1024;  // 16 MB
+
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
-  uint64_t size = els.size();  // really make sure that this has 64bits;
-  serializer << size;
+  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
+  byteBuffer.reserve(flushThreshold + 1024);  // + slack for the last item
+
+  uint64_t size = els.size();
+  byteBuffer << size;
+
+  auto flush = [&]() {
+    ad_utility::TimeBlockAndLog t{"performing the actual write"};
+    serializer.serializeBytes(byteBuffer.data().data(),
+                              byteBuffer.data().size());
+    byteBuffer.clear();
+  };
+
   for (const auto& [word, idAndSplitVal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
@@ -294,38 +306,42 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     byteBuffer << word;
     byteBuffer << splitVal.isExternalized_;
     byteBuffer << id;
+
+    if (byteBuffer.data().size() >= flushThreshold) {
+      flush();
+    }
   }
-  {
-    ad_utility::TimeBlockAndLog t{"performing the actual write"};
-    serializer.serializeBytes(byteBuffer.data().data(),
-                              byteBuffer.data().size());
-    serializer.close();
-  }
+
+  // Flush remaining data.
+  flush();
+  serializer.close();
+
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(ItemMapArray& map) {
+inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
   ItemVec els;
-  std::vector<size_t> offsets;
-  size_t totalEls =
-      std::accumulate(map.begin(), map.end(), 0,
-                      [&offsets](const auto& x, const auto& y) mutable {
-                        offsets.push_back(x);
-                        return x + y.map_.size();
-                      });
+  std::array<size_t, std::tuple_size_v<ItemMapArray>> offsets;
+  size_t totalEls = std::accumulate(
+      map.begin(), map.end(), 0,
+      [&offsets, idx = 0](const auto& x, const auto& y) mutable {
+        offsets.at(idx) = x;
+        idx++;
+        return x + y.map_.size();
+      });
   els.resize(totalEls);
-  std::vector<std::future<void>> futures;
+  std::array<std::future<void>, std::tuple_size_v<ItemMapArray>> futures;
   size_t i = 0;
-  for (auto& singleMap : map) {
-    futures.push_back(
+  for (const auto& singleMap : map) {
+    futures.at(i) =
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
           ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
                                 [](auto& el) -> T {
                                   return {el.first, std::move(el.second)};
                                 });
-        }));
+        });
     ++i;
   }
   for (auto& fut : futures) {
