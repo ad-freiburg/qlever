@@ -1,7 +1,12 @@
-// Copyright 2018 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+// 2024 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "parser/RdfParser.h"
 
@@ -986,8 +991,7 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // end of a statement.
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       std::move(rawBuffer), "([\\r\\n]+)");
-  byteVec_.resize(fileBuffer_->getBlocksize());
-  // decompress the first block and initialize Tokenizer
+  // Read the first block and initialize the tokenizer.
   if (auto res = fileBuffer_->getNextBlock(); res) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
@@ -1288,18 +1292,18 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const qlever::InputFileSpecification& file, const EncodedIriManager* ev,
+    const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
-  auto graph = [file]() -> TripleComponent {
-    if (file.defaultGraph_.has_value()) {
+  auto graph = [input]() -> TripleComponent {
+    if (input.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
-          file.defaultGraph_.value());
+          input.defaultGraph_.value());
     } else {
       return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
     }
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
-      [&file, &bufferSize, &graph, ev](
+      [&input, &bufferSize, &graph, ev](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
@@ -1309,15 +1313,15 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
         return std::make_unique<Parser>(
-            file.getParallelBuffer(bufferSize.getBytes()), ev, graph());
+            input.getParallelBuffer(bufferSize.getBytes()), ev, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
   // integers. We use it here to create the correct combination of template
   // arguments.
   return ad_utility::callFixedSize(
-      std::array{file.parseInParallel_ ? 1 : 0,
-                 file.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
+      std::array{input.parseInParallel_ ? 1 : 0,
+                 input.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
       makeRdfParserImpl);
 }
 

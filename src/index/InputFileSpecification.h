@@ -1,6 +1,11 @@
-// Copyright 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 #define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
@@ -18,14 +23,22 @@ namespace qlever {
 // An enum to distinguish between `Turtle` and `NQuad` files.
 enum class Filetype { Turtle, NQuad };
 
-// A factory that, when called, creates a ready-to-use `ParallelBuffer`.
-using ParallelBufferFactory = std::function<std::unique_ptr<ParallelBuffer>()>;
-
 // Specify a single input file or stream for the index builder. The source of
 // bytes is either a filename or a factory that produces a `ParallelBuffer`.
 struct InputFileSpecification {
+  // A factory that, when called, creates a ready-to-use `ParallelBuffer`.
+  // The `size_t` is the preferred blocksize for the `ParallelBuffer`, and the
+  // `string_view` is a descriptor of the resource, which can be used for
+  // logging and debugging.
+  using ParallelBufferFactory =
+      std::function<std::unique_ptr<ParallelBuffer>(size_t, std::string_view)>;
+
+  struct BufferFactoryAndDescription {
+    ParallelBufferFactory bufferFactory_;
+    std::string description_;
+  };
   // The byte source: either a filename or a factory.
-  std::variant<std::string, ParallelBufferFactory> source_;
+  std::variant<std::string, BufferFactoryAndDescription> source_;
 
   Filetype filetype_;
   // All triples that don't have a dedicated graph (either because the input
@@ -62,7 +75,9 @@ struct InputFileSpecification {
       return std::make_unique<ParallelFileBuffer>(
           blocksize, std::get<std::string>(source_));
     }
-    return std::get<ParallelBufferFactory>(source_)();
+    auto& [factory, description] =
+        std::get<BufferFactoryAndDescription>(source_);
+    return factory(blocksize, description);
   }
 };
 }  // namespace qlever

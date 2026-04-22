@@ -1,7 +1,11 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
 //
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_PARSER_PARALLELBUFFER_H
 #define QLEVER_SRC_PARSER_PARALLELBUFFER_H
@@ -20,10 +24,9 @@
  * @brief Abstract base class for certain input buffers.
  *
  * Is able to return a whole block of bytes from some kind of
- * input file/stream via the call to getNextBlock(). Subclasses are
- * constructed in an already-open state; there is no separate open() step.
- * If it is computationally expensive to get the next bytes (e.g.
- * because they have to be decompressed) this can be done asynchronously
+ * input file/stream via the call to getNextBlock(). If it is
+ * computationally expensive to get the next bytes (e.g. because
+ * they have to be decompressed) this can be done asynchronously
  * between two calls to getNextBlock.
  */
 class ParallelBuffer {
