@@ -358,6 +358,9 @@ class Date {
   // From a Unix Epoch timestamp, construct the corresponding `Date`.
   static Date makeFromEpoch(Seconds timestamp, TimeZone tz);
 #endif
+  // Uses `toEpoch` to return the Epoch time in seconds.
+  int64_t toEpochInt() const;
+
   static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };
