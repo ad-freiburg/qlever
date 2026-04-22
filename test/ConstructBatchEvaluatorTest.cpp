@@ -24,11 +24,11 @@ using ::testing::Pointee;
 
 // Matcher for `std::optional<EvaluatedTerm>` (i.e.
 // `std::optional<std::shared_ptr<const EvaluatedTermData>>`): asserts the
-// optional is non-empty and the pointed-to term's `str` field equals
+// optional is non-empty and the pointed-to term's `rdfTermString_` field equals
 // `expected`.
 static constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(
-      Pointee(Field(&EvaluatedTermData::rdfTermString, Eq(expected))));
+      Pointee(Field(&EvaluatedTermData::rdfTermString_, Eq(expected))));
 };
 
 static const EvaluatedVariableValues& getColumn(
@@ -128,8 +128,11 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   auto result = evaluateIdTable({0, 2}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
-  // Exactly 2 columns evaluated (columns 0 and 2); column 1 was not requested.
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
+  EXPECT_TRUE(result.variablesByColumn_.contains(0));
+  EXPECT_TRUE(result.variablesByColumn_.contains(2));
+  // false
+  EXPECT_FALSE(result.variablesByColumn_.contains(1));
   EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
   EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
 }
@@ -289,5 +292,4 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
       std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
   EXPECT_THAT(idOTerms, Each(Eq(firstO)));
 }
-
 }  // namespace

@@ -108,12 +108,18 @@ idToStringAndTypeForEncodedValue(Id id);
 // IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
-// Convert an `Id` to (string, XSD-type). The `index` is used for `VocabIndex` /
-// `TextRecordIndex` lookups; `localVocab` for `LocalVocabIndex` lookups.
-// Template parameters:
-//   removeQuotesAndAngleBrackets — strip leading/trailing delimiters
-//   returnOnlyLiterals           — return nullopt for IRIs
-//   EscapeFunction               — applied to the result string
+// Convert the `id` to a human-readable string. The `index` is used to resolve
+// `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
+// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
+// is applied to the resulting string if it is not of a numeric type.
+//
+// Return value: If the `Id` encodes a numeric value (integer, double, etc.)
+// then the `string` (first element of the pair) will be the number as a
+// string without quotation marks, and the second element of the pair will
+// contain the corresponding XSD-datatype as an URI. For all other values and
+// datatypes, the second element of the pair will be empty and the first
+// element will have the format `"stringContent"^^datatypeUri`. If the `id`
+// holds the `Undefined` value, then `std::nullopt` is returned.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -136,6 +142,9 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
       }
     }
     if (word.isIri()) {
+      // this does not assume that the rdf term (`word`) is a blank node string.
+      // if `blankNodeString` == nullopt, then we know that word is not a blank
+      // node string, and we continue after the if statement.
       if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
         return std::pair{std::move(blankNodeString.value()), nullptr};
       }
