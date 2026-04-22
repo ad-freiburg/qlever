@@ -517,7 +517,7 @@ qlever_target_link_libraries(compilationInfo)
 OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
-    add_executable(qlever-index src/index/IndexBuilderMain.cpp)
+    add_executable(qlever-index src/index/IndexBuilderMain.cpp src/index/InputFileServer.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
     add_executable(qlever-server src/ServerMain.cpp)
