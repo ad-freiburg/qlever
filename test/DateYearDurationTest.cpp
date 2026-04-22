@@ -614,6 +614,23 @@ TEST(Date, Subtraction) {
 #endif
 
 // _____________________________________________________________________________
+TEST(Date, toEpochInt) {
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  Date date = Date(1970, 1, 1, 0, 0, 0);
+  EXPECT_EQ(date.toEpochInt(), 0);
+  date = Date(1999, 1, 1, 10, 12, 0);
+  EXPECT_EQ(date.toEpochInt(), 915'185'520);
+  date = Date(1344, 2, 11, 10, 12, 0);
+  EXPECT_EQ(date.toEpochInt(), -19'751'089'680);
+#else
+  Date date = Date(1970, 1, 1, 0, 0, 0);
+  EXPECT_EQ(date.toEpochInt(), -1);
+  date = Date(1999, 1, 1, 10, 12, 0);
+  EXPECT_EQ(date.toEpochInt(), -1);
+#endif
+}
+
+// _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
   Date date = Date(1970, 1, 1, 0, 0, 0);  // No `TimeZone` given.
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
