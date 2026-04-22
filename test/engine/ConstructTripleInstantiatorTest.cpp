@@ -65,7 +65,7 @@ TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
   auto batchResult = BatchEvaluationResult{{}, 5};
 
   auto result0 = instantiateTerm(preprocessed, batchResult, 0, 0);
-  auto result3 = instantiateTerm(preprocessed, batchResult, 3, 100);
+  auto result3 = instantiateTerm(preprocessed, batchResult, 3, 3);
 
   EXPECT_THAT(result0, Optional(matchesEvaluatedTerm(
                            "<http://example.org/subject>", nullptr)));
@@ -75,11 +75,32 @@ TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
 
 TEST(InstantiateTerm, PrecomputedVariableBound) {
   auto term = makeTerm("<http://example.org/value>");
+
+  // Here we create the result of evaluating a variable that occurs in the
+  // Construct template in the following way:
+  // The values of the variable occur in the second column of the `IdTable`
+  // (remmber that the `IdTable is what is returned as result for the WHERE
+  // clause of a CONSTRUCT query). This can be seen in the initialization of the
+  // variable `preprocessed`: The `PrecomputedVariable` is defined as having
+  // `columnIndex_`=2. `EvaluatedVariableValues` contains what the `ValueIds`
+  // in the second column of the `IdTable` are resolved to for a batch of 3 rows
+  // of the `Idtable` (remember that `ValueId`s are mapped to rdf terms). In
+  // this case we simulate that the `ValueId` in the first row and the third
+  // row of the batch are unbound and therefore `std::nullopt`. The second row
+  // evaluates to `term`.
+  // Now, let's get into what we are actually testing here: `instantiateTerm`
+  // is a method that takes a single term of the CONSTRUCT template triple and
+  // instantiate that term according to the results of evaluating the WHERE
+  // clause of the CONSTRUCT query. Here, we just want to verify that the
+  // indexing into the rows of the batch that represents a part of the result of
+  // the where clause works correctly: we want `result` to be instantiated with
+  // the values for the second row (index 1) of the batch. Not with the first or
+  // third row.
+  PreprocessedTerm preprocessed = PrecomputedVariable{2};
   EvaluatedVariableValues vals = {std::nullopt, term, std::nullopt};
   auto batchResult = BatchEvaluationResult{{{2, std::move(vals)}}, 3};
 
-  PreprocessedTerm preprocessed = PrecomputedVariable{2};
-  auto result = instantiateTerm(preprocessed, batchResult, 1, 99);
+  auto result = instantiateTerm(preprocessed, batchResult, 1, 1);
 
   EXPECT_THAT(result, Optional(matchesEvaluatedTerm(
                           "<http://example.org/value>", nullptr)));
@@ -105,7 +126,8 @@ TEST(InstantiateTerm, PrecomputedBlankNodeUsesRowIdxTotal) {
 }
 
 TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
-  // rowIdxTotal drives blank node ID, not rowIdxInBatch.
+  // This test verifies that the `rowIdxTotal` parameter of `instantiateTerm`
+  // determines the blank node Id value , not the `rowIdxInBatch` parameter.
   auto batchResult = BatchEvaluationResult{{}, 5};
   PreprocessedTerm preprocessed = PrecomputedBlankNode{"_:u", "_x"};
 
@@ -119,7 +141,10 @@ TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
 //______________________________________________________________________________
 
 TEST(InstantiateBatch, EmptyTemplate) {
-  PreprocessedConstructTemplate tmpl;
+  // verify that, if the construct triple template is empty, then the result
+  // of instantiating all terms of the construct triple template leads to an
+  // empty result.
+  PreprocessedConstructTemplate tmpl = {};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
