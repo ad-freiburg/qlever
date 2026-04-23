@@ -29,7 +29,6 @@ auto LT = [](size_t blockIndex, const IdTriple<>& triple, bool insertOrDelete) {
 TEST(SortedVectorTest, test) {
   auto lt1 = LT(0, IT(1, 2, 3), true);
   auto lt1I = LT(0, IT(1, 2, 3), false);
-  auto lt2 = LT(0, IT(2, 2, 3), true);
 
   SortedLocatedTriplesVector sv;
   EXPECT_TRUE(sv.empty());

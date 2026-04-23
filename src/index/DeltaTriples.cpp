@@ -106,17 +106,20 @@ nlohmann::json DeltaTriples::vacuum(
     return ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
   };
   auto removeIdentifiedTriples =
-      [this, &cancellationHandle](
-          auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
-          const std::vector<IdTriple<0>>& insertionsToRemove) {
+      [this](auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
+             const std::vector<IdTriple<0>>& insertionsToRemove) {
         auto& state = getState<isInternal>();
-        auto removeTriples = [this, &cancellationHandle, &isInternal](
+        auto removeTriples = [this, &isInternal](
                                  const std::vector<IdTriple<0>>& triples,
                                  auto& triplesToHandlesMap) {
+          // This operation must not be interrupted so we ignore the
+          // CancellationHandle.
+          auto cancellationHandle =
+              std::make_shared<ad_utility::CancellationHandle<>>();
           // Erase located triples
           for (auto permutation : Permutation::all<isInternal>()) {
             const auto& perm = index_.getPermutation(permutation);
-            // insertOrDelete doesn't matter
+            // ToDo: insertOrDelete doesn't matter
             auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
                 triples, perm.metaData().blockData(), perm.keyOrder(), true,
                 cancellationHandle);
@@ -128,15 +131,9 @@ nlohmann::json DeltaTriples::vacuum(
           }
 
           // Remove from handles map.
-          ad_utility::chunkedForLoop<10'000>(
-              0, triples.size(),
-              [&triples, &triplesToHandlesMap](size_t i) {
-                AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triples[i]) ==
-                                     1);
-              },
-              [&cancellationHandle]() {
-                cancellationHandle->throwIfCancelled();
-              });
+          for (const auto& triple : triples) {
+            AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triple) == 1);
+          }
         };
 
         removeTriples(deletionsToRemove, state.triplesDeleted_);
@@ -145,14 +142,19 @@ nlohmann::json DeltaTriples::vacuum(
 
   nlohmann::json result = nlohmann::json::object();
   auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
-  removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove_,
-                          toRemoveInExternal.insertionsToRemove_);
-  result["external"] = toRemoveInExternal.stats_;
-
   auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
-  removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove_,
-                          toRemoveInInternal.insertionsToRemove_);
-  result["internal"] = toRemoveInInternal.stats_;
+
+  // For a consistent state this block must be executed fully.
+  // CancellationHandle's must be ignored inside this block.
+  {
+    removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove_,
+                            toRemoveInExternal.insertionsToRemove_);
+    result["external"] = toRemoveInExternal.stats_;
+
+    removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove_,
+                            toRemoveInInternal.insertionsToRemove_);
+    result["internal"] = toRemoveInInternal.stats_;
+  }
 
   return result;
 }
