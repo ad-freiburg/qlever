@@ -760,12 +760,8 @@ class TripleComponentComparator {
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks
       res.remove_prefix(1);
-      // In the case of prefix filters we might also have
-      // Literals that do not have the closing quotation mark
-      auto endPos = ad_utility::findLiteralEnd(res, "\"");
-      if (endPos != std::string::npos) {
-        // this should also be fine if there is no langtag (endPos == size()
-        // according to cppreference.com
+      if (res.back() != '>') {
+        auto endPos = res.find_last_of('"');
         langtag = res.substr(endPos + 1);
         res.remove_suffix(res.size() - endPos);
       } else {

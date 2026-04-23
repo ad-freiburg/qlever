@@ -85,13 +85,6 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
 //! Gets the last part of a string that is somehow split by the given separator.
 std::string getLastPartOfString(const std::string& text, const char separator);
 
-/**
- * @brief Return the last position where <literalEnd> was found in the <input>
- * without being escaped by backslashes. If it is not found at all, string::npos
- * is returned.
- */
-size_t findLiteralEnd(std::string_view input, std::string_view literalEnd);
-
 /*
 @brief Add elements of the range to a stream, with the `separator` between the
 elements.

@@ -332,15 +332,6 @@ TEST(StringUtils, insertThousandSeparator) {
 }
 
 // _____________________________________________________________________________
-TEST(StringUtils, findLiteralEnd) {
-  using namespace ad_utility;
-  EXPECT_EQ(findLiteralEnd("nothing", "\""), std::string_view::npos);
-  EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
-  EXPECT_EQ(findLiteralEnd("no\\\"thi\"ng", "\""), 7u);  // codespell-ignore
-  EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
-}
-
-// _____________________________________________________________________________
 TEST(StringUtils, strLangTag) {
   // INVALID TAGS
   ASSERT_FALSE(strIsLangTag(""));
