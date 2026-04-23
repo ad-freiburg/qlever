@@ -197,6 +197,7 @@ DateYearOrDuration Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
 }
 
 #endif
+
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.
