@@ -215,6 +215,14 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
           matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>"),
           matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>"),
           matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>")));
+
+  // check pointer equality here:
+  EXPECT_EQ(result[0].subject_.get(), result[1].subject_.get());
+  EXPECT_EQ(result[0].subject_.get(), result[2].subject_.get());
+  EXPECT_EQ(result[0].predicate_.get(), result[1].predicate_.get());
+  EXPECT_EQ(result[0].predicate_.get(), result[2].predicate_.get());
+  EXPECT_EQ(result[0].object_.get(), result[1].object_.get());
+  EXPECT_EQ(result[0].object_.get(), result[2].object_.get());
 }
 
 // _____________________________________________________________________________
@@ -238,6 +246,10 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
       ElementsAre(
           matchesEvaluatedTriple("<http://a>", "<http://p>", "<http://o>"),
           matchesEvaluatedTriple("<http://c>", "<http://p>", "<http://o>")));
+
+  // check pointer equality here:
+  EXPECT_EQ(result[0].predicate_.get(), result[1].predicate_.get());
+  EXPECT_EQ(result[0].object_.get(), result[1].object_.get());
 }
 
 // _____________________________________________________________________________
@@ -256,6 +268,10 @@ TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
       result,
       ElementsAre(matchesEvaluatedTriple("_:g5", "<http://p>", "<http://o>"),
                   matchesEvaluatedTriple("_:g6", "<http://p>", "<http://o>")));
+
+  // check pointer equality here:
+  EXPECT_EQ(result[0].predicate_.get(), result[1].predicate_.get());
+  EXPECT_EQ(result[0].object_.get(), result[1].object_.get());
 }
 
 // _____________________________________________________________________________
@@ -282,6 +298,18 @@ TEST(InstantiateBatch, MultipleTriples) {
           matchesEvaluatedTriple("<http://s>", "<http://p2>", "<http://o2>"),
           matchesEvaluatedTriple("<http://s>", "<http://p1>", "<http://o1>"),
           matchesEvaluatedTriple("<http://s>", "<http://p2>", "<http://o2>")));
+
+  // check pointer equality here:
+  // subject pointer equality:
+  EXPECT_EQ(result[0].subject_.get(), result[1].subject_.get());
+  EXPECT_EQ(result[0].subject_.get(), result[2].subject_.get());
+  EXPECT_EQ(result[0].subject_.get(), result[3].subject_.get());
+  // predicate pointer equality:
+  EXPECT_EQ(result[0].predicate_.get(), result[2].predicate_.get());
+  EXPECT_EQ(result[1].predicate_.get(), result[3].predicate_.get());
+  // object pointer equality:
+  EXPECT_EQ(result[0].object_.get(), result[2].object_.get());
+  EXPECT_EQ(result[1].object_.get(), result[3].object_.get());
 }
 
 // ============================================================================
@@ -311,8 +339,8 @@ TEST(FormatTerm, dataTypeNull) {
   // `rdfTermDataType` == nullptr, then we expect `rdfTermString` to already
   // be appended with its dataType. Thus, the value of `includeDataType` is
   // ignored.
-  testTermFormatting("1^^xsd:integer", nullptr, "1^^xsd:integer",
-                     "1^^xsd:integer");
+  testTermFormatting("\"blubb\"^^<someDataType>", nullptr,
+                     "\"blubb\"^^<someDataType>", "\"blubb\"^^<someDataType>");
 }
 
 // _____________________________________________________________________________
