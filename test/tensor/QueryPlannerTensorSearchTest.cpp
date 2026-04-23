@@ -62,12 +62,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
+      "_:config tensorSearch:algorithm tensorSearch:ivf ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS,
+      h::tensorSearch(1, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS_IVF,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -76,12 +76,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
+      "_:config tensorSearch:algorithm tensorSearch:ivf ;"
       "tensorSearch:numNN 100 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS,
+      h::tensorSearch(100, std::nullopt, std::nullopt, TensorSearchAlgorithm::FAISS_IVF,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -90,12 +90,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
+      "_:config tensorSearch:algorithm tensorSearch:ivf ;"
       "tensorSearch:searchK 20 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, 20, std::nullopt, TensorSearchAlgorithm::FAISS,
+      h::tensorSearch(100, 20, std::nullopt, TensorSearchAlgorithm::FAISS_IVF,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -104,12 +104,12 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:faiss ;"
-      "tensorSearch:nTrees 20 ; "
+      "_:config tensorSearch:algorithm tensorSearch:ivf ;"
+      "tensorSearch:kIVF 20 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(100, std::nullopt, 20, TensorSearchAlgorithm::FAISS,
+      h::tensorSearch(100, std::nullopt, 20, TensorSearchAlgorithm::FAISS_IVF,
                       TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
                       std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
                       scan("?a", "<p>", "?b")));
@@ -289,7 +289,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
       "SELECT * WHERE {"
       "?x <p> ?y ."
       "SERVICE tensorSearch: {"
-      "  _:config tensorSearch:algorithm tensorSearch:faiss ;"
+      "  _:config tensorSearch:algorithm tensorSearch:ivf ;"
       "    tensorSearch:left ?y ;"
       "    tensorSearch:right ?b ;"
       "    tensorSearch:numNN 5 ;"
@@ -297,7 +297,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
       "  { ?ab <p1> ?b }"
       "}"
       "SERVICE tensorSearch: {"
-      "  _:config tensorSearch:algorithm tensorSearch:faiss ;"
+      "  _:config tensorSearch:algorithm tensorSearch:ivf ;"
       "    tensorSearch:left ?y ;"
       "    tensorSearch:right ?c ;"
       "    tensorSearch:numNN 3 ;"
@@ -457,11 +457,11 @@ TEST(QueryPlanner, TensorSearchIncorrectConfigValues) {
                 "SERVICE tensorSearch: {"
                 "_:config tensorSearch:right ?b ;"
                 "tensorSearch:left ?y ;"
-                "tensorSearch:nTrees \"1\" ."
+                "tensorSearch:kIVF \"1\" ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<nTrees>` expects an integer"));
+      ::testing::ContainsRegex("`<kIVF>` expects an integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorSearch: "
                 "<https://qlever.cs.uni-freiburg.de/tensorSearch/>"

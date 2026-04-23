@@ -110,7 +110,7 @@ std::string TensorSearch::getCacheKeyImpl() const {
 
     os << "Max Results: " << (int)maxResults.value_or(-1) << "\n";
     os << "kTrees" << (int)config_.searchK_.value_or(-1) << "\n";
-    os << "nTrees" << (int)config_.nTrees_.value_or(-1) << "\n";
+    os << "kIVF" << (int)config_.kIVF_.value_or(-1) << "\n";
 
     os << "TensorSearch in distance: " << (int)config_.algo_ << "with algorithm"
        << (int)config_.dist_ << "\n";
@@ -148,8 +148,18 @@ std::string TensorSearch::getDescriptor() const {
   auto left = config_.left_.name();
   auto right = config_.right_.name();
   auto algo = getAlgorithm();
-  auto algorithmString =
-      algo == TensorSearchAlgorithm::NAIVE ? "naive" : "faiss";
+  auto algorithmString = "";
+  switch (algo) {
+    case TensorSearchAlgorithm::NAIVE:
+      algorithmString = "naive";
+      break;
+    case TensorSearchAlgorithm::FAISS_HSNW:
+      algorithmString = "hsnw";
+      break;
+    case TensorSearchAlgorithm::FAISS_IVF:
+      algorithmString = "ivf";
+      break;
+  }
   auto distanceString = [this]() {
     switch (config_.dist_) {
       case TensorDistanceAlgorithm::DOT_PRODUCT:
@@ -222,21 +232,18 @@ size_t TensorSearch::getCostEstimate() {
   size_t TensorSearchCostEst = [this]() {
     auto n = childLeft_->getSizeEstimate();
     auto m = childRight_->getSizeEstimate();
-
-    if (config_.algo_ == NAIVE) {
-      // doing a full comparison is expectedly slow
-      return n * m;
-    } else if (config_.algo_ == FAISS) {
-      // We take the cost estimate to be `log(n) * m`, where `n` and `m` are
-      // the size of the left and right table, respectively. Reasoning:
-      // When using the FAISS index, we use tree search over log(n) results m
-      // times.
-      auto logn = n > 0 ? static_cast<size_t>(std::log(static_cast<double>(n)))
+    switch (config_.algo_) {
+      case NAIVE:
+        return n * m;
+      case FAISS_IVF:
+      case FAISS_HSNW: {
+        auto logn = n > 0
+                        ? static_cast<size_t>(std::sqrt(static_cast<double>(n)))
                         : size_t{1};
-      return logn * m;
-    } else {
-      AD_FAIL();
+        return logn * m;
+      }
     }
+    AD_FAIL();
   }();
 
   // The cost to compute the children needs to be taken into account.
@@ -367,8 +374,6 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
-
-
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
@@ -379,7 +384,7 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
   // Size of output table
   size_t numColumns = getResultWidth();
 
-  auto cacheKey=config_.rightCacheName_.value_or(getCacheKey());
+  auto cacheKey = config_.rightCacheName_.value_or(getCacheKey());
   return PreparedTensorSearchParams{idTableLeft,       std::move(resultLeft),
                                     idTableRight,      std::move(resultRight),
                                     leftJoinCol,       rightJoinCol,

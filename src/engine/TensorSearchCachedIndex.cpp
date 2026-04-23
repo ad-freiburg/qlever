@@ -4,8 +4,12 @@
 
 #include "engine/TensorSearchCachedIndex.h"
 
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFFlat.h>
+
 #include <variant>
 
+#include "../../cmake-build-release-grace/_deps/faiss-src/faiss/IndexHNSW.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/TensorSearch.h"
 #include "global/Constants.h"
@@ -96,14 +100,29 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
       } else {
         // initialize index with the size of the first tensor encountered
         dimSize_ = tensorFirstDimShape;
-        size_t trees = config_.nTrees_.value_or(std::min(
-            (size_t)std::sqrt(restable.size()) + 1, restable.size() - 1));
-        quant_ = fromDistanceAndSize(config_.dist_, (int)tensorFirstDimShape);
-        index_ = std::make_shared<faiss::IndexIVFFlat>(
-            quant_.value().get(), (int)tensorFirstDimShape, trees,
-            config_.dist_ == TensorDistanceAlgorithm::DOT_PRODUCT
-                ? faiss::METRIC_INNER_PRODUCT
-                : faiss::METRIC_L2);
+        size_t default_sizes = std::min((size_t)std::sqrt(restable.size()) + 1,
+                                        restable.size() - 1);
+        size_t trees = config_.kIVF_.value_or(default_sizes);
+        size_t nNeighbours = config_.nNeighbours_.value_or(default_sizes);
+        auto metric = config_.dist_ == TensorDistanceAlgorithm::DOT_PRODUCT
+                          ? faiss::METRIC_INNER_PRODUCT
+                          : faiss::METRIC_L2;
+        switch (config_.algo_) {
+          case TensorSearchAlgorithm::FAISS_HSNW:
+            index_ = std::make_shared<faiss::IndexHNSWFlat>(
+                (int)tensorFirstDimShape, nNeighbours, metric);
+            break;
+          case TensorSearchAlgorithm::FAISS_IVF:
+            quant_ =
+                fromDistanceAndSize(config_.dist_, (int)tensorFirstDimShape);
+            index_ = std::make_shared<faiss::IndexIVFFlat>(
+                quant_.value().get(), (int)tensorFirstDimShape, trees, metric);
+            break;
+          default:
+            AD_THROW(
+                "Unknown algorithm during Faiss index build, please report "
+                "this to the developers!");
+        }
       }
       tensorIndexToRow.emplace(tensorsToAdd.size(), row);
       tensorsToAdd.emplace_back(row, tensorData.value());
@@ -114,8 +133,8 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
   if (index_.has_value()) {
     AD_LOG_INFO << "Building index with " << tensorIndexToRow.size()
                 << " items. \n";
-    // By default, the annoy indices are constructed lazily on the first query,
-    // which then is slow.
+    // By default, the annoy indices are constructed lazily on the first
+    // query, which then is slow.
     auto data = std::make_unique<float[]>(tensorsToAdd.size() * dimSize_);
     auto ids = std::make_unique<faiss::idx_t[]>(tensorsToAdd.size());
     for (size_t i = 0; i < tensorsToAdd.size(); i++) {
@@ -123,8 +142,12 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
                 data.get() + i * dimSize_);
       ids[i] = (faiss::idx_t)tensorsToAdd[i].first;
     }
-    index_.value()->train(tensorsToAdd.size(), data.get());
-    index_.value()->add_with_ids(tensorsToAdd.size(), data.get(), ids.get());
+    std::visit(
+        [&tensorsToAdd, &data](const auto& idx) -> void {
+          idx->train(tensorsToAdd.size(), data.get());
+          idx->add(tensorsToAdd.size(), data.get());
+        },
+        index_.value());
   } else {
     AD_LOG_INFO << "No valid tensors found to build index.";
   }
@@ -175,20 +198,28 @@ TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
   }
   nnIndices.resize(k);
   nnDistances.resize(k);
-  //  If the user did not specify a search_k value, we use a default that is
-  //  based on the number of items in the index based on a simple heuristic.
-  size_t search_probe = config_.searchK_.value_or(
-      std::min((size_t)std::sqrt(tensorIndexToRow_.size()),
-               tensorIndexToRow_.size() - 1));
-  index_.value()->nprobe = (int)search_probe;
-  index_.value()->search(1, query.tensorData().data(), k, nnDistances.data(),
-                         nnIndices.data());
+  std::visit(
+      [&](const auto& idx) -> void {
+        using T = std::decay_t<decltype(idx)>;
+        if (config_.searchK_.has_value()) {
+          if constexpr (std::is_same_v<T, std::variant<faiss::IndexIVFFlat>>) {
+            idx->nprobe = config_.searchK_.value();
+          }
+          if constexpr (std::is_same_v<T, std::variant<faiss::IndexHNSWFlat>>) {
+            idx->efSearch = config_.searchK_.value();
+          }
+        }
+        idx->search(1, query.tensorData().data(), k, nnDistances.data(),
+                    nnIndices.data());
+      },
+      index_.value());
 
   AD_CORRECTNESS_CHECK(nnIndices.size() == nnDistances.size());
   for (size_t i = 0; i < nnIndices.size(); i++) {
     if (nnIndices[i] < 0) {
-      // FAISS returns -1 for empty slots in the index, which can happen if the
-      // number of indexed items is smaller than `n`. We ignore these results.
+      // FAISS returns -1 for empty slots in the index, which can happen if
+      // the number of indexed items is smaller than `n`. We ignore these
+      // results.
       continue;
     }
     FaissResult res = {(size_t)nnIndices[i], nnDistances[i],

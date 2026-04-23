@@ -182,7 +182,8 @@ std::shared_ptr<TensorSearch> makeTensorSearch(
     TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM,
     TensorDistanceAlgorithm distAlg = TENSOR_SEARCH_DEFAULT_DISTANCE,
     std::optional<std::string> cacheName = std::nullopt,
-    ssize_t max_num_results = -1, bool addLeftChildFirst = false) {
+    size_t max_num_results = -1, bool addLeftChildFirst = false,
+    std::optional<size_t> searchK = std::nullopt) {
   auto leftChild =
       buildSmallestChild(qec, {"?obja", std::string{"<p1>"}, "?t1"});
   auto rightChild =
@@ -196,8 +197,8 @@ std::shared_ptr<TensorSearch> makeTensorSearch(
       ad_utility::makeExecutionTree<TensorSearch>(
           qec,
           TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist, pv,
-                                    alg, distAlg, max_num_results, std::nullopt,
-                                    std::nullopt, cacheName},
+                                    alg, distAlg, max_num_results, searchK,
+                                    std::nullopt, std::nullopt, cacheName},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
   TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());

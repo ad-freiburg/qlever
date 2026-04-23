@@ -26,9 +26,9 @@ enum class TensorDistanceAlgorithm {
   MANHATTAN_DISTANCE,
   HAMMING_DISTANCE,
 };
-enum class TensorSearchAlgorithm { NAIVE, FAISS };
+enum class TensorSearchAlgorithm { NAIVE, FAISS_IVF, FAISS_HSNW };
 const TensorSearchAlgorithm TENSOR_SEARCH_DEFAULT_ALGORITHM =
-    TensorSearchAlgorithm::FAISS;
+    TensorSearchAlgorithm::FAISS_IVF;
 const TensorDistanceAlgorithm TENSOR_SEARCH_DEFAULT_DISTANCE =
     TensorDistanceAlgorithm::DOT_PRODUCT;
 
@@ -51,9 +51,10 @@ struct TensorSearchConfiguration {
   TensorSearchAlgorithm algo_ = TENSOR_SEARCH_DEFAULT_ALGORITHM;
   TensorDistanceAlgorithm dist_ = TENSOR_SEARCH_DEFAULT_DISTANCE;
 
-  ssize_t maxResults_ = 100;
+  size_t maxResults_ = 100;
   std::optional<size_t> searchK_ = std::nullopt;
-  std::optional<size_t> nTrees_ = std::nullopt;
+  std::optional<size_t> kIVF_ = std::nullopt;
+  std::optional<size_t> nNeighbours_ = std::nullopt;
 
   // Cache name for precomputed tensor search index. This is an experimental
   // parameter that is only used for the `faiss` algorithm and allows to specify

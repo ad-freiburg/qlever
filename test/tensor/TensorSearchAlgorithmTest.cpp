@@ -46,7 +46,8 @@ TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
 
   auto tensorSearchOp =
       makeTensorSearch(qec, true, PayloadVariables::all(), param.algo,
-                       param.dist, std::nullopt, 1);
+                       param.dist, std::nullopt, 1, false, N);
+
   auto tensorSearch = static_cast<TensorSearch*>(tensorSearchOp.get());
 
   auto varColMap = tensorSearch->computeVariableToColumnMap();
@@ -70,9 +71,9 @@ INSTANTIATE_TEST_SUITE_P(
                      "NaiveEuclidean", true},
         AlgDistParam{TensorSearchAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct"},
-        AlgDistParam{TensorSearchAlgorithm::FAISS,
+        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot"},
-        AlgDistParam{TensorSearchAlgorithm::FAISS,
+        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "FaissEuclidean", true},
         AlgDistParam{TensorSearchAlgorithm::NAIVE,
@@ -84,11 +85,16 @@ INSTANTIATE_TEST_SUITE_P(
         AlgDistParam{TensorSearchAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct",
                      false, true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS,
+        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot", false,
                      true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS,
+        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
-                     "FaissEuclidean", true, true}
-        ));
+                     "FaissEuclidean", true, true},
+        AlgDistParam{TensorSearchAlgorithm::FAISS_HSNW,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "FaissHSNWDot",
+                     false, true},
+        AlgDistParam{TensorSearchAlgorithm::FAISS_HSNW,
+                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
+                     "FaissHSNWEuclidean", true, true}));
 }  // namespace

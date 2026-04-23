@@ -138,7 +138,10 @@ class TensorSearch : public Operation {
     return config_.searchK_;
   }
   std::optional<size_t> onlyForTestingGetNTrees() const {
-    return config_.nTrees_;
+    return config_.kIVF_;
+  }
+  std::optional<size_t> onlyForTestingGetNNeighbours() const {
+    return config_.nNeighbours_;
   }
   ssize_t onlyForTestingGetMaxResults() const { return config_.maxResults_; }
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {

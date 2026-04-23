@@ -85,16 +85,16 @@ TEST_P(TensorSearchCacheTest, CacheCreatedTest) {
 
 INSTANTIATE_TEST_SUITE_P(
     TensorSearchCacheTests, TensorSearchCacheTest,
-    ::testing::Values(AlgCacheParam{TensorSearchAlgorithm::FAISS,
+    ::testing::Values(AlgCacheParam{TensorSearchAlgorithm::FAISS_IVF,
                                     TensorDistanceAlgorithm::DOT_PRODUCT,
                                     "FaissDotNamed", true},
-                      AlgCacheParam{TensorSearchAlgorithm::FAISS,
+                      AlgCacheParam{TensorSearchAlgorithm::FAISS_IVF,
                                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                                     "FaissEuclideanNamed", true, true},
-                      AlgCacheParam{TensorSearchAlgorithm::FAISS,
+                      AlgCacheParam{TensorSearchAlgorithm::FAISS_IVF,
                                     TensorDistanceAlgorithm::DOT_PRODUCT,
                                     "FaissDot", false},
-                      AlgCacheParam{TensorSearchAlgorithm::FAISS,
+                      AlgCacheParam{TensorSearchAlgorithm::FAISS_IVF,
                                     TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                                     "FaissEuclidean", false, true}
 

@@ -37,6 +37,12 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
             "maximum "
             "number of nearest neighbors)");
     maxResults_ = object.getInt();
+  } else if (predString == "numNeighbors") {
+    throwIf(!object.isInt(),
+            "The parameter `<numNeighbours>` expects an integer (the "
+            "number "
+            "nearest neighbors in the tree)");
+    nNeighbors_ = object.getInt();
   } else if (predString == "searchK") {
     if (object.isInt()) {
       searchK_ = static_cast<size_t>(object.getInt());
@@ -46,12 +52,12 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
           "trees to search for, which may be higher than the number of "
           "neighbors to return).");
     }
-  } else if (predString == "nTrees") {
+  } else if (predString == "kIVF") {
     if (object.isInt()) {
-      nTrees_ = static_cast<size_t>(object.getInt());
+      kIVF_ = static_cast<size_t>(object.getInt());
     } else {
       throw TensorSearchException(
-          "The parameter `<nTrees>` expects an integer (the number of trees to "
+          "The parameter `<kIVF>` expects an integer (the number of trees to "
           "build for the index).");
     }
   } else if (predString == "algorithm") {
@@ -60,18 +66,20 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     throwIf(
         !object.isIri(),
         "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<default>` and `<faiss>`");
+        "to employ. Currently supported are `<default>`, `<hsnw>`, and "
+        "`<ivf>`");
     auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
     if (type == "naive") {
       algo_ = TensorSearchAlgorithm::NAIVE;
-    } else if (type == "faiss") {
-      algo_ = TensorSearchAlgorithm::FAISS;
+    } else if (type == "hsnw") {
+      algo_ = TensorSearchAlgorithm::FAISS_HSNW;
+    } else if (type == "ivf") {
+      algo_ = TensorSearchAlgorithm::FAISS_IVF;
     } else {
       throw TensorSearchException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported tensor search algorithm. Currently supported are "
-          "`<default>` and "
-          "`<faiss>`"};
+          "`<default>`, `<hsnw>`, and `<ivf>`"};
     }
   } else if (predString == "distance") {
     // This case is already covered in `extractParameterName` below, but we
@@ -147,7 +155,9 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
   throwIf(!right_.has_value(), "Missing parameter `<right>` in tensor search.");
 
   throwIf(
-      rightCacheName_.has_value() && algo != TensorSearchAlgorithm::FAISS,
+      rightCacheName_.has_value() &&
+          (algo != TensorSearchAlgorithm::FAISS_HSNW ||
+           algo != TensorSearchAlgorithm::FAISS_IVF),
       "The parameter `<experimentalRightCacheName>` is only supported by the "
       "`<faiss>` algorithm.");
   // the cache parameter is automatically imputed for faiss
@@ -195,9 +205,10 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
       pv,
       algo,
       dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
-      maxResults_.value_or(static_cast<ssize_t>(100)),
+      maxResults_.value_or(static_cast<size_t>(100)),
       searchK_,
-      nTrees_,
+      kIVF_,
+      nNeighbors_,
       rightCacheName_};
 }
 

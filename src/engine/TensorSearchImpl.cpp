@@ -218,7 +218,8 @@ float TensorSearchImpl::computeDistance(
 }
 Result TensorSearchImpl::computeTensorSearchResult() {
   switch (params_.config_.algo_) {
-    case TensorSearchAlgorithm::FAISS:
+    case TensorSearchAlgorithm::FAISS_IVF:
+    case TensorSearchAlgorithm::FAISS_HSNW:
       return computeTensorSearchResultFaiss();
     default:
       return computeTensorSearchResultNaive();

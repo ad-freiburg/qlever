@@ -28,7 +28,8 @@ struct TensorSearchQuery : MagicServiceQuery {
   // One of both - or both - must be provided.
   std::optional<size_t> maxResults_;
   std::optional<size_t> searchK_;
-  std::optional<size_t> nTrees_;
+  std::optional<size_t> kIVF_;
+  std::optional<size_t> nNeighbors_;
 
   // A list of variables from the right join table that shall be part of the
   // result table. If empty, only the join column - given by `right_` - will

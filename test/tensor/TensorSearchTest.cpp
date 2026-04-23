@@ -264,7 +264,8 @@ class TensorSearchVarColParamTest
           auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
                                    qec->getIndex(), valueId, {})
                                    .value();
-          if (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL) {
+          if (type &&
+              (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL)) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
           }
           columnEntries.push_back(value);
