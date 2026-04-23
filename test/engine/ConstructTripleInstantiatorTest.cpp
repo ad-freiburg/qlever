@@ -20,8 +20,11 @@ using ::testing::ElementsAre;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 
-//______________________________________________________________________________
+// ============================================================================
+//                       TEST HELPERS
+// ============================================================================
 
+// _____________________________________________________________________________
 EvaluatedTerm makeTerm(std::string str, const char* type = nullptr) {
   return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
@@ -46,8 +49,11 @@ static constexpr auto matchesEvaluatedTriple = [](const auto& s, const auto& p,
       AD_FIELD(EvaluatedTriple, object_, matchesEvaluatedTerm(o, nullptr)));
 };
 
-//______________________________________________________________________________
+// ============================================================================
+//                      TESTS FOR `instantiateTerm`
+// ============================================================================
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedConstantIsReturnedAsIs) {
   auto term = makeTerm("<http://example.org/subject>");
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
@@ -59,6 +65,7 @@ TEST(InstantiateTerm, PrecomputedConstantIsReturnedAsIs) {
                           "<http://example.org/subject>", nullptr)));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
   auto term = makeTerm("<http://example.org/subject>");
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
@@ -73,6 +80,7 @@ TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
                            "<http://example.org/subject>", nullptr)));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedVariableBound) {
   auto term = makeTerm("<http://example.org/value>");
 
@@ -106,6 +114,7 @@ TEST(InstantiateTerm, PrecomputedVariableBound) {
                           "<http://example.org/value>", nullptr)));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedVariableUnbound) {
   EvaluatedVariableValues vals = {std::nullopt, std::nullopt};
   auto batchResult = BatchEvaluationResult{{{0, std::move(vals)}}, 2};
@@ -116,6 +125,7 @@ TEST(InstantiateTerm, PrecomputedVariableUnbound) {
   EXPECT_THAT(result, ::testing::Eq(std::nullopt));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedBlankNodeUsesRowIdxTotal) {
   auto batchResult = BatchEvaluationResult{{}, 1};
   PreprocessedTerm preprocessed = PrecomputedBlankNode{"_:g", "_label"};
@@ -125,6 +135,7 @@ TEST(InstantiateTerm, PrecomputedBlankNodeUsesRowIdxTotal) {
   EXPECT_THAT(result, Optional(matchesEvaluatedTerm("_:g42_label", nullptr)));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
   // This test verifies that the `rowIdxTotal` parameter of `instantiateTerm`
   // determines the blank node Id value , not the `rowIdxInBatch` parameter.
@@ -138,8 +149,11 @@ TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
   EXPECT_THAT(r1, Optional(matchesEvaluatedTerm("_:u7_x", nullptr)));
 }
 
-//______________________________________________________________________________
+// ============================================================================
+//                      TESTS FOR `instantiateBatch`
+// ============================================================================
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, EmptyTemplate) {
   // verify that, if the construct triple template is empty, then the result
   // of instantiating all terms of the construct triple template leads to an
@@ -152,6 +166,7 @@ TEST(InstantiateBatch, EmptyTemplate) {
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, EmptyBatch) {
   auto s = makeTerm("<http://s>");
   auto p = makeTerm("<http://p>");
@@ -166,6 +181,7 @@ TEST(InstantiateBatch, EmptyBatch) {
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
   auto s = makeTerm("<http://s>");
   auto p = makeTerm("<http://p>");
@@ -185,6 +201,7 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
           matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>")));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, UnboundVariableDropsTriple) {
   // column 0: [bound, unbound, bound]
   EvaluatedVariableValues vals = {makeTerm("<http://a>"), std::nullopt,
@@ -205,6 +222,7 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
           matchesEvaluatedTriple("<http://c>", "<http://p>", "<http://o>")));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
@@ -222,6 +240,7 @@ TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
                   matchesEvaluatedTriple("_:g6", "<http://p>", "<http://o>")));
 }
 
+// _____________________________________________________________________________
 TEST(InstantiateBatch, MultipleTriples) {
   auto s = makeTerm("<http://s>");
   auto p1 = makeTerm("<http://p1>");
@@ -247,8 +266,11 @@ TEST(InstantiateBatch, MultipleTriples) {
           matchesEvaluatedTriple("<http://s>", "<http://p2>", "<http://o2>")));
 }
 
-//______________________________________________________________________________
+// ============================================================================
+//                      TESTS FOR `formatTerm`
+// ============================================================================
 
+// _____________________________________________________________________________
 static constexpr auto testTermFormatting =
     [](const std::string& rdfTermString, const char* rdfTermDataType,
        const std::string& expectedStringWhenIncludeDataType,
@@ -258,6 +280,7 @@ static constexpr auto testTermFormatting =
       EXPECT_EQ(expectedStringWhenNotIncludeDataType, formatTerm(term, false));
     };
 
+// _____________________________________________________________________________
 TEST(FormatTerm, dataTypeNull) {
   // By the definition of `EvaluatedTermData`, if `rdfTermDataType_`==`nullptr`,
   // then `rdfTermString_` is expected to already hold the value of the rdf term
@@ -274,16 +297,19 @@ TEST(FormatTerm, dataTypeNull) {
                      "1^^xsd:integer");
 }
 
+// _____________________________________________________________________________
 TEST(FormatTerm, XSD_INT_TYPE) {
   testTermFormatting("1", XSD_INT_TYPE,
                      "\"1\"^^<http://www.w3.org/2001/XMLSchema#int>", "1");
 }
 
+// _____________________________________________________________________________
 TEST(FormatTerm, XSD_DECIMAL_TYPE) {
   testTermFormatting("1", XSD_DECIMAL_TYPE,
                      "\"1\"^^<http://www.w3.org/2001/XMLSchema#decimal>", "1");
 }
 
+// _____________________________________________________________________________
 TEST(FormatTerm, XSD_BOOLEAN_TYPE) {
   testTermFormatting("1", XSD_BOOLEAN_TYPE,
                      "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
@@ -299,6 +325,7 @@ TEST(FormatTerm, XSD_BOOLEAN_TYPE) {
                      "false");
 }
 
+// _____________________________________________________________________________
 TEST(FormatTerm, XSD_DOUBLE_TYPE) {
   testTermFormatting("1.0", XSD_DOUBLE_TYPE,
                      "\"1.0\"^^<http://www.w3.org/2001/XMLSchema#double>",
@@ -311,8 +338,11 @@ TEST(FormatTerm, XSD_DOUBLE_TYPE) {
                      "\"false\"^^<http://www.w3.org/2001/XMLSchema#double>");
 }
 
-//______________________________________________________________________________
+// ============================================================================
+//                       TESTS FOR `formatTriple`
+// ============================================================================
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TurtleIriObject) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -320,6 +350,7 @@ TEST(FormatTriple, TurtleIriObject) {
             formatTriple(triple, ad_utility::MediaType::turtle));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TurtleLiteralObject) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"")};
@@ -327,6 +358,7 @@ TEST(FormatTriple, TurtleLiteralObject) {
             formatTriple(triple, ad_utility::MediaType::turtle));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, CsvSimpleTerms) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -334,6 +366,7 @@ TEST(FormatTriple, CsvSimpleTerms) {
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, CSVUsesCSVEscaping) {
   // check whether literals that contain special characters of CSV are escaped
   // correctly (i.e. whether `RdfEscaping::escapeForCsv` is used for the term
@@ -344,6 +377,7 @@ TEST(FormatTriple, CSVUsesCSVEscaping) {
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, CsvCommaInSubject) {
   auto triple = EvaluatedTriple{makeTerm("sub,ject"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -351,6 +385,7 @@ TEST(FormatTriple, CsvCommaInSubject) {
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, CsvCommaInPredicate) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("pred,icate"),
                                 makeTerm("<http://o>")};
@@ -358,6 +393,7 @@ TEST(FormatTriple, CsvCommaInPredicate) {
             formatTriple(triple, ad_utility::MediaType::csv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TsvSimpleTerms) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -365,6 +401,7 @@ TEST(FormatTriple, TsvSimpleTerms) {
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TsvObjectWithTab) {
   // check whether literals that contain special characters of TSV are escaped
   // correctly (i.e. whether `RdfEscaping::escapeForTsv` is used for the term
@@ -375,6 +412,7 @@ TEST(FormatTriple, TsvObjectWithTab) {
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TsvTabInSubject) {
   auto triple = EvaluatedTriple{makeTerm("sub\tject"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -382,6 +420,7 @@ TEST(FormatTriple, TsvTabInSubject) {
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, TsvTabInPredicate) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("pred\ticate"),
                                 makeTerm("<http://o>")};
@@ -389,14 +428,18 @@ TEST(FormatTriple, TsvTabInPredicate) {
             formatTriple(triple, ad_utility::MediaType::tsv));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, UnsupportedMediaType) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
   EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
-//______________________________________________________________________________
+// ============================================================================
+//                       TESTS FOR `createStringTriple`
+// ============================================================================
 
+// _____________________________________________________________________________
 TEST(CreateStringTriple, ReturnsFormattedTerms) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
