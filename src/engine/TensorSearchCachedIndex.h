@@ -11,8 +11,8 @@
 #include <memory>
 #include <variant>
 
-#include "../../cmake-build-release-grace/_deps/faiss-src/faiss/IndexHNSW.h"
-#include "../../cmake-build-release-grace/_deps/faiss-src/faiss/IndexIVFFlat.h"
+#include <faiss/IndexHNSW.h>
+#include <faiss/IndexIVFFlat.h>
 #include "TensorSearchConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"

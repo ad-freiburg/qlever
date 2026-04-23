@@ -156,7 +156,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
 
   throwIf(
       rightCacheName_.has_value() &&
-          (algo != TensorSearchAlgorithm::FAISS_HSNW ||
+          (algo != TensorSearchAlgorithm::FAISS_HSNW &&
            algo != TensorSearchAlgorithm::FAISS_IVF),
       "The parameter `<experimentalRightCacheName>` is only supported by the "
       "`<faiss>` algorithm.");

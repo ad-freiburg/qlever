@@ -6,10 +6,10 @@
 
 #include <faiss/IndexFlat.h>
 #include <faiss/IndexIVFFlat.h>
+#include <faiss/IndexHNSW.h>
 
 #include <variant>
 
-#include "../../cmake-build-release-grace/_deps/faiss-src/faiss/IndexHNSW.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/TensorSearch.h"
 #include "global/Constants.h"
