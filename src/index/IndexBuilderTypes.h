@@ -73,38 +73,34 @@ struct PossiblyExternalizedIriOrLiteral {
 using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
 using Triple = std::array<TripleComponentOrId, NumColumnsIndexBuilding>;
 
-// The index of a word in the partial vocabulary in the first phase of index
-// building together with its `SplitVal` (used for efficient comparisons when
-// sorting).
-//
-// TODO: `LocalVocabIndex` is a misnomer, better call it `PartialVocabIndex` or
-// something like that.
-struct LocalVocabIndexAndSplitVal {
+// The index of a word within a partial vocabulary and the corresponding bool
+// that indicates if it belongs to the external vocabulary.
+struct PartialVocabIndexWithExternalFlag {
   uint64_t id_;
-  TripleComponentComparator::SplitValNonOwningWithSortKey splitVal_;
+  bool isExternal_;
 };
 
 // During the first phase of the index building, we use hash maps from entries
-// in the partial vocabulary to their `LocalVocabIndexAndSplitVal` (see above).
-// The hash map only stores pointers (`string_view` as the key, and the
-// `LocalVocabIndexAndSplitVal` is a non-owning pointer type), so that we can
-// deallocate all strings from a single batch of triples at once as soon as we
-// have finished processing them.
+// in the partial vocabulary to their `PartialVocabIndexWithExternalFlag` (see
+// above). The hash map only stores pointers (`string_view` as the key, and the
+// `PartialVocabIndexWithExternalFlag` is a non-owning pointer type), so that we
+// can deallocate all strings from a single batch of triples at once as soon as
+// we have finished processing them.
 
 // Allocator type for the hash map.
 using ItemAlloc = ql::pmr::polymorphic_allocator<
-    std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
+    std::pair<const std::string_view, PartialVocabIndexWithExternalFlag>>;
 
 // The type of the hash map.
 using ItemMap =
-    ad_utility::HashMap<std::string_view, LocalVocabIndexAndSplitVal,
+    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag,
                         absl::DefaultHashContainerHash<std::string_view>,
                         absl::DefaultHashContainerEq<std::string_view>,
                         ItemAlloc>;
 
 // A vector that stores the same values as the hash map.
 using ItemVec =
-    std::vector<std::pair<std::string_view, LocalVocabIndexAndSplitVal>>;
+    std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope.
@@ -204,13 +200,8 @@ struct alignas(256) ItemMapManager {
       // We have to first add the string to the buffer, otherwise we don't have
       // a persistent `string_view` to add to the `map`.
       auto keyView = buffer.addString(repr);
-      // TODO<joka921> The LocalVocabIndexAndSplitVal should work on
-      // `Literal|Iri|BlankNode` directly.
-      map.try_emplace(
-          keyView, LocalVocabIndexAndSplitVal{
-                       res, comparator_->extractAndTransformComparableNonOwning(
-                                repr, TripleComponentComparator::Level::TOTAL,
-                                key.isExternal_, &buffer.charAllocator())});
+      map.try_emplace(keyView,
+                      PartialVocabIndexWithExternalFlag{res, key.isExternal_});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));

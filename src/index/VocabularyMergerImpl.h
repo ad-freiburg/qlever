@@ -166,8 +166,8 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
-  for (auto& [word, idAndSplitVal] : els) {
-    auto& id = idAndSplitVal.id_;
+  for (auto& [word, idAndExternal] : els) {
+    auto& id = idAndExternal.id_;
     if (!first && lastWord != word) {
       nextWordId++;
       lastWord = word;
@@ -237,13 +237,13 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& [word, idAndSplitVal] : els) {
+  for (const auto& [word, idAndExternal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    const auto& [id, splitVal] = idAndSplitVal;
+    const auto& [id, isExternalized] = idAndExternal;
     byteBuffer << word;
-    byteBuffer << splitVal.isExternalized_;
+    byteBuffer << isExternalized;
     byteBuffer << id;
 
     if (byteBuffer.data().size() >= flushThreshold) {
@@ -280,7 +280,7 @@ inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
           using T = ItemVec::value_type;
           ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
                                 [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
+                                  return {el.first, el.second};
                                 });
         });
     ++i;

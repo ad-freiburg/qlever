@@ -229,16 +229,14 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
-  using S = LocalVocabIndexAndSplitVal;
-  TripleComponentComparator::SplitValNonOwningWithSortKey
-      d;  // dummy value that is unused in this case.
-  input.emplace_back("alpha", S{5, d});
-  input.emplace_back("beta", S{4, d});
-  input.emplace_back("beta", S{42, d});
-  input.emplace_back("d", S{8, d});
-  input.emplace_back("e", S{9, d});
-  input.emplace_back("e", S{38, d});
-  input.emplace_back("xenon", S{0, d});
+  using S = PartialVocabIndexWithExternalFlag;
+  input.emplace_back("alpha", S{5, false});
+  input.emplace_back("beta", S{4, false});
+  input.emplace_back("beta", S{42, false});
+  input.emplace_back("d", S{8, false});
+  input.emplace_back("e", S{9, false});
+  input.emplace_back("e", S{38, false});
+  input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
   ASSERT_EQ(0u, input[0].second.id_);

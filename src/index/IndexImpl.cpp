@@ -1548,14 +1548,14 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
       return vocabMapsToVector(*items);
     }();
-    const auto identicalPred = [&c = vocab->getCaseComparator()](
-                                   const auto& a, const auto& b) {
-      return c(a.second.splitVal_, b.second.splitVal_,
-               decltype(vocab_)::SortLevel::TOTAL);
-    };
     {
       ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(&vec, identicalPred, true);
+      sortVocabVector(
+          &vec,
+          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
+            return c(a.first, b.first, decltype(vocab_)::SortLevel::TOTAL);
+          },
+          true);
     }
     auto mapping = [&]() {
       ad_utility::TimeBlockAndLog l{"creating internal mapping"};
