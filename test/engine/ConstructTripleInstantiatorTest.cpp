@@ -53,13 +53,20 @@ static constexpr auto matchesEvaluatedTriple = [](const auto& s, const auto& p,
 //                      TESTS FOR `instantiateTerm`
 // ============================================================================
 
+// this is a completely arbitrary row index for the total index of a row of the
+// result table. The `rowIdxTotal` of `instantiateTerm` is only used for the
+// blank node index generation. Whenever the specific value of `rowIdxTotal` is
+// not relevant we use this constant.
+const int dummyOffsetForRowIdxTotal = 987;
+
 // _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedConstantIsReturnedAsIs) {
   auto term = makeTerm("<http://example.org/subject>");
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
   auto batchResult = BatchEvaluationResult{{}, 1};
 
-  auto result = instantiateTerm(preprocessed, batchResult, 0, 0);
+  auto result =
+      instantiateTerm(preprocessed, batchResult, 0, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result, Optional(matchesEvaluatedTerm(
                           "<http://example.org/subject>", nullptr)));
@@ -71,8 +78,10 @@ TEST(InstantiateTerm, PrecomputedConstantIgnoresRowIndices) {
   PreprocessedTerm preprocessed = PrecomputedConstant{term};
   auto batchResult = BatchEvaluationResult{{}, 5};
 
-  auto result0 = instantiateTerm(preprocessed, batchResult, 0, 0);
-  auto result3 = instantiateTerm(preprocessed, batchResult, 3, 3);
+  auto result0 =
+      instantiateTerm(preprocessed, batchResult, 0, dummyOffsetForRowIdxTotal);
+  auto result3 =
+      instantiateTerm(preprocessed, batchResult, 3, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result0, Optional(matchesEvaluatedTerm(
                            "<http://example.org/subject>", nullptr)));
@@ -104,11 +113,14 @@ TEST(InstantiateTerm, PrecomputedVariableBound) {
   // the where clause works correctly: we want `result` to be instantiated with
   // the values for the second row (index 1) of the batch. Not with the first or
   // third row.
-  PreprocessedTerm preprocessed = PrecomputedVariable{2};
+  size_t variableColumnIndex = 2;
+  PreprocessedTerm preprocessed = PrecomputedVariable{variableColumnIndex};
   EvaluatedVariableValues vals = {std::nullopt, term, std::nullopt};
-  auto batchResult = BatchEvaluationResult{{{2, std::move(vals)}}, 3};
+  auto batchResult =
+      BatchEvaluationResult{{{variableColumnIndex, std::move(vals)}}, 3};
 
-  auto result = instantiateTerm(preprocessed, batchResult, 1, 1);
+  auto result =
+      instantiateTerm(preprocessed, batchResult, 1, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result, Optional(matchesEvaluatedTerm(
                           "<http://example.org/value>", nullptr)));
@@ -116,11 +128,14 @@ TEST(InstantiateTerm, PrecomputedVariableBound) {
 
 // _____________________________________________________________________________
 TEST(InstantiateTerm, PrecomputedVariableUnbound) {
+  size_t variableColumnIndex = 0;
   EvaluatedVariableValues vals = {std::nullopt, std::nullopt};
-  auto batchResult = BatchEvaluationResult{{{0, std::move(vals)}}, 2};
+  auto batchResult =
+      BatchEvaluationResult{{{variableColumnIndex, std::move(vals)}}, 2};
 
-  PreprocessedTerm preprocessed = PrecomputedVariable{0};
-  auto result = instantiateTerm(preprocessed, batchResult, 1, 1);
+  PreprocessedTerm preprocessed = PrecomputedVariable{variableColumnIndex};
+  auto result =
+      instantiateTerm(preprocessed, batchResult, 1, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result, ::testing::Eq(std::nullopt));
 }
@@ -161,7 +176,7 @@ TEST(InstantiateBatch, EmptyTemplate) {
   PreprocessedConstructTemplate tmpl = {};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -176,7 +191,7 @@ TEST(InstantiateBatch, EmptyBatch) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 0};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -191,7 +206,7 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
 
   EXPECT_THAT(
       result,
@@ -203,15 +218,17 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
 
 // _____________________________________________________________________________
 TEST(InstantiateBatch, UnboundVariableDropsTriple) {
+  size_t variableColumnIndex = 0;
   // column 0: [bound, unbound, bound]
   EvaluatedVariableValues vals = {makeTerm("<http://a>"), std::nullopt,
                                   makeTerm("<http://c>")};
-  auto batchResult = BatchEvaluationResult{{{0, vals}}, 3};
+  auto batchResult = BatchEvaluationResult{{{variableColumnIndex, vals}}, 3};
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
   PreprocessedConstructTemplate tmpl;
-  tmpl.preprocessedTriples_ = {
-      {PrecomputedVariable{0}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
+  tmpl.preprocessedTriples_ = {{PrecomputedVariable{variableColumnIndex},
+                                PrecomputedConstant{p},
+                                PrecomputedConstant{o}}};
 
   auto result = instantiateBatch(tmpl, batchResult, 0);
 
