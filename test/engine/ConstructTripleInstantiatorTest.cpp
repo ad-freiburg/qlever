@@ -157,8 +157,9 @@ TEST(InstantiateTerm, PrecomputedBlankNodeIgnoresBatchRowIdx) {
   auto batchResult = BatchEvaluationResult{{}, 5};
   PreprocessedTerm preprocessed = PrecomputedBlankNode{"_:u", "_x"};
 
-  auto r0 = instantiateTerm(preprocessed, batchResult, 0, 7);
-  auto r1 = instantiateTerm(preprocessed, batchResult, 4, 7);
+  const int rowIdxTotal = 7;
+  auto r0 = instantiateTerm(preprocessed, batchResult, 0, rowIdxTotal);
+  auto r1 = instantiateTerm(preprocessed, batchResult, 4, rowIdxTotal);
 
   EXPECT_THAT(r0, Optional(matchesEvaluatedTerm("_:u7_x", nullptr)));
   EXPECT_THAT(r1, Optional(matchesEvaluatedTerm("_:u7_x", nullptr)));
