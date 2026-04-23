@@ -156,7 +156,7 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
     EXPECT_THAT(
         registry.getActiveQueries(),
         UnorderedElementsAre(Pair(queryId1.toQueryId(),
-                                  Field(&ActiveQueryInfo::query, "my-query"))));
+                                  Field(&ActiveQueryInfo::query_, "my-query"))));
 
     {
       auto queryId2 = registry.uniqueId("other-query");
@@ -164,15 +164,15 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
       EXPECT_THAT(registry.getActiveQueries(),
                   UnorderedElementsAre(
                       Pair(queryId1.toQueryId(),
-                           Field(&ActiveQueryInfo::query, "my-query")),
+                           Field(&ActiveQueryInfo::query_, "my-query")),
                       Pair(queryId2.toQueryId(),
-                           Field(&ActiveQueryInfo::query, "other-query"))));
+                           Field(&ActiveQueryInfo::query_, "other-query"))));
     }
 
     EXPECT_THAT(
         registry.getActiveQueries(),
         UnorderedElementsAre(Pair(queryId1.toQueryId(),
-                                  Field(&ActiveQueryInfo::query, "my-query"))));
+                                  Field(&ActiveQueryInfo::query_, "my-query"))));
   }
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());

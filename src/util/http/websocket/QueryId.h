@@ -79,9 +79,10 @@ class QueryRegistry {
         std::make_shared<CancellationHandle<>>();
     std::string query_;
     /// Wall-clock instant at which this entry was registered.
-    std::chrono::system_clock::time_point startedAt_;
+    std::chrono::system_clock::time_point startedAt_ =
+        std::chrono::system_clock::now();
     explicit CancellationHandleWithQuery(std::string_view query)
-        : query_{query}, startedAt_{std::chrono::system_clock::now()} {}
+        : query_{query} {}
   };
   using SynchronizedType = ad_utility::Synchronized<
       ad_utility::HashMap<QueryId, CancellationHandleWithQuery>>;
@@ -95,10 +96,10 @@ class QueryRegistry {
  public:
   /// Snapshot of a single active query. Returned from `getActiveQueries`.
   struct ActiveQueryInfo {
-    std::string query;
+    std::string query_;
     /// Wall-clock instant when the query was registered. Serialized to
     /// clients as a Unix-epoch timestamp.
-    std::chrono::system_clock::time_point startedAt;
+    std::chrono::system_clock::time_point startedAt_;
   };
 
   QueryRegistry() = default;

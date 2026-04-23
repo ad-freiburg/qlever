@@ -504,10 +504,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     nlohmann::json json;
     for (auto& [key, info] : queryRegistry_.getActiveQueries()) {
       auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             info.startedAt.time_since_epoch())
+                             info.startedAt_.time_since_epoch())
                              .count();
       json[nlohmann::json(key)] = {
-          {"query", std::move(info.query)},
+          {"query", std::move(info.query_)},
           {"started_at", startedAtMs},
       };
     }
