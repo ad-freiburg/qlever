@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 #define QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 
+#include <chrono>
 #include <cstdint>
 #include <random>
 
@@ -77,6 +78,9 @@ class QueryRegistry {
     SharedCancellationHandle cancellationHandle_ =
         std::make_shared<CancellationHandle<>>();
     std::string query_;
+    /// Wall-clock instant at which this entry was registered.
+    std::chrono::system_clock::time_point startedAt_ =
+        std::chrono::system_clock::now();
     explicit CancellationHandleWithQuery(std::string_view query)
         : query_{query} {}
   };
@@ -90,6 +94,14 @@ class QueryRegistry {
       std::make_shared<SynchronizedType>()};
 
  public:
+  /// Snapshot of a single active query. Returned from `getActiveQueries`.
+  struct ActiveQueryInfo {
+    std::string query_;
+    /// Wall-clock instant when the query was registered. Serialized to
+    /// clients as a Unix-epoch timestamp.
+    std::chrono::system_clock::time_point startedAt_;
+  };
+
   QueryRegistry() = default;
 
   /// Tries to create a new unique OwningQueryId object from the given string.
@@ -131,14 +143,15 @@ class QueryRegistry {
     return std::move(result.value());
   }
 
-  /// Member function that acquires a read lock and returns a vector
-  /// of all currently registered queries.
-  ad_utility::HashMap<QueryId, std::string> getActiveQueries() const {
+  /// Member function that acquires a read lock and returns a snapshot of all
+  ///  currently registered queries. See `ActiveQueryInfo` for the value shape.
+  ad_utility::HashMap<QueryId, ActiveQueryInfo> getActiveQueries() const {
     return registry_->withReadLock([](const auto& map) {
-      ad_utility::HashMap<QueryId, std::string> result;
+      ad_utility::HashMap<QueryId, ActiveQueryInfo> result;
       result.reserve(map.size());
       for (const auto& entry : map) {
-        result.emplace(entry.first, entry.second.query_);
+        result.emplace(entry.first, ActiveQueryInfo{entry.second.query_,
+                                                    entry.second.startedAt_});
       }
       return result;
     });
