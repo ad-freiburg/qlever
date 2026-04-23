@@ -127,6 +127,20 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 }
 
 // _____________________________________________________________________________
+std::optional<int64_t> Date::toEpochInt() const {
+  std::optional<Date::Nanoseconds> result = toEpoch();
+  if (!result.has_value()) {
+    return std::nullopt;  // Invalid date.
+  } else {
+    // First convert the timepoint to its duration representation and then cast
+    // to total seconds.
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               result.value().time_since_epoch())
+        .count();
+  }
+}
+
+// _____________________________________________________________________________
 Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
   // Shift the timestamp according to the given `TimeZone`offset.
@@ -154,25 +168,6 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
 }
 
 #endif
-
-// _____________________________________________________________________________
-int64_t Date::toEpochInt() const {
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  std::optional<Date::Nanoseconds> result = toEpoch();
-  if (!result.has_value()) {
-    return -1;  // Invalid date.
-  } else {
-    // First convert the timepoint to its duration representation and then cast
-    // to total seconds.
-    return std::chrono::duration_cast<std::chrono::seconds>(
-               result.value().time_since_epoch())
-        .count();
-  }
-#else
-  // This method can not be used with CPP17.
-  return -1;
-#endif
-}
 
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
