@@ -92,7 +92,7 @@ StringTriple ConstructQueryEvaluator::evaluateTriple(
 // _____________________________________________________________________________
 std::string ConstructQueryEvaluator::evaluatePreprocessed(
     const PrecomputedConstant& constant) {
-  return constant.value_;
+  return constant.evaluatedTerm_->rdfTermString_;
 }
 
 // _____________________________________________________________________________
