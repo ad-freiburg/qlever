@@ -209,7 +209,7 @@ std::optional<TensorData> TensorData::fromLiteral(
 float TensorData::cosineSimilarity(const TensorData& tensor1,
                                    const TensorData& tensor2) {
   if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+    throw std::runtime_error{"Tensors are not broadcastable for cosine similarity"};
   }
   float inner = dot(tensor1, tensor2);
   float norm1 = norm(tensor1);
@@ -221,7 +221,7 @@ float TensorData::cosineSimilarity(const TensorData& tensor1,
 float TensorData::euclideanDistance(const TensorData& tensor1,
                                     const TensorData& tensor2) {
   if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+    throw std::runtime_error{"Tensors are not broadcastable for euclidean distance"};
   }
   auto diff = subtract(tensor1, tensor2);
   return norm(diff);
@@ -265,7 +265,7 @@ float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
 TensorData TensorData::add(const TensorData& tensor1,
                            const TensorData& tensor2) {
   if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+    throw std::runtime_error{"Tensors are not broadcastable for addition"};
   }
   std::vector<float> result(tensor1.tensorData_.size());
   std::transform(tensor1.tensorData_.begin(), tensor1.tensorData_.end(),

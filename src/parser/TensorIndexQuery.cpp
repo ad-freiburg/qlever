@@ -65,7 +65,7 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
     throwIf(
         !object.isIri(),
         "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<default>`, `<hsnw>`, and "
+        "to employ. Currently supported are `<naive>`, `<hsnw>`, and "
         "`<ivf>`");
     auto type = extractParameterName(object, TENSOR_INDEX_IRI);
     if (type == "naive") {
@@ -78,7 +78,7 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
       throw TensorIndexException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported tensor search algorithm. Currently supported are "
-          "`<default>`, `<hsnw>`, and `<ivf>`"};
+          "`<naive>`, `<hsnw>`, and `<ivf>`"};
     }
   } else if (predString == "distance") {
     // This case is already covered in `extractParameterName` below, but we
@@ -135,7 +135,7 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
     throw TensorIndexException(absl::StrCat(
         "Unsupported argument ", predString,
         " in tensor search; supported arguments are: `<left>`, `<right>`, "
-        "`<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
+        "`<numNearestNeighbors>`, `<searchK>`, `<kIVF>`, "
         "`<algo>`, `<distance>`, `<payload>`, and "
         "`<experimentalRightCacheName>`"));
   }
