@@ -20,12 +20,14 @@ namespace qlever::constructExport {
 using ad_utility::InputRangeTypeErased;
 using StringTriple = QueryExecutionTree::StringTriple;
 
+//______________________________________________________________________________
 IdCache ConstructTripleGenerator::makeIdCache(
     const PreprocessedConstructTemplate& tmpl) {
   return IdCache{std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
                  CACHE_ENTRIES_PER_VARIABLE};
 }
 
+//______________________________________________________________________________
 InputRangeTypeErased<EvaluatedTriple>
 ConstructTripleGenerator::evaluateTableWithRange(
     const PreprocessedConstructTemplate& tmpl, const Index& index,
