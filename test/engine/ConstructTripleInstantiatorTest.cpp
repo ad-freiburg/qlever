@@ -26,7 +26,8 @@ using ::testing::UnorderedElementsAre;
 
 // _____________________________________________________________________________
 EvaluatedTerm makeTerm(std::string str, const char* type = nullptr) {
-  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
+  return std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{std::move(str), type});
 }
 
 // Matches an `EvaluatedTerm` (shared_ptr<const EvaluatedTermData>) by
