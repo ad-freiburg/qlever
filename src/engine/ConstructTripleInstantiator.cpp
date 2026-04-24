@@ -31,8 +31,8 @@ std::optional<EvaluatedTerm> instantiateTerm(
         } else if constexpr (std::is_same_v<T, PrecomputedVariable>) {
           return batchResult.getVariable(t.columnIndex_, rowIdxInBatch);
         } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
-          return std::make_shared<const EvaluatedTermData>(
-              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr);
+          return std::make_shared<const EvaluatedTermData>(EvaluatedTermData{
+              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr});
         } else {
           static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
@@ -76,6 +76,8 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
   const char* d = XSD_DECIMAL_TYPE;
   const char* b = XSD_BOOLEAN_TYPE;
 
+  // Note: XSD_DOUBLE_TYPE values (for example "NaN", "INF", "-INF") always
+  // include the datatype.
   if (!includeDataType &&
       (term.rdfTermDataType_ == i || term.rdfTermDataType_ == d ||
        (term.rdfTermDataType_ == b && term.rdfTermString_.length() > 1))) {
