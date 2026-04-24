@@ -36,48 +36,44 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  auto processTable =
-      [preprocessedTemplate = std::move(preprocessedTemplate), &index,
-       cancellationHandle, accumulatedRows = rowOffset,
-       cache = std::move(cache)](const TableWithRange& table) mutable {
-        const size_t numRowsOfTable = ql::ranges::distance(table.view_);
-        const size_t firstRowOfTable =
-            numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
-        // ceiling division: ensure the last partial batch is not dropped.
-        const size_t numBatches =
-            (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
-        const size_t tableRowOffset = accumulatedRows;
-        accumulatedRows += numRowsOfTable;
+  auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
+                       &index, cancellationHandle, cache = std::move(cache)](
+                          const TableWithRange& table) mutable {
+    const size_t numRowsOfTable = ql::ranges::distance(table.view_);
+    const size_t firstRowOfTable =
+        numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
+    // ceiling division: ensure the last partial batch is not dropped.
+    const size_t numBatches =
+        (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
-        auto computeBatch = [table, &preprocessedTemplate, &index, &cache,
-                             numRowsOfTable, firstRowOfTable, tableRowOffset,
-                             cancellationHandle](int batchIdx) {
-          cancellationHandle->throwIfCancelled();
+    auto computeBatch = [table, &preprocessedTemplate, &index, &cache,
+                         numRowsOfTable, firstRowOfTable,
+                         cancellationHandle](int batchIdx) {
+      cancellationHandle->throwIfCancelled();
 
-          const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
+      const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
 
-          // Clamp to `numRowsOfTable` so the last batch does not exceed the
-          // table bounds.
-          const size_t batchEnd =
-              std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
+      // Clamp to `numRowsOfTable` so the last batch does not exceed the table
+      // bounds.
+      const size_t batchEnd =
+          std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
 
-          BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
-                                     firstRowOfTable + batchStart,
-                                     firstRowOfTable + batchEnd};
+      BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
+                                 firstRowOfTable + batchStart,
+                                 firstRowOfTable + batchEnd};
 
-          auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-              preprocessedTemplate.uniqueVariableColumns_, ctx,
-              table.tableWithVocab_.localVocab(), index, cache);
+      auto batchResult = ConstructBatchEvaluator::evaluateBatch(
+          preprocessedTemplate.uniqueVariableColumns_, ctx,
+          table.tableWithVocab_.localVocab(), index, cache);
 
-          const size_t blankNodeBaseId =
-              tableRowOffset + firstRowOfTable + batchStart;
-          return instantiateBatch(preprocessedTemplate, batchResult,
-                                  blankNodeBaseId);
-        };
+      const size_t blankNodeBaseId = firstRowOfTable + batchStart;
+      return instantiateBatch(preprocessedTemplate, batchResult,
+                              blankNodeBaseId);
+    };
 
-        return ql::views::iota(size_t{0}, numBatches) |
-               ql::views::transform(computeBatch) | ql::views::join;
-      };
+    return ql::views::iota(size_t{0}, numBatches) |
+           ql::views::transform(computeBatch) | ql::views::join;
+  };
 
   auto pipeline = ad_utility::allView(std::move(rowIndices)) |
                   ql::views::transform(std::move(processTable)) |

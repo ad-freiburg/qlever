@@ -113,18 +113,22 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
 // Tests
 // =============================================================================
 
-// No rows in the view -> no triples emitted, regardless of the template.
+// No rows in the table view -> no triples emitted, regardless of the template.
 TEST_F(ConstructTripleGeneratorTest, emptyTable) {
   auto result = makeResult(makeIdTableFromVector({}));
-  auto table = makeRange(*result, 0, 0);
-  auto triples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto table = makeRange(*result, 0, 0);  // empty table
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
-  EXPECT_TRUE(run(triples, {}, table).empty());
+  EXPECT_TRUE(run(templateTriples, {}, table).empty());
 }
 
 // All-constants template: every result row emits one identical triple,
-// regardless of IdTable cell contents.
+// regardless of `IdTable` cell contents.
 TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
+  //              col 0
+  // row 0:       undefined
+  // row 1:       undefined
+  // row 2:       undefined
   auto result = makeResult(makeIdTableFromVector(
       {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}}));
   auto table = makeRange(*result, 0, 3);
@@ -136,7 +140,7 @@ TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
                           matchTriple("<s>", "<p>", "<o>")));
 }
 
-// Variable in subject position: correctly resolved from the IdTable column.
+// Variable in subject position: correctly resolved from the `IdTable` column.
 TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
   //              col 0
   // row 0:       <s>
@@ -145,6 +149,7 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
   auto table = makeRange(*result, 0, 2);
   auto triples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
   VariableToColumnMap varMap;
+  // values of variable ?sub are located in column 0 of `Idtable`.
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
   EXPECT_THAT(run(triples, varMap, table),
@@ -152,7 +157,8 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
                           matchTriple("<o>", "<p>", "<o>")));
 }
 
-// A row where a variable resolves to an undefined Id -> that triple is dropped.
+// A row where a variable resolves to an undefined `Id` -> that triple is
+// dropped.
 // Rows before and after the undefined row are unaffected.
 TEST_F(ConstructTripleGeneratorTest, undefDropsTriple) {
   auto result = makeResult(
@@ -243,8 +249,8 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
               ElementsAre(matchTriple("_:u0_x", "<p>", "<o>"),
                           matchTriple("_:u1_x", "<p>", "<o>"),
                           matchTriple("_:u2_x", "<p>", "<o>"),
-                          matchTriple("_:u8_x", "<p>", "<o>"),
-                          matchTriple("_:u9_x", "<p>", "<o>")));
+                          matchTriple("_:u3_x", "<p>", "<o>"),
+                          matchTriple("_:u4_x", "<p>", "<o>")));
 }
 
 // A view starting at a non-zero index reads the correct rows from the IdTable.
