@@ -263,7 +263,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructClauseTriples,
+    const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // For each result from the WHERE clause, we produce up to
@@ -271,10 +271,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   // filtered out because one of the components is UNDEF (it would require
   // materializing the whole result).
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructClauseTriples.size());
+                                  constructTriples.size());
 
   return qlever::constructExport::ConstructTripleGenerator::
-      generateStringTriples(constructClauseTriples, qet.getVariableColumns(),
+      generateStringTriples(constructTriples, qet.getVariableColumns(),
                             qet.getQec()->getIndex(), cancellationHandle,
                             std::move(rowIndices), limitAndOffset._offset);
 }

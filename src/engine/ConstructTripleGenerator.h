@@ -65,6 +65,6 @@ class ConstructTripleGenerator {
       size_t rowOffset);
 };
 
-};  // namespace qlever::constructExport
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

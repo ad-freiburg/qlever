@@ -129,7 +129,7 @@ class ExportQueryExecutionTrees {
   // `StringTriple`s.
   static auto constructQueryResultToStringTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructClauseTriples,
+      const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
