@@ -57,19 +57,22 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  // Return the filename if this spec is filename-based, or an empty string
-  // for factory-based specs.
+  // Return the filename/description for the `source_`.
   const std::string& filename() const {
-    static const std::string empty{};
-    if (std::holds_alternative<std::string>(source_)) {
-      return std::get<std::string>(source_);
-    }
-    return empty;
+    return std::visit(
+        [](const auto& arg) -> const auto& {
+          if constexpr (ad_utility::isSimilar<std::string, decltype(arg)>) {
+            return arg;
+          } else {
+            return arg.description_;
+          }
+        },
+        source_);
   }
 
   // Create and return a `ParallelBuffer` for this spec. For filename-based
   // specs, a `ParallelFileBuffer` with the given `blocksize` is returned. For
-  // factory-based specs, the factory is called (ignoring `blocksize`).
+  // factory-based specs, the factory is called.
   std::unique_ptr<ParallelBuffer> getParallelBuffer(size_t blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
       return std::make_unique<ParallelFileBuffer>(
