@@ -30,9 +30,9 @@ using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;
 
-// Generates triples from CONSTRUCT query results by instantiating triple
-// patterns (from the CONSTRUCT clause) with values from the result table
-// (produced by the WHERE clause).
+// Generates triples from the CONSTRUCT query results by instantiating the
+// template triple patterns with the values from the result table produced by
+// the WHERE clause of the CONSTRUCT query.
 class ConstructTripleGenerator {
  public:
   static InputRangeTypeErased<std::string> generateFormattedTriples(
