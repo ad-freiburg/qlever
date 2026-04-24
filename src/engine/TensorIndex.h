@@ -2,22 +2,22 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#ifndef QLEVER_SRC_ENGINE_TENSORSEARCH_H
-#define QLEVER_SRC_ENGINE_TENSORSEARCH_H
+#ifndef QLEVER_SRC_ENGINE_TENSORINDEX_H
+#define QLEVER_SRC_ENGINE_TENSORINDEX_H
 
 #include <memory>
 #include <optional>
 #include <variant>
 
 #include "engine/Operation.h"
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndexConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/TensorData.h"
 #include "rdfTypes/Variable.h"
 
-class TensorSearchCachedIndex;
+class TensorIndexCachedIndex;
 // helper struct to improve readability in prepareJoin()
-struct PreparedTensorSearchParams {
+struct PreparedTensorIndexParams {
   const IdTable* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
   const IdTable* const idTableRight_;
@@ -27,42 +27,42 @@ struct PreparedTensorSearchParams {
   std::vector<ColumnIndex> rightSelectedCols_;
   std::string cacheKey_;
   size_t numColumns_;
-  TensorSearchConfiguration config_;
+  TensorIndexConfiguration config_;
 };
 
-class TensorSearchImpl {
+class TensorIndexImpl {
  private:
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
-  PreparedTensorSearchParams params_;
+  PreparedTensorIndexParams params_;
   QueryExecutionContext* qec_;
   float computeDistance(const ad_utility::TensorData& tensorLeft,
                         const ad_utility::TensorData& tensorRight) const;
-  Result computeTensorSearchResultFaiss();
-  Result computeTensorSearchResultNaive();
+  Result computeTensorIndexResultFaiss();
+  Result computeTensorIndexResultNaive();
 
  public:
-  TensorSearchImpl(PreparedTensorSearchParams& params,
+  TensorIndexImpl(PreparedTensorIndexParams& params,
                    QueryExecutionContext* qec)
       : params_(std::move(params)), qec_(qec) {};
   static size_t getNumThreads();
-  Result computeTensorSearchResult();
+  Result computeTensorIndexResult();
   static void initializeGlobalRuntimeParameters();
 };
 
 // This class is implementing a Tensor Search operation. This operations
 // performs (approximate) NN over either an index or naively.
-class TensorSearch : public Operation {
+class TensorIndex : public Operation {
  public:
-  // creates a TensorSearch operation: the required configuration object
+  // creates a TensorIndex operation: the required configuration object
   // can for example be obtained from the SpatialQuery class. Children are
   // optional, because they may be added later using the addChild method.
   // The substitutesFilterOp parameter indicates whether the spatial join
   // was explicitly requested by the user (false) or has been created to
   // implicitly rewrite a cartesian product with a geo filter (true).
-  TensorSearch(
-      QueryExecutionContext* qec, TensorSearchConfiguration config,
+  TensorIndex(
+      QueryExecutionContext* qec, TensorIndexConfiguration config,
       std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
       std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
       bool substitutesFilterOp = false);
@@ -80,9 +80,9 @@ class TensorSearch : public Operation {
   bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
 
   // this function assumes, that the complete cross product is build and
-  // returned. If the TensorSearch does not have both children yet, it just
+  // returned. If the TensorIndex does not have both children yet, it just
   // returns one as a dummy return. As no column gets joined in the
-  // TensorSearch (both point columns stay in the result table in their row)
+  // TensorIndex (both point columns stay in the result table in their row)
   // each row can have at most the same number of distinct elements as it had
   // before. If the size increases, the multiplicity increases. The assumption
   // is, that the distinctness doesn't change and only the multiplicity
@@ -101,16 +101,16 @@ class TensorSearch : public Operation {
   // operation has computed its result
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // this method creates a new TensorSearch object, to which the child gets
+  // this method creates a new TensorIndex object, to which the child gets
   // added. The reason for this behavior is, that the QueryPlanner can then
-  // still use the existing TensorSearch object, to try different orders
-  std::shared_ptr<TensorSearch> addChild(
+  // still use the existing TensorIndex object, to try different orders
+  std::shared_ptr<TensorIndex> addChild(
       std::shared_ptr<QueryExecutionTree> child,
       const Variable& varOfChild) const;
 
-  // if the TensorSearch has both children its construction is done. Then true
+  // if the TensorIndex has both children its construction is done. Then true
   // is returned. This function is needed in the QueryPlanner, so that the
-  // QueryPlanner stops trying to add children, after the TensorSearch is
+  // QueryPlanner stops trying to add children, after the TensorIndex is
   // already constructed
   bool isConstructed() const;
 
@@ -118,20 +118,20 @@ class TensorSearch : public Operation {
   std::optional<size_t> getMaxResults() const;
 
   // switch the algorithm set in the config parameter at construction time
-  void selectAlgorithm(TensorSearchAlgorithm algo) { config_.algo_ = algo; }
+  void selectAlgorithm(TensorIndexAlgorithm algo) { config_.algo_ = algo; }
 
   // retrieve the currently selected algorithm
-  TensorSearchAlgorithm getAlgorithm() const { return config_.algo_; }
+  TensorIndexAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // retrieve the currently selected spatial join type
   TensorDistanceAlgorithm getDistanceFunction() const { return config_.dist_; }
 
   // retrieve the variables the spatial join is joining on
-  std::pair<Variable, Variable> getTensorSearchVariables() const {
+  std::pair<Variable, Variable> getTensorIndexVariables() const {
     return {config_.left_, config_.right_};
   }
 
-  const TensorSearchConfiguration& onlyForTestingGetConfig() const {
+  const TensorIndexConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
   std::optional<size_t> onlyForTestingGetSearchK() const {
@@ -166,14 +166,14 @@ class TensorSearch : public Operation {
     return childRight_;
   }
 
-  PreparedTensorSearchParams onlyForTestingGetPrepareJoin() const {
+  PreparedTensorIndexParams onlyForTestingGetPrepareJoin() const {
     return prepareJoin();
   }
 
-  void checkCancellationWrapperForTensorSearchAlgorithms() const {
+  void checkCancellationWrapperForTensorIndexAlgorithms() const {
     checkCancellation();
   }
-  static size_t getNumThreadsForTensorSearch();
+  static size_t getNumThreadsForTensorIndex();
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -184,14 +184,14 @@ class TensorSearch : public Operation {
   VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
-  PreparedTensorSearchParams prepareJoin() const;
+  PreparedTensorIndexParams prepareJoin() const;
 
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  TensorSearchConfiguration config_;
+  TensorIndexConfiguration config_;
 
   bool substitutesFilterOp_ = false;
 };
 
-#endif  // QLEVER_SRC_ENGINE_TensorSearch_H
+#endif  // QLEVER_SRC_ENGINE_TensorIndex_H

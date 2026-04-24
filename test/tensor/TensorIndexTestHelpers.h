@@ -1,5 +1,5 @@
-#ifndef QLEVER_TEST_TENSOR_TENSORSEARCHHELPERS_H
-#define QLEVER_TEST_TENSOR_TENSORSEARCHHELPERS_H
+#ifndef QLEVER_TEST_TENSOR_TENSORINDEXHELPERS_H
+#define QLEVER_TEST_TENSOR_TENSORINDEXHELPERS_H
 
 #include <absl/strings/str_cat.h>
 
@@ -10,13 +10,13 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TensorSearch.h"
-#include "engine/TensorSearchCachedIndex.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexCachedIndex.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
-namespace TensorSearchTestHelpers {
+namespace TensorIndexTestHelpers {
 // Helper to build a small deterministic dataset of vectors. The returned
 // Turtle contains subjects <s0> .. <sN-1> with predicate <p1> and a
 // tensor literal as required by the tensor datatype.
@@ -146,8 +146,8 @@ inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
   auto scan1 = buildIndexScan(qec, triple1);
   auto scan2 = buildIndexScan(qec, triple2);
   auto scan3 = buildIndexScan(qec, triple3);
-  auto tensorSearch = buildJoin(qec, scan1, scan2, joinVariable1);
-  return buildJoin(qec, tensorSearch, scan3, joinVariable2);
+  auto tensorIndex = buildJoin(qec, scan1, scan2, joinVariable1);
+  return buildJoin(qec, tensorIndex, scan3, joinVariable2);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
@@ -160,14 +160,14 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
 }
 
 struct AlgDistParam {
-  TensorSearchAlgorithm algo;
+  TensorIndexAlgorithm algo;
   TensorDistanceAlgorithm dist;
   std::string name;
   bool reverse = false;
   bool tensorVocab = false;
 };
 
-class TensorSearchFunctionalTest
+class TensorIndexFunctionalTest
     : public ::testing::TestWithParam<AlgDistParam> {};
 
 inline std::shared_ptr<QueryExecutionTree> buildSmallestChild(
@@ -176,11 +176,11 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallestChild(
   return scan;
 }
 
-std::shared_ptr<TensorSearch> makeTensorSearch(
+std::shared_ptr<TensorIndex> makeTensorIndex(
     QueryExecutionContext* qec, bool addDist = true,
     PayloadVariables pv = PayloadVariables::all(),
-    TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM,
-    TensorDistanceAlgorithm distAlg = TENSOR_SEARCH_DEFAULT_DISTANCE,
+    TensorIndexAlgorithm alg = TENSOR_INDEX_DEFAULT_ALGORITHM,
+    TensorDistanceAlgorithm distAlg = TENSOR_INDEX_DEFAULT_DISTANCE,
     std::optional<std::string> cacheName = std::nullopt,
     size_t max_num_results = -1, bool addLeftChildFirst = false,
     std::optional<size_t> searchK = std::nullopt) {
@@ -193,25 +193,25 @@ std::shared_ptr<TensorSearch> makeTensorSearch(
   if (addDist) {
     dist = Variable{"?dist"};
   }
-  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-      ad_utility::makeExecutionTree<TensorSearch>(
+  std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+      ad_utility::makeExecutionTree<TensorIndex>(
           qec,
-          TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist, pv,
+          TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist, pv,
                                     alg, distAlg, max_num_results, searchK,
                                     std::nullopt, std::nullopt, cacheName},
           std::nullopt, std::nullopt);
-  std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
-  TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
+  std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
+  TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
   Variable firstVariable =
       addLeftChildFirst ? Variable{"?t1"} : Variable{"?t2"};
   Variable secondVariable =
       addLeftChildFirst ? Variable{"?t2"} : Variable{"?t1"};
-  auto tensorSearch1 = tensorSearch->addChild(firstChild, firstVariable);
-  tensorSearch = static_cast<TensorSearch*>(tensorSearch1.get());
-  auto tensorSearch2 = tensorSearch->addChild(secondChild, secondVariable);
-  return tensorSearch2;
+  auto tensorIndex1 = tensorIndex->addChild(firstChild, firstVariable);
+  tensorIndex = static_cast<TensorIndex*>(tensorIndex1.get());
+  auto tensorIndex2 = tensorIndex->addChild(secondChild, secondVariable);
+  return tensorIndex2;
 }
 
 void expectSelfResult(const IdTable* idTable, VariableToColumnMap& varColMap,
@@ -242,6 +242,6 @@ void expectSelfResult(const IdTable* idTable, VariableToColumnMap& varColMap,
     }
   }
 }
-}  // namespace TensorSearchTestHelpers
+}  // namespace TensorIndexTestHelpers
 
-#endif  // QLEVER_TEST_TENSOR_TENSORSEARCHHELPERS_H
+#endif  // QLEVER_TEST_TENSOR_TENSORINDEXHELPERS_H

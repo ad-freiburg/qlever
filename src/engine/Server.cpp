@@ -26,7 +26,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
-#include "engine/TensorSearch.h"
+#include "engine/TensorIndex.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
@@ -120,7 +120,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
                 << "\"" << std::endl;
   }
-  TensorSearchImpl::initializeGlobalRuntimeParameters();
+  TensorIndexImpl::initializeGlobalRuntimeParameters();
 }
 
 // _____________________________________________________________________________

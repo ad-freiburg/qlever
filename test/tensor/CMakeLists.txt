@@ -1,9 +1,9 @@
 
 addLinkAndDiscoverTest(QueryParsingTensorTest qlever engine parser sparqlExpressions)
-addLinkAndDiscoverTest(QueryPlannerTensorSearchTest qlever engine parser sparqlExpressions)
-addLinkAndDiscoverTest(TensorSearchAlgorithmTest qlever engine parser sparqlExpressions)
-addLinkAndDiscoverTest(TensorSearchCacheTest qlever engine parser sparqlExpressions rdfTypes)
-addLinkAndDiscoverTest(TensorSearchTest qlever engine parser sparqlExpressions)
+addLinkAndDiscoverTest(QueryPlannerTensorIndexTest qlever engine parser sparqlExpressions)
+addLinkAndDiscoverTest(TensorIndexAlgorithmTest qlever engine parser sparqlExpressions)
+addLinkAndDiscoverTest(TensorIndexCacheTest qlever engine parser sparqlExpressions rdfTypes)
+addLinkAndDiscoverTest(TensorIndexTest qlever engine parser sparqlExpressions)
 addLinkAndDiscoverTest(TensorVocabTest vocabulary rdfTypes)
 addLinkAndDiscoverTestNoLibs(TensorLoadingTest engine sparqlExpressions)
 addLinkAndDiscoverTestNoLibs(TensorFunctionTest parser sparqlExpressions rdfTypes)

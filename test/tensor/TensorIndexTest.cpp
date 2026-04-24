@@ -14,20 +14,20 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "TensorSearchTestHelpers.h"
+#include "TensorIndexTestHelpers.h"
 #include "TensorTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TensorSearch.h"
-#include "engine/TensorSearchCachedIndex.h"
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexConfig.h"
+#include "engine/TensorIndexCachedIndex.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 namespace {  // anonymous namespace to avoid linker problems
-using namespace TensorSearchTestHelpers;
+using namespace TensorIndexTestHelpers;
 using namespace ad_utility::testing;
 
 namespace variableColumnMapAndResultWidth {
@@ -40,9 +40,9 @@ using VarColTestSuiteParam = std::tuple<bool, bool, bool, bool>;
 using V = Variable;
 using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 // Helper function to create a tensor search from VALUEs
-std::shared_ptr<TensorSearch> makeTensorSearchFromValues(
+std::shared_ptr<TensorIndex> makeTensorIndexFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
-    TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM) {
+    TensorIndexAlgorithm alg = TENSOR_INDEX_DEFAULT_ALGORITHM) {
   EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -64,21 +64,21 @@ std::shared_ptr<TensorSearch> makeTensorSearchFromValues(
   auto rightChild =
       std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
 
-  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-      ad_utility::makeExecutionTree<TensorSearch>(
+  std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+      ad_utility::makeExecutionTree<TensorIndex>(
           qec,
-          TensorSearchConfiguration{Variable{"?a"}, Variable{"?b"},
+          TensorIndexConfiguration{Variable{"?a"}, Variable{"?b"},
                                     std::nullopt, pv, alg},
           std::nullopt, std::nullopt);
-  std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
-  TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
-  auto tensorSearch1 = tensorSearch->addChild(leftChild, Variable{"?a"});
-  tensorSearch = static_cast<TensorSearch*>(tensorSearch1.get());
-  auto tensorSearch2 = tensorSearch->addChild(rightChild, Variable{"?b"});
-  return tensorSearch2;
+  std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
+  TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
+  auto tensorIndex1 = tensorIndex->addChild(leftChild, Variable{"?a"});
+  tensorIndex = static_cast<TensorIndex*>(tensorIndex1.get());
+  auto tensorIndex2 = tensorIndex->addChild(rightChild, Variable{"?b"});
+  return tensorIndex2;
 }
 
-class TensorSearchVarColParamTest
+class TensorIndexVarColParamTest
     : public ::testing::TestWithParam<VarColTestSuiteParam> {
  public:
   // Helper function to construct a child for testing
@@ -117,11 +117,11 @@ class TensorSearchVarColParamTest
     return expectedColumns;
   };
 
-  std::shared_ptr<TensorSearch> makeTensorSearch(
+  std::shared_ptr<TensorIndex> makeTensorIndex(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
       bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
-      TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM,
-      TensorDistanceAlgorithm distAlg = TENSOR_SEARCH_DEFAULT_DISTANCE) {
+      TensorIndexAlgorithm alg = TENSOR_INDEX_DEFAULT_ALGORITHM,
+      TensorDistanceAlgorithm distAlg = TENSOR_INDEX_DEFAULT_DISTANCE) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -131,24 +131,24 @@ class TensorSearchVarColParamTest
     if (addDist) {
       dist = Variable{"?dist"};
     }
-    std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-        ad_utility::makeExecutionTree<TensorSearch>(
+    std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+        ad_utility::makeExecutionTree<TensorIndex>(
             qec,
-            TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist,
+            TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist,
                                       pv, alg, distAlg},
             std::nullopt, std::nullopt);
-    std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
-    TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
+    std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
+    TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
     Variable firstVariable =
         addLeftChildFirst ? Variable{"?t1"} : Variable{"?t2"};
     Variable secondVariable =
         addLeftChildFirst ? Variable{"?t2"} : Variable{"?t1"};
-    auto tensorSearch1 = tensorSearch->addChild(firstChild, firstVariable);
-    tensorSearch = static_cast<TensorSearch*>(tensorSearch1.get());
-    auto tensorSearch2 = tensorSearch->addChild(secondChild, secondVariable);
-    return tensorSearch2;
+    auto tensorIndex1 = tensorIndex->addChild(firstChild, firstVariable);
+    tensorIndex = static_cast<TensorIndex*>(tensorIndex1.get());
+    auto tensorIndex2 = tensorIndex->addChild(secondChild, secondVariable);
+    return tensorIndex2;
   }
 
   // only test one at a time. Then the gtest will fail on the test, which
@@ -156,13 +156,13 @@ class TensorSearchVarColParamTest
   // computeVariableToColumnMap() if only one of them is wrong
   void testGetResultWidthOrVariableToColumnMap(
       VarColTestSuiteParam parameters,
-      TensorSearchAlgorithm alg = TENSOR_SEARCH_DEFAULT_ALGORITHM) {
+      TensorIndexAlgorithm alg = TENSOR_INDEX_DEFAULT_ALGORITHM) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildQec(makeVectorKg(6, 6));
-    auto tensorSearchOp =
-        makeTensorSearch(qec, parameters, true, PayloadVariables::all(), alg);
-    auto tensorSearch = static_cast<TensorSearch*>(tensorSearchOp.get());
+    auto tensorIndexOp =
+        makeTensorIndex(qec, parameters, true, PayloadVariables::all(), alg);
+    auto tensorIndex = static_cast<TensorIndex*>(tensorIndexOp.get());
 
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 17);
@@ -170,7 +170,7 @@ class TensorSearchVarColParamTest
     if (!testVarToColMap) {
       size_t expectedResultWidth =
           (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3) + 1;
-      ASSERT_EQ(tensorSearch->getResultWidth(), expectedResultWidth);
+      ASSERT_EQ(tensorIndex->getResultWidth(), expectedResultWidth);
     } else {
       std::vector<std::pair<std::string, std::string>> expectedColumns{};
 
@@ -181,8 +181,8 @@ class TensorSearchVarColParamTest
 
       expectedColumns.push_back({"?dist", "0"});
 
-      auto varColMap = tensorSearch->computeVariableToColumnMap();
-      auto resultTable = tensorSearch->computeResult(false);
+      auto varColMap = tensorIndex->computeVariableToColumnMap();
+      auto resultTable = tensorIndex->computeResult(false);
 
       // if the size of varColMap and expectedColumns is the same and each
       // element of expectedColumns is contained in varColMap, then they are the
@@ -212,17 +212,17 @@ class TensorSearchVarColParamTest
   }
 
   // Test tensor search on contains
-  void testGetResultWidthOrVariableToColumnMapTensorSearchNaive(
+  void testGetResultWidthOrVariableToColumnMapTensorIndexNaive(
       VarColTestSuiteParam parameters) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildQec(makeVectorKg(6, 6));
 
-    auto tensorSearch =
-        makeTensorSearch(qec, parameters, false, PayloadVariables::all(),
-                         TensorSearchAlgorithm::NAIVE,
+    auto tensorIndex =
+        makeTensorIndex(qec, parameters, false, PayloadVariables::all(),
+                         TensorIndexAlgorithm::NAIVE,
                          TensorDistanceAlgorithm::COSINE_SIMILARITY);
-    auto tensorSearchPtr = static_cast<TensorSearch*>(tensorSearch.get());
+    auto tensorIndexPtr = static_cast<TensorIndex*>(tensorIndex.get());
 
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 17);
@@ -230,7 +230,7 @@ class TensorSearchVarColParamTest
     if (!testVarToColMap) {
       size_t expectedResultWidth =
           (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
-      ASSERT_EQ(tensorSearchPtr->getResultWidth(), expectedResultWidth);
+      ASSERT_EQ(tensorIndexPtr->getResultWidth(), expectedResultWidth);
     } else {
       std::vector<std::pair<std::string, std::string>> expectedColumns{};
 
@@ -239,8 +239,8 @@ class TensorSearchVarColParamTest
       expectedColumns =
           addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
-      auto varColMap = tensorSearchPtr->computeVariableToColumnMap();
-      auto resultTable = tensorSearchPtr->computeResult(false);
+      auto varColMap = tensorIndexPtr->computeVariableToColumnMap();
+      auto resultTable = tensorIndexPtr->computeResult(false);
 
       // if the size of varColMap and expectedColumns is the same and each
       // element of expectedColumns is contained in varColMap, then they are the
@@ -295,9 +295,9 @@ class TensorSearchVarColParamTest
             VariableToColumnMap expectedVarToColMap,
             std::optional<std::string> matchWarning = std::nullopt) {
           auto qec = buildQec(makeVectorKg(6, 6));
-          auto tensorSearchOp = makeTensorSearch(qec, parameters, addDist, pv);
-          auto tensorSearch = static_cast<TensorSearch*>(tensorSearchOp.get());
-          auto vc = tensorSearch->computeVariableToColumnMap();
+          auto tensorIndexOp = makeTensorIndex(qec, parameters, addDist, pv);
+          auto tensorIndex = static_cast<TensorIndex*>(tensorIndexOp.get());
+          auto vc = tensorIndex->computeVariableToColumnMap();
           // for (const auto& [var, colInfo] : expectedVarToColMap) {
           //   std::cout << "Expecting variable " << var.name() << " in column "
           //             << colInfo.columnIndex_ << "\n";
@@ -309,7 +309,7 @@ class TensorSearchVarColParamTest
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
-            ASSERT_THAT(tensorSearch->collectWarnings(),
+            ASSERT_THAT(tensorIndex->collectWarnings(),
                         ::testing::Contains(
                             ::testing::HasSubstr(matchWarning.value())));
           }
@@ -433,30 +433,30 @@ class TensorSearchVarColParamTest
   }
 };
 
-TEST_P(TensorSearchVarColParamTest, variableToColumnMap) {
+TEST_P(TensorIndexVarColParamTest, variableToColumnMap) {
   testGetResultWidthOrVariableToColumnMap(GetParam());
 }
-TEST_P(TensorSearchVarColParamTest, variableToColumnMapLibtensorsearchNaive) {
-  testGetResultWidthOrVariableToColumnMapTensorSearchNaive(GetParam());
+TEST_P(TensorIndexVarColParamTest, variableToColumnMapLibtensorIndexNaive) {
+  testGetResultWidthOrVariableToColumnMapTensorIndexNaive(GetParam());
 }
 
 // Test a tensor search with VALUES as both children
-TEST(TensorSearchVarColParamTest, testTensorsearchFromvalues) {
-  auto qec = buildQec(TensorSearchTestHelpers::makeVectorKg(6, 6));
+TEST(TensorIndexVarColParamTest, testTensorIndexFromvalues) {
+  auto qec = buildQec(TensorIndexTestHelpers::makeVectorKg(6, 6));
 
-  auto tensorSearch = makeTensorSearchFromValues(qec, PayloadVariables::all(),
-                                                 TensorSearchAlgorithm::NAIVE);
-  auto tensorSearch_ptr = static_cast<TensorSearch*>(tensorSearch.get());
+  auto tensorIndex = makeTensorIndexFromValues(qec, PayloadVariables::all(),
+                                                 TensorIndexAlgorithm::NAIVE);
+  auto tensorIndex_ptr = static_cast<TensorIndex*>(tensorIndex.get());
 
-  auto resultTable = tensorSearch_ptr->computeResult(false);
+  auto resultTable = tensorIndex_ptr->computeResult(false);
   ASSERT_EQ(resultTable.idTable().numRows(), 1);
 }
 
-TEST_P(TensorSearchVarColParamTest, payloadVariables) {
+TEST_P(TensorIndexVarColParamTest, payloadVariables) {
   testPayloadVariablesVarToColMap(GetParam());
 }
 
-INSTANTIATE_TEST_SUITE_P(TensorSearch, TensorSearchVarColParamTest,
+INSTANTIATE_TEST_SUITE_P(TensorIndex, TensorIndexVarColParamTest,
                          ::testing::Combine(::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool(),
@@ -465,40 +465,40 @@ INSTANTIATE_TEST_SUITE_P(TensorSearch, TensorSearchVarColParamTest,
 }  // namespace variableColumnMapAndResultWidth
 
 namespace stringRepresentation {
-TEST(TensorSearch, getDescriptor) {
+TEST(TensorIndex, getDescriptor) {
   auto qec = getQec();
   TripleComponent subject{Variable{"?subject"}};
   TripleComponent object{Variable{"?object"}};
 
-  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-      ad_utility::makeExecutionTree<TensorSearch>(
+  std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+      ad_utility::makeExecutionTree<TensorIndex>(
           qec,
-          TensorSearchConfiguration{subject.getVariable(),
+          TensorIndexConfiguration{subject.getVariable(),
                                     object.getVariable()},
           std::nullopt, std::nullopt);
-  std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
-  TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
+  std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
+  TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
 
-  auto description = tensorSearch->getDescriptor();
+  auto description = tensorIndex->getDescriptor();
   ASSERT_THAT(description, ::testing::HasSubstr(absl::StrCat(
-                               tensorSearch->getMaxResults().value_or(-1))));
+                               tensorIndex->getMaxResults().value_or(-1))));
   ASSERT_TRUE(description.find("?subject") != std::string::npos);
   ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
 
 // _____________________________________________________________________________
-TEST(TensorSearch, getDescriptorLibtensorsearchNaive) {
-  // The `TensorSearch`'s descriptor should contain a readable representation
+TEST(TensorIndex, getDescriptorLibtensorIndexNaive) {
+  // The `TensorIndex`'s descriptor should contain a readable representation
   // of the join type
-  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-      ad_utility::makeExecutionTree<TensorSearch>(
+  std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+      ad_utility::makeExecutionTree<TensorIndex>(
           getQec(),
-          TensorSearchConfiguration{Variable{"?subject"}, Variable{"?object"},
+          TensorIndexConfiguration{Variable{"?subject"}, Variable{"?object"},
                                     std::nullopt, PayloadVariables::all(),
-                                    TensorSearchAlgorithm::NAIVE,
+                                    TensorIndexAlgorithm::NAIVE,
                                     TensorDistanceAlgorithm::COSINE_SIMILARITY},
           std::nullopt, std::nullopt);
-  auto description = tensorSearchOperation->getRootOperation()->getDescriptor();
+  auto description = tensorIndexOperation->getRootOperation()->getDescriptor();
   ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
   ASSERT_THAT(description, ::testing::HasSubstr("?object"));
   ASSERT_THAT(description, ::testing::HasSubstr("naive"));
@@ -506,9 +506,9 @@ TEST(TensorSearch, getDescriptorLibtensorsearchNaive) {
 }
 
 // _____________________________________________________________________________
-TEST(TensorSearch, getCacheKeyImpl) {
-  using namespace TensorSearchTestHelpers;
-  auto qec = buildQec(TensorSearchTestHelpers::makeVectorKg(6, 6));
+TEST(TensorIndex, getCacheKeyImpl) {
+  using namespace TensorIndexTestHelpers;
+  auto qec = buildQec(TensorIndexTestHelpers::makeVectorKg(6, 6));
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 17);
   // ====================== build inputs ===================================
@@ -519,40 +519,40 @@ TEST(TensorSearch, getCacheKeyImpl) {
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<hasVector>"}, "?t2"});
 
-  std::shared_ptr<QueryExecutionTree> tensorSearchOperation =
-      ad_utility::makeExecutionTree<TensorSearch>(
-          qec, TensorSearchConfiguration{subj, obj}, std::nullopt,
+  std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
+      ad_utility::makeExecutionTree<TensorIndex>(
+          qec, TensorIndexConfiguration{subj, obj}, std::nullopt,
           std::nullopt);
-  std::shared_ptr<Operation> op = tensorSearchOperation->getRootOperation();
-  TensorSearch* tensorSearch = static_cast<TensorSearch*>(op.get());
+  std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
+  TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
 
-  ASSERT_EQ(tensorSearch->getCacheKeyImpl(), "incomplete TensorSearch class");
+  ASSERT_EQ(tensorIndex->getCacheKeyImpl(), "incomplete TensorIndex class");
 
-  auto tensorSearch1 = tensorSearch->addChild(leftChild, subj);
-  tensorSearch = static_cast<TensorSearch*>(tensorSearch1.get());
+  auto tensorIndex1 = tensorIndex->addChild(leftChild, subj);
+  tensorIndex = static_cast<TensorIndex*>(tensorIndex1.get());
 
-  ASSERT_EQ(tensorSearch->getCacheKeyImpl(), "incomplete TensorSearch class");
+  ASSERT_EQ(tensorIndex->getCacheKeyImpl(), "incomplete TensorIndex class");
 
-  auto tensorSearch2 = tensorSearch->addChild(rightChild, obj);
-  tensorSearch = static_cast<TensorSearch*>(tensorSearch2.get());
+  auto tensorIndex2 = tensorIndex->addChild(rightChild, obj);
+  tensorIndex = static_cast<TensorIndex*>(tensorIndex2.get());
 
-  auto cacheKeyString = tensorSearch->getCacheKeyImpl();
+  auto cacheKeyString = tensorIndex->getCacheKeyImpl();
   auto leftCacheKeyString =
-      tensorSearch->onlyForTestingGetLeftChild()->getCacheKey();
+      tensorIndex->onlyForTestingGetLeftChild()->getCacheKey();
   auto rightCacheKeyString =
-      tensorSearch->onlyForTestingGetRightChild()->getCacheKey();
+      tensorIndex->onlyForTestingGetRightChild()->getCacheKey();
 
   ASSERT_TRUE(cacheKeyString.find(
-                  absl::StrCat(tensorSearch->getMaxResults().value_or(-1))) !=
+                  absl::StrCat(tensorIndex->getMaxResults().value_or(-1))) !=
               std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
 }
 
 // _____________________________________________________________________________
-TEST(TensorSearch, clone) {
-  using namespace TensorSearchTestHelpers;
-  auto qec = buildQec(TensorSearchTestHelpers::makeVectorKg(6, 6));
+TEST(TensorIndex, clone) {
+  using namespace TensorIndexTestHelpers;
+  auto qec = buildQec(TensorIndexTestHelpers::makeVectorKg(6, 6));
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 17);
   auto leftChild =
@@ -561,64 +561,64 @@ TEST(TensorSearch, clone) {
       buildIndexScan(qec, {"?obj2", std::string{"<hasVector>"}, "?t2"});
 
   {
-    TensorSearch tensorSearch{
-        qec, TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}},
+    TensorIndex tensorIndex{
+        qec, TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}},
         std::nullopt, std::nullopt};
 
-    auto clone = tensorSearch.clone();
+    auto clone = tensorIndex.clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(tensorSearch), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), tensorSearch.getDescriptor());
+    EXPECT_EQ(typeid(tensorIndex), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), tensorIndex.getDescriptor());
 
-    EXPECT_EQ(tensorSearch.getChildren().empty(),
+    EXPECT_EQ(tensorIndex.getChildren().empty(),
               cloneReference.getChildren().empty());
   }
 
   {
-    TensorSearch tensorSearch{
-        qec, TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}},
+    TensorIndex tensorIndex{
+        qec, TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}},
         leftChild, std::nullopt};
 
-    auto clone = tensorSearch.clone();
+    auto clone = tensorIndex.clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(tensorSearch), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), tensorSearch.getDescriptor());
+    EXPECT_EQ(typeid(tensorIndex), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), tensorIndex.getDescriptor());
 
-    EXPECT_NE(tensorSearch.getChildren().at(0),
+    EXPECT_NE(tensorIndex.getChildren().at(0),
               cloneReference.getChildren().at(0));
   }
 
   {
-    TensorSearch tensorSearch{
-        qec, TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}},
+    TensorIndex tensorIndex{
+        qec, TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}},
         std::nullopt, rightChild};
 
-    auto clone = tensorSearch.clone();
+    auto clone = tensorIndex.clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(tensorSearch), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), tensorSearch.getDescriptor());
+    EXPECT_EQ(typeid(tensorIndex), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), tensorIndex.getDescriptor());
 
-    EXPECT_NE(tensorSearch.getChildren().at(0),
+    EXPECT_NE(tensorIndex.getChildren().at(0),
               cloneReference.getChildren().at(0));
   }
 
   {
-    TensorSearch tensorSearch{
-        qec, TensorSearchConfiguration{Variable{"?t1"}, Variable{"?t2"}},
+    TensorIndex tensorIndex{
+        qec, TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}},
         leftChild, rightChild};
 
-    auto clone = tensorSearch.clone();
+    auto clone = tensorIndex.clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(tensorSearch), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), tensorSearch.getDescriptor());
+    EXPECT_EQ(typeid(tensorIndex), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), tensorIndex.getDescriptor());
 
-    EXPECT_NE(tensorSearch.getChildren().at(0),
+    EXPECT_NE(tensorIndex.getChildren().at(0),
               cloneReference.getChildren().at(0));
-    EXPECT_NE(tensorSearch.getChildren().at(1),
+    EXPECT_NE(tensorIndex.getChildren().at(1),
               cloneReference.getChildren().at(1));
   }
 }

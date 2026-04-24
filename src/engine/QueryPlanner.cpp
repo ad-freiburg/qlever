@@ -47,7 +47,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TensorSearch.h"
+#include "engine/TensorIndex.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -67,7 +67,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
-#include "parser/TensorSearchQuery.h"
+#include "parser/TensorIndexQuery.h"
 #include "rdfTypes/Variable.h"
 #include "util/Exception.h"
 
@@ -932,9 +932,9 @@ auto QueryPlanner::seedWithScansAndText(
       }
     } else if ((ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) &&
                ql::ends_with(input, '>')) {
-      parsedQuery::TensorSearchQuery config{node.triple_};
-      auto plan = makeSubtreePlan<TensorSearch>(
-          _qec, config.toTensorSearchConfiguration(), std::nullopt,
+      parsedQuery::TensorIndexQuery config{node.triple_};
+      auto plan = makeSubtreePlan<TensorIndex>(
+          _qec, config.toTensorIndexConfiguration(), std::nullopt,
           std::nullopt);
       if (ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) {
         plan._qet->getRootOperation()->addWarning(absl::StrCat(
@@ -942,7 +942,7 @@ auto QueryPlanner::seedWithScansAndText(
             "deprecated due "
             "to confusing semantics. Please upgrade your query to the new "
             "syntax 'SERVICE ",
-            TENSOR_SEARCH_IRI,
+            TENSOR_INDEX_IRI,
             " { ... }'. For more information, please see the QLever Wiki."));
       }
       pushPlan(plan);
@@ -2335,7 +2335,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
-  if (auto opt = createJoin<TensorSearch>(a, b, jcs)) {
+  if (auto opt = createJoin<TensorIndex>(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
@@ -3144,8 +3144,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::TensorSearchQuery>) {
-    visitTensorSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::TensorIndexQuery>) {
+    visitTensorIndex(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
@@ -3332,15 +3332,15 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
 // copied from visitSpatialSearch and adapted for tensor search
-void QueryPlanner::GraphPatternPlanner::visitTensorSearch(
-    parsedQuery::TensorSearchQuery& tensorSearchQuery) {
-  auto config = tensorSearchQuery.toTensorSearchConfiguration();
+void QueryPlanner::GraphPatternPlanner::visitTensorIndex(
+    parsedQuery::TensorIndexQuery& tensorIndexQuery) {
+  auto config = tensorIndexQuery.toTensorIndexConfiguration();
 
   // If there is no child graph pattern, we need to construct a neutral element
   std::vector<SubtreePlan> candidatesIn;
-  if (tensorSearchQuery.childGraphPattern_.has_value()) {
+  if (tensorIndexQuery.childGraphPattern_.has_value()) {
     candidatesIn =
-        planner_.optimize(&tensorSearchQuery.childGraphPattern_.value());
+        planner_.optimize(&tensorIndexQuery.childGraphPattern_.value());
   } else {
     candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
   }
@@ -3350,25 +3350,25 @@ void QueryPlanner::GraphPatternPlanner::visitTensorSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the TensorSearch outside of the SERVICE. This is only allowed for
+    // of the TensorIndex outside of the SERVICE. This is only allowed for
     // implicit joins.
-    auto addCandidateTensorSearch = [this, &sub, &config,
+    auto addCandidateTensorIndex = [this, &sub, &config,
                                      &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
       if (!rightVarOutside) {
         right = std::move(sub._qet);
       }
-      auto tensorSearch =
-          std::make_shared<TensorSearch>(qec_, config, std::nullopt, right);
-      auto plan = makeSubtreePlan<TensorSearch>(std::move(tensorSearch));
+      auto tensorIndex =
+          std::make_shared<TensorIndex>(qec_, config, std::nullopt, right);
+      auto plan = makeSubtreePlan<TensorIndex>(std::move(tensorIndex));
       candidatesOut.push_back(std::move(plan));
     };
 
-    if (tensorSearchQuery.childGraphPattern_.has_value()) {
+    if (tensorIndexQuery.childGraphPattern_.has_value()) {
       // The version using the child graph pattern
-      addCandidateTensorSearch(false);
+      addCandidateTensorIndex(false);
     } else {
-      addCandidateTensorSearch(true);
+      addCandidateTensorIndex(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

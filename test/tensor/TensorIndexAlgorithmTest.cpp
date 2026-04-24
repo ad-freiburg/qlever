@@ -15,24 +15,24 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "TensorSearchTestHelpers.h"
+#include "TensorIndexTestHelpers.h"
 #include "TensorTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TensorSearch.h"
-#include "engine/TensorSearchCachedIndex.h"
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexCachedIndex.h"
+#include "engine/TensorIndexConfig.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
 #include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
-using namespace TensorSearchTestHelpers;
+using namespace TensorIndexTestHelpers;
 using namespace ad_utility::testing;
 using namespace TensorTestHelpers;
 
-TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
+TEST_P(TensorIndexFunctionalTest, NearestNeighborSelfIsReturned) {
   auto param = GetParam();
 
   // // Build a small index with 6 vectors in 3 dimensions.
@@ -44,14 +44,14 @@ TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
   ASSERT_EQ(numTriples,
             N * 3 - 1);  // N vector triples + N name triples + N-1 rel triples
 
-  auto tensorSearchOp =
-      makeTensorSearch(qec, true, PayloadVariables::all(), param.algo,
+  auto tensorIndexOp =
+      makeTensorIndex(qec, true, PayloadVariables::all(), param.algo,
                        param.dist, std::nullopt, 1, false, N);
 
-  auto tensorSearch = static_cast<TensorSearch*>(tensorSearchOp.get());
+  auto tensorIndex = static_cast<TensorIndex*>(tensorIndexOp.get());
 
-  auto varColMap = tensorSearch->computeVariableToColumnMap();
-  auto resultTable = tensorSearch->computeResult(false);
+  auto varColMap = tensorIndex->computeVariableToColumnMap();
+  auto resultTable = tensorIndex->computeResult(false);
 
   const auto* idTable = &resultTable.idTable();
 
@@ -62,39 +62,39 @@ TEST_P(TensorSearchFunctionalTest, NearestNeighborSelfIsReturned) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TensorSearchAlgorithmTests, TensorSearchFunctionalTest,
+    TensorIndexAlgorithmTests, TensorIndexFunctionalTest,
     ::testing::Values(
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::COSINE_SIMILARITY, "NaiveCosine"},
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "NaiveEuclidean", true},
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct"},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot"},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "FaissEuclidean", true},
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::COSINE_SIMILARITY, "NaiveCosine",
                      false, true},
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "NaiveEuclidean", true, true},
-        AlgDistParam{TensorSearchAlgorithm::NAIVE,
+        AlgDistParam{TensorIndexAlgorithm::NAIVE,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "NaiveInnerProduct",
                      false, true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissDot", false,
                      true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_IVF,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "FaissEuclidean", true, true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_HSNW,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_HSNW,
                      TensorDistanceAlgorithm::DOT_PRODUCT, "FaissHSNWDot",
                      false, true},
-        AlgDistParam{TensorSearchAlgorithm::FAISS_HSNW,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_HSNW,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "FaissHSNWEuclidean", true, true}));
 }  // namespace

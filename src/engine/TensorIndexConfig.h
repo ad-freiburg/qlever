@@ -2,8 +2,8 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#ifndef QLEVER_SRC_ENGINE_TENSORSEARCHCONFIG_H
-#define QLEVER_SRC_ENGINE_TENSORSEARCHCONFIG_H
+#ifndef QLEVER_SRC_ENGINE_TENSORINDEXCONFIG_H
+#define QLEVER_SRC_ENGINE_TENSORINDEXCONFIG_H
 
 #include <array>
 #include <cstddef>
@@ -26,14 +26,14 @@ enum class TensorDistanceAlgorithm {
   MANHATTAN_DISTANCE,
   HAMMING_DISTANCE,
 };
-enum class TensorSearchAlgorithm { NAIVE, FAISS_IVF, FAISS_HSNW };
-const TensorSearchAlgorithm TENSOR_SEARCH_DEFAULT_ALGORITHM =
-    TensorSearchAlgorithm::FAISS_IVF;
-const TensorDistanceAlgorithm TENSOR_SEARCH_DEFAULT_DISTANCE =
+enum class TensorIndexAlgorithm { NAIVE, FAISS_IVF, FAISS_HSNW };
+const TensorIndexAlgorithm TENSOR_INDEX_DEFAULT_ALGORITHM =
+    TensorIndexAlgorithm::FAISS_IVF;
+const TensorDistanceAlgorithm TENSOR_INDEX_DEFAULT_DISTANCE =
     TensorDistanceAlgorithm::DOT_PRODUCT;
 
 // The configuration object that will be provided by the special SERVICE.
-struct TensorSearchConfiguration {
+struct TensorIndexConfiguration {
   // The variables for the two tables to be joined
   Variable left_;
   Variable right_;
@@ -48,8 +48,8 @@ struct TensorSearchConfiguration {
   PayloadVariables payloadVariables_ = PayloadVariables::all();
 
   // Choice of algorithm.
-  TensorSearchAlgorithm algo_ = TENSOR_SEARCH_DEFAULT_ALGORITHM;
-  TensorDistanceAlgorithm dist_ = TENSOR_SEARCH_DEFAULT_DISTANCE;
+  TensorIndexAlgorithm algo_ = TENSOR_INDEX_DEFAULT_ALGORITHM;
+  TensorDistanceAlgorithm dist_ = TENSOR_INDEX_DEFAULT_DISTANCE;
 
   size_t maxResults_ = 100;
   std::optional<size_t> searchK_ = std::nullopt;
@@ -65,4 +65,4 @@ struct TensorSearchConfiguration {
   std::optional<std::string> rightCacheName_ = std::nullopt;
 };
 
-#endif  // QLEVER_SRC_ENGINE_TENSORSEARCHCONFIG_H
+#endif  // QLEVER_SRC_ENGINE_TENSORINDEXCONFIG_H

@@ -35,7 +35,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TensorSearch.h"
+#include "engine/TensorIndex.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -434,43 +434,43 @@ struct SpatialJoinMatcher {
 constexpr inline SpatialJoinMatcher spatialJoin;
 constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
 
-// Match a TensorSearch operation, similar to above
+// Match a TensorIndex operation, similar to above
 template <bool Substitute = false>
-struct TensorSearchMatcher {
+struct TensorIndexMatcher {
   template <
       QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(ssize_t maxResults, 
                   std::optional<size_t> searchK, 
                   std::optional<size_t> nTrees, 
-                  TensorSearchAlgorithm algorithm,
+                  TensorIndexAlgorithm algorithm,
                   TensorDistanceAlgorithm distanceAlgorithm,                  
                   Variable left,
                   Variable right, 
                   std::optional<Variable> distanceVariable,
                   PayloadVariables payloadVariables,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::TensorSearch>(AllOf(
+    return RootOperation<::TensorIndex>(AllOf(
         children(childMatchers...),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetMaxResults,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetMaxResults,
                     Eq(maxResults)),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetSearchK,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetSearchK,
                     Eq(searchK)),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetNTrees,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetNTrees,
                     Eq(nTrees)),
-        AD_PROPERTY(::TensorSearch, getAlgorithm,
+        AD_PROPERTY(::TensorIndex, getAlgorithm,
                     Eq(algorithm)),
-        AD_PROPERTY(::TensorSearch, getDistanceFunction,
+        AD_PROPERTY(::TensorIndex, getDistanceFunction,
                     Eq(distanceAlgorithm)),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetVariables,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetVariables,
                     Eq(std::pair(left, right))),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetDistanceVariable,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetDistanceVariable,
                     Eq(distanceVariable)),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetPayloadVariables,
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetPayloadVariables,
                     Eq(payloadVariables))));
   }
 };
-constexpr inline TensorSearchMatcher tensorSearch;
-constexpr inline TensorSearchMatcher<true> tensorSearchFilterSubstitute;
+constexpr inline TensorIndexMatcher tensorIndex;
+constexpr inline TensorIndexMatcher<true> tensorIndexFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =

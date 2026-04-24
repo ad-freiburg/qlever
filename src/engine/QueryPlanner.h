@@ -668,7 +668,7 @@ class QueryPlanner {
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
-    void visitTensorSearch(parsedQuery::TensorSearchQuery& config);
+    void visitTensorIndex(parsedQuery::TensorIndexQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
     void visitMaterializedViewQuery(

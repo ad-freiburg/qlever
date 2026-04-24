@@ -2,8 +2,6 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#include "engine/TensorSearch.h"
-
 #include <absl/container/flat_hash_set.h>
 #include <absl/strings/charconv.h>
 
@@ -18,7 +16,8 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
@@ -28,8 +27,8 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 // ____________________________________________________________________________
-TensorSearch::TensorSearch(
-    QueryExecutionContext* qec, TensorSearchConfiguration config,
+TensorIndex::TensorIndex(
+    QueryExecutionContext* qec, TensorIndexConfiguration config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
     bool substitutesFilterOp)
@@ -45,16 +44,16 @@ TensorSearch::TensorSearch(
 }
 
 // ____________________________________________________________________________
-std::shared_ptr<TensorSearch> TensorSearch::addChild(
+std::shared_ptr<TensorIndex> TensorIndex::addChild(
     std::shared_ptr<QueryExecutionTree> child,
     const Variable& varOfChild) const {
-  std::shared_ptr<TensorSearch> sj;
+  std::shared_ptr<TensorIndex> sj;
   if (varOfChild == config_.left_) {
-    sj = std::make_shared<TensorSearch>(getExecutionContext(), config_,
+    sj = std::make_shared<TensorIndex>(getExecutionContext(), config_,
                                         std::move(child), childRight_,
                                         substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
-    sj = std::make_shared<TensorSearch>(getExecutionContext(), config_,
+    sj = std::make_shared<TensorIndex>(getExecutionContext(), config_,
                                         childLeft_, std::move(child),
                                         substitutesFilterOp_);
   } else {
@@ -72,15 +71,15 @@ std::shared_ptr<TensorSearch> TensorSearch::addChild(
 }
 
 // ____________________________________________________________________________
-bool TensorSearch::isConstructed() const { return childLeft_ && childRight_; }
+bool TensorIndex::isConstructed() const { return childLeft_ && childRight_; }
 
 // ____________________________________________________________________________
-std::optional<size_t> TensorSearch::getMaxResults() const {
+std::optional<size_t> TensorIndex::getMaxResults() const {
   return config_.maxResults_;
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> TensorSearch::getChildren() {
+std::vector<QueryExecutionTree*> TensorIndex::getChildren() {
   std::vector<QueryExecutionTree*> result;
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
     if (child) {
@@ -93,13 +92,13 @@ std::vector<QueryExecutionTree*> TensorSearch::getChildren() {
 }
 
 // ____________________________________________________________________________
-std::string TensorSearch::getCacheKeyImpl() const {
+std::string TensorIndex::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
     std::ostringstream os;
     // This includes all attributes that change the result
 
     // Children
-    os << "TensorSearch\nChild1:\n" << childLeft_->getCacheKey() << "\n";
+    os << "TensorIndex\nChild1:\n" << childLeft_->getCacheKey() << "\n";
     os << "Child2:\n" << childRight_->getCacheKey() << "\n";
 
     // Join Variables
@@ -112,7 +111,7 @@ std::string TensorSearch::getCacheKeyImpl() const {
     os << "kTrees" << (int)config_.searchK_.value_or(-1) << "\n";
     os << "kIVF" << (int)config_.kIVF_.value_or(-1) << "\n";
 
-    os << "TensorSearch in distance: " << (int)config_.algo_ << "with algorithm"
+    os << "TensorIndex in distance: " << (int)config_.algo_ << "with algorithm"
        << (int)config_.dist_ << "\n";
 
     // Uses distance variable?
@@ -139,24 +138,24 @@ std::string TensorSearch::getCacheKeyImpl() const {
     // the result.
     return std::move(os).str();
   } else {
-    return "incomplete TensorSearch class";
+    return "incomplete TensorIndex class";
   }
 }
 
 // ____________________________________________________________________________
-std::string TensorSearch::getDescriptor() const {
+std::string TensorIndex::getDescriptor() const {
   auto left = config_.left_.name();
   auto right = config_.right_.name();
   auto algo = getAlgorithm();
   auto algorithmString = "";
   switch (algo) {
-    case TensorSearchAlgorithm::NAIVE:
+    case TensorIndexAlgorithm::NAIVE:
       algorithmString = "naive";
       break;
-    case TensorSearchAlgorithm::FAISS_HSNW:
+    case TensorIndexAlgorithm::FAISS_HSNW:
       algorithmString = "hsnw";
       break;
-    case TensorSearchAlgorithm::FAISS_IVF:
+    case TensorIndexAlgorithm::FAISS_IVF:
       algorithmString = "ivf";
       break;
   }
@@ -185,7 +184,7 @@ std::string TensorSearch::getDescriptor() const {
 }
 
 // ____________________________________________________________________________
-size_t TensorSearch::getResultWidth() const {
+size_t TensorIndex::getResultWidth() const {
   if (childLeft_ && childRight_) {
     // don't subtract anything because of a common join column. In the case
     // of the tensor search, the join column is different for both sides (e.g.
@@ -223,13 +222,13 @@ size_t TensorSearch::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-size_t TensorSearch::getCostEstimate() {
-  using enum TensorSearchAlgorithm;
+size_t TensorIndex::getCostEstimate() {
+  using enum TensorIndexAlgorithm;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }
 
-  size_t TensorSearchCostEst = [this]() {
+  size_t TensorIndexCostEst = [this]() {
     auto n = childLeft_->getSizeEstimate();
     auto m = childRight_->getSizeEstimate();
     switch (config_.algo_) {
@@ -247,12 +246,12 @@ size_t TensorSearch::getCostEstimate() {
   }();
 
   // The cost to compute the children needs to be taken into account.
-  return TensorSearchCostEst + childLeft_->getCostEstimate() +
+  return TensorIndexCostEst + childLeft_->getCostEstimate() +
          childRight_->getCostEstimate();
 }
 
 // ____________________________________________________________________________
-uint64_t TensorSearch::getSizeEstimateBeforeLimit() {
+uint64_t TensorIndex::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
     // If we limit the number of results to k, even in the largest scenario, the
     // result can be at most `|childLeft| * k`
@@ -269,7 +268,7 @@ uint64_t TensorSearch::getSizeEstimateBeforeLimit() {
 }
 
 // ____________________________________________________________________________
-float TensorSearch::getMultiplicity(size_t col) {
+float TensorIndex::getMultiplicity(size_t col) {
   auto getDistinctness = [](std::shared_ptr<QueryExecutionTree> child,
                             ColumnIndex ind) {
     auto size = (u_int)child->getSizeEstimate();
@@ -310,7 +309,7 @@ float TensorSearch::getMultiplicity(size_t col) {
 }
 
 // ____________________________________________________________________________
-bool TensorSearch::knownEmptyResult() {
+bool TensorIndex::knownEmptyResult() {
   // return false if either both children don't have an empty result, only one
   // child is available, which doesn't have a known empty result or neither
   // child is available
@@ -319,7 +318,7 @@ bool TensorSearch::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> TensorSearch::resultSortedOn() const {
+std::vector<ColumnIndex> TensorIndex::resultSortedOn() const {
   // the baseline (with O(n^2) runtime) can have some sorted columns, but as
   // the "true" computeResult method will use bounding boxes, which can't
   // guarantee that a sorted column stays sorted, this will return no sorted
@@ -328,7 +327,7 @@ std::vector<ColumnIndex> TensorSearch::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
-VariableToColumnMap TensorSearch::getVarColMapPayloadVars() const {
+VariableToColumnMap TensorIndex::getVarColMapPayloadVars() const {
   AD_CONTRACT_CHECK(childRight_,
                     "Child right must be added before payload variable to "
                     "column map can be computed.");
@@ -359,7 +358,7 @@ VariableToColumnMap TensorSearch::getVarColMapPayloadVars() const {
 }
 
 // ____________________________________________________________________________
-PreparedTensorSearchParams TensorSearch::prepareJoin() const {
+PreparedTensorIndexParams TensorIndex::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTable();
@@ -385,7 +384,7 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
   size_t numColumns = getResultWidth();
 
   auto cacheKey = config_.rightCacheName_.value_or(getCacheKey());
-  return PreparedTensorSearchParams{idTableLeft,       std::move(resultLeft),
+  return PreparedTensorIndexParams{idTableLeft,       std::move(resultLeft),
                                     idTableRight,      std::move(resultRight),
                                     leftJoinCol,       rightJoinCol,
                                     rightSelectedCols, cacheKey,
@@ -393,14 +392,14 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
 }
 
 // ____________________________________________________________________________
-Result TensorSearch::computeResult([[maybe_unused]] bool requestLaziness) {
+Result TensorIndex::computeResult([[maybe_unused]] bool requestLaziness) {
   auto params = prepareJoin();
-  auto searchImpl = TensorSearchImpl(params, getExecutionContext());
-  return searchImpl.computeTensorSearchResult();
+  auto searchImpl = TensorIndexImpl(params, getExecutionContext());
+  return searchImpl.computeTensorIndexResult();
 }
 
 // ____________________________________________________________________________
-VariableToColumnMap TensorSearch::computeVariableToColumnMap() const {
+VariableToColumnMap TensorIndex::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
   auto makeUndefCol = makePossiblyUndefinedColumn;
 
@@ -459,8 +458,8 @@ VariableToColumnMap TensorSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> TensorSearch::cloneImpl() const {
-  return std::make_unique<TensorSearch>(
+std::unique_ptr<Operation> TensorIndex::cloneImpl() const {
+  return std::make_unique<TensorIndex>(
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
       childRight_ ? std::optional{childRight_->clone()} : std::nullopt);

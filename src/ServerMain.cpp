@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
       "this option to 0.");
   add("tensor-search-max-num-threads",
       optionFactory
-          .getProgramOption<&RuntimeParameters::tensorSearchMaxNumThreads_>(),
+          .getProgramOption<&RuntimeParameters::tensorIndexMaxNumThreads_>(),
       "The maximum number of threads to be used for tensor search processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
   add("materialized-view-writer-memory",

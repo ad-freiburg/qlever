@@ -2,23 +2,23 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#ifndef QLEVER_SRC_PARSER_TENSORSEARCHQUERY_H
-#define QLEVER_SRC_PARSER_TENSORSEARCHQUERY_H
+#ifndef QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
+#define QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
 
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndexConfig.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
 namespace parsedQuery {
 
-class TensorSearchException : public std::runtime_error {
+class TensorIndexException : public std::runtime_error {
   // Constructors have to be explicitly inherited
   using std::runtime_error::runtime_error;
 };
 
 // Tensor Search feature via SERVICE. This struct holds intermediate or
 // incomplete configuration during the parsing process.
-struct TensorSearchQuery : MagicServiceQuery {
+struct TensorIndexQuery : MagicServiceQuery {
   // Required after everything has been added: the left and right join
   // variables.
   std::optional<Variable> left_;
@@ -46,7 +46,7 @@ struct TensorSearchQuery : MagicServiceQuery {
 
   // Optional further argument: the join algorithm. If it is not given, the
   // default algorithm is used implicitly.
-  std::optional<TensorSearchAlgorithm> algo_;
+  std::optional<TensorIndexAlgorithm> algo_;
   std::optional<TensorDistanceAlgorithm> dist_;
 
   // This parameter indicates the name of the cache entry to be used.
@@ -58,23 +58,23 @@ struct TensorSearchQuery : MagicServiceQuery {
   // declared inside the service (despite confusing semantics).
   bool ignoreMissingRightChild_ = false;
 
-  TensorSearchQuery() = default;
-  TensorSearchQuery(TensorSearchQuery&& other) noexcept = default;
-  TensorSearchQuery(const TensorSearchQuery& other) = default;
-  TensorSearchQuery& operator=(const TensorSearchQuery& other) = default;
-  TensorSearchQuery& operator=(TensorSearchQuery&& a) noexcept = default;
-  ~TensorSearchQuery() noexcept override = default;
+  TensorIndexQuery() = default;
+  TensorIndexQuery(TensorIndexQuery&& other) noexcept = default;
+  TensorIndexQuery(const TensorIndexQuery& other) = default;
+  TensorIndexQuery& operator=(const TensorIndexQuery& other) = default;
+  TensorIndexQuery& operator=(TensorIndexQuery&& a) noexcept = default;
+  ~TensorIndexQuery() noexcept override = default;
 
   // Alternative constructor for backward compatibility (allows initializing a
-  // TensorSearchQuery using a magic predicate)
-  explicit TensorSearchQuery(const SparqlTriple& triple);
+  // TensorIndexQuery using a magic predicate)
+  explicit TensorIndexQuery(const SparqlTriple& triple);
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
-  // Convert this TensorSearchQuery to a proper TensorJoinConfiguration. This will
+  // Convert this TensorIndexQuery to a proper TensorJoinConfiguration. This will
   // check if all required values have been provided and otherwise throw.
-  TensorSearchConfiguration toTensorSearchConfiguration() const;
+  TensorIndexConfiguration toTensorIndexConfiguration() const;
 
   // Throw if the current configuration is invalid.
   void validate() const override;
@@ -82,11 +82,11 @@ struct TensorSearchQuery : MagicServiceQuery {
   constexpr std::string_view name() const override { return "tensor search"; };
 
  private:
-  // If `throwCondition` is `true`, throw `TensorSearchException{message}`.
+  // If `throwCondition` is `true`, throw `TensorIndexException{message}`.
   void throwIf(bool throwCondition, std::string_view message) const;
 };
 
 
 }  // namespace parsedQuery
 
-#endif  // QLEVER_SRC_PARSER_TENSORSEARCHQUERY_H
+#endif  // QLEVER_SRC_PARSER_TENSORINDEXQUERY_H

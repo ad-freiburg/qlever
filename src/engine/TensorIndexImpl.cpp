@@ -16,9 +16,9 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
-#include "engine/TensorSearch.h"
-#include "engine/TensorSearchCachedIndex.h"
-#include "engine/TensorSearchConfig.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexCachedIndex.h"
+#include "engine/TensorIndexConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
@@ -40,16 +40,16 @@ extern "C" {
 #include <omp.h>
 #endif
 // ____________________________________________________________________________
-size_t TensorSearchImpl::getNumThreads() {
+size_t TensorIndexImpl::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
   size_t userPreference =
-      getRuntimeParameter<&RuntimeParameters::tensorSearchMaxNumThreads_>();
+      getRuntimeParameter<&RuntimeParameters::tensorIndexMaxNumThreads_>();
   if (userPreference == 0 || maxHwConcurrency < userPreference) {
     return maxHwConcurrency;
   }
   return userPreference;
 }
-void TensorSearchImpl::initializeGlobalRuntimeParameters() {
+void TensorIndexImpl::initializeGlobalRuntimeParameters() {
   // This function is called at the beginning of the server execution to set the
   // global runtime parameters related to tensor search. This is necessary to
   // ensure that the number of threads used for tensor search is set correctly
@@ -60,7 +60,7 @@ void TensorSearchImpl::initializeGlobalRuntimeParameters() {
   size_t maxNumThreads = getNumThreads();
   AD_LOG_INFO << "Setting the number of threads for BLAS to " << maxNumThreads
               << " (as specified by the "
-              << "tensorSearchMaxNumThreads runtime parameter)" << std::endl;
+              << "tensorIndexMaxNumThreads runtime parameter)" << std::endl;
   openblas_set_num_threads(maxNumThreads);
 #else
 #ifdef QLEVER_TENSOR_PARALLEL
@@ -69,7 +69,7 @@ void TensorSearchImpl::initializeGlobalRuntimeParameters() {
   size_t maxNumThreads = getNumThreads();
   AD_LOG_INFO << "Setting the number of threads for OpenMP to " << maxNumThreads
               << " (as specified by the "
-              << "tensorSearchMaxNumThreads runtime parameter)" << std::endl;
+              << "tensorIndexMaxNumThreads runtime parameter)" << std::endl;
   omp_set_num_threads(maxNumThreads);
 #else
   AD_LOG_INFO << "Using internal implementation for tensor operations."
@@ -80,7 +80,7 @@ void TensorSearchImpl::initializeGlobalRuntimeParameters() {
 }
 
 // ____________________________________________________________________________
-void TensorSearchImpl::addResultTableEntry(IdTable* result,
+void TensorIndexImpl::addResultTableEntry(IdTable* result,
                                            const IdTable* idTableLeft,
                                            const IdTable* idTableRight,
                                            size_t rowLeft, size_t rowRight,
@@ -122,11 +122,11 @@ void TensorSearchImpl::addResultTableEntry(IdTable* result,
   }
 }
 
-Result TensorSearchImpl::computeTensorSearchResultFaiss() {
+Result TensorIndexImpl::computeTensorIndexResultFaiss() {
   // #ifdef WITH_DENSE_TENSOR_INDEX
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
-  auto faissIndex = TensorSearchCachedIndex::fromKeyOrBuild(
+  auto faissIndex = TensorIndexCachedIndex::fromKeyOrBuild(
       params_.cacheKey_, params_.rightJoinCol_, *params_.idTableRight_,
       qec_->getIndex(), params_.config_);
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
@@ -150,12 +150,12 @@ Result TensorSearchImpl::computeTensorSearchResultFaiss() {
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
   // #else
   //   throw ad_utility::Exception(
-  //       "TensorSearchImpl::computeTensorSearchResultFaiss() called, but
+  //       "TensorIndexImpl::computeTensorIndexResultFaiss() called, but
   //       qlever " "was not compiled with the option to use the dense tensor
   //       index.");
   // #endif
 }
-Result TensorSearchImpl::computeTensorSearchResultNaive() {
+Result TensorIndexImpl::computeTensorIndexResultNaive() {
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
   for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
@@ -200,7 +200,7 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
       std::move(result), std::vector<ColumnIndex>{},
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
 }
-float TensorSearchImpl::computeDistance(
+float TensorIndexImpl::computeDistance(
     const ad_utility::TensorData& left,
     const ad_utility::TensorData& right) const {
   switch (params_.config_.dist_) {
@@ -213,15 +213,15 @@ float TensorSearchImpl::computeDistance(
           ad_utility::TensorData::subtract(left, right));
     default:
       throw ad_utility::Exception(
-          "Unknown distance function in TensorSearchImpl::computeDistance");
+          "Unknown distance function in TensorIndexImpl::computeDistance");
   }
 }
-Result TensorSearchImpl::computeTensorSearchResult() {
+Result TensorIndexImpl::computeTensorIndexResult() {
   switch (params_.config_.algo_) {
-    case TensorSearchAlgorithm::FAISS_IVF:
-    case TensorSearchAlgorithm::FAISS_HSNW:
-      return computeTensorSearchResultFaiss();
+    case TensorIndexAlgorithm::FAISS_IVF:
+    case TensorIndexAlgorithm::FAISS_HSNW:
+      return computeTensorIndexResultFaiss();
     default:
-      return computeTensorSearchResultNaive();
+      return computeTensorIndexResultNaive();
   }
 }

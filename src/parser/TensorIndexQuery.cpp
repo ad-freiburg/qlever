@@ -3,12 +3,11 @@
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 // Adapted from Spatial Join Logic
 
-#include "parser/TensorSearchQuery.h"
-
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
+#include "parser/TensorIndexQuery.h"
 
 namespace parsedQuery {
 
@@ -18,12 +17,12 @@ constexpr ctll::fixed_string resultsCaptureGroup = "results";
 }  // namespace detail
 
 // ____________________________________________________________________________
-void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
+void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
   auto simpleTriple = triple.getSimple();
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;
 
-  auto predString = extractParameterName(predicate, TENSOR_SEARCH_IRI);
+  auto predString = extractParameterName(predicate, TENSOR_INDEX_IRI);
 
   if (predString == "left") {
     setVariable("left", object, left_);
@@ -47,7 +46,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     if (object.isInt()) {
       searchK_ = static_cast<size_t>(object.getInt());
     } else {
-      throw TensorSearchException(
+      throw TensorIndexException(
           "The parameter `<searchK>` expects an integer (the number of nearest "
           "trees to search for, which may be higher than the number of "
           "neighbors to return).");
@@ -56,7 +55,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     if (object.isInt()) {
       kIVF_ = static_cast<size_t>(object.getInt());
     } else {
-      throw TensorSearchException(
+      throw TensorIndexException(
           "The parameter `<kIVF>` expects an integer (the number of trees to "
           "build for the index).");
     }
@@ -68,15 +67,15 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
         "The parameter `<algorithm>` needs an IRI that selects the algorithm "
         "to employ. Currently supported are `<default>`, `<hsnw>`, and "
         "`<ivf>`");
-    auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
+    auto type = extractParameterName(object, TENSOR_INDEX_IRI);
     if (type == "naive") {
-      algo_ = TensorSearchAlgorithm::NAIVE;
+      algo_ = TensorIndexAlgorithm::NAIVE;
     } else if (type == "hsnw") {
-      algo_ = TensorSearchAlgorithm::FAISS_HSNW;
+      algo_ = TensorIndexAlgorithm::FAISS_HSNW;
     } else if (type == "ivf") {
-      algo_ = TensorSearchAlgorithm::FAISS_IVF;
+      algo_ = TensorIndexAlgorithm::FAISS_IVF;
     } else {
-      throw TensorSearchException{
+      throw TensorIndexException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported tensor search algorithm. Currently supported are "
           "`<default>`, `<hsnw>`, and `<ivf>`"};
@@ -89,7 +88,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
             "metric to employ. Currently supported are `<angular>`, "
             "`<cosine>`, `<dot>`, "
             "`<euclidean>`, `<manhattan>`, or  `<hamming>` ");
-    auto dist = extractParameterName(object, TENSOR_SEARCH_IRI);
+    auto dist = extractParameterName(object, TENSOR_INDEX_IRI);
     if (dist == "angular") {
       dist_ = TensorDistanceAlgorithm::ANGULAR_DISTANCE;
     } else if (dist == "cosine") {
@@ -103,7 +102,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     } else if (dist == "hamming") {
       dist_ = TensorDistanceAlgorithm::HAMMING_DISTANCE;
     } else {
-      throw TensorSearchException{
+      throw TensorIndexException{
           "The IRI given for the parameter `<distance>` does not refer to a "
           "supported distance metric. Currently supported are `<angular>`, "
           "`<cosine>`, `<dot>`, "
@@ -118,11 +117,11 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
 
       payloadVariables_.addVariable(getVariable("payload", object));
     } else if (object.isIri() &&
-               extractParameterName(object, TENSOR_SEARCH_IRI) == "all") {
+               extractParameterName(object, TENSOR_INDEX_IRI) == "all") {
       // All variables selected
       payloadVariables_.setToAll();
     } else {
-      throw TensorSearchException(
+      throw TensorIndexException(
           "The argument to the `<payload>` parameter must be either a variable "
           "to be selected or `<all>`");
     }
@@ -133,7 +132,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
             "be the name of a pinned cache entry as a string literal.");
     rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
   } else {
-    throw TensorSearchException(absl::StrCat(
+    throw TensorIndexException(absl::StrCat(
         "Unsupported argument ", predString,
         " in tensor search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
@@ -143,10 +142,10 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
-TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
+TensorIndexConfiguration TensorIndexQuery::toTensorIndexConfiguration()
     const {
   // Default algorithm
-  TensorSearchAlgorithm algo = TENSOR_SEARCH_DEFAULT_ALGORITHM;
+  TensorIndexAlgorithm algo = TENSOR_INDEX_DEFAULT_ALGORITHM;
   if (algo_.has_value()) {
     algo = algo_.value();
   }
@@ -156,12 +155,12 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
 
   throwIf(
       rightCacheName_.has_value() &&
-          (algo != TensorSearchAlgorithm::FAISS_HSNW &&
-           algo != TensorSearchAlgorithm::FAISS_IVF),
+          (algo != TensorIndexAlgorithm::FAISS_HSNW &&
+           algo != TensorIndexAlgorithm::FAISS_IVF),
       "The parameter `<experimentalRightCacheName>` is only supported by the "
       "`<faiss>` algorithm.");
   // the cache parameter is automatically imputed for faiss
-  // if (algo == TensorSearchAlgorithm::FAISS) {
+  // if (algo == TensorIndexAlgorithm::FAISS) {
   //   throwIf(!rightCacheName_.has_value(),
   //           "The parameter `<experimentalRightCacheName>` is mandatory for
   //           the "
@@ -180,7 +179,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
           !childGraphPattern_.has_value(),
       "A tensor search with a maximum number of results must have its right "
       "variable declared inside the service using a graph pattern: SERVICE "
-      "tensorSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
+      "tensorIndex: { [Config Triples] { <Something> <ThatSelects> ?right "
       "} }.");
   throwIf(
       !ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
@@ -198,13 +197,13 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
     pv = payloadVariables_;
   }
 
-  return TensorSearchConfiguration{
+  return TensorIndexConfiguration{
       left_.value(),
       right_.value(),
       distanceVariable_,
       pv,
       algo,
-      dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
+      dist_.value_or(TENSOR_INDEX_DEFAULT_DISTANCE),
       maxResults_.value_or(static_cast<size_t>(100)),
       searchK_,
       kIVF_,
@@ -213,11 +212,11 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
 }
 
 // ____________________________________________________________________________
-TensorSearchQuery::TensorSearchQuery(const SparqlTriple& triple) {
+TensorIndexQuery::TensorIndexQuery(const SparqlTriple& triple) {
   auto predicate = triple.getSimplePredicate();
   AD_CONTRACT_CHECK(
       predicate.has_value(),
-      "The config triple for TensorSearch must have a special IRI "
+      "The config triple for TensorIndex must have a special IRI "
       "as predicate");
   std::string_view input = predicate.value();
 
@@ -254,19 +253,19 @@ TensorSearchQuery::TensorSearchQuery(const SparqlTriple& triple) {
 }
 
 // _____________________________________________________________________________
-void TensorSearchQuery::throwIf(bool throwCondition,
+void TensorIndexQuery::throwIf(bool throwCondition,
                                 std::string_view message) const {
   if (throwCondition) {
-    throw TensorSearchException{std::string(message)};
+    throw TensorIndexException{std::string(message)};
   }
 }
 
 // _____________________________________________________________________________
-void TensorSearchQuery::validate() const {
+void TensorIndexQuery::validate() const {
   // We convert the tensor search query to a tensor search configuration and
   // discard its result here to detect errors early and report them to the user
   // with highlighting. It's only a small struct so not much is wasted.
-  [[maybe_unused]] auto&& _ = toTensorSearchConfiguration();
+  [[maybe_unused]] auto&& _ = toTensorIndexConfiguration();
 }
 
 }  // namespace parsedQuery

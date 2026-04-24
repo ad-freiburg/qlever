@@ -6,15 +6,15 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/TensorSearch.h"
+#include "engine/TensorIndex.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/TensorData.h"
 namespace {
 using namespace ad_utility;
 using namespace std::literals;
 TEST(TensorPerformance, BigTensorInnerProduct) {
-  setRuntimeParameter<&RuntimeParameters::tensorSearchMaxNumThreads_>(1);
-  TensorSearchImpl::initializeGlobalRuntimeParameters();
+  setRuntimeParameter<&RuntimeParameters::tensorIndexMaxNumThreads_>(1);
+  TensorIndexImpl::initializeGlobalRuntimeParameters();
   constexpr size_t N = 512;
   std::vector<std::string> vectors;
   for (size_t i = 0; i < N; i++) {

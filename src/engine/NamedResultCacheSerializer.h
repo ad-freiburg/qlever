@@ -130,9 +130,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       serializer << arg.cachedGeoIndex_.value();
     }
     // DISABLE NAMED SEREALIZATION - just do it in-memory for now
-    // bool hasTensorSearchIndex = arg.cachedTensorIndex_.has_value();
-    // serializer << hasTensorSearchIndex;
-    // if (hasTensorSearchIndex) {
+    // bool hasTensorIndexIndex = arg.cachedTensorIndex_.has_value();
+    // serializer << hasTensorIndexIndex;
+    // if (hasTensorIndexIndex) {
     //   serializer << arg.cachedTensorIndex_.value();
     // }
   } else {
@@ -182,12 +182,12 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       serializer >> cachedGeoIndex.value();
     }
 
-    // Deserialize `cachedTensorSearchIndex`.
+    // Deserialize `cachedTensorIndexIndex`.
     // bool hasTensorIndex;
     // serializer >> hasTensorIndex;
-    // std::optional<TensorSearchCachedIndex> cachedTensorIndex;
+    // std::optional<TensorIndexCachedIndex> cachedTensorIndex;
     // if (hasTensorIndex) {
-    //   cachedTensorIndex.emplace(TensorSearchCachedIndex::TagForSerialization{});
+    //   cachedTensorIndex.emplace(TensorIndexCachedIndex::TagForSerialization{});
     //   serializer >> cachedTensorIndex.value();
     // }
 

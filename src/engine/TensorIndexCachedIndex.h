@@ -2,18 +2,18 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#ifndef QLEVER_SRC_ENGINE_TENSORSEARCHCACHEDINDEX_H
-#define QLEVER_SRC_ENGINE_TENSORSEARCHCACHEDINDEX_H
+#ifndef QLEVER_SRC_ENGINE_TENSORINDEXCACHEDINDEX_H
+#define QLEVER_SRC_ENGINE_TENSORINDEXCACHEDINDEX_H
 
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
+#include <faiss/IndexHNSW.h>
+#include <faiss/IndexIVFFlat.h>
 
 #include <memory>
 #include <variant>
 
-#include <faiss/IndexHNSW.h>
-#include <faiss/IndexIVFFlat.h>
-#include "TensorSearchConfig.h"
+#include "TensorIndexConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "index/Index.h"
@@ -31,7 +31,7 @@ using FaissIndexTypes = std::variant<std::shared_ptr<faiss::IndexFlat>,
                                      std::shared_ptr<faiss::IndexHNSWFlat>,
                                      std::shared_ptr<faiss::IndexIVFFlat>>;
 using FaissIndex = std::optional<FaissIndexTypes>;
-class TensorSearchCachedIndex {
+class TensorIndexCachedIndex {
  private:
   std::optional<std::shared_ptr<faiss::IndexFlat>> quant_;
   FaissIndex index_;
@@ -49,23 +49,23 @@ class TensorSearchCachedIndex {
 
  private:
   FaissIndexToRow tensorIndexToRow_;
-  TensorSearchConfiguration config_;
+  TensorIndexConfiguration config_;
   size_t nTrees_;
   ssize_t dimSize_;
 
  public:
   // Constructor that builds an index from the tensors in the given column in
   // the `IdTable`.
-  TensorSearchCachedIndex(ColumnIndex col, const IdTable& restable,
+  TensorIndexCachedIndex(ColumnIndex col, const IdTable& restable,
                           const Index& index,
-                          TensorSearchConfiguration config_);
-  TensorSearchCachedIndex(TensorSearchCachedIndex&&) noexcept = default;
-  TensorSearchCachedIndex& operator=(TensorSearchCachedIndex&&) noexcept =
+                          TensorIndexConfiguration config_);
+  TensorIndexCachedIndex(TensorIndexCachedIndex&&) noexcept = default;
+  TensorIndexCachedIndex& operator=(TensorIndexCachedIndex&&) noexcept =
       default;
-  static std::shared_ptr<const TensorSearchCachedIndex> fromKeyOrBuild(
+  static std::shared_ptr<const TensorIndexCachedIndex> fromKeyOrBuild(
       const std::string& key, ColumnIndex col, const IdTable& restable,
-      const Index& index, TensorSearchConfiguration config);
-  static std::shared_ptr<const TensorSearchCachedIndex> fromKey(
+      const Index& index, TensorIndexConfiguration config);
+  static std::shared_ptr<const TensorIndexCachedIndex> fromKey(
       const std::string& key);
 
   std::shared_ptr<const faiss::Index> getIndex() const;
@@ -77,11 +77,11 @@ class TensorSearchCachedIndex {
   size_t getRow(size_t faissIdx) const {
     return tensorIndexToRow_.at(faissIdx);
   }
-  const TensorSearchConfiguration& getConfig() const { return config_; }
+  const TensorIndexConfiguration& getConfig() const { return config_; }
 
  private:
   FaissIndexToRow buildIndex(ColumnIndex col, const IdTable& restable,
                              const Index& index);
 };
 
-#endif  // QLEVER_SRC_ENGINE_TENSORSEARCHCACHEDINDEX_H
+#endif  // QLEVER_SRC_ENGINE_TENSORINDEXCACHEDINDEX_H

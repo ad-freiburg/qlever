@@ -2,21 +2,20 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#include "engine/TensorSearchCachedIndex.h"
-
 #include <faiss/IndexFlat.h>
-#include <faiss/IndexIVFFlat.h>
 #include <faiss/IndexHNSW.h>
+#include <faiss/IndexIVFFlat.h>
 
 #include <variant>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/TensorSearch.h"
+#include "engine/TensorIndex.h"
+#include "engine/TensorIndexCachedIndex.h"
 #include "global/Constants.h"
 #include "util/Serializer/FileSerializer.h"
 
 struct ValueSizeGetter {
-  ad_utility::MemorySize operator()(const TensorSearchCachedIndex&) const {
+  ad_utility::MemorySize operator()(const TensorIndexCachedIndex&) const {
     return ad_utility::MemorySize::bytes(1);
   }
 };
@@ -24,11 +23,11 @@ struct ValueSizeGetter {
 // We use an LRU cache, where the key is the name of the cached result.
 using Key = std::string;
 using Cache =
-    ad_utility::LRUCache<Key, TensorSearchCachedIndex, ValueSizeGetter>;
+    ad_utility::LRUCache<Key, TensorIndexCachedIndex, ValueSizeGetter>;
 
 ad_utility::Synchronized<Cache> cache_;
 // using namespace  ad_utility::serialization;
-using FaissIndexToRow = TensorSearchCachedIndex::FaissIndexToRow;
+using FaissIndexToRow = TensorIndexCachedIndex::FaissIndexToRow;
 
 std::shared_ptr<faiss::IndexFlat> fromDistanceAndSize(
     TensorDistanceAlgorithm dist, int f) {
@@ -45,21 +44,21 @@ std::shared_ptr<faiss::IndexFlat> fromDistanceAndSize(
     //   break;
     default:
       throw std::runtime_error(
-          "Unsupported distance metric for TensorSearchCachedIndex! Supported "
+          "Unsupported distance metric for TensorIndexCachedIndex! Supported "
           "are DOT_PRODUCT and "
           "EUCLIDEAN_DISTANCE.");
   }
 }
 
 // ____________________________________________________________________________
-TensorSearchCachedIndex::TensorSearchCachedIndex(
+TensorIndexCachedIndex::TensorIndexCachedIndex(
     ColumnIndex col, const IdTable& restable, const Index& index,
-    TensorSearchConfiguration config_)
+    TensorIndexConfiguration config_)
     : config_{config_} {
   tensorIndexToRow_ = buildIndex(col, restable, index);
 }
 
-FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
+FaissIndexToRow TensorIndexCachedIndex::buildIndex(ColumnIndex col,
                                                     const IdTable& restable,
                                                     const Index& index) {
   FaissIndexToRow tensorIndexToRow;
@@ -108,11 +107,11 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
                           ? faiss::METRIC_INNER_PRODUCT
                           : faiss::METRIC_L2;
         switch (config_.algo_) {
-          case TensorSearchAlgorithm::FAISS_HSNW:
+          case TensorIndexAlgorithm::FAISS_HSNW:
             index_ = std::make_shared<faiss::IndexHNSWFlat>(
                 (int)tensorFirstDimShape, nNeighbours, metric);
             break;
-          case TensorSearchAlgorithm::FAISS_IVF:
+          case TensorIndexAlgorithm::FAISS_IVF:
             quant_ =
                 fromDistanceAndSize(config_.dist_, (int)tensorFirstDimShape);
             index_ = std::make_shared<faiss::IndexIVFFlat>(
@@ -154,20 +153,20 @@ FaissIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
   return tensorIndexToRow;
 }
 
-std::shared_ptr<const TensorSearchCachedIndex>
-TensorSearchCachedIndex::fromKeyOrBuild(const std::string& key, ColumnIndex col,
+std::shared_ptr<const TensorIndexCachedIndex>
+TensorIndexCachedIndex::fromKeyOrBuild(const std::string& key, ColumnIndex col,
                                         const IdTable& restable,
                                         const Index& index,
-                                        TensorSearchConfiguration config) {
+                                        TensorIndexConfiguration config) {
   auto lock = cache_.wlock();
   if (!lock->contains(key)) {
-    auto newIndex = TensorSearchCachedIndex(col, restable, index, config);
+    auto newIndex = TensorIndexCachedIndex(col, restable, index, config);
     lock->insert(key, std::move(newIndex));
   }
   return (*lock)[key];
 }
 
-std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKey(
+std::shared_ptr<const TensorIndexCachedIndex> TensorIndexCachedIndex::fromKey(
     const std::string& key) {
   auto lock = cache_.wlock();
   if (!lock->contains(key)) {
@@ -179,8 +178,8 @@ std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKey(
   return (*lock)[key];
 }
 
-std::vector<TensorSearchCachedIndex::FaissResult>
-TensorSearchCachedIndex::findNN(const ad_utility::TensorData& query,
+std::vector<TensorIndexCachedIndex::FaissResult>
+TensorIndexCachedIndex::findNN(const ad_utility::TensorData& query,
                                 size_t k) const {
   std::vector<FaissResult> result;
   auto firstDimShape =
