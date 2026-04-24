@@ -410,15 +410,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
-  // Create an index for testing.
-  EncodedIriManager encodedIriManager({"http://example.org/"});
   // <http://example.org/123> is an encoded IRI
   ad_utility::testing::TestIndexConfig indexConfig{
       "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
       "\"baz\" ."};
-  indexConfig.encodedIriManager = encodedIriManager;
+  indexConfig.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   Index index = ad_utility::testing::makeTestIndex(
       "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
+  auto& encodedIriManager = index.encodedIriManager();
 
   // Helpers
   using namespace ::testing;
