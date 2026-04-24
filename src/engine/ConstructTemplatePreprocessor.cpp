@@ -21,9 +21,9 @@ namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
-    const Iri& iri){return PrecomputedConstant{
-    std::make_shared<const EvaluatedTermData>(EvaluatedTermData{iri.iri(),
-                                                                nullptr})}};
+    const Iri& iri) {
+  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{iri.iri(), nullptr})};
 }
 
 // _____________________________________________________________________________
