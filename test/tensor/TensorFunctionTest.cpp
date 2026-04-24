@@ -1,4 +1,4 @@
-// Copyright 2026, Technical University of Graz, University of Padova
+// Copyright 2026, Graz Technical University, University of Padova
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 #include <gmock/gmock.h>
