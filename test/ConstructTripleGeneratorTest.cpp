@@ -22,10 +22,6 @@ using ::testing::ElementsAre;
 using ::testing::Field;
 using Triples = ad_utility::sparql_types::Triples;
 
-// Batch size as defined in the anonymous namespace of
-// ConstructTripleGenerator.cpp.
-constexpr size_t BATCH_SIZE = 1024;
-
 // Matcher for StringTriple: checks all three string values.
 static auto matchTriple(const std::string& s, const std::string& p,
                         const std::string& o) {
@@ -270,10 +266,11 @@ TEST_F(ConstructTripleGeneratorTest, viewSubrangeReadsCorrectRows) {
                           matchTriple("<o>", "<pred>", "<obj>")));
 }
 
-// More than BATCH_SIZE rows: the generator correctly crosses the internal batch
-// boundary and yields triples for all rows.
+// More than ConstructTripleGenerator::DEFAULT_BATCH_SIZE rows: the generator
+// correctly crosses the internal batch boundary and yields triples for all
+// rows.
 TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
-  constexpr size_t N = BATCH_SIZE + 1;
+  constexpr size_t N = ConstructTripleGenerator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
@@ -290,10 +287,11 @@ TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
   }
 }
 
-// After consuming all BATCH_SIZE triples in batch 0, cancelling the handle
-// causes the next get() call (which would start batch 1) to throw.
+// After consuming all ConstructTripleGenerator::DEFAULT_BATCH_SIZE triples in
+// batch 0, cancelling the handle causes the next get() call (which would start
+// batch 1) to throw.
 TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
-  constexpr size_t N = BATCH_SIZE + 1;
+  constexpr size_t N = ConstructTripleGenerator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
@@ -304,8 +302,9 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
   auto range = ConstructTripleGenerator::generateStringTriples(
       triples, {}, index_, handle, singleTableRange(table), 0);
 
-  // Drain all BATCH_SIZE triples from batch 0.
-  for (size_t i = 0; i < BATCH_SIZE; ++i) {
+  // Drain all ConstructTripleGenerator::DEFAULT_BATCH_SIZE triples from batch
+  // 0.
+  for (size_t i = 0; i < ConstructTripleGenerator::DEFAULT_BATCH_SIZE; ++i) {
     ASSERT_TRUE(range.get().has_value());
   }
 
