@@ -56,12 +56,6 @@ class ConstructTripleGenerator {
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
   //____________________________________________________________________________
-  static InputRangeTypeErased<EvaluatedTriple> evaluateTableWithRange(
-      const PreprocessedConstructTemplate& tmpl, const Index& index,
-      CancellationHandle cancellationHandle, const TableWithRange& table,
-      size_t rowOffset, IdCache& cache);
-
-  //____________________________________________________________________________
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns, const Index& index,

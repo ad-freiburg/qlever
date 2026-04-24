@@ -28,73 +28,62 @@ IdCache ConstructTripleGenerator::makeIdCache(
 }
 
 //______________________________________________________________________________
-InputRangeTypeErased<EvaluatedTriple>
-ConstructTripleGenerator::evaluateTableWithRange(
-    const PreprocessedConstructTemplate& tmpl, const Index& index,
-    CancellationHandle cancellationHandle, const TableWithRange& table,
-    size_t rowOffset, IdCache& cache) {
-  const size_t numRowsOfTable = ql::ranges::distance(table.view_);
-  const size_t firstRowOfTable =
-      numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
-  const size_t numBatches =
-      (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
-
-  // this lambda computes the result for a single batch of the `TableWithRange`.
-  // `numRowsOfTable`, `firstRowOfTable`, and `rowOffset` are captured by value
-  // because they are stack-local to this function and would be dangling
-  // references if captured by `[&]` and the returned range is iterated after
-  // this function returns. `table` is captured by value (it is just two
-  // reference_wrappers + an iota_view) so the returned range does
-  // not dangle if the caller's `table` object goes out of scope while the range
-  // is still alive; the underlying IdTable and LocalVocab still need to outlive
-  // the range. `tmpl`, `index`, and `cache` are captured by reference because
-  // they are owned by the caller of `evaluateTables` and outlive the range.
-  auto computeBatch = [table, &tmpl, &index, &cache, numRowsOfTable,
-                       firstRowOfTable, rowOffset,
-                       cancellationHandle](int batchIdx) {
-    cancellationHandle->throwIfCancelled();
-
-    const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
-    const size_t batchEnd =
-        std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
-
-    BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
-                               firstRowOfTable + batchStart,
-                               firstRowOfTable + batchEnd};
-
-    auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-        tmpl.uniqueVariableColumns_, ctx, table.tableWithVocab_.localVocab(),
-        index, cache);
-
-    const size_t blankNodeBaseId = rowOffset + firstRowOfTable + batchStart;
-    return instantiateBatch(tmpl, batchResult, blankNodeBaseId);
-  };
-
-  return InputRangeTypeErased(ql::views::iota(size_t{0}, numBatches) |
-                              ql::views::transform(computeBatch) |
-                              ql::views::join);
-}
-
-//______________________________________________________________________________
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    const Index& index, CancellationHandle cancellationhandle,
+    const Index& index, CancellationHandle cancellationHandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset) {
-  auto tmpl = ConstructTemplatePreprocessor::preprocess(templateTriples,
-                                                        variableColumns);
-  IdCache cache = makeIdCache(tmpl);
+  auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
+      templateTriples, variableColumns);
+  IdCache cache = makeIdCache(preprocessedTemplate);
 
-  return InputRangeTypeErased(ad_utility::CachingContinuableTransformInputRange(
-      ad_utility::allView(std::move(rowIndices)),
-      [tmpl = std::move(tmpl), &index, cancellationhandle,
-       accumulatedRows = rowOffset,
+  auto processTable =
+      [preprocessedTemplate = std::move(preprocessedTemplate), &index,
+       cancellationHandle, accumulatedRows = rowOffset,
        cache = std::move(cache)](const TableWithRange& table) mutable {
+        const size_t numRowsOfTable = ql::ranges::distance(table.view_);
+        const size_t firstRowOfTable =
+            numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
+        // ceiling division: ensure the last partial batch is not dropped.
+        const size_t numBatches =
+            (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
         const size_t tableRowOffset = accumulatedRows;
-        accumulatedRows += ql::ranges::distance(table.view_);
+        accumulatedRows += numRowsOfTable;
+
+        auto computeBatch = [table, &preprocessedTemplate, &index, &cache,
+                             numRowsOfTable, firstRowOfTable, tableRowOffset,
+                             cancellationHandle](int batchIdx) {
+          cancellationHandle->throwIfCancelled();
+
+          const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
+
+          // Clamp to `numRowsOfTable` so the last batch does not exceed the
+          // table bounds.
+          const size_t batchEnd =
+              std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
+
+          BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
+                                     firstRowOfTable + batchStart,
+                                     firstRowOfTable + batchEnd};
+
+          auto batchResult = ConstructBatchEvaluator::evaluateBatch(
+              preprocessedTemplate.uniqueVariableColumns_, ctx,
+              table.tableWithVocab_.localVocab(), index, cache);
+
+          const size_t blankNodeBaseId =
+              tableRowOffset + firstRowOfTable + batchStart;
+          return instantiateBatch(preprocessedTemplate, batchResult,
+                                  blankNodeBaseId);
+        };
+
+        auto batches = ql::views::iota(size_t{0}, numBatches) |
+                       ql::views::transform(computeBatch) | ql::views::join;
+
         return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
-            evaluateTableWithRange(tmpl, index, cancellationhandle, table,
-                                   tableRowOffset, cache));
-      }));
+            InputRangeTypeErased(std::move(batches)));
+      };
+  auto pipeline = ad_utility::CachingContinuableTransformInputRange(
+      ad_utility::allView(std::move(rowIndices)), std::move(processTable));
+  return InputRangeTypeErased(std::move(pipeline));
 }
 
 //______________________________________________________________________________
