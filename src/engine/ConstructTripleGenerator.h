@@ -35,6 +35,9 @@ using StringTriple = QueryExecutionTree::StringTriple;
 // the WHERE clause of the CONSTRUCT query.
 class ConstructTripleGenerator {
  public:
+  static constexpr size_t DEFAULT_BATCH_SIZE = 1024;
+  static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
+
   //____________________________________________________________________________
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
@@ -49,9 +52,6 @@ class ConstructTripleGenerator {
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
 
  private:
-  static constexpr size_t DEFAULT_BATCH_SIZE = 1024;
-  static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
-
   //____________________________________________________________________________
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
