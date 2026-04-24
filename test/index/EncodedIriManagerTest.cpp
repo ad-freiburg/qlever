@@ -213,6 +213,7 @@ struct TestHardcodedPrefixes {
       "http://example.org/always/"};
 };
 
+// _____________________________________________________________________________
 TEST(EncodedIriManager, HardcodedPrefixes) {
   using Manager =
       EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
@@ -229,6 +230,18 @@ TEST(EncodedIriManager, HardcodedPrefixes) {
   ASSERT_TRUE(id2.has_value());
   auto id3 = em2.encode("<http://other.org/1>");
   ASSERT_TRUE(id3.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  // Adding a hardcoded prefix a second time in the constructor is an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Manager({std::string{TestHardcodedPrefixes::value.at(0)}}),
+      testing::HasSubstr(
+          "!ad_utility::contains(prefixesWithoutAngleBrackets, prefix)"));
 }
 
 // _____________________________________________________________________________
