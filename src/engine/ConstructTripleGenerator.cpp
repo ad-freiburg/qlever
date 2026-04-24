@@ -75,14 +75,13 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                                   blankNodeBaseId);
         };
 
-        auto batches = ql::views::iota(size_t{0}, numBatches) |
-                       ql::views::transform(computeBatch) | ql::views::join;
-
-        return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
-            InputRangeTypeErased(std::move(batches)));
+        return ql::views::iota(size_t{0}, numBatches) |
+               ql::views::transform(computeBatch) | ql::views::join;
       };
-  auto pipeline = ad_utility::CachingContinuableTransformInputRange(
-      ad_utility::allView(std::move(rowIndices)), std::move(processTable));
+
+  auto pipeline = ad_utility::allView(std::move(rowIndices)) |
+                  ql::views::transform(std::move(processTable)) |
+                  ql::views::join;
   return InputRangeTypeErased(std::move(pipeline));
 }
 
