@@ -99,9 +99,25 @@ struct ExtractTimeComponentImpl {
 
 //______________________________________________________________________________
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-using ExtractEpoch =
-    ExtractTimeComponentImpl<&Date::toEpochInt, &Id::makeFromInt>;
+struct ExtractEpoch {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    if (!d.has_value() || !d->isDate()) {
+      return Id::makeUndefined();
+    }
+    Date date = d.value().getDate();
+    if (!date.hasTime()) {
+      return Id::makeUndefined();
+    }
+    std::optional<int64_t> epoch = date.toEpochInt();
+    if (!epoch.has_value()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromInt(epoch.value());
+  }
+};
 #endif
+
+//______________________________________________________________________________
 using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
 using ExtractMinutes =
     ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
