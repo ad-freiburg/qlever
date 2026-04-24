@@ -1013,7 +1013,6 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
                                        MediaType::binaryQleverExport};
         return ad_utility::contains(supportedMediaTypes, mediaType);
       }
-      // query is a CONSTRUCT query.
       std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
                                      MediaType::qleverJson, MediaType::turtle};
       return ad_utility::contains(supportedMediaTypes, mediaType);
