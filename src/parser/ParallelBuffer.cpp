@@ -1,5 +1,11 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "parser/ParallelBuffer.h"
 
@@ -8,9 +14,8 @@
 // _________________________________________________________________________
 ParallelFileBuffer::ParallelFileBuffer(size_t blocksize,
                                        const std::string& filename)
-    : ParallelBuffer{blocksize} {
+    : ParallelBuffer{blocksize}, eof_{false} {
   file_.open(filename, "r");
-  eof_ = false;
   buf_.resize(blocksize_);
   auto task = [&file = this->file_, bs = this->blocksize_,
                &buf = this->buf_]() { return file.read(buf.data(), bs); };
