@@ -32,7 +32,7 @@ std::optional<EvaluatedTerm> instantiateTerm(
           return batchResult.getVariable(t.columnIndex_, rowIdxInBatch);
         } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
           return std::make_shared<const EvaluatedTermData>(EvaluatedTermData{
-              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr)};
+              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr});
         } else {
           static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
