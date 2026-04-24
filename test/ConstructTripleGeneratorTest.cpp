@@ -22,7 +22,7 @@ using ::testing::ElementsAre;
 using ::testing::Field;
 using Triples = ad_utility::sparql_types::Triples;
 
-// Matcher for StringTriple: checks all three string values.
+// Matcher for `StringTriple`: checks all three string values.
 static auto matchTriple(const std::string& s, const std::string& p,
                         const std::string& o) {
   return AllOf(Field(&StringTriple::subject_, s),
@@ -30,7 +30,7 @@ static auto matchTriple(const std::string& s, const std::string& p,
                Field(&StringTriple::object_, o));
 }
 
-// Drain all StringTriples from an InputRangeTypeErased into a vector.
+// Drain all `StringTriple`s from an `InputRangeTypeErased` into a vector.
 static std::vector<StringTriple> collectAll(
     ad_utility::InputRangeTypeErased<StringTriple> range) {
   std::vector<StringTriple> result;
@@ -46,7 +46,7 @@ static std::vector<StringTriple> collectAll(
 //   <s> <p> <o> .
 //   <s> <q> "hello" .
 //
-// Provides helpers to build IdTables, Triples templates, and TableWithRange
+// Provides helpers to build `IdTable`s, template triples, and `TableWithRange`
 // values.
 // =============================================================================
 
@@ -61,19 +61,19 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
   Id idO_ = ad_utility::testing::makeGetId(index_)("<o>");
   Id idQ_ = ad_utility::testing::makeGetId(index_)("<q>");
 
-  // Create a non-cancelled CancellationHandle.
+  // Create a non-cancelled `CancellationHandle`.
   static ad_utility::SharedCancellationHandle makeHandle() {
     return std::make_shared<
         ad_utility::SharedCancellationHandle::element_type>();
   }
 
-  // Wrap an IdTable in a shared Result (moves the table in).
+  // Wrap an `IdTable` in a shared Result (moves the table in).
   static std::shared_ptr<const Result> makeResult(IdTable table) {
     return std::make_shared<const Result>(
         std::move(table), std::vector<ColumnIndex>{}, LocalVocab{});
   }
 
-  // Create a TableWithRange referencing the Result's IdTable, covering rows
+  // Create a `TableWithRange` referencing the Result's `IdTable`, covering rows
   // [start, end).
   static TableWithRange makeRange(const Result& result, uint64_t start,
                                   uint64_t end) {
@@ -81,7 +81,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
             ql::views::iota(start, end)};
   }
 
-  // Wrap a single TableWithRange in an InputRangeTypeErased.
+  // Wrap a single `TableWithRange` in an `InputRangeTypeErased`.
   static ad_utility::InputRangeTypeErased<TableWithRange> singleTableRange(
       TableWithRange table) {
     return ad_utility::InputRangeTypeErased<TableWithRange>{
