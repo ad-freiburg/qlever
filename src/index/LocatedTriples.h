@@ -166,7 +166,8 @@ class SortedLocatedTriplesVector {
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   friend class ad_benchmark::ZipMergeIteratorBenchmark;
   friend class ad_benchmark::InsertBatchBenchmark;
-  friend class BlockSortedLocatedTriplesVector;
+  template <size_t>
+  friend class BlockSortedLocatedTriplesVectorImpl;
   FRIEND_TEST(SortedVectorTest, sortedVector);
 
  public:
@@ -246,31 +247,91 @@ static_assert(std::ranges::range<SortedLocatedTriplesVector>);
 
 // Variant of `SortedLocatedTriplesVector` that stores triples across multiple
 // sorted, non-overlapping blocks. Blocks are dynamically split when they exceed
-// a target size. After consolidation, each block is fully sorted and iteration
-// is plain sequential vector traversal with no merge comparisons.
-class BlockSortedLocatedTriplesVector {
+// `BlockSize`. After consolidation, each block is fully sorted and iteration is
+// plain sequential vector traversal with no merge comparisons.
+//
+// `BlockSortedLocatedTriplesVector` is an alias for the default block size of
+// 16384.
+template <size_t BlockSize>
+class BlockSortedLocatedTriplesVectorImpl {
   using Block = std::vector<LocatedTriple>;
 
   std::vector<Block> blocks_;
   std::vector<LocatedTriple> pending_;
   size_t totalSize_ = 0;
 
-  static constexpr size_t kTargetBlockSize = 16384;
+  static constexpr size_t kTargetBlockSize = BlockSize;
 
   // Find the block index where `lt` belongs by binary search on block
   // boundaries (each block's last element).
-  size_t findBlock(const LocatedTriple& lt) const;
+  size_t findBlock(const LocatedTriple& lt) const {
+    LocatedTripleCompare comp;
+    auto it = std::lower_bound(
+        blocks_.begin(), blocks_.end(), lt,
+        [&comp](const Block& block, const LocatedTriple& value) {
+          return comp(block.back(), value);
+        });
+    return static_cast<size_t>(it - blocks_.begin());
+  }
 
   // Split block at `blockIdx` into kTargetBlockSize-sized pieces if it exceeds
   // kTargetBlockSize.
-  void splitIfNeeded(size_t blockIdx);
+  void splitIfNeeded(size_t blockIdx) {
+    Block& block = blocks_.at(blockIdx);
+    if (block.size() <= kTargetBlockSize) {
+      return;
+    }
+    // Split into ceil(block.size() / kTargetBlockSize) new blocks.
+    std::vector<Block> newBlocks;
+    for (size_t offset = 0; offset < block.size(); offset += kTargetBlockSize) {
+      size_t end = std::min(offset + kTargetBlockSize, block.size());
+      newBlocks.emplace_back(std::make_move_iterator(block.begin() + offset),
+                             std::make_move_iterator(block.begin() + end));
+    }
+    blocks_.erase(blocks_.begin() + blockIdx);
+    blocks_.insert(blocks_.begin() + blockIdx,
+                   std::make_move_iterator(newBlocks.begin()),
+                   std::make_move_iterator(newBlocks.end()));
+  }
 
   // Remove empty blocks from `blocks_`.
-  void removeEmptyBlocks();
+  void removeEmptyBlocks() {
+    std::erase_if(blocks_, [](const Block& b) { return b.empty(); });
+  }
 
   // Merge sorted `pending` elements into an existing sorted `block` with
   // last-wins deduplication on equal triples.
-  static void mergeIntoBlock(Block& block, ql::span<LocatedTriple> pending);
+  static void mergeIntoBlock(Block& block, ql::span<LocatedTriple> pending) {
+    if (pending.empty()) {
+      return;
+    }
+    LocatedTripleCompare lt;
+    Block merged;
+    merged.reserve(block.size() + pending.size());
+
+    auto blockIt = block.begin();
+    auto pendIt = pending.begin();
+
+    while (blockIt != block.end() && pendIt != pending.end()) {
+      if (lt(*blockIt, *pendIt)) {
+        merged.push_back(std::move(*blockIt));
+        ++blockIt;
+      } else if (lt(*pendIt, *blockIt)) {
+        merged.push_back(std::move(*pendIt));
+        ++pendIt;
+      } else {
+        // Equal triples: pending (newer) wins.
+        merged.push_back(std::move(*pendIt));
+        ++pendIt;
+        ++blockIt;
+      }
+    }
+
+    std::move(blockIt, block.end(), std::back_inserter(merged));
+    std::move(pendIt, pending.end(), std::back_inserter(merged));
+
+    block.swap(merged);
+  }
 
   bool isClean() const { return pending_.empty(); }
 
@@ -280,14 +341,84 @@ class BlockSortedLocatedTriplesVector {
   FRIEND_TEST(BlockSortedVectorTest, internals);
 
  public:
-  BlockSortedLocatedTriplesVector() = default;
+  BlockSortedLocatedTriplesVectorImpl() = default;
 
-  static BlockSortedLocatedTriplesVector fromSorted(
-      std::vector<LocatedTriple> sortedTriples);
+  static BlockSortedLocatedTriplesVectorImpl fromSorted(
+      std::vector<LocatedTriple> sortedTriples) {
+    AD_EXPENSIVE_CHECK(
+        ql::ranges::is_sorted(sortedTriples, LocatedTripleCompare{}));
+    BlockSortedLocatedTriplesVectorImpl result;
+    result.totalSize_ = sortedTriples.size();
 
-  void consolidate(double threshold = 0.25);
+    for (size_t i = 0; i < sortedTriples.size(); i += kTargetBlockSize) {
+      size_t end = std::min(i + kTargetBlockSize, sortedTriples.size());
+      Block block;
+      block.reserve(end - i);
+      std::move(sortedTriples.begin() + i, sortedTriples.begin() + end,
+                std::back_inserter(block));
+      result.blocks_.push_back(std::move(block));
+    }
+    return result;
+  }
 
-  void insert(LocatedTriple lt);
+  void consolidate(double /*threshold*/ = 0.25) {
+    if (pending_.empty()) {
+      return;
+    }
+
+    // Sort and deduplicate the pending buffer.
+    SortedLocatedTriplesVector::sortAndRemoveDuplicates(pending_, pending_);
+
+    if (blocks_.empty()) {
+      // No existing blocks: the pending buffer becomes the first block.
+      blocks_.push_back(std::move(pending_));
+      splitIfNeeded(0);
+    } else {
+      // Merge-walk: distribute sorted pending elements into existing blocks.
+      auto pendIt = pending_.begin();
+      LocatedTripleCompare comp;
+
+      for (size_t i = 0; i < blocks_.size() && pendIt != pending_.end(); ++i) {
+        // Find the range of pending elements that belong to block i.
+        auto pendEnd = pendIt;
+        if (i + 1 < blocks_.size()) {
+          // Elements <= this block's max go here.
+          pendEnd =
+              std::upper_bound(pendIt, pending_.end(), blocks_[i].back(), comp);
+        } else {
+          // Last block gets all remaining.
+          pendEnd = pending_.end();
+        }
+
+        if (pendIt != pendEnd) {
+          mergeIntoBlock(blocks_[i], ql::span(&*pendIt, pendEnd - pendIt));
+          splitIfNeeded(i);
+          // If we just split, the next block is at i+1 which is the new second
+          // half. The loop increment will move to i+1 which is correct since
+          // all pending elements up to pendEnd have already been merged.
+        }
+        pendIt = pendEnd;
+      }
+
+      // If there are remaining pending elements beyond all existing blocks,
+      // append them to the last block (they are all > last block's max, so
+      // sorted order is preserved) and split if needed.
+      if (pendIt != pending_.end()) {
+        auto& lastBlock = blocks_.back();
+        lastBlock.insert(lastBlock.end(), std::make_move_iterator(pendIt),
+                         std::make_move_iterator(pending_.end()));
+        splitIfNeeded(blocks_.size() - 1);
+      }
+    }
+
+    pending_.clear();
+    totalSize_ = 0;
+    for (const auto& block : blocks_) {
+      totalSize_ += block.size();
+    }
+  }
+
+  void insert(LocatedTriple lt) { pending_.push_back(std::move(lt)); }
 
   using iterator =
       ad_utility::detail::FlattenIterator<std::vector<Block>::iterator,
@@ -296,27 +427,103 @@ class BlockSortedLocatedTriplesVector {
       ad_utility::detail::FlattenIterator<std::vector<Block>::const_iterator,
                                           Block::const_iterator>;
 
-  iterator begin();
-  const_iterator begin() const;
-  iterator end();
-  const_iterator end() const;
+  iterator begin() {
+    AD_CONTRACT_CHECK(isClean());
+    return iterator(blocks_.begin(), blocks_.end());
+  }
 
-  LocatedTriple& back();
-  const LocatedTriple& back() const;
+  const_iterator begin() const {
+    AD_CONTRACT_CHECK(isClean());
+    return const_iterator(blocks_.begin(), blocks_.end());
+  }
 
-  void erase(const LocatedTriple& elem);
-  void erase(std::vector<LocatedTriple> toDelete);
-  void erase(ql::span<LocatedTriple> sortedTriples);
+  iterator end() {
+    AD_CONTRACT_CHECK(isClean());
+    return iterator(blocks_.end(), blocks_.end());
+  }
 
-  size_t size() const;
-  bool empty() const;
+  const_iterator end() const {
+    AD_CONTRACT_CHECK(isClean());
+    return const_iterator(blocks_.end(), blocks_.end());
+  }
 
-  bool operator==(const BlockSortedLocatedTriplesVector& other) const {
+  LocatedTriple& back() {
+    AD_CONTRACT_CHECK(!empty());
+    AD_CONTRACT_CHECK(isClean());
+    return blocks_.back().back();
+  }
+
+  const LocatedTriple& back() const {
+    AD_CONTRACT_CHECK(!empty());
+    AD_CONTRACT_CHECK(isClean());
+    return blocks_.back().back();
+  }
+
+  void erase(const LocatedTriple& elem) {
+    AD_CONTRACT_CHECK(isClean());
+    size_t blockIdx = findBlock(elem);
+    AD_CONTRACT_CHECK(blockIdx < blocks_.size());
+    auto& block = blocks_[blockIdx];
+    auto iter = ql::ranges::lower_bound(block, elem, LocatedTripleCompare{});
+    AD_CONTRACT_CHECK(iter != block.end() && *iter == elem);
+    block.erase(iter);
+    --totalSize_;
+    if (block.empty()) {
+      blocks_.erase(blocks_.begin() + blockIdx);
+    }
+  }
+
+  void erase(std::vector<LocatedTriple> toDelete) {
+    ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
+    erase(ql::span{toDelete});
+  }
+
+  void erase(ql::span<LocatedTriple> sortedTriples) {
+    AD_CONTRACT_CHECK(isClean());
+
+    auto delIt = sortedTriples.begin();
+    LocatedTripleCompare comp;
+
+    for (size_t i = 0; i < blocks_.size() && delIt != sortedTriples.end();
+         ++i) {
+      auto delEnd = delIt;
+      if (i + 1 < blocks_.size()) {
+        delEnd = std::upper_bound(delIt, sortedTriples.end(), blocks_[i].back(),
+                                  comp);
+      } else {
+        delEnd = sortedTriples.end();
+      }
+
+      if (delIt != delEnd) {
+        SortedLocatedTriplesVector::eraseSortedSubRange(
+            blocks_[i], ql::ranges::subrange(delIt, delEnd));
+      }
+      delIt = delEnd;
+    }
+
+    removeEmptyBlocks();
+    totalSize_ = 0;
+    for (const auto& block : blocks_) {
+      totalSize_ += block.size();
+    }
+  }
+
+  size_t size() const {
+    AD_CONTRACT_CHECK(isClean());
+    return totalSize_;
+  }
+
+  bool empty() const { return totalSize_ == 0 && pending_.empty(); }
+
+  bool operator==(const BlockSortedLocatedTriplesVectorImpl& other) const {
     AD_CONTRACT_CHECK(isClean());
     AD_CONTRACT_CHECK(other.isClean());
     return ql::ranges::equal(*this, other);
   }
 };
+
+using BlockSortedLocatedTriplesVector =
+    BlockSortedLocatedTriplesVectorImpl<16384>;
 static_assert(std::ranges::range<BlockSortedLocatedTriplesVector>);
 
 using LocatedTriples = BlockSortedLocatedTriplesVector;
