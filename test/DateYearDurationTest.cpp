@@ -614,6 +614,16 @@ TEST(Date, Subtraction) {
 #endif
 
 // _____________________________________________________________________________
+TEST(Date, toEpochInt) {
+  Date date = Date(1970, 1, 1, 0, 0, 0);
+  EXPECT_EQ(date.toEpochInt(), 0);
+  date = Date(1999, 1, 1, 10, 12, 0);
+  EXPECT_EQ(date.toEpochInt(), 915'185'520);
+  date = Date(1949, 2, 11, 10, 12, 0);
+  EXPECT_EQ(date.toEpochInt(), -659'108'880);
+}
+
+// _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
   Date date = Date(1970, 1, 1, 0, 0, 0);  // No `TimeZone` given.
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());

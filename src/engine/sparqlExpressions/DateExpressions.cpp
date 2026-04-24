@@ -98,6 +98,26 @@ struct ExtractTimeComponentImpl {
 };
 
 //______________________________________________________________________________
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+struct ExtractEpoch {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    if (!d.has_value() || !d->isDate()) {
+      return Id::makeUndefined();
+    }
+    Date date = d.value().getDate();
+    if (!date.hasTime()) {
+      return Id::makeUndefined();
+    }
+    std::optional<int64_t> epoch = date.toEpochInt();
+    if (!epoch.has_value()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromInt(epoch.value());
+  }
+};
+#endif
+
+//______________________________________________________________________________
 using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
 using ExtractMinutes =
     ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
@@ -111,6 +131,9 @@ NARY_EXPRESSION(TimezoneStrExpression, 1,
                 FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
                 FV<ExtractTimezoneDurationFormat, DateValueGetter>);
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+NARY_EXPRESSION(ToEpochExpression, 1, FV<ExtractEpoch, DateValueGetter>);
+#endif
 NARY_EXPRESSION(HoursExpression, 1, FV<ExtractHours, DateValueGetter>);
 NARY_EXPRESSION(MinutesExpression, 1, FV<ExtractMinutes, DateValueGetter>);
 NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
@@ -148,6 +171,12 @@ SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child) {
   return std::make_unique<TimezoneDurationExpression>(std::move(child));
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<ToEpochExpression>(std::move(child));
+}
+#endif
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
   return std::make_unique<MonthExpression>(std::move(child));
