@@ -530,13 +530,13 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
-          // true and return std::nullopt. this is exactly the behavior we
-          // need, as a first step in the parallel Pipeline.
+          // true and return std::nullopt. this is exactly the behavior we need,
+          // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
-          // get the Ids for the original triple and the possibly added
-          // language Tag triples using the provided HashMaps via itemArray.
-          // See documentation of the function for more details
+          // get the Ids for the original triple and the possibly added language
+          // Tag triples using the provided HashMaps via itemArray. See
+          // documentation of the function for more details
           getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
                                                   &(vocab_.getCaseComparator()),
                                                   this, itemAlloc));
@@ -607,6 +607,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
               << std::endl;
   AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
               << std::endl;
+
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
