@@ -297,6 +297,9 @@ auto getIdMapLambdas(
   // return a lambda that takes a single parsed `triple` and returns
   // `IdTriples`, which contains a processed version of the triple plus
   // additional internal triples if applicable.
+  //
+  // TODO: This lambda has become quite large and complex. Better refactor it
+  // into a separate function.
   const auto itemMapLamdaCreator = [&itemMaps, index,
                                     numHasWordTriples](const size_t itemIndex) {
     return [&map = *itemMaps[itemIndex], index, numHasWordTriples](
@@ -323,7 +326,8 @@ auto getIdMapLambdas(
       //
       // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
       // for adding these internal triples for update triples. If you change
-      // this code, you probably also have to change that one.
+      // this code, you probably also have to change that one. This should
+      // eventually be refactored, so that this code duplication is avoided.
       if (!lt.langtag_.empty()) {
         // Get the `Id` for the language tag, e.g., `@en`.
         auto langTagId = map.getId(TripleComponent{
@@ -349,6 +353,11 @@ auto getIdMapLambdas(
       // Third, if applicable, add a `ql:has-word` triple for each distinct word
       // in the literal. We abuse the graph ID field to store the term
       // frequency of the word in the literal.
+      //
+      // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+      // for adding these internal triples for update triples. If you change
+      // this code, you probably also have to change that one. This should
+      // eventually be refactored, so that this code duplication is avoided.
       if (!lt.wordFrequencies_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
