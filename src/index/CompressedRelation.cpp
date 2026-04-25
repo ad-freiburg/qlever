@@ -8,7 +8,6 @@
 
 #include <thread>
 
-#include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
@@ -16,6 +15,7 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GraphComputation.h"
+#include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
@@ -540,6 +540,17 @@ CompressedRelationReader::lazyScan(
   return IdTableGeneratorInputRange{Generator{
       scanSpec, std::move(relevantBlockMetadata), additionalColumns,
       cancellationHandle, locatedTriplesPerBlock, limitOffset, this, config}};
+}
+
+// _____________________________________________________________________________
+IdTable CompressedRelationReader::readBlockWithoutLocatedTriples(
+    CompressedBlockMetadata block, ColumnIndices additionalColumns) const {
+  auto config = getScanConfig({std::nullopt, std::nullopt, std::nullopt},
+                              std::move(additionalColumns), {});
+  CompressedBlock compressedColumns =
+      readCompressedBlockFromFile(block, config.scanColumns_);
+  auto decompressedBlock = decompressBlock(compressedColumns, block.numRows_);
+  return decompressedBlock;
 }
 
 // _____________________________________________________________________________

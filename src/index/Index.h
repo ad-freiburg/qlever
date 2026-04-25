@@ -122,9 +122,6 @@ class Index {
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-  [[nodiscard]] size_t getCardinality(
       Id id, Permutation::Enum permutation,
       const LocatedTriplesState& locatedTriplesState) const;
 

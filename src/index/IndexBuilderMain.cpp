@@ -117,7 +117,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
   check(filetype, "--file-format, -F");
   check(defaultGraphs, "--default-graph, -g");
-  check(parseParallel, "--parse-parallel, p");
+  check(parseParallel, "--parallel-parsing, p");
 
   std::vector<qlever::InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
@@ -213,7 +213,7 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
-  add("parse-parallel,p", po::value(&parseParallel),
+  add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "
       "using the N-Triples or N-Quads format, as well as for well-behaved "

@@ -13,9 +13,14 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -972,4 +977,127 @@ TEST_F(LocatedTriplesTest, debugPrints) {
                           "IdTriple(V:0, V:0, V:0, V:123948, ), IdTriple(V:1, "
                           "V:2, V:3, V:123948, ), ")));
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
+  static constexpr const char* testTurtle =
+      "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
+  auto config = ad_utility::testing::TestIndexConfig{testTurtle};
+  config.blocksizePermutations = 1_kB;
+  auto* qec = ad_utility::testing::getQec(config);
+
+  const auto& index = qec->getIndex().getImpl();
+  auto& perm = index.getPermutation(Permutation::PSO);
+
+  LocalVocab lv;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  using TC = TripleComponent;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto getId = [&lv, &index](TC&& tc) {
+    return std::move(tc).toValueId(index, lv);
+  };
+  auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
+  auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
+                                            TC&& o) -> IdTriple<0> {
+    return IdTriple<0>{{getId(std::move(s)), getId(std::move(p)),
+                        getId(std::move(o)), defaultGraph}};
+  };
+
+  // Triples that exist in the index.
+  auto tInIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<A>"));
+  auto tInIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<B>"));
+  // Triples that do NOT exist in the index.
+  auto tNotIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<b>"));
+  auto tNotIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<a>"));
+  auto tNotIdx3 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<f>"));
+  auto tNotIdx4 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<g>"));
+  auto tNotIdx5 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<h>"));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  {
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tInIdx2});
+    const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+
+    {
+      // Block has less than the threshold.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(3ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
+      EXPECT_THAT(result.insertionsToRemove_, testing::IsEmpty());
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.totalRemoved(), 0u);
+      EXPECT_EQ(result.stats_.totalKept(), 0u);
+    }
+
+    {
+      // Block has more than the threshold.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
+      EXPECT_THAT(result.insertionsToRemove_,
+                  testing::UnorderedElementsAre(tInIdx1, tInIdx2));
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.numInsertionsRemoved_, 2u);
+      EXPECT_EQ(result.stats_.numDeletionsRemoved_, 0u);
+      EXPECT_EQ(result.stats_.numInsertionsKept_, 0u);
+      EXPECT_EQ(result.stats_.numDeletionsKept_, 0u);
+    }
+  }
+
+  {
+    // Also has inserts and deletes past the last block with index triples.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+            2ul);
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
+    dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
+    const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+    auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
+    EXPECT_THAT(result.insertionsToRemove_,
+                testing::UnorderedElementsAre(tInIdx1));
+    EXPECT_THAT(result.deletionsToRemove_,
+                testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
+    EXPECT_EQ(result.stats_.numInsertionsRemoved_, 1u);
+    EXPECT_EQ(result.stats_.numDeletionsRemoved_, 2u);
+    EXPECT_EQ(result.stats_.numInsertionsKept_, 3u);
+    EXPECT_EQ(result.stats_.numDeletionsKept_, 1u);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, computeDiff) {
+  auto I = &Id::makeFromInt;
+  std::vector<LocatedTriple> locatedTriples;
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(1), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(2), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}}, false});
+
+  auto originalTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  locatedTriples.at(0).insertOrDelete_ = false;
+  locatedTriples.at(3).insertOrDelete_ = true;
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{2, IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}}, false});
+
+  auto newTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  auto result = newTriples.computeDiff(originalTriples);
+  EXPECT_THAT(result,
+              ::testing::ElementsAre(
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}),
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}})));
 }

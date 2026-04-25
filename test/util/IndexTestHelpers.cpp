@@ -127,18 +127,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::PSO), 0, 1);
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(POS), 1, 0);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OPS), 1,
+        col0IdTag);
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OSP), 0,
+        col0IdTag);
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
@@ -237,6 +237,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      throw std::runtime_error("The text index is not available in C++17 mode");
+#else
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
@@ -285,6 +288,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
+#endif
     }
   }
   if (!c.usePatterns || !c.loadAllPermutations) {
@@ -352,7 +356,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
     std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
-    std::unique_ptr<QueryExecutionContext> qec_ =
+    std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
@@ -379,9 +383,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>(),
                    std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
-  return qec;
+  return contextMap.at(c).qec_.get();
 }
 
 // _____________________________________________________________________________
@@ -404,8 +406,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static const EncodedIriManager encodedIriManager;
-    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
+    auto id = literalOrIri.toValueId(index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

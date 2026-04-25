@@ -31,10 +31,6 @@ auto lit = [](std::string_view s) {
   return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
 };
 
-auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
-};
-
 // Convenient access to constants for "infinity" and "not a number". The
 // spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
@@ -323,31 +319,39 @@ TEST(RelationalExpression, DoubleAndDouble) {
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri, IdOrLiteralOrIri>(
-      {lit("alpha"), lit("beta")}, {lit("sigma"), lit("delta")},
-      {lit("epsilon"), lit("epsilon")});
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, IdOrLocalVocabEntry>(
+      {lve("alpha"), lve("beta")}, {lve("sigma"), lve("delta")},
+      {lve("epsilon"), lve("epsilon")});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions.
   // TODO<joka921> Add an example for strings that are bytewise different but
   // equal on the unicode level (e.g.`ä` vs `a + dots`.
-  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
-  // IdOrLiteralOrIri>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry,
+  // IdOrLocalVocabEntry>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
-  auto stringVec = VectorWithMemoryLimit<IdOrLiteralOrIri>(
-      {lit("hallo"), lit("by"), lit("")}, makeAllocator());
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  auto stringVec = VectorWithMemoryLimit<IdOrLocalVocabEntry>(
+      {lve("hallo"), lve("by"), lve("")}, makeAllocator());
   auto intVec =
       VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
-  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("hallo")});
-  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("3")});
-  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("hallo")});
-  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("-12.0")});
-  testUndefHelper(intVec.clone(), IdOrLiteralOrIri{lit("someString")});
-  testUndefHelper(doubleVec.clone(), IdOrLiteralOrIri{lit("someString")});
+  testUndefHelper(int64_t{3}, IdOrLocalVocabEntry{lve("hallo")});
+  testUndefHelper(int64_t{3}, IdOrLocalVocabEntry{lve("3")});
+  testUndefHelper(-12.0, IdOrLocalVocabEntry{lve("hallo")});
+  testUndefHelper(-12.0, IdOrLocalVocabEntry{lve("-12.0")});
+  testUndefHelper(intVec.clone(), IdOrLocalVocabEntry{lve("someString")});
+  testUndefHelper(doubleVec.clone(), IdOrLocalVocabEntry{lve("someString")});
   testUndefHelper(int64_t{3}, stringVec.clone());
   testUndefHelper(intVec.clone(), stringVec.clone());
   testUndefHelper(doubleVec.clone(), stringVec.clone());
@@ -569,21 +573,25 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vec(
-      {lit("alpha"), lit("alpaka"), lit("bertram"), lit("sigma"), lit("zeta"),
-       lit("kaulquappe"), lit("caesar"), lit("caesar"), lit("caesar")},
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vec(
+      {lve("alpha"), lve("alpaka"), lve("bertram"), lve("sigma"), lve("zeta"),
+       lve("kaulquappe"), lve("caesar"), lve("caesar"), lve("caesar")},
       makeAllocator());
   testLessThanGreaterThanEqualMultipleValuesHelper(
-      IdOrLiteralOrIri{lit("caesar")}, vec.clone());
+      IdOrLocalVocabEntry{lve("caesar")}, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
   // for strings that are bytewise different but equal on the unicode level
   // (e.g.`ä` vs `a + dots`.
-  // VectorWithMemoryLimit<IdOrLiteralOrIri> vec2({"AlpHa", "älpaka", "Æ",
+  // VectorWithMemoryLimit<IdOrLocalVocabEntry> vec2({"AlpHa", "älpaka", "Æ",
   // "sigma", "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
-  // IdOrLiteralOrIri>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry,
+  // IdOrLocalVocabEntry>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
@@ -626,13 +634,17 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vecA{
-      {lit("alpha"), lit("beta"), lit("g"), lit("epsilon"), lit("fraud"),
-       lit("capitalism"), lit(""), lit("bo'sä30"), lit("Me")},
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vecA{
+      {lve("alpha"), lve("beta"), lve("g"), lve("epsilon"), lve("fraud"),
+       lve("capitalism"), lve(""), lve("bo'sä30"), lve("Me")},
       makeAllocator()};
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vecB{
-      {lit("alph"), lit("alpha"), lit("f"), lit("epsiloo"), lit("freud"),
-       lit("communism"), lit(""), lit("bo'sä30"), lit("Me")},
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vecB{
+      {lve("alph"), lve("alpha"), lve("f"), lve("epsiloo"), lve("freud"),
+       lve("communism"), lve(""), lve("bo'sä30"), lve("Me")},
       makeAllocator()};
   testLessThanGreaterThanEqualMultipleValuesHelper(vecA.clone(), vecB.clone());
   // TODO<joka921> Add a test case for correct unicode collation as soon as that
@@ -662,6 +674,12 @@ void testInExpressionVector(T1 leftValue, T2 rightValue, Ctx& ctx,
   check();
 }
 
+// Helper function to expose a static `TestContext` instance.
+TestContext& testContext() {
+  static TestContext ctx;
+  return ctx;
+}
+
 // Assert that the expression `leftValue Comparator rightValue`, when evaluated
 // on the `TestContext` (see above), yields the `expected` result.
 
@@ -669,7 +687,7 @@ template <Comparison Comp, typename T1, typename T2>
 void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
                               std::vector<Id> expected,
                               source_location l = AD_CURRENT_SOURCE_LOC()) {
-  static TestContext ctx;
+  auto& ctx = testContext();
   auto expression =
       makeExpression<Comp>(liftToValueId(leftValue), liftToValueId(rightValue));
   auto trace = generateLocationTrace(l, "test lambda was called here");
@@ -696,6 +714,10 @@ void testWithExplicitResult(T1 leftValue, T2 rightValue,
 }
 
 TEST(RelationalExpression, VariableAndConstant) {
+  auto* qec = testContext().qec;
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
   // ?ints column is `1, 0, -1`
   testWithExplicitResult<LT>(int64_t{0}, Variable{"?ints"},
                              {true, false, false});
@@ -718,20 +740,22 @@ TEST(RelationalExpression, VariableAndConstant) {
 
   // ?vocab column is `"Beta", "alpha", "älpha"
   testWithExplicitResult<LE>(Variable{"?vocab"},
-                             IdOrLiteralOrIri{lit("\"älpha\"")},
+                             IdOrLocalVocabEntry{lve("\"älpha\"")},
                              {false, true, true});
   testWithExplicitResult<GT>(Variable{"?vocab"},
-                             IdOrLiteralOrIri{lit("\"alpha\"")},
+                             IdOrLocalVocabEntry{lve("\"alpha\"")},
                              {true, false, true});
-  testWithExplicitResult<LT>(IdOrLiteralOrIri{lit("\"atm\"")},
+  testWithExplicitResult<LT>(IdOrLocalVocabEntry{lve("\"atm\"")},
                              Variable{"?vocab"}, {true, false, false});
 
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>(IdOrLiteralOrIri{iriref("<xa>")},
+  testWithExplicitIdResult<GT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
+                                   "<xa>", qec->getLocalVocabContext())},
                                Variable{"?mixed"}, {U, U, B(true)});
-  testWithExplicitIdResult<LT>(IdOrLiteralOrIri{iriref("<u>")},
+  testWithExplicitIdResult<LT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
+                                   "<u>", qec->getLocalVocabContext())},
                                Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
@@ -810,6 +834,10 @@ void testSortedVariableAndConstant(
 }
 
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
+  auto* qec = testContext().qec;
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
   // Sorted order (by bits of the valueIds):
   // ?ints column is `0, 1,  -1`
   // ?doubles column is `0.1 , 2.8`,-0.1
@@ -826,7 +854,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
   // ints and strings are always incompatible.
-  testSortedVariableAndConstant<NE>(ints, IdOrLiteralOrIri{lit("a string")},
+  testSortedVariableAndConstant<NE>(ints, IdOrLocalVocabEntry{lve("a string")},
                                     {});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
@@ -837,14 +865,14 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
   testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
 
-  testSortedVariableAndConstant<GT>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
-                                    {{{1, 3}}});
-  testSortedVariableAndConstant<GE>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
-                                    {{{0, 3}}});
-  testSortedVariableAndConstant<LE>(vocab, IdOrLiteralOrIri{lit("\"ball\"")},
+  testSortedVariableAndConstant<GT>(
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{1, 3}}});
+  testSortedVariableAndConstant<GE>(
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{0, 3}}});
+  testSortedVariableAndConstant<LE>(vocab, IdOrLocalVocabEntry{lve("\"ball\"")},
                                     {{{0, 2}}});
-  testSortedVariableAndConstant<NE>(vocab, IdOrLiteralOrIri{lit("\"älpha\"")},
-                                    {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<NE>(
+      vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}});
   testSortedVariableAndConstant<LE>(vocab, inf, {});
 
   // Note: vocab entries and numeric values are not compatible, so every
@@ -854,11 +882,12 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
   testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
-  testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
-                                    {{{2, 3}}});
+  testSortedVariableAndConstant<LE>(
+      mixed,
+      IdOrLocalVocabEntry{
+          LocalVocabEntry::fromIriref("<z>", qec->getLocalVocabContext())},
+      {{{2, 3}}});
 }
-
-TEST(RelationalExpression, InExpression) {}
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto makeInt = [](int i) {

@@ -147,8 +147,9 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
 }
 
 // _____________________________________________________________________________
-Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
-                    uint64_t minBlankNodeIndex) {
+std::optional<Id> tryRemapBlankNodeId(Id original,
+                                      const BlankNodeBlocks& blankNodeBlocks,
+                                      uint64_t minBlankNodeIndex) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::BlankNodeIndex,
       "Only ids resembling a blank node index can be remapped with this "
@@ -160,13 +161,24 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
   auto normalizedId = rawId - minBlankNodeIndex;
   auto blockIndex = normalizedId / ad_utility::BlankNodeManager::blockSize_;
   auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
-  AD_EXPENSIVE_CHECK(it != blankNodeBlocks.end() && *it == blockIndex,
-                     "Could not find block index of blank node.");
+  if (it == blankNodeBlocks.end() || *it != blockIndex) {
+    return std::nullopt;
+  }
   auto relativeId = normalizedId % ad_utility::BlankNodeManager::blockSize_;
   auto blockOffset = ql::ranges::distance(blankNodeBlocks.begin(), it) *
                      ad_utility::BlankNodeManager::blockSize_;
   return Id::makeFromBlankNodeIndex(
       BlankNodeIndex::make(relativeId + blockOffset + minBlankNodeIndex));
+}
+
+// _____________________________________________________________________________
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex) {
+  auto value =
+      tryRemapBlankNodeId(original, blankNodeBlocks, minBlankNodeIndex);
+  AD_CORRECTNESS_CHECK(value.has_value(),
+                       "Could not find block index of blank node.");
+  return value.value();
 }
 
 // _____________________________________________________________________________
@@ -331,7 +343,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 
 // _____________________________________________________________________________
 namespace qlever {
-void materializeToIndex(
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
@@ -353,7 +365,7 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  const auto& [insertionPositions, localVocabMapping] =
+  auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
@@ -367,7 +379,7 @@ void materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  IndexImpl newIndex{index.allocator(), false};
+  IndexImpl newIndex{index.allocator()};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
@@ -421,6 +433,8 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
 #undef REBUILD_LOG_INFO
+  return {std::move(insertionPositions), std::move(localVocabMapping),
+          std::move(blankNodeBlocks), minBlankNodeIndex};
 }
 
 }  // namespace qlever

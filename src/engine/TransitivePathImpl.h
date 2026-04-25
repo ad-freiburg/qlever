@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
+#include "engine/TransitivePathGraphSearch.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
@@ -200,44 +201,6 @@ class TransitivePathImpl : public TransitivePathBase {
   }
 
   /**
-   * @brief Depth-first search to find connected nodes in the graph.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @param target Optional target Id. If supplied, only paths which end in this
-   * Id are added to the result.
-   * @return A set of connected nodes in the graph.
-   */
-  Set findConnectedNodes(const T& edges, Id startNode,
-                         const std::optional<Id>& target) const {
-    std::vector<std::pair<Id, size_t>> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
-    Set connectedNodes{allocator()};
-    stack.emplace_back(startNode, 0);
-
-    while (!stack.empty()) {
-      checkCancellation();
-      auto [node, steps] = stack.back();
-      stack.pop_back();
-
-      if (steps <= maxDist_ && !marks.contains(node)) {
-        if (steps >= minDist_) {
-          marks.insert(node);
-          if (!target.has_value() || node == target.value()) {
-            connectedNodes.insert(node);
-          }
-        }
-
-        const auto& successors = edges.successors(node);
-        for (auto successor : successors) {
-          stack.emplace_back(successor, steps + 1);
-        }
-      }
-    }
-    return connectedNodes;
-  }
-
-  /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
    *
@@ -261,6 +224,7 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
+    using namespace qlever::graphSearch;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
@@ -269,8 +233,7 @@ class TransitivePathImpl : public TransitivePathBase {
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
+            : std::optional{std::move(target).toValueId(index, targetHelper)};
     bool sameVariableOnBothSides =
         !targetId.has_value() && lhs_.value_ == rhs_.value_;
     bool endsWithGraphVariable =
@@ -296,7 +259,13 @@ class TransitivePathImpl : public TransitivePathBase {
             targetId = graphId;
           }
           edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
+
+          // Pick the appropriate graph search strategy and run it.
+          GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
+                                    maxDist_);
+          GraphSearchExecutionParams ep(cancellationHandle_, allocator());
+          Set connectedNodes = runOptimalGraphSearch(gsp, ep);
+
           if (!connectedNodes.empty()) {
             runtimeInfo().addDetail("Hull time", timer.msecs());
             timer.stop();
@@ -353,8 +322,8 @@ class TransitivePathImpl : public TransitivePathBase {
     }
     // id -> var|id
     LocalVocab helperVocab;
-    Id startId = TripleComponent{startSide.value_}.toValueId(
-        getIndex().getVocab(), helperVocab, getIndex().encodedIriManager());
+    Id startId =
+        TripleComponent{startSide.value_}.toValueId(getIndex(), helperVocab);
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways. This also augments the id with matching graph ids.

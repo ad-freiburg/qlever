@@ -48,13 +48,6 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
-    const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
     Id id, Permutation::Enum p,
     const LocatedTriplesState& locatedTriplesState) const {
   return pimpl_->getCardinality(id, p, locatedTriplesState);

@@ -24,8 +24,8 @@
 // distinct graphs, otherwise returns the distinct graphs as a vector. The
 // `preexistingGraphs` is used to initialize the vector of distinct graphs, so
 // this function can be used to extend existing metadata.
-CPP_template(typename T)(requires ql::ranges::range<T>&&
-                             std::same_as<ql::ranges::range_value_t<T>, Id>)
+CPP_template(typename T)(requires ql::ranges::range<T>&& ql::concepts::same_as<
+                         ql::ranges::range_value_t<T>, Id>)
     std::optional<std::vector<Id>> computeDistinctGraphs(
         T&& idRange, ql::span<const Id> preexistingGraphs = {}) {
   AD_CORRECTNESS_CHECK(preexistingGraphs.size() <=
