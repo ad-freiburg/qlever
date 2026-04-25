@@ -37,17 +37,21 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
-                       &index, cancellationHandle, cache = std::move(cache)](
-                          const TableWithRange& table) mutable {
+                       &index, cancellationHandle, cache = std::move(cache),
+                       accumulatedRowOffset =
+                           rowOffset](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::distance(table.view_);
     const size_t firstRowOfTable =
         numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
+    // Snapshot the offset for this table, then advance it for the next table.
+    const size_t tableRowOffset = accumulatedRowOffset;
+    accumulatedRowOffset += numRowsOfTable;
     // ceiling division: ensure the last partial batch is not dropped.
     const size_t numBatches =
         (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
     auto computeBatch = [table, &preprocessedTemplate, &index, &cache,
-                         numRowsOfTable, firstRowOfTable,
+                         numRowsOfTable, firstRowOfTable, tableRowOffset,
                          cancellationHandle](int batchIdx) {
       cancellationHandle->throwIfCancelled();
 
@@ -66,7 +70,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
           preprocessedTemplate.uniqueVariableColumns_, ctx,
           table.tableWithVocab_.localVocab(), index, cache);
 
-      const size_t blankNodeBaseId = firstRowOfTable + batchStart;
+      const size_t blankNodeBaseId =
+          tableRowOffset + firstRowOfTable + batchStart;
       return instantiateBatch(preprocessedTemplate, batchResult,
                               blankNodeBaseId);
     };
