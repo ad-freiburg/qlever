@@ -61,7 +61,9 @@ void LazyGroupBy::commitRow(
 
   for (auto& alias : aggregateAliases_) {
     GroupByImpl::evaluateAlias(alias, &resultTable, evaluationContext,
-                               aggregationData_, &localVocab_, allocator_);
+                               aggregationData_,
+                               evaluationContext._qec.getLocalVocabContext(),
+                               &localVocab_, allocator_);
   }
   resetAggregationData();
 }

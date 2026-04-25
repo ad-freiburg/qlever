@@ -114,15 +114,15 @@ const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
 }
 
 struct ApplyBaseIfPresent {
-  IdOrLocalVocabEntry operator()(IdOrLocalVocabEntry iri,
-                                 const IdOrLocalVocabEntry& base) const {
+  IdOrLiteralOrIri operator()(IdOrLocalVocabEntry iri,
+                              const IdOrLocalVocabEntry& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
-      return iri;
+      return std::get<Id>(iri);
     }
     const auto& baseIri = extractIri(base);
     if (baseIri.empty()) {
-      return iri;
+      return std::get<LocalVocabEntry>(iri);
     }
     // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
@@ -241,6 +241,7 @@ CPP_template(typename NaryOperation)(
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
     std::vector<PrefilterExprVariablePair> prefilterVec;
     const auto& children = this->children();
@@ -423,11 +424,12 @@ class ConcatExpression : public detail::VariadicExpression {
     bool isFirstLiteral = true;
 
     auto moveLiteralToResult =
-        [](std::optional<Literal>& literal) -> IdOrLocalVocabEntry {
+        [ctx](std::optional<Literal>& literal) -> IdOrLocalVocabEntry {
       if (!literal.has_value()) {
         return Id::makeUndefined();
       }
-      return LiteralOrIri(std::move(literal.value()));
+      return LocalVocabEntry{std::move(literal.value()),
+                             ctx->getLocalVocabContext()};
     };
 
     auto visitSingleExpressionResult = CPP_template_lambda(
