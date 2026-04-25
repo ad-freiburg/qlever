@@ -85,11 +85,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
-  auto parser = std::make_unique<RdfMultifileParser>(
-      files, &encodedIriManager(), parserBufferSize());
-  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
-  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
-  return parser;
+  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
+                                              parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
