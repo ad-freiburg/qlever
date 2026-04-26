@@ -16,6 +16,7 @@
 
 #include "CompilationInfo.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -323,6 +324,10 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
+    // For index building, use more threads for writing permutations than the
+    // default (which is optimized for `rebuild-index`, where six permutations
+    // are written simultaneously).
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
