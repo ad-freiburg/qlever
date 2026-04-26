@@ -189,6 +189,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& addHasWordTriples();
+
   bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
