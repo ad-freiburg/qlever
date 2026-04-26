@@ -543,11 +543,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
       while (auto opt = p.getNextValue()) {
         numTriplesParsedTimer.cont();
-        for (const auto& innerOpt : opt.value()) {
-          if (innerOpt) {
-            actualCurrentPartialSize++;
-            localWriter.push_back(innerOpt.value());
-          }
+        for (const auto& triple : opt.value()) {
+          actualCurrentPartialSize++;
+          localWriter.push_back(triple);
         }
         numTriplesParsed++;
         if (progressBar.update()) {
@@ -1324,7 +1322,7 @@ void IndexImpl::readConfiguration() {
 
 // ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
-  ProcessedTriple result{{}, "", {}};
+  ProcessedTriple result;
   auto& resultTriple = result.triple_;
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();

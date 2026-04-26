@@ -14,6 +14,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
+#include <absl/container/inlined_vector.h>
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
@@ -278,20 +279,15 @@ auto getIdMapLambdas(
     // `IndexImpl.cpp`).
     itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
 
-    // In each map, assign the first IDs to the special IRIs `ql:langtag` and
-    // `ql:has-word`.
+    // In each map, assign the first ID to `ql:langtag`.
     //
     // NOTE: This is not necessary for functionality, but certain unit tests
-    // currently fail without it.
+    // currently fail without it. Will be removed in #2839.
     itemMaps[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
-    if (index->addHasWordTriples()) {
-      itemMaps[j]->getId(TripleComponent{
-          ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-    }
   }
   using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
-  using IdTriples = std::vector<std::optional<IdTriple>>;
+  using IdTriples = absl::InlinedVector<IdTriple, 3>;
 
   // For a given `ItemMapManager` (specified via its index in `itemMaps`),
   // return a lambda that takes a single parsed `triple` and returns
@@ -307,17 +303,22 @@ auto getIdMapLambdas(
       // Process the given triple.
       ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
-      // We return processed versions of: (1) the original triple, (2) two
-      // internal triples for the language tag (if any), and (3) one triple for
-      // each distinct word in the literal (if applicable).
-      IdTriples result(3 + lt.wordFrequencies_.size());
+      // Reserve the exact number of triples we will produce. For ≤3 triples
+      // (original + language tag), this stays inline. For more (has-word
+      // triples), this allocates on the heap once.
+      IdTriples result;
+      result.reserve(1 + (lt.langtag_.empty() ? 0 : 2) +
+                     lt.wordFrequencies_.size());
 
       // First, process the original triple.
-      result[0] = map.getId(lt.triple_);
+      result.push_back(map.getId(lt.triple_));
       static_assert(NumColumnsIndexBuilding == 4,
                     " The following lines probably have to be changed when "
                     "the number of payload columns changes");
-      auto& spoIds = *result[0];  // ids of original triple
+      // Convenience reference to the IDs of the original triple. This is safe
+      // because the `reserve` above ensures that no subsequent `push_back`
+      // will reallocate `result`.
+      auto& spoIds = result[0];
       auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
 
       // Second, if there is a language tag, add the corresponding two internal
@@ -339,10 +340,10 @@ auto getIdMapLambdas(
         auto langTaggedPredId = map.getId(TripleComponent{
             ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
         // Add the internal triple `<subject> @language@<predicate> <object>`.
-        result[1].emplace(
+        result.push_back(
             IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
         // Add the internal triple `<object> ql:langtag <@language>`.
-        result[2].emplace(IdTriple{
+        result.push_back(IdTriple{
             spoIds[2],
             map.getId(
                 TripleComponent{ad_utility::triple_component::Iri::fromIriref(
@@ -361,18 +362,18 @@ auto getIdMapLambdas(
       if (!lt.wordFrequencies_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-        size_t resultIndex = 3;
         for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
           // Add the internal triple `<literal> ql:has-word "word"`.
           auto wordId = map.getId(TripleComponent{
-              ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
-                  absl::StrCat("\"", word, "\""))});
-          auto termFrequencyId =
-              Id::makeFromInt(static_cast<int64_t>(termFrequency));
-          result[resultIndex++].emplace(
-              IdTriple{spoIds[2], hasWordPredId, wordId, termFrequencyId});
+              ad_utility::triple_component::Literal::literalWithoutQuotes(
+                  word)});
+          result.push_back(
+              IdTriple{spoIds[2], hasWordPredId, wordId,
+                       Id::makeFromInt(static_cast<int64_t>(termFrequency))});
         }
-        // Update the counter for the number of ql:has-word triples.
+        // Update the counter for the number of `ql:has-word` triples. Relaxed
+        // ordering is fine because this counter is only read after all threads
+        // have finished (for a log message).
         if (numHasWordTriples != nullptr) {
           numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
                                        std::memory_order_relaxed);
