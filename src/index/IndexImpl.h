@@ -141,7 +141,7 @@ class IndexImpl {
   uint64_t numDistinctSubjectPredicatePairs_;
 
   // If true, add `ql:has-word` triples for each word in each literal.
-  bool addHasWordTriples_ = true;
+  bool addHasWordTriples_ = false;
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
