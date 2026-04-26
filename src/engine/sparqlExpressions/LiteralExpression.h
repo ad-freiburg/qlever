@@ -56,7 +56,7 @@ class LiteralExpression : public SparqlExpression {
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
                          : IdOrLocalVocabEntry{LocalVocabEntry{
-                               ad_utility::triple_component::LiteralOrIri{s}}};
+                               s, context->getLocalVocabContext()}};
       auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
@@ -265,15 +265,16 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
 inline std::optional<IdOrLocalVocabEntry>
-getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child) {
+getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
+                                            const LocalVocabContext& context) {
   using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {
-    return LocalVocabEntry{literalExpr->value()};
+    return LocalVocabEntry{literalExpr->value(), context};
   } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
-    return LocalVocabEntry{iriExpr->value()};
+    return LocalVocabEntry{iriExpr->value(), context};
   } else {
     return std::nullopt;
   }

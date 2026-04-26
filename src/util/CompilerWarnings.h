@@ -37,6 +37,13 @@
   _Pragma("GCC diagnostic push")             \
       _Pragma("GCC diagnostic ignored \"-Wnon-template-friend\"")
 
+// Disable the `aggressive-loop-optimizations` warning, which produces false
+// positives on GCC 13 when `std::advance` is inlined into
+// `std::vector::assign` through a `ranges::elements_view` over a hash map.
+#define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS \
+  _Pragma("GCC diagnostic push")             \
+      _Pragma("GCC diagnostic ignored \"-Waggressive-loop-optimizations\"")
+
 // Re-enable the warnings disabled by the last `DISABLE_...` call.
 #define GCC_REENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 
@@ -46,6 +53,7 @@
 #define DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_FREE_NONHEAP_WARNINGS
+#define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 
