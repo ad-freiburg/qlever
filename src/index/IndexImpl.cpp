@@ -543,10 +543,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
       while (auto opt = p.getNextValue()) {
         numTriplesParsedTimer.cont();
-        for (const auto& triple : opt.value()) {
-          actualCurrentPartialSize++;
-          localWriter.push_back(triple);
-        }
+        const auto& triples = opt.value();
+        actualCurrentPartialSize += triples.size();
+        localWriter.insert(localWriter.end(), triples.begin(), triples.end());
         numTriplesParsed++;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
