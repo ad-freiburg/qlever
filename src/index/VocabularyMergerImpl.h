@@ -88,11 +88,17 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
+  // Only one asynchronous task to limit memory consumption.
+  ad_utility::TaskQueue<> wordWriter{1, 1};
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (std::vector<QueueWord>& currentWords : mergedWords) {
-    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
+    wordWriter.push([this, currentWords = std::move(currentWords),
+                     &wordCallback, &lessThan, &progressBar]() mutable {
+      writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
+    });
   }
+  wordWriter.finish();
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
