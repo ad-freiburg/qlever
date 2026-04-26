@@ -82,14 +82,12 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType,
-                      c.encodedPrefixesWithoutAngleBrackets,
-                      c.addHasWordTriples);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
