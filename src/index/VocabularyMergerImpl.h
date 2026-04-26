@@ -162,7 +162,7 @@ CPP_template_def(typename C, typename L)(
 // ____________________________________________________________________________________________________________
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(2 * els.size());
+  res.reserve(els.size());
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
@@ -172,8 +172,8 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
       nextWordId++;
       lastWord = word;
     }
-    AD_CONTRACT_CHECK(!res.count(id));
-    res[id] = nextWordId;
+    auto inserted = res.try_emplace(id, nextWordId).second;
+    AD_CONTRACT_CHECK(inserted);
     id = nextWordId;
     first = false;
   }
@@ -302,12 +302,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
-  ad_utility::HashMap<Id, Id> res;
   auto vec = getIdMapFromFile(filename);
-  for (const auto& [partialId, globalId] : vec) {
-    res[partialId] = globalId;
-  }
-  return res;
+  return ad_utility::HashMap<Id, Id>{vec.begin(), vec.end()};
 }
 }  // namespace ad_utility::vocabulary_merger
 
