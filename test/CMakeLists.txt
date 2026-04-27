@@ -515,4 +515,6 @@ addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
 addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
+addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
