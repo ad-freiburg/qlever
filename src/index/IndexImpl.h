@@ -96,6 +96,13 @@ class IndexImpl {
   // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
+  // Return type of `buildPartialVocabularies`.
+  struct BuildPartialVocabulariesResult {
+    size_t numFiles;
+    std::vector<size_t> actualPartialSizes;
+    std::unique_ptr<TripleVec> idTriples;
+  };
+
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
     using ReadType = IndexMetaDataMmapView;
@@ -509,6 +516,13 @@ class IndexImpl {
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
+
+  // Parse all triples from `parser` in batches of `linesPerPartial`, write one
+  // partial vocabulary file per batch, and return the accumulated ID triples
+  // together with per-batch size information. The memory used by the item
+  // allocator is freed when this function returns.
+  BuildPartialVocabulariesResult buildPartialVocabularies(
+      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(

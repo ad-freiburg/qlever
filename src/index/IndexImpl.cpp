@@ -477,10 +477,8 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 // _____________________________________________________________________________
-IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
+IndexImpl::BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
-  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
-  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
@@ -607,6 +605,17 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
               << std::endl;
   AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
               << std::endl;
+  return {numFiles, std::move(actualPartialSizes),
+          std::move(*idTriples.wlock())};
+}
+
+// _____________________________________________________________________________
+IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
+    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
+  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
+  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
+  auto [numFiles, actualPartialSizes, idTriplesPtr] =
+      buildPartialVocabularies(parser, linesPerPartial);
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -638,7 +647,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                      sizeInternalVocabulary
               << std::endl;
 
-  res.idTriples = std::move(*idTriples.wlock());
+  res.idTriples = std::move(idTriplesPtr);
   res.actualPartialSizes = std::move(actualPartialSizes);
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
