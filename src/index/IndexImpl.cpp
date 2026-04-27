@@ -70,7 +70,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   };
 
   auto firstSorter = convertPartialToGlobalIds(
-      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
+      *indexBuilderData.idTriples, indexBuilderData.numTriplesPerPartialVocab,
       NUM_TRIPLES_PER_PARTIAL_VOCAB, isQleverInternalTriple);
 
   return {indexBuilderData, std::move(firstSorter)};
@@ -477,6 +477,8 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 // _____________________________________________________________________________
 IndexImpl::BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
+  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
+  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
@@ -485,12 +487,8 @@ IndexImpl::BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
               << std::endl;
   bool parserExhausted = false;
 
-  // already count the numbers of triples that will be used for the language
-  // filter
-  size_t numFiles = 0;
-
   // we add extra triples
-  std::vector<size_t> actualPartialSizes;
+  std::vector<size_t> numTriplesPerPartialVocab;
 
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
@@ -583,13 +581,13 @@ IndexImpl::BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(
-            numTriplesParsed, numFiles, actualCurrentPartialSize,
-            std::move(oldItemPtr), std::move(localWriter), &idTriples);
-    numFiles++;
+            numTriplesParsed, numTriplesPerPartialVocab.size(),
+            actualCurrentPartialSize, std::move(oldItemPtr),
+            std::move(localWriter), &idTriples);
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
-    actualPartialSizes.push_back(actualCurrentPartialSize);
+    numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   for (auto& future : writePartialVocabularyFuture) {
@@ -604,18 +602,15 @@ IndexImpl::BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     AD_LOG_INFO << "Number of `ql:has-word` triples created: "
                 << numHasWordTriples.load() << std::endl;
   }
-  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
-              << std::endl;
-  return {numFiles, std::move(actualPartialSizes),
-          std::move(*idTriples.wlock())};
+  AD_LOG_INFO << "Number of partial vocabularies created: "
+              << numTriplesPerPartialVocab.size() << std::endl;
+  return {std::move(numTriplesPerPartialVocab), std::move(*idTriples.wlock())};
 }
 
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
-  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
-  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
-  auto [numFiles, actualPartialSizes, idTriplesPtr] =
+  auto [numTriplesPerPartialVocab, idTriplesPtr] =
       buildPartialVocabularies(parser, linesPerPartial);
 
   size_t sizeInternalVocabulary = 0;
@@ -631,7 +626,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numTriplesPerPartialVocab.size(), sortPred, wordCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
     return mergedVocabMeta;
@@ -649,10 +644,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
               << std::endl;
 
   res.idTriples = std::move(idTriplesPtr);
-  res.actualPartialSizes = std::move(actualPartialSizes);
+  res.numTriplesPerPartialVocab = std::move(numTriplesPerPartialVocab);
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
-  for (size_t n = 0; n < numFiles; ++n) {
+  for (size_t n = 0; n < res.numTriplesPerPartialVocab.size(); ++n) {
     deleteTemporaryFile(
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }

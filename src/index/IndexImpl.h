@@ -66,7 +66,7 @@ struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
   // number of additional language filter triples.
-  std::vector<size_t> actualPartialSizes;
+  std::vector<size_t> numTriplesPerPartialVocab;
 };
 
 // Store the "normal" triples sorted by the first permutation, together with
@@ -99,9 +99,11 @@ class IndexImpl {
 
   // Return type of `buildPartialVocabularies`.
   struct BuildPartialVocabulariesResult {
-    size_t numFiles;
-    std::vector<size_t> actualPartialSizes;
-    std::unique_ptr<TripleVec> idTriples;
+    // The i-th entry is the actual number of triples of the i-th batch, which
+    // belongs to the i-th partial vocabulary. It might be slightly different
+    // from the specified `batchSize` because of internally added triples.
+    std::vector<size_t> numTriplesPerPartialVocab_;
+    std::unique_ptr<TripleVec> idTriples_;
   };
 
   struct IndexMetaDataMmapDispatcher {
