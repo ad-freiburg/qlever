@@ -104,10 +104,9 @@ class QueryRegistry {
     friend void to_json(nlohmann::json& json, const ActiveQueryInfo& info) {
       json = {
           {"query", info.query_},
-          {"started_at",
-           std::chrono::duration_cast<std::chrono::milliseconds>(
-               info.startedAt_.time_since_epoch())
-               .count()},
+          {"started_at", std::chrono::duration_cast<std::chrono::milliseconds>(
+                             info.startedAt_.time_since_epoch())
+                             .count()},
       };
     }
   };
