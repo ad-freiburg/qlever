@@ -61,7 +61,7 @@ TEST(QueryRegistry, verifyActiveQueryInfoToJsonWorks) {
   nlohmann::json json = info;
 
   EXPECT_EQ(json.at("query").get<std::string_view>(), "my-query");
-  EXPECT_EQ(json.at("started_at").get<int64_t>(), 1700000000123);
+  EXPECT_EQ(json.at("started-at").get<int64_t>(), 1700000000123);
 }
 
 // _____________________________________________________________________________
