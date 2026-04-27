@@ -1,12 +1,12 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "engine/ConstructQueryEvaluator.h"
 
-#include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
@@ -51,7 +51,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
-  return std::visit(
+  return term.visit(
       [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
         using T = std::decay_t<decltype(arg)>;
 
@@ -66,8 +66,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
-      },
-      term);
+      });
 }
 
 // _____________________________________________________________________________
@@ -93,7 +92,7 @@ StringTriple ConstructQueryEvaluator::evaluateTriple(
 // _____________________________________________________________________________
 std::string ConstructQueryEvaluator::evaluatePreprocessed(
     const PrecomputedConstant& constant) {
-  return constant.value_;
+  return constant.evaluatedTerm_->rdfTermString_;
 }
 
 // _____________________________________________________________________________
@@ -154,7 +153,7 @@ StringTriple ConstructQueryEvaluator::evaluatePreprocessedTriple(
 std::optional<std::string> ConstructQueryEvaluator::evaluateId(
     Id id, const Index& index, const LocalVocab& localVocab) {
   auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
 
   if (!optionalStringAndType.has_value()) {
     return std::nullopt;

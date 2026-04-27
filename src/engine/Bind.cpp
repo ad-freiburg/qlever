@@ -21,6 +21,10 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
+  // If the cache key is deterministic, this `Bind` expression can be cached.
+  isExpressionCacheable_ =
+      _bind._expression.getCacheKey(_subtree->getVariableColumns()) ==
+      _bind._expression.getCacheKey(_subtree->getVariableColumns());
 }
 
 // BIND adds exactly one new column
@@ -43,8 +47,9 @@ size_t Bind::getCostEstimate() {
 bool Bind::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
-void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
-  _subtree->applyLimit(limitOffset);
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  _subtree = _subtree->clone();
+  _subtree->applyLimitOffset(limitOffset);
 }
 
 float Bind::getMultiplicity(size_t col) {

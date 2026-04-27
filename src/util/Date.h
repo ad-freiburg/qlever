@@ -178,7 +178,7 @@ class Date {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
 #endif
   /// Construct a `Date` from values for the different components. If any of the
@@ -342,14 +342,21 @@ class Date {
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Calculates `DayTimeDuration` between the two `Dates` using Epoch time.
   std::optional<DayTimeDuration> operator-(const Date& rhs) const;
+
+  // Calculates `Date` that is time of the `DayTimeDuration` earlier.
+  std::optional<Date> operator-(const DayTimeDuration& rhs) const;
 
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
   std::optional<Nanoseconds> toEpoch() const;
+
+  // From a Unix Epoch timestamp, construct the corresponding `Date`.
+  static Date makeFromEpoch(Nanoseconds timestamp, TimeZone tz);
 #endif
+  static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };
 #ifdef QLEVER_CPP_17

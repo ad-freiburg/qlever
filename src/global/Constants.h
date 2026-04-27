@@ -109,6 +109,15 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
                                 QLEVER_INTERNAL_PREFIX_URL,
                                 string_constants::detail::blank_node_prefix>();
 
+// The prefix of the new graph IRIs that are generated when a Graph Store
+// Protocol PUT is made without specifying a graph.
+namespace string_constants::detail {
+constexpr inline std::string_view new_graph_prefix = "graph/";
+}  // namespace string_constants::detail
+constexpr inline std::string_view QLEVER_NEW_GRAPH_PREFIX =
+    ad_utility::constexprStrCat<QLEVER_INTERNAL_PREFIX_URL,
+                                string_constants::detail::new_graph_prefix>();
+
 // The prefix of the SERVICE IRI used for a cached result with a name. Use as
 // in `SERVICE <ql:cached-result-with-name-$query-name$> {}`.
 namespace string_constants::detail {
@@ -145,9 +154,12 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 
 namespace constants::details::strings {
 constexpr inline std::string_view langtag{"langtag"};
-}
+constexpr inline std::string_view hasWord{"has-word"};
+}  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
+constexpr inline std::string_view HAS_WORD_PREDICATE =
+    makeQleverInternalIriConst<constants::details::strings::hasWord>();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.

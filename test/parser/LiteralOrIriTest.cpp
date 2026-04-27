@@ -1,7 +1,13 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023        Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -18,11 +24,9 @@
 namespace {
 
 using namespace ad_utility::triple_component;
-using Iri = ad_utility::triple_component::Iri;
-using Literal = ad_utility::triple_component::Literal;
 constexpr std::string_view myDatatype =
     "http://www.w3.org/2001/XMLSchema#myDatatype";
-std::string myDatatypeWithBrackets = absl::StrCat("<", myDatatype, ">");
+const std::string myDatatypeWithBrackets = absl::StrCat("<", myDatatype, ">");
 
 // _____________________________________________________________________________
 TEST(IriTest, IriCreation) {
@@ -112,6 +116,21 @@ TEST(LiteralTest, LiteralTest) {
   EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+
+  literal.addLanguageTag("en");
+  EXPECT_EQ("en", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+
+  Iri datatype = Iri::fromIriref("<someIri>");
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
+  literal.removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_NO_THROW(literal.addDatatype(datatype));
+  EXPECT_EQ(asStringViewUnsafe(literal.getDatatype()), "someIri");
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
 }
 
 // _____________________________________________________________________________
@@ -468,14 +487,7 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
       "\"Comparative evaluation of the protective effect of sodium "
       "valproate, phenazepam and ionol in stress-induced liver damage in "
       "rats\"@en");
-  using namespace ad_utility::testing;
-  // Ensure that the global singleton comparator (which is used for the <=>
-  // comparison) is available. Creating a QEC sets this comparator.
-  getQec(TestIndexConfig{});
-  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
-  EXPECT_THAT(ql::compareThreeWay(l1, l2),
-              testing::Not(testing::Eq(ql::strong_ordering::equal)));
 }
 
 // _____________________________________________________________________________
@@ -508,5 +520,75 @@ TEST(LiteralOrIri, toStringRepresentation) {
     EXPECT_TRUE(lit.toStringRepresentation().empty());
   }
 }
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, IriView) {
+  std::string s = "<http://example.org/foo>";
+  IriView v = IriView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_THAT("http://example.org/foo", asStringViewUnsafe(v.getContent()));
+  // Test that the `IriView` actually references the `s` the was passed in.
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+
+  EXPECT_FALSE(v.empty());
+  EXPECT_TRUE(IriView{}.empty());
+  ad_utility::HashSet<IriView> set{v};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(v));
+}
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, LiteralView) {
+  std::string s = "\"Hello\"@en";
+  LiteralView v = LiteralView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+  EXPECT_TRUE(v.hasLanguageTag());
+  EXPECT_FALSE(v.hasDatatype());
+  EXPECT_THAT("Hello", asStringViewUnsafe(v.getContent()));
+  EXPECT_THAT("en", asStringViewUnsafe(v.getLanguageTag()));
+  EXPECT_THROW(v.getDatatype(), ad_utility::Exception);
+  v.removeDatatypeOrLanguageTag();
+  EXPECT_FALSE(v.hasLanguageTag());
+  EXPECT_EQ(v.toStringRepresentation(), "\"Hello\"");
+  // We have only stripped a suffix, so the begin pointer stays the same.
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+  EXPECT_TRUE(LiteralView::fromStringRepresentation("\"plain\"").isPlain());
+}
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, LiteralOrIriView) {
+  std::string iriStr = "<http://example.org/>";
+  LiteralOrIriView iv = LiteralOrIriView::fromStringRepresentation(iriStr);
+  static_assert(
+      std::is_same_v<decltype(iv.toStringRepresentation()), std::string_view>);
+  EXPECT_TRUE(iv.isIri());
+  EXPECT_FALSE(iv.isLiteral());
+  EXPECT_THAT("http://example.org/", asStringViewUnsafe(iv.getIriContent()));
+  EXPECT_EQ(iv.toStringRepresentation(), iriStr);
+  EXPECT_EQ(iv.toStringRepresentation().data(), iriStr.data());
+
+  std::string litStr = "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>";
+  LiteralOrIriView lv = LiteralOrIriView::fromStringRepresentation(litStr);
+  EXPECT_EQ(lv.toStringRepresentation(), litStr);
+  EXPECT_EQ(lv.toStringRepresentation().data(), litStr.data());
+  EXPECT_FALSE(lv.isIri());
+  EXPECT_TRUE(lv.isLiteral());
+  EXPECT_FALSE(lv.hasLanguageTag());
+  EXPECT_TRUE(lv.hasDatatype());
+  EXPECT_THAT("42", asStringViewUnsafe(lv.getLiteralContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#integer",
+              asStringViewUnsafe(lv.getDatatype()));
+
+  ad_utility::HashSet<LiteralOrIriView> set{iv, lv};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
+}
+
+using LitTypes =
+    ::testing::Types<LiteralOrIri, LiteralOrIriView, Literal, LiteralView>;
 
 }  // namespace

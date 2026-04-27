@@ -63,7 +63,7 @@ void compareIdTableWithExpectedContent(
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
   ad_utility::callFixedSizeVi(
       table.idTable.numColumns(), [&table](auto numCols) {
-        Engine::sort<numCols>(&table.idTable, table.joinColumn);
+        IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn);
       });
 }
 

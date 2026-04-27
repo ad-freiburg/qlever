@@ -12,10 +12,10 @@
 #ifndef QLEVER_SRC_ENGINE_SORT_H
 #define QLEVER_SRC_ENGINE_SORT_H
 
-#include "engine/LocalVocab.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "index/LocalVocab.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -85,7 +85,7 @@ class Sort : public Operation {
 
   virtual Result computeResult(bool requestLaziness) override;
 
-  // Sort in memory, using `Engine::sort`.
+  // Sort in memory, using `IdTableUtils::sort`.
   Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
 
   // Sort externally, using `CompressedExternalIdTableSorter`, using the value

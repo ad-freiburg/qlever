@@ -36,8 +36,6 @@ class ServiceTest : public ::testing::Test {
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  ad_utility::AllocatorWithLimit<Id> testAllocator =
-      ad_utility::testing::makeAllocator();
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
   // is used by default by a `Service` operation (see the constructor in
@@ -196,8 +194,8 @@ TEST_F(ServiceTest, computeResult) {
     // Compute the Result lazily for the given Service and check that the
     // resulting IdTable equals the expected IdTable-vector.
     auto checkLazyResult =
-        [](Service& service,
-           const std::vector<std::vector<std::string>>& expIdTableVector) {
+        [this](Service& service,
+               const std::vector<std::vector<std::string>>& expIdTableVector) {
           auto result = service.computeResultOnlyForTesting(true);
 
           // compute resulting idTable
@@ -209,12 +207,12 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
-          auto get =
-              [&localVocabs](
-                  const std::string& s) -> std::optional<LocalVocabIndex> {
+          auto get = [this, &localVocabs](
+                         std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index = localVocab.getIndexOrNullopt(
-                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              auto index =
+                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
+                      s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -267,7 +265,7 @@ TEST_F(ServiceTest, computeResult) {
     // status-code isn't ok
     expectThrowOrSilence(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
-        "SERVICE responded with HTTP status code: 400, Bad Request.",
+        "SERVICE responded with HTTP status code: 400, Bad Request",
         boost::beast::http::status::bad_request,
         "application/sparql-results+json");
     // contentType doesn't match
@@ -275,7 +273,7 @@ TEST_F(ServiceTest, computeResult) {
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
         "QLever requires the endpoint of a SERVICE to send "
         "the result as 'application/sparql-results+json' but "
-        "the endpoint sent 'wrong/type'.",
+        "the endpoint sent 'wrong/type'",
         boost::beast::http::status::ok, "wrong/type");
 
     // or Result has invalid structure
@@ -302,12 +300,12 @@ TEST_F(ServiceTest, computeResult) {
     expectThrowOrSilence(
         "{\"head\": {},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
     // wrong variables type (array of strings expected)
     expectThrowOrSilence(
         "{\"head\": {\"vars\": [\"x\", \"y\", 3]},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
 
     // Internal parser errors.
     expectThrowOrSilence(
@@ -382,9 +380,10 @@ TEST_F(ServiceTest, computeResult) {
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
-    auto get = [&localVocab](const std::string& s) {
+    const auto& localVocabContext = testQec->getLocalVocabContext();
+    auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          ad_utility::triple_component::LiteralOrIri::iriref(s));
+          LocalVocabEntry::fromIriref(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -722,9 +721,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry(
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "a\"b\"c"));
+  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 
@@ -817,7 +814,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
    public:
     MockValues(QueryExecutionContext* qec,
                parsedQuery::SparqlValues parsedValues)
-        : Values(qec, parsedValues) {}
+        : Operation{qec}, Values(qec, parsedValues) {}
 
     Result computeResult([[maybe_unused]] bool requestLaziness) override {
       Result res = Values::computeResult(false);
@@ -1048,5 +1045,41 @@ TEST_F(ServiceTest, serviceAllowedIriPrefixes) {
     auto s = makeService(parsedServiceClause);
     AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
                                  ::testing::HasSubstr("not allowed"));
+  }
+}
+
+// Test that a `Service` operation correctly passes the `maxRedirects` parameter
+// to the HTTP client. The actual redirect handling is tested in `HttpTest.cpp`.
+TEST_F(ServiceTest, redirectsIntegration) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://example.com/api>"),
+      "",
+      "{ }",
+      false};
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  // Test with default setting for `maxRedirects`, which is 1.
+  {
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(1)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
+
+  // Test with custom setting for `maxRedirects`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(5)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
   }
 }
