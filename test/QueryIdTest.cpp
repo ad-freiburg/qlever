@@ -52,6 +52,20 @@ TEST(QueryId, veriyToJsonWorks) {
 
 // _____________________________________________________________________________
 
+TEST(QueryRegistry, verifyActiveQueryInfoToJsonWorks) {
+  using ActiveQueryInfo = QueryRegistry::ActiveQueryInfo;
+  auto startedAt = std::chrono::system_clock::time_point{} +
+                   std::chrono::milliseconds{1700000000123};
+  ActiveQueryInfo info{"my-query", startedAt};
+
+  nlohmann::json json = info;
+
+  EXPECT_EQ(json.at("query").get<std::string_view>(), "my-query");
+  EXPECT_EQ(json.at("started_at").get<int64_t>(), 1700000000123);
+}
+
+// _____________________________________________________________________________
+
 TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
   QueryRegistry registry{};
   auto queryIdOne = registry.uniqueId("my-query");
