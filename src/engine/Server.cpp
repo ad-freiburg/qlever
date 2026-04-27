@@ -714,14 +714,26 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index_);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, index_, index().graphNameManager());
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
           ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
       requireValidAccessToken("Update from Graph Store Protocol");
+    }
+
+    auto persistedGraphNameManager = index().getPersistedGraphNameManager();
+    // TODO: extract
+    if (persistedGraphNameManager.has_value()) {
+      auto path = persistedGraphNameManager.value();
+      auto tempPath = path;
+      tempPath += ".tmp";
+      ad_utility::serialization::FileWriteSerializer serializer{
+          tempPath.c_str()};
+      serializer | index().graphNameManager();
+      std::filesystem::rename(tempPath, path);
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
