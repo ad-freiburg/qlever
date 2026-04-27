@@ -70,6 +70,7 @@ class ConstructTripleGenerator {
   FRIEND_TEST(MakeIdCache, multipleVariables);
   FRIEND_TEST(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables);
   FRIEND_TEST(ConstructTripleGeneratorTest, cannotCancelDuringBatch);
+  FRIEND_TEST(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches);
 };
 
 }  // namespace qlever::constructExport

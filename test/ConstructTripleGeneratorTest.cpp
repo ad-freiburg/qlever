@@ -12,6 +12,7 @@
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/Result.h"
+#include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 
 namespace {
@@ -31,6 +32,13 @@ static auto matchTriple(const std::string& s, const std::string& p,
   return AllOf(Field(&EvaluatedTriple::subject_, ResultOf(termStr, s)),
                Field(&EvaluatedTriple::predicate_, ResultOf(termStr, p)),
                Field(&EvaluatedTriple::object_, ResultOf(termStr, o)));
+}
+
+static auto matchStringTriple(const std::string& s, const std::string& p,
+                              const std::string& o) {
+  return AllOf(Field(&StringTriple::subject_, s),
+               Field(&StringTriple::predicate_, p),
+               Field(&StringTriple::object_, o));
 }
 
 // Drain all `EvaluatedTriple`s from an `InputRangeTypeErased` into a vector.
@@ -317,7 +325,7 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   auto handle = makeHandle();
-  auto range = ConstructTripleGenerator::generateStringTriples(
+  auto range = ConstructTripleGenerator::evaluateTables(
       templateTriples, {}, index_, handle, singleTableRange(table), 0);
 
   // Drain all ConstructTripleGenerator::BATCH_SIZE triples from batch
@@ -361,6 +369,33 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
   EXPECT_FALSE(range.get().has_value());
 }
 
+// The `IdCache` is shared across batches: for the same `Id`, the
+// `EvaluatedTerm` `shared_ptr` returned in batch 1 is pointer-identical to the
+// one from batch 0, proving the cache was not reset between batches.
+TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
+  constexpr size_t N = ConstructTripleGenerator::BATCH_SIZE + 1;
+
+  // All rows hold the same ID so the second batch is guaranteed to be a cache
+  // hit if the cache is carried over. This relies on the cache capacity being
+  // larger than `BATCH_SIZE`. The minimum cache capacity is
+  // `CACHE_ENTRIES_PER_VARIABLE` (due to the std::max floor in `makeIdCache`),
+  // which currently exceeds `BATCH_SIZE`.
+  std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
+  auto result = makeResult(makeIdTableFromVector(rows));
+  auto table = makeTableWithRange(*result, 0, N);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  auto collected = run(templateTriples, varMap, std::move(table));
+  ASSERT_EQ(collected.size(), N);
+
+  // Batch 0: row 0. Batch 1: last row.
+  const EvaluatedTerm& fromBatch0 = collected.front().subject_;
+  const EvaluatedTerm& fromBatch1 = collected.back().subject_;
+  EXPECT_EQ(fromBatch0.get(), fromBatch1.get());
+}
+
 // =============================================================================
 // Tests for `ConstructTripleGenerator::makeIdCache`
 // =============================================================================
@@ -393,4 +428,102 @@ TEST(MakeIdCache, multipleVariables) {
   EXPECT_EQ(cache.capacity(),
             3 * ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
 }
+
+// =============================================================================
+// Tests for `ConstructTripleGenerator::generateStringTriples`
+// =============================================================================
+
+// Smoke test: constants are emitted as plain IRI strings in the StringTriple.
+TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
+  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  auto range = ConstructTripleGenerator::generateStringTriples(
+      templateTriples, {}, index_, makeHandle(),
+      singleTableRange(std::move(table)), 0);
+
+  std::vector<StringTriple> triples;
+  while (auto triple = range.get()) {
+    triples.push_back(std::move(*triple));
+  }
+
+  EXPECT_THAT(triples, ElementsAre(matchStringTriple("<s>", "<p>", "<o>")));
+}
+
+// =============================================================================
+// Tests for `ConstructTripleGenerator::generateFormattedTriples`
+// =============================================================================
+
+// Helper: collect all strings from a formatted-triples range.
+static std::vector<std::string> collectFormatted(
+    ad_utility::InputRangeTypeErased<std::string> range) {
+  std::vector<std::string> result;
+  while (auto s = range.get()) {
+    result.push_back(std::move(*s));
+  }
+  return result;
+}
+
+// Turtle format: `<s> <p> <o> .\n`
+TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesTurtle) {
+  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  auto range = ConstructTripleGenerator::generateFormattedTriples(
+      templateTriples, {}, index_, makeHandle(),
+      singleTableRange(std::move(table)), 0, ad_utility::MediaType::turtle);
+
+  EXPECT_THAT(collectFormatted(std::move(range)),
+              ElementsAre("<s> <p> <o> .\n"));
+}
+
+// CSV format: `<s>,<p>,<o>\n`
+TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesCSV) {
+  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  auto range = ConstructTripleGenerator::generateFormattedTriples(
+      templateTriples, {}, index_, makeHandle(),
+      singleTableRange(std::move(table)), 0, ad_utility::MediaType::csv);
+
+  EXPECT_THAT(collectFormatted(std::move(range)), ElementsAre("<s>,<p>,<o>\n"));
+}
+
+// TSV format: `<s>\t<p>\t<o>\n`
+TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesTSV) {
+  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  auto range = ConstructTripleGenerator::generateFormattedTriples(
+      templateTriples, {}, index_, makeHandle(),
+      singleTableRange(std::move(table)), 0, ad_utility::MediaType::tsv);
+
+  EXPECT_THAT(collectFormatted(std::move(range)),
+              ElementsAre("<s>\t<p>\t<o>\n"));
+}
+
+// Only turtle, csv, and tsv are supported. Any other media type triggers a
+// contract check failure when the first triple is pulled from the range.
+TEST_F(ConstructTripleGeneratorTest,
+       generateFormattedTriplesRejectsUnsupportedMediaType) {
+  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  static constexpr std::array supported{ad_utility::MediaType::turtle,
+                                        ad_utility::MediaType::csv,
+                                        ad_utility::MediaType::tsv};
+  for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
+    if (ad_utility::contains(supported, mediaType)) continue;
+    auto range = ConstructTripleGenerator::generateFormattedTriples(
+        templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
+        mediaType);
+    EXPECT_ANY_THROW(range.get());
+  }
+}
+
 }  // namespace qlever::constructExport
