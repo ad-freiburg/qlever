@@ -66,7 +66,11 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
-  std::optional<EncodedIriManager> encodedIriManager = std::nullopt;
+  std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
+      std::nullopt;
+  // If true, add `ql:has-word` triples for each word in each literal during
+  // index building.
+  bool addHasWordTriples = false;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -78,18 +82,19 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedIriManager);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType, encodedIriManager)
+      scoringMetric, bAndKParam, indexType, vocabularyType,
+      encodedPrefixesWithoutAngleBrackets, addHasWordTriples)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

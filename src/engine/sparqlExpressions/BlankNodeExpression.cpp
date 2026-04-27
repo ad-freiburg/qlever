@@ -99,7 +99,7 @@ class BlankNodeExpression : public SparqlExpression {
 
     ad_utility::chunkedForLoop<1000>(
         0, numElements,
-        [this, &result, &blankNodePrefix, &getNextLabel](size_t) {
+        [this, &result, context, &blankNodePrefix, &getNextLabel](size_t) {
           const auto& label = getNextLabel();
           // TODO<RobinTF> Encoding blank nodes as IRIs is very
           // memory-inefficient given that we only need to ensure distinctness.
@@ -109,9 +109,8 @@ class BlankNodeExpression : public SparqlExpression {
             auto uniqueIri = absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX,
                                           "_:", blankNodePrefix, label.value(),
                                           "_", counter_++, ">");
-            result.push_back(LiteralOrIri{
-                ad_utility::triple_component::Iri::fromStringRepresentation(
-                    std::move(uniqueIri))});
+            result.push_back(LocalVocabEntry::fromStringRepresentation(
+                std::move(uniqueIri), context->getLocalVocabContext()));
           } else {
             result.push_back(Id::makeUndefined());
             ++counter_;

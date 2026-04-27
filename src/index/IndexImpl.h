@@ -25,6 +25,7 @@
 #include "index/DocsDB.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GraphNameManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -140,6 +141,9 @@ class IndexImpl {
   double avgNumDistinctSubjectsPerPredicate_;
   uint64_t numDistinctSubjectPredicatePairs_;
 
+  // If true, add `ql:has-word` triples for each word in each literal.
+  bool addHasWordTriples_ = false;
+
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -158,9 +162,6 @@ class IndexImpl {
   TextScoringMetric textScoringMetric_;
   std::pair<float, float> bAndKParamForTextScoring_;
 
-  // Global static pointer to the currently active index. It is used to compare
-  // LocalVocab entries with each other as well as with Vocab entries.
-  static inline const IndexImpl* globalSingletonIndex_ = nullptr;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -204,9 +205,12 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  GraphNameManager graphNameManager_ = GraphNameManager();
+  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
+      std::nullopt;
+
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
-                     bool registerSingleton = true);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -225,13 +229,6 @@ class IndexImpl {
 
   // Function only exposed for testing.
   auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
-
-  static const IndexImpl& staticGlobalSingletonIndex() {
-    AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
-    return *globalSingletonIndex_;
-  }
-
-  void setGlobalIndexOnlyForTesting() const { globalSingletonIndex_ = this; }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference or shared pointer (`pso_`).
@@ -268,6 +265,13 @@ class IndexImpl {
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
+  }
+
+  GraphNameManager& graphNameManager() { return graphNameManager_; }
+  const GraphNameManager& graphNameManager() const { return graphNameManager_; }
+  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
+      const {
+    return graphNameManagerStateFile_;
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
@@ -435,6 +439,8 @@ class IndexImpl {
   bool usePatterns() const;
 
   bool& loadAllPermutations();
+
+  bool& addHasWordTriples();
 
   bool& doNotLoadPermutations();
 
@@ -708,7 +714,13 @@ class IndexImpl {
   bool isLiteral(std::string_view object) const;
 
  public:
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
+  // Process the given parsed triple in a number of ways:
+  //
+  // 1. If the object has a language tag, extract and store it
+  // 2. If the object is a literal, store the distinct words contained in it
+  //    together with their term frequencies
+  // 3. If the IRI or literal can be encoded directly into an `Id`, do so
+  ProcessedTriple processTriple(TurtleTriple&& triple) const;
 
  protected:
   /**
