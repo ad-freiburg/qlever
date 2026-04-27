@@ -145,6 +145,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
+bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
+
+// ____________________________________________________________________________
 bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
 
 // ____________________________________________________________________________
@@ -287,4 +290,19 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 // ____________________________________________________________________________
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
+}
+// ____________________________________________________________________________
+GraphNameManager& Index::graphNameManager() {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const GraphNameManager& Index::graphNameManager() const {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const std::optional<std::filesystem::path>&
+Index::getPersistedGraphNameManager() const {
+  return pimpl_->getPersistedGraphNameManager();
 }
