@@ -204,6 +204,10 @@ class QueryExecutionContext
   auto& pinResultWithName() { return pinResultWithName_; }
   const auto& pinResultWithName() const { return pinResultWithName_; }
 
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
   // header.

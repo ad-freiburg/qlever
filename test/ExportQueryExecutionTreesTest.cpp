@@ -1954,8 +1954,8 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   ad_utility::testing::TestIndexConfig config{kg};
-  config.encodedIriManager = EncodedIriManager{
-      std::vector<std::string>{"http://example.org/", "http://test.com/id/"}};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"};
   auto qec = ad_utility::testing::getQec(std::move(config));
 
   // Parse query with the same EncodedIriManager

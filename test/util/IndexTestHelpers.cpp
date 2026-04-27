@@ -26,13 +26,14 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
   BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
-  BATCH_SIZE_VOCABULARY_MERGE() = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
                          // some tests (i.e. polygon testing in Spatial Joins)
                          // require a larger buffer size
+  // By default, don't add ql:has-word triples in test indices.
+  index.addHasWordTriples() = false;
   return index;
 }
 
@@ -216,21 +217,16 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
-    if (c.encodedIriManager.has_value()) {
-      // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !ql::ends_with(prefix, '>'));
-        prefixes.push_back(prefix.substr(1));
-      }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
@@ -380,9 +376,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>(),
                    std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexOnlyForTesting();
-  return qec;
+  return contextMap.at(c).qec_.get();
 }
 
 // _____________________________________________________________________________

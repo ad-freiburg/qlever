@@ -38,6 +38,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerWarnings.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -348,8 +349,10 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
+    DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
     std::vector<Variable> vars =
         varToCol | ql::views::keys | ::ranges::to<std::vector>();
+    GCC_REENABLE_WARNINGS
     ql::ranges::sort(
         vars.begin(), vars.end(), [&](const auto& a, const auto& b) {
           return varToCol.at(a).columnIndex_ < varToCol.at(b).columnIndex_;

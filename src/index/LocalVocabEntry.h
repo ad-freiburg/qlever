@@ -18,6 +18,9 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
+class IndexImpl;
+using LocalVocabContext = IndexImpl;
+
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
@@ -37,6 +40,8 @@ class alignas(16) LocalVocabEntry
   FRIEND_TEST(TripleComponent, toValueId);
 
  private:
+  // Pointer to keep this object assignable.
+  const LocalVocabContext* context_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -49,17 +54,22 @@ class alignas(16) LocalVocabEntry
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
-  // Inherit the constructors from `LiteralOrIri`
-  using Base::Base;
+  LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
+      : Base{std::move(literal)}, context_{&context} {}
+  LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
+      : Base{std::move(iri)}, context_{&context} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  QL_EXPLICIT(false)
-  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  LocalVocabEntry(const Base& base, const LocalVocabContext& context)
+      : Base{base}, context_{&context} {}
+  LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
+      : Base{std::move(base)}, context_{&context} {}
+
   // Constructor for when the position in the vocab is already known.
-  QL_EXPLICIT(true)
-  LocalVocabEntry(Base&& base, auto lower, auto upper)
+  LocalVocabEntry(Base&& base, auto lower, auto upper,
+                  const LocalVocabContext& context)
       : Base{std::move(base)},
+        context_{&context},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
@@ -70,6 +80,25 @@ class alignas(16) LocalVocabEntry
                         PositionInVocab{IdProxy::make(lower.getBits()),
                                         IdProxy::make(upper.getBits())}));
   }
+
+  LocalVocabEntry(const LocalVocabEntry&) = default;
+  LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
+  LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
+  LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
+
+  // Convenience functions that delegate to the corresponding static functions
+  // of `IriT` and `LiteralT`.
+  static LocalVocabEntry fromStringRepresentation(std::string s,
+                                                  const LocalVocabContext& ctx);
+
+  static LocalVocabEntry fromIriref(std::string_view view,
+                                    const LocalVocabContext& ctx);
+
+  static LocalVocabEntry literalWithoutQuotes(std::string_view view,
+                                              const LocalVocabContext& ctx);
+
+  static LocalVocabEntry literalWithNormalizedContent(
+      NormalizedStringView view, const LocalVocabContext& ctx);
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
