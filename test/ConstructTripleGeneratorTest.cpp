@@ -41,15 +41,6 @@ static auto matchStringTriple(const std::string& s, const std::string& p,
                Field(&StringTriple::object_, o));
 }
 
-// Drain all `EvaluatedTriple`s from an `InputRangeTypeErased` into a vector.
-static std::vector<EvaluatedTriple> collectAll(
-    ad_utility::InputRangeTypeErased<EvaluatedTriple> range) {
-  std::vector<EvaluatedTriple> result;
-  while (auto t = range.get()) {
-    result.push_back(std::move(*t));
-  }
-  return result;
-}
 }  // namespace
 
 namespace qlever::constructExport {
@@ -263,7 +254,7 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
   // Table 2: rowOffset=3 (3 rows processed from table1), firstRow=5
   //   row 0: rowId = 3+5+0 = 8
   //   row 1: rowId = 3+5+1 = 9
-  EXPECT_THAT(collectAll(std::move(range)),
+  EXPECT_THAT(::ranges::to_vector(std::move(range)),
               ElementsAre(matchTriple("_:u0_x", "<p>", "<o>"),
                           matchTriple("_:u1_x", "<p>", "<o>"),
                           matchTriple("_:u2_x", "<p>", "<o>"),

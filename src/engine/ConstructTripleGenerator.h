@@ -37,17 +37,25 @@ class ConstructTripleGenerator {
   friend class ConstructTripleGeneratorTest;
 
  public:
+  // the number of `IdTable` rows that one batch consists of.
   static constexpr size_t BATCH_SIZE = 1024;
+  // the number of entries in the `IdCache` for each variable in the construct
+  // clause template.
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
-  //____________________________________________________________________________
+  // generate the formatted triples that result from instantiating the template
+  // triples of the construct clause (`templateTriples`) for each row of the
+  // result table (`IdTable`) contained in the `result`. The triples are
+  // formatted according to `mediaType`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
       ad_utility::MediaType mediaType);
 
-  //____________________________________________________________________________
+  // generate the triples that result from instantiating the template triples of
+  // the construct clause (`templateTriples`) for each row of the result table
+  // (`IdTable`) contained in the `result`.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,

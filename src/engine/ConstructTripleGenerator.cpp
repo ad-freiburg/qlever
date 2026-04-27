@@ -32,10 +32,12 @@ static std::vector<EvaluatedTriple> computeBatch(
     const TableWithRange& table,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, IdCache& cache, size_t numRowsOfTable,
-    size_t firstRowOfTable, size_t tableRowOffset,
-    CancellationHandle cancellationHandle, size_t batchIdx) {
+    size_t tableRowOffset, CancellationHandle cancellationHandle,
+    size_t batchIdx) {
   cancellationHandle->throwIfCancelled();
   const size_t batchStart = batchIdx * ConstructTripleGenerator::BATCH_SIZE;
+  const size_t firstRowOfTable =
+      numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
   const size_t batchEnd = std::min(
       batchStart + ConstructTripleGenerator::BATCH_SIZE, numRowsOfTable);
   BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
@@ -64,20 +66,18 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                        accumulatedRowOffset =
                            rowOffset](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
-    const size_t firstRowOfTable =
-        numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
     // Snapshot the offset for this table, then advance it for the next table.
     const size_t tableRowOffset = accumulatedRowOffset;
     accumulatedRowOffset += numRowsOfTable;
     // Ceiling division: ensure the last partial batch is not dropped.
     const size_t numBatches = (numRowsOfTable + BATCH_SIZE - 1) / BATCH_SIZE;
-    return ql::views::iota(size_t{0}, numBatches) |
-           ql::views::transform([&, numRowsOfTable, firstRowOfTable,
-                                 tableRowOffset](size_t batchIdx) {
-             return computeBatch(table, preprocessedTemplate, index, cache,
-                                 numRowsOfTable, firstRowOfTable,
-                                 tableRowOffset, cancellationHandle, batchIdx);
-           }) |
+    return ranges::views::chunk(table.view_, BATCH_SIZE) |
+           ql::views::transform(
+               [&, numRowsOfTable, tableRowOffset](size_t batchIdx) {
+                 return computeBatch(table, preprocessedTemplate, index, cache,
+                                     numRowsOfTable, tableRowOffset,
+                                     cancellationHandle, batchIdx);
+               }) |
            ql::views::join;
   };
 
