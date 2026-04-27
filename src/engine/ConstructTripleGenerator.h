@@ -10,8 +10,6 @@
 
 #include <gtest/gtest_prod.h>
 
-#include <memory>
-
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
@@ -36,8 +34,10 @@ using StringTriple = QueryExecutionTree::StringTriple;
 // template triple patterns with the values from the result table produced by
 // the WHERE clause of the CONSTRUCT query.
 class ConstructTripleGenerator {
+  friend class ConstructTripleGeneratorTest;
+
  public:
-  static constexpr size_t DEFAULT_BATCH_SIZE = 1024;
+  static constexpr size_t BATCH_SIZE = 1024;
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
   //____________________________________________________________________________
@@ -68,6 +68,8 @@ class ConstructTripleGenerator {
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
   FRIEND_TEST(MakeIdCache, multipleVariables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, cannotCancelDuringBatch);
 };
 
 }  // namespace qlever::constructExport

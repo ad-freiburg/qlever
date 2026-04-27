@@ -26,6 +26,30 @@ IdCache ConstructTripleGenerator::makeIdCache(
                  CACHE_ENTRIES_PER_VARIABLE};
 }
 
+// Evaluate a single batch of rows from `table`, starting at `batchIdx *
+// BATCH_SIZE`. Cancellation is checked once at the start of the batch.
+static std::vector<EvaluatedTriple> computeBatch(
+    const TableWithRange& table,
+    const PreprocessedConstructTemplate& preprocessedTemplate,
+    const Index& index, IdCache& cache, size_t numRowsOfTable,
+    size_t firstRowOfTable, size_t tableRowOffset,
+    CancellationHandle cancellationHandle, size_t batchIdx) {
+  cancellationHandle->throwIfCancelled();
+  const size_t batchStart = batchIdx * ConstructTripleGenerator::BATCH_SIZE;
+  const size_t batchEnd = std::min(
+      batchStart + ConstructTripleGenerator::BATCH_SIZE, numRowsOfTable);
+  BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
+                             firstRowOfTable + batchStart,
+                             firstRowOfTable + batchEnd};
+
+  auto batchResult = ConstructBatchEvaluator::evaluateBatch(
+      preprocessedTemplate.uniqueVariableColumns_, ctx,
+      table.tableWithVocab_.localVocab(), index, cache);
+
+  const size_t blankNodeBaseId = tableRowOffset + firstRowOfTable + batchStart;
+  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
+}
+
 //______________________________________________________________________________
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
@@ -39,44 +63,22 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                        &index, cancellationHandle, cache = std::move(cache),
                        accumulatedRowOffset =
                            rowOffset](const TableWithRange& table) mutable {
-    const size_t numRowsOfTable = ql::ranges::distance(table.view_);
+    const size_t numRowsOfTable = ql::ranges::size(table.view_);
     const size_t firstRowOfTable =
         numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
     // Snapshot the offset for this table, then advance it for the next table.
     const size_t tableRowOffset = accumulatedRowOffset;
     accumulatedRowOffset += numRowsOfTable;
-    // ceiling division: ensure the last partial batch is not dropped.
-    const size_t numBatches =
-        (numRowsOfTable + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
-
-    auto computeBatch = [table, &preprocessedTemplate, &index, &cache,
-                         numRowsOfTable, firstRowOfTable, tableRowOffset,
-                         cancellationHandle](int batchIdx) {
-      cancellationHandle->throwIfCancelled();
-
-      const size_t batchStart = batchIdx * DEFAULT_BATCH_SIZE;
-
-      // Clamp to `numRowsOfTable` so the last batch does not exceed the table
-      // bounds.
-      const size_t batchEnd =
-          std::min(batchStart + DEFAULT_BATCH_SIZE, numRowsOfTable);
-
-      BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
-                                 firstRowOfTable + batchStart,
-                                 firstRowOfTable + batchEnd};
-
-      auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-          preprocessedTemplate.uniqueVariableColumns_, ctx,
-          table.tableWithVocab_.localVocab(), index, cache);
-
-      const size_t blankNodeBaseId =
-          tableRowOffset + firstRowOfTable + batchStart;
-      return instantiateBatch(preprocessedTemplate, batchResult,
-                              blankNodeBaseId);
-    };
-
+    // Ceiling division: ensure the last partial batch is not dropped.
+    const size_t numBatches = (numRowsOfTable + BATCH_SIZE - 1) / BATCH_SIZE;
     return ql::views::iota(size_t{0}, numBatches) |
-           ql::views::transform(computeBatch) | ql::views::join;
+           ql::views::transform([&, numRowsOfTable, firstRowOfTable,
+                                 tableRowOffset](size_t batchIdx) {
+             return computeBatch(table, preprocessedTemplate, index, cache,
+                                 numRowsOfTable, firstRowOfTable,
+                                 tableRowOffset, cancellationHandle, batchIdx);
+           }) |
+           ql::views::join;
   };
 
   auto pipeline = allView(std::move(rowIndices)) |
