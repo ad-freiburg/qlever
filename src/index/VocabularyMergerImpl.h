@@ -228,6 +228,9 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     byteBuffer.clear();
   };
 
+  // This is essentially a `VectorIncrementalSerializer` with a custom
+  // serialization function, which the infrastructure currently does not
+  // support.
   for (const auto& [word, idAndSplitVal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
@@ -253,13 +256,10 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
   ItemVec els;
   std::array<size_t, std::tuple_size_v<ItemMapArray>> offsets;
-  size_t totalEls = std::accumulate(
-      map.begin(), map.end(), 0,
-      [&offsets, idx = 0](const auto& x, const auto& y) mutable {
-        offsets.at(idx) = x;
-        idx++;
-        return x + y.map_.size();
-      });
+  auto getSize = [](const auto& x) { return x.map_.size(); };
+  std::transform_exclusive_scan(map.begin(), map.end(), offsets.begin(), 0,
+                                std::plus{}, getSize);
+  size_t totalEls = offsets.back() + getSize(map.back());
   els.resize(totalEls);
   std::array<std::future<void>, std::tuple_size_v<ItemMapArray>> futures;
   size_t i = 0;
