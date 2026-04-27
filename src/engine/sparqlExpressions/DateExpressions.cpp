@@ -98,9 +98,9 @@ struct ExtractTimeComponentImpl {
 };
 
 //______________________________________________________________________________
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 struct ExtractEpoch {
   Id operator()(std::optional<DateYearOrDuration> d) const {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!d.has_value() || !d->isDate()) {
       return Id::makeUndefined();
     }
@@ -113,9 +113,11 @@ struct ExtractEpoch {
       return Id::makeUndefined();
     }
     return Id::makeFromInt(epoch.value());
+#else
+    return Id::makeUndefined();
+#endif
   }
 };
-#endif
 
 //______________________________________________________________________________
 using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
