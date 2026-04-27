@@ -98,8 +98,18 @@ class QueryRegistry {
   struct ActiveQueryInfo {
     std::string query_;
     /// Wall-clock instant when the query was registered. Serialized to
-    /// clients as a Unix-epoch timestamp.
+    /// clients as a Unix-epoch timestamp in milliseconds.
     std::chrono::system_clock::time_point startedAt_;
+
+    friend void to_json(nlohmann::json& json, const ActiveQueryInfo& info) {
+      json = {
+          {"query", info.query_},
+          {"started_at",
+           std::chrono::duration_cast<std::chrono::milliseconds>(
+               info.startedAt_.time_since_epoch())
+               .count()},
+      };
+    }
   };
 
   QueryRegistry() = default;
