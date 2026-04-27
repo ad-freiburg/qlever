@@ -88,7 +88,8 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
         ad_utility::OwningView{std::vector<TableWithRange>{std::move(table)}}};
   }
 
-  // Run the generator over a single table and collect StringTriples.
+  // Run the `ConstructTripleGenerator` over a single `TableWithRange` and
+  // collect `StringTriple`s.
   std::vector<StringTriple> run(
       Triples triples, VariableToColumnMap varMap, TableWithRange table,
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
@@ -249,8 +250,8 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
               ElementsAre(matchTriple("_:u0_x", "<p>", "<o>"),
                           matchTriple("_:u1_x", "<p>", "<o>"),
                           matchTriple("_:u2_x", "<p>", "<o>"),
-                          matchTriple("_:u3_x", "<p>", "<o>"),
-                          matchTriple("_:u4_x", "<p>", "<o>")));
+                          matchTriple("_:u8_x", "<p>", "<o>"),
+                          matchTriple("_:u9_x", "<p>", "<o>")));
 }
 
 // A view starting at a non-zero index reads the correct rows from the IdTable.
@@ -321,3 +322,38 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
 }
 
 }  // namespace
+
+// =============================================================================
+// Tests for `ConstructTripleGenerator::makeIdCache`
+// =============================================================================
+namespace qlever::constructExport {
+
+// Zero variables: the `std::max` floor ensures we never create a zero-capacity
+// cache, so the capacity equals exactly `CACHE_ENTRIES_PER_VARIABLE`.
+TEST(MakeIdCache, emptyTemplate) {
+  PreprocessedConstructTemplate tmpl;
+  auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
+  EXPECT_EQ(cache.capacity(),
+            ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
+}
+
+// One variable: the floor is not doing work; result is still
+// `CACHE_ENTRIES_PER_VARIABLE`.
+TEST(MakeIdCache, singleVariable) {
+  PreprocessedConstructTemplate tmpl;
+  tmpl.uniqueVariableColumns_ = {0};
+  auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
+  EXPECT_EQ(cache.capacity(),
+            ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
+}
+
+// Multiple variables: capacity scales linearly with the number of unique
+// variable columns.
+TEST(MakeIdCache, multipleVariables) {
+  PreprocessedConstructTemplate tmpl;
+  tmpl.uniqueVariableColumns_ = {0, 1, 2};
+  auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
+  EXPECT_EQ(cache.capacity(),
+            3 * ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
+}
+}  // namespace qlever::constructExport
