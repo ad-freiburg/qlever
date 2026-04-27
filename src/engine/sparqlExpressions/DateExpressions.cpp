@@ -133,9 +133,7 @@ NARY_EXPRESSION(TimezoneStrExpression, 1,
                 FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
                 FV<ExtractTimezoneDurationFormat, DateValueGetter>);
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 NARY_EXPRESSION(ToEpochExpression, 1, FV<ExtractEpoch, DateValueGetter>);
-#endif
 NARY_EXPRESSION(HoursExpression, 1, FV<ExtractHours, DateValueGetter>);
 NARY_EXPRESSION(MinutesExpression, 1, FV<ExtractMinutes, DateValueGetter>);
 NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
@@ -174,11 +172,9 @@ SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child) {
   return std::make_unique<TimezoneDurationExpression>(std::move(child));
 }
 
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child) {
   return std::make_unique<ToEpochExpression>(std::move(child));
 }
-#endif
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
   return std::make_unique<MonthExpression>(std::move(child));
