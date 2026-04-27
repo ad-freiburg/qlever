@@ -74,7 +74,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
       indexBuilderData.parsedTriples_.numTriplesPerPartialVocab_,
       NUM_TRIPLES_PER_PARTIAL_VOCAB, isQleverInternalTriple);
 
-  return {indexBuilderData, std::move(firstSorter)};
+  return {std::move(indexBuilderData.vocabularyMetaData_),
+          std::move(firstSorter)};
 }
 
 // _____________________________________________________________________________
@@ -646,7 +647,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
-  return {{std::move(mergeRes)}, std::move(parsedTriples)};
+  return {std::move(mergeRes), std::move(parsedTriples)};
 }
 
 // _____________________________________________________________________________

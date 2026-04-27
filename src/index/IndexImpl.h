@@ -53,12 +53,6 @@ using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
-// Several data that are passed along between different phases of the
-// index builder.
-struct IndexBuilderDataBase {
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
-};
-
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
   using TripleVec =
@@ -70,8 +64,9 @@ struct BuildPartialVocabulariesResult {
   std::unique_ptr<TripleVec> idTriples_;
 };
 
-// All the data from IndexBuilderDataBase and (unsorted) external ID triples.
-struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
+// Data produced after parsing: vocabulary metadata and unsorted ID triples.
+struct IndexBuilderDataAsExternalVector {
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
 };
 
@@ -84,15 +79,11 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
       internalTriplesPso_;
 };
-// All the data from IndexBuilderDataBase and a ExternalSorter that stores all
-// ID triples sorted by the first permutation.
-struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
+// Vocabulary metadata and ID triples sorted by the first permutation.
+struct IndexBuilderDataAsFirstPermutationSorter {
   using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   SorterPtr sorter_;
-  IndexBuilderDataAsFirstPermutationSorter(const IndexBuilderDataBase& base,
-                                           SorterPtr sorter)
-      : IndexBuilderDataBase{base}, sorter_{std::move(sorter)} {}
-  IndexBuilderDataAsFirstPermutationSorter() = default;
 };
 
 class IndexImpl {
