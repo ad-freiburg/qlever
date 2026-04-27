@@ -59,14 +59,20 @@ struct IndexBuilderDataBase {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
 };
 
+// Return type of `IndexImpl::buildPartialVocabularies`.
+struct BuildPartialVocabulariesResult {
+  using TripleVec =
+      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+  // The i-th entry is the actual number of triples of the i-th batch, which
+  // belongs to the i-th partial vocabulary. It might be slightly different
+  // from the specified `batchSize` because of internally added triples.
+  std::vector<size_t> numTriplesPerPartialVocab_;
+  std::unique_ptr<TripleVec> idTriples_;
+};
+
 // All the data from IndexBuilderDataBase and (unsorted) external ID triples.
 struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
-  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
-  // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
-  // The number of triples for each partial vocabulary. This also depends on the
-  // number of additional language filter triples.
-  std::vector<size_t> numTriplesPerPartialVocab;
+  BuildPartialVocabulariesResult parsedTriples_;
 };
 
 // Store the "normal" triples sorted by the first permutation, together with
@@ -96,15 +102,6 @@ class IndexImpl {
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
-
-  // Return type of `buildPartialVocabularies`.
-  struct BuildPartialVocabulariesResult {
-    // The i-th entry is the actual number of triples of the i-th batch, which
-    // belongs to the i-th partial vocabulary. It might be slightly different
-    // from the specified `batchSize` because of internally added triples.
-    std::vector<size_t> numTriplesPerPartialVocab_;
-    std::unique_ptr<TripleVec> idTriples_;
-  };
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
