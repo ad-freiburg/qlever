@@ -12,7 +12,6 @@
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
-#include "util/InputRangeUtils.h"
 #include "util/Views.h"
 
 namespace qlever::constructExport {
@@ -80,7 +79,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
            ql::views::transform(computeBatch) | ql::views::join;
   };
 
-  auto pipeline = ad_utility::allView(std::move(rowIndices)) |
+  auto pipeline = allView(std::move(rowIndices)) |
                   ql::views::transform(std::move(processTable)) |
                   ql::views::join;
   return InputRangeTypeErased(std::move(pipeline));
@@ -97,11 +96,11 @@ ConstructTripleGenerator::generateFormattedTriples(
       evaluateTables(templateTriples, variableColums, index, cancellationhandle,
                      std::move(rowIndices), rowOffset);
 
-  return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
-      ad_utility::allView(std::move(evaluatedTriples)),
-      [mediaType](const EvaluatedTriple& triple) {
-        return formatTriple(triple, mediaType);
-      }));
+  auto transformer = [mediaType](const EvaluatedTriple& triple) {
+    return formatTriple(triple, mediaType);
+  };
+  return InputRangeTypeErased(allView(std::move(evaluatedTriples)) |
+                              ql::views::transform(transformer));
 }
 
 //______________________________________________________________________________
@@ -114,11 +113,11 @@ ConstructTripleGenerator::generateStringTriples(
       evaluateTables(templateTriples, variableColums, index, cancellationhandle,
                      std::move(rowIndices), rowOffset);
 
-  return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
-      ad_utility::allView(std::move(evaluatedTriples)),
-      [](const EvaluatedTriple& triple) {
-        return createStringTriple(triple);
-      }));
+  auto transformer = [](const EvaluatedTriple& triple) {
+    return createStringTriple(triple);
+  };
+  return InputRangeTypeErased(allView(std::move(evaluatedTriples)) |
+                              ql::views::transform(transformer));
 }
 
 }  // namespace qlever::constructExport

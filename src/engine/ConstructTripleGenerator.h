@@ -8,6 +8,8 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
+#include <gtest/gtest_prod.h>
+
 #include <memory>
 
 #include "engine/ConstructBatchEvaluator.h"
@@ -62,6 +64,10 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationhandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
       size_t rowOffset);
+
+  FRIEND_TEST(MakeIdCache, emptyTemplate);
+  FRIEND_TEST(MakeIdCache, singleVariable);
+  FRIEND_TEST(MakeIdCache, multipleVariables);
 };
 
 }  // namespace qlever::constructExport
