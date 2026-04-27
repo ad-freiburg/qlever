@@ -513,4 +513,6 @@ addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest engine parser)
+addLinkAndDiscoverTest(ExportIdsTest index engine parser)
+
+addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
