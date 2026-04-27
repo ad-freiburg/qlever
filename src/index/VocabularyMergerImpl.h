@@ -215,6 +215,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   static constexpr size_t flushThreshold = 16ULL * 1024 * 1024;  // 16 MB
 
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
+  // TODO<RobinTF> Ideally the `FileWriteSerializer` should come with its own
+  // buffer to avoid having to implement this logic here. Despite `fwrite`
+  // (which is called by `FileWriteSerializer::serializeBytes`) buffering data
+  // on its own it is faster to buffer with our own buffer, presumably because
+  // `fwrite` is thread-safe and therefore has to acquire a mutex for every
+  // call.
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(flushThreshold + 1024);  // + slack for the last item
 
