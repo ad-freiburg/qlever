@@ -10,16 +10,37 @@
 #ifndef QLEVER_SRC_INDEX_INDEXREBUILDER_H
 #define QLEVER_SRC_INDEX_INDEXREBUILDER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "global/IndexTypes.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
-#include "util/BlankNodeManager.h"
+#include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
 
 namespace qlever {
+
+namespace indexRebuilder {
+
+// Map old vocab `Id`s to new vocab `Id`s according to the given
+// `insertionPositions`. This is the  most performance critical code of the
+// rebuild.
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+
+// Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
+// id space left by random allocation of blank node ids. Return an empty
+// optional if the blank node cannot be remapped given the provided mapping.
+std::optional<Id> tryRemapBlankNodeId(Id original,
+                                      const BlankNodeBlocks& blankNodeBlocks,
+                                      uint64_t minBlankNodeIndex);
+
+// Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
+// id space left by random allocation of blank node ids.
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex);
+}  // namespace indexRebuilder
 
 // Build a new index based on the existing state of the engine.
 // The new index will be written at the path specified by `newIndexName`.
@@ -32,13 +53,13 @@ namespace qlever {
 // `cancellationHandle` can be used to cancel the rebuild. In this case, the new
 // index will be left in an incomplete state and should be deleted by the
 // caller.
-void materializeToIndex(
+// Return the datastructures used for mapping to be used in further
+// post-processing.
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
-    const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks,
+    const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const std::string& logFileName);
 

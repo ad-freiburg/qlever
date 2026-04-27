@@ -158,9 +158,10 @@ TEST_F(LoadTest, computeResult) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
               using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-              auto lveOpt = lv.getIndexOrNullopt(
+              auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
-                                    : LiteralOrIri{field.getIri()});
+                                    : LiteralOrIri{field.getIri()},
+                  testQec->getLocalVocabContext()});
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }
