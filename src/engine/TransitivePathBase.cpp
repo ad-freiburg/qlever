@@ -28,6 +28,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 
 // _____________________________________________________________________________
 TransitivePathBase::TransitivePathBase(
@@ -301,7 +302,7 @@ std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
 }
 
 // _____________________________________________________________________________
-size_t TransitivePathBase::numJoinColumnsWith(
+size_t TransitivePathBase::numJoinColumnsWidth(
     const std::shared_ptr<QueryExecutionTree>& tree,
     ColumnIndex joinColumn) const {
   auto graphCol = getActualGraphColumnIndex(tree);
@@ -466,15 +467,24 @@ std::vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
-  return bindLeftOrRightSide(std::move(leftop), inputCol, true);
+  return bindLeftOrRightSide(std::pair{std::move(leftop), inputCol},
+                             std::nullopt);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  return bindLeftOrRightSide(std::move(rightop), inputCol, false);
+  return bindLeftOrRightSide(std::nullopt,
+                             std::pair{std::move(rightop), inputCol});
 }
 
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePathBase> TransitivePathBase::bindBothSides(
+    std::shared_ptr<QueryExecutionTree> leftOp, size_t leftCol,
+    std::shared_ptr<QueryExecutionTree> rightOp, size_t rightCol) const {
+  return bindLeftOrRightSide(std::pair{leftOp, leftCol},
+                             std::pair{rightOp, rightCol});
+}
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
@@ -543,9 +553,13 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
-    std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-    bool isLeft) const {
-  leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
+    std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
+        leftOpAndCol,
+    std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
+        rightOpAndCol) const {
+  // Ensure at least one side is given.
+  AD_CORRECTNESS_CHECK(leftOpAndCol.has_value() || rightOpAndCol.has_value());
+
   // Create a copy of this.
   //
   // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
@@ -555,19 +569,25 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // `Operation::getExternallyVariableColumns`).
   auto lhs = lhs_;
   auto rhs = rhs_;
-  if (isLeft) {
-    lhs.treeAndCol_ = {leftOrRightOp, inputCol};
-    // Remove placeholder tree if binding actual tree.
-    if (!rhs.isVariable()) {
-      rhs.treeAndCol_ = std::nullopt;
+
+  // Process both sides according to if they're given or not.
+  // `resetPlaceholder` ensures a side is always cleared if its `opAndCol` has
+  // no value.
+  auto setTreeAndCol = [this](auto& side, auto& opAndCol,
+                              bool resetPlaceholder) {
+    // if (opAndCol.has_value()) {
+    if (side.isVariable()) {
+      auto& [op, col] = opAndCol.value();
+      op = matchWithKnowledgeGraph(col, std::move(op));
+
+      side.treeAndCol_ = {op, col};
+
+    } else if (resetPlaceholder || !side.isVariable()) {
+      side.treeAndCol_ = std::nullopt;
     }
-  } else {
-    // Remove placeholder tree if binding actual tree.
-    if (boundVariableIsForEmptyPath_ || !lhs.isVariable()) {
-      lhs.treeAndCol_ = std::nullopt;
-    }
-    rhs.treeAndCol_ = {leftOrRightOp, inputCol};
-  }
+  };
+  setTreeAndCol(lhs, leftOpAndCol, false);
+  setTreeAndCol(rhs, rightOpAndCol, boundVariableIsForEmptyPath_);
 
   // We use the cheapest tree that can be created using any of the alternative
   // subtrees. This has the effect that the `TransitivePathBinSearch` will
@@ -584,46 +604,59 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
         useBinSearch, activeGraphs_, graphVariable_));
   }
 
-  auto& p = *ql::ranges::min_element(
+  auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
-  // Note: The `variable` in the following structured binding is `const`, even
-  // if we bind by value. We deliberately make one unnecessary copy of the
-  // `variable` to keep the code simpler.
-  for (auto [variable, columnIndexWithType] :
-       leftOrRightOp->getVariableColumns()) {
-    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    if (columnIndex == inputCol || variable == graphVariable_) {
-      continue;
+  // Traverse each side of the operation and insert their non-graph-colums to
+  // the plan.
+  auto insertColumnsToPlan = [this, &plan](const auto& opAndCol) {
+    // Ensure we only bind populated columns.
+    if (!opAndCol.has_value()) {
+      return;
     }
 
-    columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
-
-    // When we have a graph variable, we write it last, so we have to account
-    // for that.
-    if (graphVariable_.has_value()) {
-      auto optGraphIndex =
-          leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value());
-      if (columnIndex >
-          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
-        columnIndexWithType.columnIndex_ -= 1;
+    const auto& [op, col] = opAndCol.value();
+    // Note: The `variable` in the following structured binding is `const`,
+    // even if we bind by value. We deliberately make one unnecessary copy
+    // of the `variable` to keep the code simpler.
+    for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
+      ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
+      if (columnIndex == col || variable == graphVariable_) {
+        continue;
       }
-    }
 
-    AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
-    p->variableColumns_[variable] = columnIndexWithType;
-  }
-  p->resultWidth_ += leftOrRightOp->getResultWidth() -
-                     numJoinColumnsWith(leftOrRightOp, inputCol);
-  // Make sure mapping actually points to the last column if it's not one of the
-  // regular variables.
+      columnIndexWithType.columnIndex_ += columnIndex > col ? 1 : 2;
+
+      // When we have a graph variable, we write it last, so we have to
+      // account for that.
+      if (graphVariable_.has_value()) {
+        auto optGraphIndex =
+            op->getVariableColumnOrNullopt(graphVariable_.value());
+        if (columnIndex >
+            optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
+          columnIndexWithType.columnIndex_ -= 1;
+        }
+      }
+      // TODO<schaetzr> why this fails? Maybe convert to if?
+      AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
+      plan->variableColumns_[variable] = columnIndexWithType;
+    }
+    plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
+  };
+
+  insertColumnsToPlan(leftOpAndCol);
+  insertColumnsToPlan(rightOpAndCol);
+
+  // Make sure mapping actually points to the last column if it's not one
+  // of the regular variables.
   if (graphVariable_.has_value()) {
-    auto& graphIndex = p->variableColumns_[graphVariable_.value()].columnIndex_;
+    auto& graphIndex =
+        plan->variableColumns_[graphVariable_.value()].columnIndex_;
     if (graphIndex == 2) {
-      graphIndex = p->resultWidth_ - 1;
+      graphIndex = plan->resultWidth_ - 1;
     }
   }
-  return std::move(p);
+  return std::move(plan);
 }
 
 // _____________________________________________________________________________
@@ -639,9 +672,9 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
-  // The first two columns are both sides of the transitive path, then they are
-  // followed by the payload columns (if present) and then the (optional) graph
-  // column follows (but it is not written in this function).
+  // The first two columns are both sides of the transitive path, then they
+  // are followed by the payload columns (if present) and then the (optional)
+  // graph column follows (but it is not written in this function).
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(inputTable.numColumns() +
                            (graphVariable_.has_value() ? 3 : 2) ==
