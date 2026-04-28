@@ -37,6 +37,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         CancellationHandle cancellationHandle) {
   cancellationHandle->throwIfCancelled();
 
+  AD_CORRECTNESS_CHECK(!ql::ranges::empty(chunkView));
   const size_t batchBegin = *ql::ranges::begin(chunkView);
   const size_t batchEnd = batchBegin + ql::ranges::size(chunkView);
 
