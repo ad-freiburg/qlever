@@ -979,7 +979,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1166,10 +1167,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
-  auto indexE =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<e>")});
-  auto indexG =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<g>")});
+  const auto& localVocabContext = qec_->getLocalVocabContext();
+  auto indexE = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<e>"), localVocabContext});
+  auto indexG = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<g>"), localVocabContext});
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1785,8 +1787,10 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       dynamic_cast<IndexScan&>(*baseScanTree->getRootOperation());
 
   // Create prefilter condition: ?x < <s2>
-  auto prefilterPairs = []() {
-    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  auto prefilterPairs = [&qec]() {
+    return makePrefilterVec(
+        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+           Var{"?x"}));
   };
 
   // Test with different variable combinations
@@ -1887,7 +1891,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
