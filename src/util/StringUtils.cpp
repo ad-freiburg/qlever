@@ -158,6 +158,42 @@ std::string getLastPartOfString(const std::string& text, const char separator) {
   }
 }
 
+// _________________________________________________________________________
+size_t findLiteralEnd(const std::string_view input,
+                      const std::string_view literalEnd) {
+  // keep track of the last position where the literalEnd was found unescaped
+  auto lastFoundPos = size_t(-1);
+  auto endPos = input.find(literalEnd, 0);
+  while (endPos != std::string::npos) {
+    if (endPos > 0 && input[endPos - 1] == '\\') {
+      size_t numBackslash = 1;
+      auto slashPos = endPos - 2;
+      // the first condition checks > 0 for unsigned numbers
+      while (slashPos < input.size() && input[slashPos] == '\\') {
+        slashPos--;
+        numBackslash++;
+      }
+      if (numBackslash % 2 == 0) {
+        // even number of backslashes means that the quote we found has not
+        // been escaped
+        break;
+      }
+      endPos = input.find(literalEnd, endPos + 1);
+    } else {
+      // no backslash before the literalEnd, mark this as a candidate position
+      lastFoundPos = endPos;
+      endPos = input.find(literalEnd, endPos + 1);
+    }
+  }
+
+  // if we have found any unescaped occurrence of literalEnd, return the last
+  // of these positions
+  if (lastFoundPos != size_t(-1)) {
+    return lastFoundPos;
+  }
+  return endPos;
+}
+
 // ___________________________________________________________________________
 std::string addIndentation(std::string_view str,
                            std::string_view indentationSymbol) {
