@@ -55,23 +55,23 @@ struct TripleComponentWithIndex {
   }
 };
 
-// An IRI or literal together with the information, whether it should be part
+// A `TripleComponent` together with the information, whether it should be part
 // of the external vocabulary.
-struct PossiblyExternalizedIriOrLiteral {
-  PossiblyExternalizedIriOrLiteral(TripleComponent iriOrLiteral,
-                                   bool isExternal = false)
-      : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
-  PossiblyExternalizedIriOrLiteral() = default;
-  TripleComponent iriOrLiteral_;
+struct PossiblyExternalizedTripleComponent {
+  PossiblyExternalizedTripleComponent(TripleComponent iriOrLiteral,
+                                      bool isExternal = false)
+      : tripleComponent_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
+  PossiblyExternalizedTripleComponent() = default;
+  TripleComponent tripleComponent_;
   bool isExternal_ = false;
 
-  AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
-    serializer | arg.iriOrLiteral_;
+  AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedTripleComponent) {
+    serializer | arg.tripleComponent_;
     serializer | arg.isExternal_;
   }
 };
-using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
-using Triple = std::array<TripleComponentOrId, NumColumnsIndexBuilding>;
+using Triple =
+    std::array<PossiblyExternalizedTripleComponent, NumColumnsIndexBuilding>;
 
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
@@ -165,12 +165,12 @@ struct alignas(256) ItemMapManager {
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
       : map_(alloc), minId_(minId), comparator_(cmp) {
-    // Precompute the mapping from the `specialIds` to their norma IDs in the
+    // Precompute the mapping from the `specialIds` to their normal IDs in the
     // vocabulary. This makes resolving such IRIs much cheaper.
     for (const auto& [specialIri, specialId] : qlever::specialIds()) {
       auto iriref = TripleComponent::Iri::fromIriref(specialIri);
-      auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
-      specialIdMapping_[specialId] = getId(std::move(key));
+      auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
+      specialIdMapping_[specialId] = getId(key);
     }
   }
 
@@ -178,11 +178,12 @@ struct alignas(256) ItemMapManager {
   // the actual vocabulary.
   ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
 
-  // For a given `TripleComponentOrId`, if we have seen it before, return its
-  // assigned ID. Else assign it the next free ID, store it, and return it.
-  Id getId(const TripleComponentOrId& keyOrId) {
-    if (std::holds_alternative<Id>(keyOrId)) {
-      auto id = std::get<Id>(keyOrId);
+  // For a given `PossiblyExternalizedTripleComponent`, if we have seen it
+  // before, return its assigned ID. Else assign it the next free ID, store it,
+  // and return it.
+  Id getId(const PossiblyExternalizedTripleComponent& key) {
+    if (key.tripleComponent_.isId()) {
+      auto id = key.tripleComponent_.getId();
       if (id.getDatatype() != Datatype::Undefined) {
         return id;
       } else {
@@ -190,10 +191,9 @@ struct alignas(256) ItemMapManager {
         return specialIdMapping_.at(id);
       }
     }
-    const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
-    auto repr = key.iriOrLiteral_.toRdfLiteral();
+    auto repr = key.tripleComponent_.toRdfLiteral();
     auto it = map.find(repr);
     if (it == map.end()) {
       uint64_t res = map.size() + minId_;
@@ -319,9 +319,7 @@ auto getIdMapLambdas(
         auto langTagId = map.getId(TripleComponent{
             ad_utility::convertLangtagToEntityUri(lt.langtag_)});
         // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
-        const auto& iri =
-            std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])
-                .iriOrLiteral_.getIri();
+        const auto& iri = lt.triple_[1].tripleComponent_.getIri();
         auto langTaggedPredId = map.getId(TripleComponent{
             ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
         // Add the internal triple `<subject> @language@<predicate> <object>`.

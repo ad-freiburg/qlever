@@ -1355,12 +1355,11 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
-    if (idIfNotString.has_value()) {
-      resultTriple[index] = idIfNotString.value();
-    } else {
-      // `toRdfLiteral` handles literals as well as IRIs correctly.
-      resultTriple[index] = std::move(el);
-    }
+    resultTriple[index] =
+        idIfNotString.has_value()
+            ? TripleComponent{idIfNotString.value()}
+            // `toRdfLiteral` handles literals as well as IRIs correctly.
+            : std::move(el);
   };
   handleStringOrId(&TurtleTriple::subject_, 0);
   handleStringOrId(&TurtleTriple::predicate_, 1);
@@ -1372,15 +1371,14 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
-  for (auto& el : resultTriple) {
-    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
+  for (auto& component : resultTriple) {
+    if (component.tripleComponent_.isId()) {
       // If we already have an ID, we can just continue;
       continue;
     }
-    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    const auto& iriOrLiteral = component.iriOrLiteral_;
+    const auto& iriOrLiteral = component.tripleComponent_;
     // TODO<joka921> Perform this normalization right at the beginning of the
-    // parsing. iriOrLiteral =
+    // parsing.iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
