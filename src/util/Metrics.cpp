@@ -15,12 +15,12 @@
 #include <string>
 
 #include "opentelemetry/exporters/ostream/metric_exporter.h"
-#include "opentelemetry/exporters/prometheus/exporter_factory.h"
-#include "opentelemetry/exporters/prometheus/exporter_options.h"
+#include "opentelemetry/exporters/prometheus/collector.h"
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
+#include "prometheus/text_serializer.h"
 
 namespace metrics_api = opentelemetry::metrics;
 namespace metrics_sdk = opentelemetry::sdk::metrics;
@@ -28,9 +28,42 @@ namespace metrics_exp = opentelemetry::exporter::metrics;
 
 namespace ad_utility::metrics {
 
-void initialize(bool enabled, uint16_t port) {
+namespace {
+
+// Pull-based MetricReader that serializes metrics to Prometheus text format
+// on demand. Mirrors PrometheusExporter but without the CivetWeb HTTP server.
+class PullMetricReader : public metrics_sdk::MetricReader,
+                         public MetricsReader {
+ public:
+  PullMetricReader()
+      : collector_(std::make_shared<metrics_exp::PrometheusCollector>(
+            this, /*populate_target_info=*/false,
+            /*without_otel_scope=*/false)) {}
+
+  std::string getMetricsText() const override {
+    prometheus::TextSerializer serializer;
+    return serializer.Serialize(collector_->Collect());
+  }
+
+  metrics_sdk::AggregationTemporality GetAggregationTemporality(
+      metrics_sdk::InstrumentType) const noexcept override {
+    return metrics_sdk::AggregationTemporality::kCumulative;
+  }
+
+ private:
+  bool OnForceFlush(std::chrono::microseconds) noexcept override {
+    return true;
+  }
+  bool OnShutDown(std::chrono::microseconds) noexcept override { return true; }
+
+  std::shared_ptr<metrics_exp::PrometheusCollector> collector_;
+};
+
+}  // namespace
+
+std::shared_ptr<MetricsReader> initialize(bool enabled) {
   if (!enabled) {
-    return;
+    return nullptr;
   }
 
   // OStream reader — periodic snapshots to stdout for debugging.
@@ -42,18 +75,17 @@ void initialize(bool enabled, uint16_t port) {
           std::make_unique<metrics_exp::OStreamMetricExporter>(std::cout),
           ostream_options);
 
-  // Prometheus reader — HTTP /metrics endpoint on the configured port.
-  metrics_exp::PrometheusExporterOptions prometheus_options;
-  prometheus_options.url = "localhost:" + std::to_string(port);
-  auto prometheus_reader =
-      metrics_exp::PrometheusExporterFactory::Create(prometheus_options);
+  // Pull reader — metrics served via /metrics on the main server port.
+  auto pull_reader = std::make_shared<PullMetricReader>();
 
   auto provider = metrics_sdk::MeterProviderFactory::Create();
   provider->AddMetricReader(std::move(ostream_reader));
-  provider->AddMetricReader(std::move(prometheus_reader));
+  provider->AddMetricReader(pull_reader);
 
   metrics_api::Provider::SetMeterProvider(
       std::shared_ptr<metrics_api::MeterProvider>(std::move(provider)));
+
+  return pull_reader;
 }
 
 ActiveCounterGuard::ActiveCounterGuard(

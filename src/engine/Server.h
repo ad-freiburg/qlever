@@ -23,6 +23,7 @@
 #include "opentelemetry/metrics/sync_instruments.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Metrics.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -55,7 +56,9 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool noAccessCheck = false, bool usePatternTrick = true);
+                  bool noAccessCheck = false, bool usePatternTrick = true,
+                  std::shared_ptr<ad_utility::metrics::MetricsReader>
+                      metricsReader = nullptr);
 
   virtual ~Server() = default;
 
@@ -140,6 +143,10 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
+
+  // MetricsReader for serving the /metrics endpoint. Null when metrics are
+  // disabled (--enable-metrics not passed).
+  std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
   // Metrics instruments — created in run() from the global MeterProvider.
   // No-op instruments are used when metrics are disabled.

@@ -10,17 +10,28 @@
 #ifndef QLEVER_SRC_UTIL_METRICS_H
 #define QLEVER_SRC_UTIL_METRICS_H
 
+#include <memory>
+#include <string>
+
 #include "opentelemetry/metrics/sync_instruments.h"
 
 namespace ad_utility::metrics {
 
+// Abstract interface for pulling a Prometheus text exposition from the
+// registered metrics. Implemented by PullMetricReader in Metrics.cpp.
+class MetricsReader {
+ public:
+  virtual ~MetricsReader() = default;
+  virtual std::string getMetricsText() const = 0;
+};
+
 // Initialize the global OTEL MeterProvider. When `enabled` is false this
 // function is a no-op and the provider remains the built-in no-op provider,
 // so all subsequent Add/Record calls are safe but silently discarded.
-// When `enabled` is true a Prometheus scrape endpoint is opened on `port`
-// and periodic OStream snapshots are written to stdout.
+// When `enabled` is true, periodic OStream snapshots are written to stdout
+// and a MetricsReader is returned that exposes metrics in Prometheus format.
 // Must be called once at startup before Server::run().
-void initialize(bool enabled, uint16_t port);
+std::shared_ptr<MetricsReader> initialize(bool enabled);
 
 // RAII guard: increments the given counter on construction, decrements on
 // destruction. Safe to use in coroutines — the frame destructor fires on

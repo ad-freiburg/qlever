@@ -52,13 +52,15 @@ using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken,
-               bool noAccessCheck, bool usePatternTrick)
+Server::Server(
+    unsigned short port, size_t numThreads, ad_utility::MemorySize maxMem,
+    std::string accessToken, bool noAccessCheck, bool usePatternTrick,
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
+      metricsReader_(std::move(metricsReader)),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -616,6 +618,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     response = createOkResponse("This QLever server is up and running\n",
                                 request, MediaType::textPlain);
+  }
+
+  // Prometheus metrics scrape endpoint.
+  if (parsedHttpRequest.path_ == "/metrics") {
+    requireValidAccessToken("metrics");
+    if (!metricsReader_) {
+      response = createNotFoundResponse(
+          "Metrics not enabled (use --enable-metrics)", request);
+    } else {
+      response = createOkResponse(metricsReader_->getMetricsText(), request,
+                                  MediaType::textPlain);
+    }
   }
 
   // Set description of KB index.
