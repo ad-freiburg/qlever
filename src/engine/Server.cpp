@@ -60,7 +60,6 @@ Server::Server(
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      metricsReader_(std::move(metricsReader)),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -70,7 +69,8 @@ Server::Server(
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      queryThreadPool_{numThreads} {
+      queryThreadPool_{numThreads},
+      metricsReader_(std::move(metricsReader)) {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
