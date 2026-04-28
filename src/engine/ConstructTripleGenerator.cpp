@@ -39,7 +39,8 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
 
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(chunkView));
   const size_t batchBegin = *ql::ranges::begin(chunkView);
-  const size_t batchEnd = *ql::ranges::end(chunkView);
+  const size_t batchEnd =
+      batchBegin + static_cast<size_t>(ql::ranges::size(chunkView));
 
   BatchEvaluationContext ctx{tableWithVocab.idTable(), batchBegin, batchEnd};
 
