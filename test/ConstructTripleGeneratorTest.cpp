@@ -229,8 +229,8 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
 
   std::vector<TableWithRange> tables{table1, table2};
 
-  auto tableRange = ad_utility::InputRangeTypeErased<TableWithRange>{
-      ad_utility::OwningView{std::move(tables)}};
+  auto tableRange =
+      ad_utility::InputRangeTypeErased<TableWithRange>{std::move(tables)};
 
   auto range = ConstructTripleGenerator::evaluateTables(
       templateTriples, {}, index_, makeHandle(), std::move(tableRange), 0);
@@ -369,7 +369,7 @@ TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
   auto collected = run(templateTriples, varMap, std::move(table));
   ASSERT_EQ(collected.size(), N);
 
-  // Batch 0: row 0. Batch 1: last row.
+  // Batch 0: row 0. Batch 1: last row. Check pointer equality here.
   const EvaluatedTerm& fromBatch0 = collected.front().subject_;
   const EvaluatedTerm& fromBatch1 = collected.back().subject_;
   EXPECT_EQ(fromBatch0.get(), fromBatch1.get());

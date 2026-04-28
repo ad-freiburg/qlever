@@ -63,9 +63,11 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                        accumulatedRowOffset =
                            rowOffset](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
+
     // Snapshot the offset for this table, then advance it for the next table.
     const size_t tableRowOffset = accumulatedRowOffset;
     accumulatedRowOffset += numRowsOfTable;
+
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
            ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
                                  cancellationHandle,
