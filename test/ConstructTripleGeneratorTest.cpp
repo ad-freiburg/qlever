@@ -41,6 +41,8 @@ static auto matchStringTriple(const std::string& s, const std::string& p,
                Field(&StringTriple::object_, o));
 }
 
+static constexpr auto U = Id::makeUndefined();
+
 }  // namespace
 
 namespace qlever::constructExport {
@@ -89,8 +91,8 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
   // Wrap a single `TableWithRange` in an `InputRangeTypeErased`.
   static ad_utility::InputRangeTypeErased<TableWithRange> singleTableRange(
       TableWithRange table) {
-    return ad_utility::InputRangeTypeErased<TableWithRange>{
-        ad_utility::OwningView{std::vector<TableWithRange>{std::move(table)}}};
+    return ad_utility::InputRangeTypeErased{
+        std::vector<TableWithRange>{std::move(table)}};
   }
 
   // Run `ConstructTripleGenerator::evaluateTables` over a single
@@ -101,17 +103,12 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
     auto stringTriples = ConstructTripleGenerator::evaluateTables(
         triples, varMap, index_, handle, singleTableRange(std::move(table)), 0);
 
-    std::vector<EvaluatedTriple> resultTriples;
-    for (auto& triple : stringTriples) {
-      resultTriples.push_back(triple);
-    }
-
-    return resultTriples;
+    return ::ranges::to_vector(stringTriples);
   }
 
   // Build a single-triple CONSTRUCT template.
   static Triples oneTriple(GraphTerm s, GraphTerm p, GraphTerm o) {
-    return {std::array<GraphTerm, 3>{std::move(s), std::move(p), std::move(o)}};
+    return {std::array{std::move(s), std::move(p), std::move(o)}};
   }
 };
 
@@ -135,8 +132,7 @@ TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
   // row 0:       undefined
   // row 1:       undefined
   // row 2:       undefined
-  auto result = makeResult(makeIdTableFromVector(
-      {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}}));
+  auto result = makeResult(makeIdTableFromVector({{U}, {U}, {U}}));
   auto table = makeTableWithRange(*result, 0, 3);
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
@@ -167,8 +163,7 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
 // dropped.
 // Rows before and after the undefined row are unaffected.
 TEST_F(ConstructTripleGeneratorTest, undefDropsTriple) {
-  auto result = makeResult(
-      makeIdTableFromVector({{idS_}, {Id::makeUndefined()}, {idO_}}));
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {U}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 3);
   auto triples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
   VariableToColumnMap varMap;
@@ -202,8 +197,7 @@ TEST_F(ConstructTripleGeneratorTest, multipleTemplateTriples) {
 // firstRow (view start), and the in-batch row index:
 //   blankNodeRowId = rowOffset + firstRow + rowInBatch
 TEST_F(ConstructTripleGeneratorTest, blankNodeUsesCorrectRowId) {
-  auto result = makeResult(makeIdTableFromVector(
-      {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}}));
+  auto result = makeResult(makeIdTableFromVector({{U}, {U}, {U}}));
 
   // View starts at absolute row 1 of the `IdTable`: firstRow=1, numRows=2.
   auto table = makeTableWithRange(*result, 1, 3);
@@ -222,18 +216,12 @@ TEST_F(ConstructTripleGeneratorTest, blankNodeUsesCorrectRowId) {
 // table incorporate the row count of the first table.
 TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
   // Table 1: 3 rows (view 0..3)
-  auto result1 = makeResult(makeIdTableFromVector(
-      {{Id::makeUndefined()}, {Id::makeUndefined()}, {Id::makeUndefined()}}));
+  auto result1 = makeResult(makeIdTableFromVector({{}, {U}, {U}}));
   auto table1 = makeTableWithRange(*result1, 0, 3);
 
   // Table 2: 2 rows (view 5..7, i.e. rows 5 and 6 of its IdTable)
-  auto result2 = makeResult(makeIdTableFromVector({{Id::makeUndefined()},
-                                                   {Id::makeUndefined()},
-                                                   {Id::makeUndefined()},
-                                                   {Id::makeUndefined()},
-                                                   {Id::makeUndefined()},
-                                                   {Id::makeUndefined()},
-                                                   {Id::makeUndefined()}}));
+  auto result2 =
+      makeResult(makeIdTableFromVector({{U}, {U}, {U}, {U}, {U}, {U}, {U}}));
   auto table2 = makeTableWithRange(*result2, 5, 7);
 
   auto templateTriples =
@@ -426,7 +414,7 @@ TEST(MakeIdCache, multipleVariables) {
 
 // Smoke test: constants are emitted as plain IRI strings in the StringTriple.
 TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
-  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
@@ -434,10 +422,7 @@ TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
       templateTriples, {}, index_, makeHandle(),
       singleTableRange(std::move(table)), 0);
 
-  std::vector<StringTriple> triples;
-  while (auto triple = range.get()) {
-    triples.push_back(std::move(*triple));
-  }
+  auto triples = ::ranges::to_vector(range);
 
   EXPECT_THAT(triples, ElementsAre(matchStringTriple("<s>", "<p>", "<o>")));
 }
@@ -456,64 +441,63 @@ static std::vector<std::string> collectFormatted(
   return result;
 }
 
-// Turtle format: `<s> <p> <o> .\n`
-TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesTurtle) {
-  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+struct FormattedTriplesParam {
+  ad_utility::MediaType mediaType;
+  std::string expected;
+};
+
+class GenerateFormattedTriplesTest
+    : public ConstructTripleGeneratorTest,
+      public ::testing::WithParamInterface<FormattedTriplesParam> {};
+
+TEST_P(GenerateFormattedTriplesTest, formatsCorrectly) {
+  auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   auto range = ConstructTripleGenerator::generateFormattedTriples(
       templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0, ad_utility::MediaType::turtle);
+      singleTableRange(std::move(table)), 0, GetParam().mediaType);
 
   EXPECT_THAT(collectFormatted(std::move(range)),
-              ElementsAre("<s> <p> <o> .\n"));
+              ElementsAre(GetParam().expected));
 }
 
-// CSV format: `<s>,<p>,<o>\n`
-TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesCSV) {
-  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
-  auto table = makeTableWithRange(*result, 0, 1);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
-
-  auto range = ConstructTripleGenerator::generateFormattedTriples(
-      templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0, ad_utility::MediaType::csv);
-
-  EXPECT_THAT(collectFormatted(std::move(range)), ElementsAre("<s>,<p>,<o>\n"));
-}
-
-// TSV format: `<s>\t<p>\t<o>\n`
-TEST_F(ConstructTripleGeneratorTest, generateFormattedTriplesTSV) {
-  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
-  auto table = makeTableWithRange(*result, 0, 1);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
-
-  auto range = ConstructTripleGenerator::generateFormattedTriples(
-      templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0, ad_utility::MediaType::tsv);
-
-  EXPECT_THAT(collectFormatted(std::move(range)),
-              ElementsAre("<s>\t<p>\t<o>\n"));
-}
+INSTANTIATE_TEST_SUITE_P(
+    FormattedTripleFormats, GenerateFormattedTriplesTest,
+    ::testing::Values(
+        FormattedTriplesParam{ad_utility::MediaType::turtle, "<s> <p> <o> .\n"},
+        FormattedTriplesParam{ad_utility::MediaType::csv, "<s>,<p>,<o>\n"},
+        FormattedTriplesParam{ad_utility::MediaType::tsv, "<s>\t<p>\t<o>\n"}));
 
 // Only turtle, csv, and tsv are supported. Any other media type triggers a
 // contract check failure when the first triple is pulled from the range.
 TEST_F(ConstructTripleGeneratorTest,
        generateFormattedTriplesRejectsUnsupportedMediaType) {
-  auto result = makeResult(makeIdTableFromVector({{Id::makeUndefined()}}));
+  auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   static constexpr std::array supported{ad_utility::MediaType::turtle,
                                         ad_utility::MediaType::csv,
                                         ad_utility::MediaType::tsv};
+
+  // expect that unsupported mediatypes throw.
   for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
     if (ad_utility::contains(supported, mediaType)) continue;
     auto range = ConstructTripleGenerator::generateFormattedTriples(
         templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
         mediaType);
     EXPECT_ANY_THROW(range.get());
+  }
+
+  // expect that supported mediatypes do not throw.
+  for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
+    if (!ad_utility::contains(supported, mediaType)) continue;
+    auto range = ConstructTripleGenerator::generateFormattedTriples(
+        templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
+        mediaType);
+    EXPECT_NO_THROW(range.get());
   }
 }
 

@@ -776,8 +776,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   AD_CONTRACT_CHECK(format != qleverJson);
 
   result->logResultSize();
-
   uint64_t resultSize = 0;
+
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require

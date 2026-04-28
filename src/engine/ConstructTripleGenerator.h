@@ -43,29 +43,29 @@ class ConstructTripleGenerator {
   // clause template.
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
-  // generate the formatted triples that result from instantiating the template
-  // triples of the construct clause (`templateTriples`) for each row of the
-  // result table (`IdTable`) contained in the `result`. The triples are
-  // formatted according to `mediaType`.
+  // Instantiates `templateTriples` for each row in `rowIndices` and returns a
+  // lazy range of triples serialized according to `mediaType`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
       ad_utility::MediaType mediaType);
 
-  // generate the triples that result from instantiating the template triples of
-  // the construct clause (`templateTriples`) for each row of the result table
-  // (`IdTable`) contained in the `result`.
+  // Instantiates `templateTriples` for each row in `rowIndices` and returns a
+  // lazy range of `StringTriple`.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
 
  private:
-  //____________________________________________________________________________
+  // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
+  // blank-node-only templates).
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
-  //____________________________________________________________________________
+  // Lazily evaluates all `TableWithRange` values from `rowIndices`, processes
+  // them in batches of `BATCH_SIZE` rows, and returns a flat range of
+  // `EvaluatedTriple`.
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns, const Index& index,

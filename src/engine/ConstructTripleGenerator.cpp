@@ -26,29 +26,26 @@ IdCache ConstructTripleGenerator::makeIdCache(
                  CACHE_ENTRIES_PER_VARIABLE};
 }
 
-// Evaluate a single batch of rows from `table`, starting at `batchIdx *
-// BATCH_SIZE`. Cancellation is checked once at the start of the batch.
+// Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
+// the start.
+template <ql::ranges::range ChunkView>
 static std::vector<EvaluatedTriple> computeBatch(
-    const TableWithRange& table,
+    const TableConstRefWithVocab& tableWithVocab, ChunkView chunkView,
     const PreprocessedConstructTemplate& preprocessedTemplate,
-    const Index& index, IdCache& cache, size_t numRowsOfTable,
-    size_t tableRowOffset, CancellationHandle cancellationHandle,
-    size_t batchIdx) {
+    const Index& index, IdCache& cache, size_t tableRowOffset,
+    CancellationHandle cancellationHandle) {
   cancellationHandle->throwIfCancelled();
-  const size_t batchStart = batchIdx * ConstructTripleGenerator::BATCH_SIZE;
-  const size_t firstRowOfTable =
-      numRowsOfTable > 0 ? *ql::ranges::begin(table.view_) : 0;
-  const size_t batchEnd = std::min(
-      batchStart + ConstructTripleGenerator::BATCH_SIZE, numRowsOfTable);
-  BatchEvaluationContext ctx{table.tableWithVocab_.idTable(),
-                             firstRowOfTable + batchStart,
-                             firstRowOfTable + batchEnd};
+
+  const size_t batchBegin = *ql::ranges::begin(chunkView);
+  const size_t batchEnd = batchBegin + ql::ranges::size(chunkView);
+
+  BatchEvaluationContext ctx{tableWithVocab.idTable(), batchBegin, batchEnd};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate.uniqueVariableColumns_, ctx,
-      table.tableWithVocab_.localVocab(), index, cache);
+      tableWithVocab.localVocab(), index, cache);
 
-  const size_t blankNodeBaseId = tableRowOffset + firstRowOfTable + batchStart;
+  const size_t blankNodeBaseId = tableRowOffset + batchBegin;
   return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
 }
 
@@ -69,15 +66,14 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     // Snapshot the offset for this table, then advance it for the next table.
     const size_t tableRowOffset = accumulatedRowOffset;
     accumulatedRowOffset += numRowsOfTable;
-    // Ceiling division: ensure the last partial batch is not dropped.
-    const size_t numBatches = (numRowsOfTable + BATCH_SIZE - 1) / BATCH_SIZE;
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
-           ql::views::transform(
-               [&, numRowsOfTable, tableRowOffset](size_t batchIdx) {
-                 return computeBatch(table, preprocessedTemplate, index, cache,
-                                     numRowsOfTable, tableRowOffset,
-                                     cancellationHandle, batchIdx);
-               }) |
+           ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
+                                 cancellationHandle,
+                                 tableRowOffset](auto chunkView) {
+             return computeBatch(table.tableWithVocab_, chunkView,
+                                 preprocessedTemplate, index, cache,
+                                 tableRowOffset, cancellationHandle);
+           }) |
            ql::views::join;
   };
 
