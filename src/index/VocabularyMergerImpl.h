@@ -173,7 +173,7 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
       lastWord = word;
     }
     auto inserted = res.try_emplace(id, nextWordId).second;
-    AD_CONTRACT_CHECK(inserted);
+    AD_CORRECTNESS_CHECK(inserted);
     id = nextWordId;
     first = false;
   }
