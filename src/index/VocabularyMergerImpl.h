@@ -167,14 +167,15 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   std::string_view lastWord;
   size_t nextWordId = 0;
   for (auto& [word, idAndExternal] : els) {
-    auto& id = idAndExternal.id_;
+    auto id = idAndExternal.id();
     if (!first && lastWord != word) {
       nextWordId++;
       lastWord = word;
     }
     auto inserted = res.try_emplace(id, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    id = nextWordId;
+    idAndExternal = PartialVocabIndexWithExternalFlag{
+        nextWordId, idAndExternal.isExternal()};
     first = false;
   }
   return res;
@@ -241,10 +242,9 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    const auto& [id, isExternalized] = idAndExternal;
     byteBuffer << word;
-    byteBuffer << isExternalized;
-    byteBuffer << id;
+    byteBuffer << idAndExternal.isExternal();
+    byteBuffer << idAndExternal.id();
 
     if (byteBuffer.data().size() >= flushThreshold) {
       flush();

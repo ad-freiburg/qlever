@@ -239,13 +239,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id_);
-  ASSERT_EQ(1u, input[1].second.id_);
-  ASSERT_EQ(1u, input[2].second.id_);
-  ASSERT_EQ(2u, input[3].second.id_);
-  ASSERT_EQ(3u, input[4].second.id_);
-  ASSERT_EQ(3u, input[5].second.id_);
-  ASSERT_EQ(4u, input[6].second.id_);
+  ASSERT_EQ(0u, input[0].second.id());
+  ASSERT_EQ(1u, input[1].second.id());
+  ASSERT_EQ(1u, input[2].second.id());
+  ASSERT_EQ(2u, input[3].second.id());
+  ASSERT_EQ(3u, input[4].second.id());
+  ASSERT_EQ(3u, input[5].second.id());
+  ASSERT_EQ(4u, input[6].second.id());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);

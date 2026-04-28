@@ -75,9 +75,21 @@ using Triple =
 
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
-struct PartialVocabIndexWithExternalFlag {
-  uint64_t id_;
-  bool isExternal_;
+// The `isExternal` bool is encoded in the most significant bit of the id which
+// can never be used anyway because this is occupied by the datatype bits of the
+// final `Id`.
+class PartialVocabIndexWithExternalFlag {
+  uint64_t encodedId_;
+
+ public:
+  PartialVocabIndexWithExternalFlag(uint64_t id, bool isExternal)
+      : encodedId_{(uint64_t(isExternal) << 63) | id} {}
+
+  PartialVocabIndexWithExternalFlag() = default;
+
+  // Access the original values.
+  uint64_t id() const { return encodedId_ & (uint64_t(-1) >> 1); }
+  bool isExternal() const { return (encodedId_ >> 63) != 0; }
 };
 
 // During the first phase of the index building, we use hash maps from entries
@@ -204,7 +216,7 @@ struct alignas(256) ItemMapManager {
                       PartialVocabIndexWithExternalFlag{res, key.isExternal_});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id()));
     }
   }
 

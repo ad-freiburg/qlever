@@ -1566,7 +1566,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
       vec.erase(std::unique(vec.begin(), vec.end(),
                             [](const auto& a, const auto& b) {
-                              return a.second.id_ == b.second.id_;
+                              return a.second.id() == b.second.id();
                             }),
                 vec.end());
     }
