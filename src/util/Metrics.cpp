@@ -98,11 +98,15 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
 }
 
 ActiveCounterGuard::ActiveCounterGuard(
-    metrics_api::UpDownCounter<int64_t>& counter)
-    : counter_(counter) {
-  counter_.Add(1);
+    metrics_api::UpDownCounter<int64_t>& counter, std::string operation)
+    : counter_(counter), operation_(std::move(operation)) {
+  counter_.Add(1,
+               {{"operation", opentelemetry::nostd::string_view{operation_}}});
 }
 
-ActiveCounterGuard::~ActiveCounterGuard() { counter_.Add(-1); }
+ActiveCounterGuard::~ActiveCounterGuard() {
+  counter_.Add(-1,
+               {{"operation", opentelemetry::nostd::string_view{operation_}}});
+}
 
 }  // namespace ad_utility::metrics

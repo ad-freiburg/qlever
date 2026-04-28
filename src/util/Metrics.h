@@ -39,13 +39,15 @@ std::shared_ptr<MetricsReader> initialize(bool enabled);
 class ActiveCounterGuard {
  public:
   explicit ActiveCounterGuard(
-      opentelemetry::metrics::UpDownCounter<int64_t>& counter);
+      opentelemetry::metrics::UpDownCounter<int64_t>& counter,
+      std::string operation);
   ~ActiveCounterGuard();
   ActiveCounterGuard(const ActiveCounterGuard&) = delete;
   ActiveCounterGuard& operator=(const ActiveCounterGuard&) = delete;
 
  private:
   opentelemetry::metrics::UpDownCounter<int64_t>& counter_;
+  std::string operation_;
 };
 
 }  // namespace ad_utility::metrics

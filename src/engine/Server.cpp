@@ -115,16 +115,12 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
-  activeQueries_ = meter->CreateInt64UpDownCounter(
-      "qlever.active_queries",
-      "Number of SPARQL queries currently being processed");
-  activeUpdates_ = meter->CreateInt64UpDownCounter(
-      "qlever.active_updates",
-      "Number of SPARQL updates currently being processed");
-  queryDuration_ = meter->CreateDoubleHistogram(
-      "qlever.query_duration", "Total execution time of SPARQL queries", "ms");
-  updateDuration_ = meter->CreateDoubleHistogram(
-      "qlever.update_duration", "Total execution time of SPARQL updates", "ms");
+  activeOperations_ = meter->CreateInt64UpDownCounter(
+      "qlever.active_operations",
+      "Number of SPARQL operations currently being processed");
+  operationDuration_ = meter->CreateDoubleHistogram(
+      "qlever.operation_duration", "Total execution time of SPARQL operations",
+      "ms");
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -1065,7 +1061,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
-  ad_utility::metrics::ActiveCounterGuard queryGuard{*activeQueries_};
+  ad_utility::metrics::ActiveCounterGuard queryGuard{*activeOperations_,
+                                                     "query"};
 
   auto mediaTypes = determineMediaTypes(params, request);
   AD_LOG_INFO << "Requested media types of the result are: "
@@ -1121,7 +1118,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
-  queryDuration_->Record(static_cast<double>(requestTimer.msecs().count()), {});
+  operationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {{"operation", opentelemetry::nostd::string_view{"query"}}},
+      opentelemetry::context::Context{});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1226,7 +1226,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
-  ad_utility::metrics::ActiveCounterGuard updateGuard{*activeUpdates_};
+  ad_utility::metrics::ActiveCounterGuard updateGuard{*activeOperations_,
+                                                      "update"};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1303,8 +1304,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
-  updateDuration_->Record(static_cast<double>(requestTimer.msecs().count()),
-                          {});
+  operationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {{"operation", opentelemetry::nostd::string_view{"update"}}},
+      opentelemetry::context::Context{});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");

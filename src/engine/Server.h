@@ -149,13 +149,11 @@ class Server {
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
   // Metrics instruments — created in run() from the global MeterProvider.
-  // No-op instruments are used when metrics are disabled.
+  // No-op instruments are used when metrics are disabled. Both instruments use
+  // an "operation" label ("query" / "update") to distinguish operation types.
   std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
-      activeQueries_;
-  std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
-      activeUpdates_;
-  std::unique_ptr<opentelemetry::metrics::Histogram<double>> queryDuration_;
-  std::unique_ptr<opentelemetry::metrics::Histogram<double>> updateDuration_;
+      activeOperations_;
+  std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
