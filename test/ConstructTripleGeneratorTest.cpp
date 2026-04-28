@@ -216,7 +216,7 @@ TEST_F(ConstructTripleGeneratorTest, blankNodeUsesCorrectRowId) {
 // table incorporate the row count of the first table.
 TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
   // Table 1: 3 rows (view 0..3)
-  auto result1 = makeResult(makeIdTableFromVector({{}, {U}, {U}}));
+  auto result1 = makeResult(makeIdTableFromVector({{U}, {U}, {U}}));
   auto table1 = makeTableWithRange(*result1, 0, 3);
 
   // Table 2: 2 rows (view 5..7, i.e. rows 5 and 6 of its IdTable)
