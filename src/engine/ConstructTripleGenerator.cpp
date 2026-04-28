@@ -9,6 +9,7 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include "backports/concepts.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -28,12 +29,12 @@ IdCache ConstructTripleGenerator::makeIdCache(
 
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
 // the start.
-template <ql::ranges::range ChunkView>
-static std::vector<EvaluatedTriple> computeBatch(
-    const TableConstRefWithVocab& tableWithVocab, ChunkView chunkView,
-    const PreprocessedConstructTemplate& preprocessedTemplate,
-    const Index& index, IdCache& cache, size_t tableRowOffset,
-    CancellationHandle cancellationHandle) {
+CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
+    vector<EvaluatedTriple> computeBatch(
+        const TableConstRefWithVocab& tableWithVocab, ChunkView chunkView,
+        const PreprocessedConstructTemplate& preprocessedTemplate,
+        const Index& index, IdCache& cache, size_t tableRowOffset,
+        CancellationHandle cancellationHandle) {
   cancellationHandle->throwIfCancelled();
 
   const size_t batchBegin = *ql::ranges::begin(chunkView);
