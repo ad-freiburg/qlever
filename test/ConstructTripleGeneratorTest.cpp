@@ -482,23 +482,18 @@ TEST_F(ConstructTripleGeneratorTest,
                                         ad_utility::MediaType::csv,
                                         ad_utility::MediaType::tsv};
 
-  // expect that unsupported mediatypes throw.
+  // expect that unsupported mediatypes throw, expect that supported mediatypes
+  // don't throw
   for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
-    if (ad_utility::contains(supported, mediaType)) continue;
     auto range = ConstructTripleGenerator::generateFormattedTriples(
         templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
         mediaType);
-    EXPECT_ANY_THROW(range.get());
-  }
 
-  // expect that supported mediatypes do not throw.
-  for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
-    if (!ad_utility::contains(supported, mediaType)) continue;
-    auto range = ConstructTripleGenerator::generateFormattedTriples(
-        templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
-        mediaType);
-    EXPECT_NO_THROW(range.get());
+    if (ad_utility::contains(supported, mediaType)) {
+      EXPECT_NO_THROW(range.get());
+    } else {
+      EXPECT_ANY_THROW(range.get());
+    }
   }
-}
 
 }  // namespace qlever::constructExport
