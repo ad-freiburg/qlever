@@ -483,7 +483,7 @@ TEST_F(ConstructTripleGeneratorTest,
                                         ad_utility::MediaType::tsv};
 
   // expect that unsupported mediatypes throw, expect that supported mediatypes
-  // don't throw
+  // don't throw.
   for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
     auto range = ConstructTripleGenerator::generateFormattedTriples(
         templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
