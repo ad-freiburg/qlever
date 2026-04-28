@@ -26,7 +26,7 @@ enum class TensorDistanceAlgorithm {
   MANHATTAN_DISTANCE,
   HAMMING_DISTANCE,
 };
-enum class TensorIndexAlgorithm { NAIVE, FAISS_IVF, FAISS_HSNW };
+enum class TensorIndexAlgorithm { NAIVE, FAISS_IVF, FAISS_HNSW };
 const TensorIndexAlgorithm TENSOR_INDEX_DEFAULT_ALGORITHM =
     TensorIndexAlgorithm::FAISS_IVF;
 const TensorDistanceAlgorithm TENSOR_INDEX_DEFAULT_DISTANCE =

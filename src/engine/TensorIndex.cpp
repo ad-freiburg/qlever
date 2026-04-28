@@ -152,8 +152,8 @@ std::string TensorIndex::getDescriptor() const {
     case TensorIndexAlgorithm::NAIVE:
       algorithmString = "naive";
       break;
-    case TensorIndexAlgorithm::FAISS_HSNW:
-      algorithmString = "hsnw";
+    case TensorIndexAlgorithm::FAISS_HNSW:
+      algorithmString = "hnsw";
       break;
     case TensorIndexAlgorithm::FAISS_IVF:
       algorithmString = "ivf";
@@ -235,7 +235,7 @@ size_t TensorIndex::getCostEstimate() {
       case NAIVE:
         return n * m;
       case FAISS_IVF:
-      case FAISS_HSNW: {
+      case FAISS_HNSW: {
         auto logn = n > 0
                         ? static_cast<size_t>(std::sqrt(static_cast<double>(n)))
                         : size_t{1};

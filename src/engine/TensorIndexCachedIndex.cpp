@@ -2,6 +2,8 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
+#include "engine/TensorIndexCachedIndex.h"
+
 #include <faiss/IndexFlat.h>
 #include <faiss/IndexHNSW.h>
 #include <faiss/IndexIVFFlat.h>
@@ -10,7 +12,6 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/TensorIndex.h"
-#include "engine/TensorIndexCachedIndex.h"
 #include "global/Constants.h"
 #include "util/Serializer/FileSerializer.h"
 
@@ -51,16 +52,17 @@ std::shared_ptr<faiss::IndexFlat> fromDistanceAndSize(
 }
 
 // ____________________________________________________________________________
-TensorIndexCachedIndex::TensorIndexCachedIndex(
-    ColumnIndex col, const IdTable& restable, const Index& index,
-    TensorIndexConfiguration config_)
+TensorIndexCachedIndex::TensorIndexCachedIndex(ColumnIndex col,
+                                               const IdTable& restable,
+                                               const Index& index,
+                                               TensorIndexConfiguration config_)
     : config_{config_} {
   tensorIndexToRow_ = buildIndex(col, restable, index);
 }
 
 FaissIndexToRow TensorIndexCachedIndex::buildIndex(ColumnIndex col,
-                                                    const IdTable& restable,
-                                                    const Index& index) {
+                                                   const IdTable& restable,
+                                                   const Index& index) {
   FaissIndexToRow tensorIndexToRow;
   // Populate the index from the given `IdTable`
   std::optional<ssize_t> firstItemSize;
@@ -107,7 +109,7 @@ FaissIndexToRow TensorIndexCachedIndex::buildIndex(ColumnIndex col,
                           ? faiss::METRIC_INNER_PRODUCT
                           : faiss::METRIC_L2;
         switch (config_.algo_) {
-          case TensorIndexAlgorithm::FAISS_HSNW:
+          case TensorIndexAlgorithm::FAISS_HNSW:
             index_ = std::make_shared<faiss::IndexHNSWFlat>(
                 (int)tensorFirstDimShape, nNeighbours, metric);
             break;
@@ -155,9 +157,9 @@ FaissIndexToRow TensorIndexCachedIndex::buildIndex(ColumnIndex col,
 
 std::shared_ptr<const TensorIndexCachedIndex>
 TensorIndexCachedIndex::fromKeyOrBuild(const std::string& key, ColumnIndex col,
-                                        const IdTable& restable,
-                                        const Index& index,
-                                        TensorIndexConfiguration config) {
+                                       const IdTable& restable,
+                                       const Index& index,
+                                       TensorIndexConfiguration config) {
   auto lock = cache_.wlock();
   if (!lock->contains(key)) {
     auto newIndex = TensorIndexCachedIndex(col, restable, index, config);
@@ -178,9 +180,8 @@ std::shared_ptr<const TensorIndexCachedIndex> TensorIndexCachedIndex::fromKey(
   return (*lock)[key];
 }
 
-std::vector<TensorIndexCachedIndex::FaissResult>
-TensorIndexCachedIndex::findNN(const ad_utility::TensorData& query,
-                                size_t k) const {
+std::vector<TensorIndexCachedIndex::FaissResult> TensorIndexCachedIndex::findNN(
+    const ad_utility::TensorData& query, size_t k) const {
   std::vector<FaissResult> result;
   auto firstDimShape =
       query.shape().size() > 0 ? (ssize_t)query.shape()[0] : -1;
@@ -201,11 +202,19 @@ TensorIndexCachedIndex::findNN(const ad_utility::TensorData& query,
       [&](const auto& idx) -> void {
         using T = std::decay_t<decltype(idx)>;
         if (config_.searchK_.has_value()) {
-          if constexpr (std::is_same_v<T, std::variant<faiss::IndexIVFFlat>>) {
+          AD_LOG_INFO << "Using " << config_.searchK_.value();
+          if constexpr (std::is_same_v<T,
+                                       std::shared_ptr<faiss::IndexIVFFlat>>) {
+            AD_LOG_INFO << "; Setting nprobe to " << config_.searchK_.value()
+                        << "\n";
             idx->nprobe = config_.searchK_.value();
-          }
-          if constexpr (std::is_same_v<T, std::variant<faiss::IndexHNSWFlat>>) {
-            idx->efSearch = config_.searchK_.value();
+          } else if constexpr (std::is_same_v<
+                                   T, std::shared_ptr<faiss::IndexHNSWFlat>>) {
+            AD_LOG_INFO << "; Setting efSearch to " << config_.searchK_.value()
+                        << "\n";
+            idx->hnsw.efSearch = config_.searchK_.value();
+          } else {
+            AD_FAIL();
           }
         }
         idx->search(1, query.tensorData().data(), k, nnDistances.data(),

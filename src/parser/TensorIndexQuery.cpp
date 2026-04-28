@@ -65,20 +65,20 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
     throwIf(
         !object.isIri(),
         "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<naive>`, `<hsnw>`, and "
+        "to employ. Currently supported are `<naive>`, `<hnsw>`, and "
         "`<ivf>`");
     auto type = extractParameterName(object, TENSOR_INDEX_IRI);
     if (type == "naive") {
       algo_ = TensorIndexAlgorithm::NAIVE;
-    } else if (type == "hsnw") {
-      algo_ = TensorIndexAlgorithm::FAISS_HSNW;
+    } else if (type == "hnsw") {
+      algo_ = TensorIndexAlgorithm::FAISS_HNSW;
     } else if (type == "ivf") {
       algo_ = TensorIndexAlgorithm::FAISS_IVF;
     } else {
       throw TensorIndexException{
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported tensor search algorithm. Currently supported are "
-          "`<naive>`, `<hsnw>`, and `<ivf>`"};
+          "`<naive>`, `<hnsw>`, and `<ivf>`"};
     }
   } else if (predString == "distance") {
     // This case is already covered in `extractParameterName` below, but we
@@ -155,7 +155,7 @@ TensorIndexConfiguration TensorIndexQuery::toTensorIndexConfiguration()
 
   throwIf(
       rightCacheName_.has_value() &&
-          (algo != TensorIndexAlgorithm::FAISS_HSNW &&
+          (algo != TensorIndexAlgorithm::FAISS_HNSW &&
            algo != TensorIndexAlgorithm::FAISS_IVF),
       "The parameter `<experimentalRightCacheName>` is only supported by the "
       "`<faiss>` algorithm.");

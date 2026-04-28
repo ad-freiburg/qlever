@@ -91,10 +91,10 @@ INSTANTIATE_TEST_SUITE_P(
         AlgDistParam{TensorIndexAlgorithm::FAISS_IVF,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
                      "FaissEuclidean", true, true},
-        AlgDistParam{TensorIndexAlgorithm::FAISS_HSNW,
-                     TensorDistanceAlgorithm::DOT_PRODUCT, "FaissHSNWDot",
+        AlgDistParam{TensorIndexAlgorithm::FAISS_HNSW,
+                     TensorDistanceAlgorithm::DOT_PRODUCT, "FaissHNSWDot",
                      false, true},
-        AlgDistParam{TensorIndexAlgorithm::FAISS_HSNW,
+        AlgDistParam{TensorIndexAlgorithm::FAISS_HNSW,
                      TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE,
-                     "FaissHSNWEuclidean", true, true}));
+                     "FaissHNSWEuclidean", true, true}));
 }  // namespace

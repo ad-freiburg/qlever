@@ -219,7 +219,7 @@ float TensorIndexImpl::computeDistance(
 Result TensorIndexImpl::computeTensorIndexResult() {
   switch (params_.config_.algo_) {
     case TensorIndexAlgorithm::FAISS_IVF:
-    case TensorIndexAlgorithm::FAISS_HSNW:
+    case TensorIndexAlgorithm::FAISS_HNSW:
       return computeTensorIndexResultFaiss();
     default:
       return computeTensorIndexResultNaive();
