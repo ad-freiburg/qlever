@@ -495,5 +495,6 @@ TEST_F(ConstructTripleGeneratorTest,
       EXPECT_ANY_THROW(range.get());
     }
   }
+}
 
 }  // namespace qlever::constructExport
