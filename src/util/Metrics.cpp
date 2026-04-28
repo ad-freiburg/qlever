@@ -38,7 +38,7 @@ class PullMetricReader : public metrics_sdk::MetricReader,
   PullMetricReader()
       : collector_(std::make_shared<metrics_exp::PrometheusCollector>(
             this, /*populate_target_info=*/false,
-            /*without_otel_scope=*/false)) {}
+            /*without_otel_scope=*/true)) {}
 
   std::string getMetricsText() const override {
     prometheus::TextSerializer serializer;
@@ -84,6 +84,15 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
 
   metrics_api::Provider::SetMeterProvider(
       std::shared_ptr<metrics_api::MeterProvider>(std::move(provider)));
+
+  auto meter =
+      metrics_api::Provider::GetMeterProvider()->GetMeter("qlever", "0.0.1");
+  auto startTimeMetric = meter->CreateUInt64Counter(
+      "qlever.start_time_seconds",
+      "Unix timestamp (seconds) when the QLever server was started", "s");
+  startTimeMetric->Add(std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count());
 
   return pull_reader;
 }
