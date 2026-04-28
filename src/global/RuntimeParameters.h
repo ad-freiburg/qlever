@@ -26,12 +26,12 @@ struct RuntimeParameters {
   // Serializers for the `LogLevel` enum, used by `LogLevelParameter`.
   struct LogLevelFromString {
     LogLevel operator()(const std::string& s) const {
-      return ad_utility::logLevelFromString(s);
+      return LogLevel::fromString(s);
     }
   };
   struct LogLevelToString {
     std::string operator()(LogLevel level) const {
-      return std::string{ad_utility::logLevelToString(level)};
+      return std::string{level.toString()};
     }
   };
   using LogLevelParameter =

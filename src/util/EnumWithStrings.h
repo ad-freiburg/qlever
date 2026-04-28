@@ -21,8 +21,14 @@
 
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/Exception.h"
 #include "util/Random.h"
-#include "util/json.h"
+// Use the raw nlohmann header rather than `util/json.h` to avoid pulling in
+// `util/File.h` (which uses AD_LOG macros) during the processing of Log.h.
+#ifndef JSON_USE_IMPLICIT_CONVERSIONS
+#define JSON_USE_IMPLICIT_CONVERSIONS 0
+#endif
+#include <nlohmann/json.hpp>
 
 namespace ad_utility {
 

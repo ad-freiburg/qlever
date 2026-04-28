@@ -16,16 +16,68 @@
 #include <locale>
 #include <mutex>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 
 #include "backports/keywords.h"
-#include "util/ConstexprMap.h"
+#include "util/EnumWithStrings.h"
 #include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
 #define LOGLEVEL INFO
 #endif
+
+namespace ad_utility {
+
+namespace detail {
+enum class LogLevelEnum {
+  FATAL = 0,
+  ERROR = 1,
+  WARN = 2,
+  INFO = 3,
+  DEBUG = 4,
+  TIMING = 5,
+  TRACE = 6
+};
+}
+
+// Log level wrapper using the `EnumWithStrings` CRTP base to provide string
+// conversion, JSON serialization, and boost::program_options integration.
+class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
+ public:
+  using Enum = detail::LogLevelEnum;
+  static constexpr std::array<std::pair<Enum, std::string_view>, 7>
+      descriptions_{{{Enum::FATAL, "FATAL"},
+                     {Enum::ERROR, "ERROR"},
+                     {Enum::WARN, "WARN"},
+                     {Enum::INFO, "INFO"},
+                     {Enum::DEBUG, "DEBUG"},
+                     {Enum::TIMING, "TIMING"},
+                     {Enum::TRACE, "TRACE"}}};
+  static constexpr std::string_view typeName() { return "log level"; }
+  using EnumWithStrings::EnumWithStrings;
+  static const LogLevel FATAL;
+  static const LogLevel ERROR;
+  static const LogLevel WARN;
+  static const LogLevel INFO;
+  static const LogLevel DEBUG;
+  static const LogLevel TIMING;
+  static const LogLevel TRACE;
+};
+
+inline const LogLevel LogLevel::FATAL{LogLevel::Enum::FATAL};
+inline const LogLevel LogLevel::ERROR{LogLevel::Enum::ERROR};
+inline const LogLevel LogLevel::WARN{LogLevel::Enum::WARN};
+inline const LogLevel LogLevel::INFO{LogLevel::Enum::INFO};
+inline const LogLevel LogLevel::DEBUG{LogLevel::Enum::DEBUG};
+inline const LogLevel LogLevel::TIMING{LogLevel::Enum::TIMING};
+inline const LogLevel LogLevel::TRACE{LogLevel::Enum::TRACE};
+
+}  // namespace ad_utility
+
+// Global type alias and using-enum so that `LogLevel::FATAL` etc. and the
+// compile-time `LOGLEVEL` macro keep working outside `namespace ad_utility`.
+using LogLevel = ad_utility::LogLevel;
+using enum LogLevel::Enum;
 
 // Both the compile-time level (LOGLEVEL) and the runtime level must pass for a
 // message to be logged. The LogLock temporary is held for the entire <<
@@ -38,26 +90,14 @@
     (ad_utility::detail::LogLock{ad_utility::detail::logMutex},                \
      ad_utility::Log::getLog<x>())  // NOLINT
 
-enum class LogLevel {
-  FATAL = 0,
-  ERROR = 1,
-  WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
-};
-
 // Macros for the different log levels.
-#define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
-#define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
-#define AD_LOG_WARN AD_LOG(LogLevel::WARN)
-#define AD_LOG_INFO AD_LOG(LogLevel::INFO)
-#define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
-#define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
-#define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
-
-using enum LogLevel;
+#define AD_LOG_FATAL AD_LOG(LogLevel::Enum::FATAL)
+#define AD_LOG_ERROR AD_LOG(LogLevel::Enum::ERROR)
+#define AD_LOG_WARN AD_LOG(LogLevel::Enum::WARN)
+#define AD_LOG_INFO AD_LOG(LogLevel::Enum::INFO)
+#define AD_LOG_DEBUG AD_LOG(LogLevel::Enum::DEBUG)
+#define AD_LOG_TIMING AD_LOG(LogLevel::Enum::TIMING)
+#define AD_LOG_TRACE AD_LOG(LogLevel::Enum::TRACE)
 
 namespace ad_utility {
 
@@ -67,7 +107,7 @@ namespace detail {
 inline std::mutex logMutex;
 // Runtime log level; messages with a higher level than this are suppressed.
 // Default is INFO so debug output is off unless explicitly requested.
-inline std::atomic<LogLevel> runtimeLogLevel{LogLevel::INFO};
+inline std::atomic<LogLevel::Enum> runtimeLogLevel{LogLevel::Enum::INFO};
 
 // Non-[[nodiscard]] wrapper so the comma-operator pattern doesn't trigger
 // -Wunused-value warnings (std::lock_guard itself is [[nodiscard]] in libc++).
@@ -79,42 +119,7 @@ struct LogLock {
 
 // Set the runtime log level, called from the RuntimeParameters update action.
 inline void setRuntimeLogLevel(LogLevel level) {
-  detail::runtimeLogLevel.store(level, std::memory_order_relaxed);
-}
-
-// Convert a log level to its string representation at runtime.
-inline std::string_view logLevelToString(LogLevel level) {
-  switch (level) {
-    case LogLevel::FATAL:
-      return "FATAL";
-    case LogLevel::ERROR:
-      return "ERROR";
-    case LogLevel::WARN:
-      return "WARN";
-    case LogLevel::INFO:
-      return "INFO";
-    case LogLevel::DEBUG:
-      return "DEBUG";
-    case LogLevel::TIMING:
-      return "TIMING";
-    case LogLevel::TRACE:
-      return "TRACE";
-  }
-  throw std::runtime_error{"Unknown log level"};
-}
-
-// Parse a log level from its string representation (case-sensitive).
-inline LogLevel logLevelFromString(std::string_view s) {
-  if (s == "FATAL") return LogLevel::FATAL;
-  if (s == "ERROR") return LogLevel::ERROR;
-  if (s == "WARN") return LogLevel::WARN;
-  if (s == "INFO") return LogLevel::INFO;
-  if (s == "DEBUG") return LogLevel::DEBUG;
-  if (s == "TIMING") return LogLevel::TIMING;
-  if (s == "TRACE") return LogLevel::TRACE;
-  throw std::runtime_error{
-      "Invalid log level \"" + std::string{s} +
-      "\". Valid values: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, TRACE."};
+  detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
 
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
@@ -157,7 +162,7 @@ const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 // The class that actually does the logging.
 class Log {
  public:
-  template <LogLevel LEVEL>
+  template <LogLevel::Enum LEVEL>
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
@@ -171,19 +176,9 @@ class Log {
                             absl::LocalTimeZone());
   }
 
-  template <LogLevel LEVEL>
+  template <LogLevel::Enum LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
-    using P = ConstexprMapPair<LogLevel, std::string_view>;
-    constexpr ConstexprMap map{std::array<P, 7>{
-        P(TRACE, "TRACE"),
-        P(TIMING, "TIMING"),
-        P(DEBUG, "DEBUG"),
-        P(INFO, "INFO"),
-        P(WARN, "WARN"),
-        P(ERROR, "ERROR"),
-        P(FATAL, "FATAL"),
-    }};
-    return map.at(LEVEL);
+    return LogLevel::descriptions_[static_cast<size_t>(LEVEL)].second;
   }
 };
 }  // namespace ad_utility

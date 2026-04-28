@@ -163,15 +163,4 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
 }
 }  // namespace qlever
 
-// This function is required to use `LogLevel` in `boost::program_options`.
-// `LogLevel` is at global scope, so this validate() must also be at global
-// scope for ADL to find it.
-inline void validate(boost::any& v, const std::vector<std::string>& values,
-                     LogLevel*, int) {
-  using namespace boost::program_options;
-  validators::check_first_occurrence(v);
-  const std::string& s = validators::get_single_string(values);
-  v = ad_utility::logLevelFromString(s);
-}
-
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H
