@@ -31,16 +31,16 @@ IdCache ConstructTripleGenerator::makeIdCache(
 // the start.
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
     vector<EvaluatedTriple> computeBatch(
-        const TableConstRefWithVocab& tableWithVocab, ChunkView chunkView,
+        const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
         CancellationHandle cancellationHandle) {
   cancellationHandle->throwIfCancelled();
+  AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
-  AD_CORRECTNESS_CHECK(!ql::ranges::empty(chunkView));
-  const size_t batchBegin = *ql::ranges::begin(chunkView);
+  const size_t batchBegin = *ql::ranges::begin(batch);
   const size_t batchEnd =
-      batchBegin + static_cast<size_t>(ql::ranges::size(chunkView));
+      batchBegin + static_cast<size_t>(ql::ranges::size(batch));
 
   BatchEvaluationContext ctx{tableWithVocab.idTable(), batchBegin, batchEnd};
 
