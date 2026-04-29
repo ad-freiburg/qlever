@@ -29,5 +29,6 @@ add_library(parser
         UpdateTriples.cpp
         MaterializedViewQuery.cpp
         GraphPatternAnalysis.cpp
+        ExternalValuesQuery.cpp
 )
 qlever_target_link_libraries(parser basicParser sparqlParser parserData sparqlExpressions rdfEscaping global util index rdfTypes)

@@ -21,7 +21,8 @@ Qlever::Qlever(const EngineConfig& config)
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
       index_{allocator_},
-      enablePatternTrick_{!config.noPatterns_} {
+      enablePatternTrick_{!config.noPatterns_},
+      disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -77,6 +78,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setKeepTempFiles(config.keepTemporaryFiles_);
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
 
@@ -181,7 +183,8 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_);
+      &namedResultCache_, &materializedViewsManager_, [](std::string) {}, false,
+      false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});

@@ -178,7 +178,7 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          AD_LOG_WARN
+          AD_LOG_DEBUG
               << "No timeout check has been performed for at least "
               << ParseableDuration{std::chrono::duration_cast<DurationType>(
                                        steady_clock::now() -

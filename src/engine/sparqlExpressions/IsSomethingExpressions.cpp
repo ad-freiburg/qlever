@@ -31,6 +31,7 @@ CPP_class_template(typename NaryOperation,
  public:
   using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
     using namespace prefilterExpressions;
     std::vector<PrefilterExprVariablePair> prefilterVec;
@@ -77,7 +78,16 @@ using isGeoPointExpression =
 struct BoolToId {
   Id operator()(bool b) const { return Id::makeFromBool(b); }
 };
-using boundExpression = NARY<1, FV<BoolToId, IsValidValueGetter>>;
+
+class BoundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
+ public:
+  using NARY<1, FV<BoolToId, IsValidValueGetter>>::NARY;
+
+  // The result of `BOUND` is always a valid bool.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
+  }
+};
 
 }  // namespace detail
 
@@ -97,7 +107,7 @@ SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isGeoPointExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
-  return std::make_unique<detail::boundExpression>(std::move(arg));
+  return std::make_unique<detail::BoundExpression>(std::move(arg));
 }
 
 }  // namespace sparqlExpression

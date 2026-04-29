@@ -149,7 +149,24 @@ class WktEnvelope {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
+// Get one of the two bounding box corners as `GeoPoint`s.
+template <BoundingBoxCorner RequestedCorner>
+class WktEnvelopeCorner {
+ public:
+  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    if constexpr (RequestedCorner == BoundingBoxCorner::LOWER_LEFT) {
+      return ValueId::makeFromGeoPoint(boundingBox.value().lowerLeft());
+    } else {
+      static_assert(RequestedCorner == BoundingBoxCorner::UPPER_RIGHT);
+      return ValueId::makeFromGeoPoint(boundingBox.value().upperRight());
+    }
   }
 };
 
@@ -185,7 +202,7 @@ class WktGeometryType {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
@@ -207,7 +224,7 @@ class WktGeometryN {
     }
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 

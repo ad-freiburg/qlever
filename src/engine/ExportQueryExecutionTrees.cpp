@@ -1,9 +1,15 @@
-// Copyright 2022 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ExportQueryExecutionTrees.h"
 
@@ -19,6 +25,7 @@
 #include "backports/algorithm.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
+#include "index/EncodedIriManager.h"
 #include "index/ExportIds.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -31,8 +38,8 @@
 using ad_utility::InputRangeTypeErased;
 
 namespace {
+
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -259,9 +266,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return ConstructTripleGenerator::generateStringTriples(
-      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
-      std::move(cancellationHandle));
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(qet, constructTriples, limitAndOffset,
+                            std::move(result), resultSize,
+                            std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -337,7 +345,7 @@ nlohmann::json idTableToQLeverJSONRow(
       continue;
     }
     const auto& currentId = data(rowIndex, opt->columnIndex_);
-    const auto& optionalStringAndXsdType = ExportIds::idToStringAndType(
+    const auto& optionalStringAndXsdType = ql::exportIds::idToStringAndType(
         qet.getQec()->getIndex(), currentId, localVocab);
     if (!optionalStringAndXsdType.has_value()) {
       row.emplace_back(nullptr);
@@ -493,7 +501,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    std::erase(selectedColumnIndices, std::nullopt);
+    ql::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -534,7 +542,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              ExportIds::idToStringAndType<format == MediaType::csv>(
+              ql::exportIds::idToStringAndType<format == MediaType::csv>(
                   qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
@@ -561,7 +569,7 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =
-      ExportIds::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalValue.has_value()) {
     return ""s;
   }
@@ -709,9 +717,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   ql::erase(columns, std::nullopt);
 
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
-    nlohmann::ordered_json binding = {};
+    auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
-      auto optionalStringAndType = ExportIds::idToStringAndType(
+      auto optionalStringAndType = ql::exportIds::idToStringAndType(
           qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
           pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
@@ -862,7 +870,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimit()) {
+  if (qet.supportsLimitOffset()) {
     limitOffsetClause._offset = 0;
   }
 }

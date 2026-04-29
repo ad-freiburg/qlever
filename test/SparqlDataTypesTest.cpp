@@ -1,13 +1,22 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de), UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/ConstructTripleInstantiator.h"
+#include "engine/ConstructTypes.h"
+#include "engine/Result.h"
 #include "index/Index.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 
 using namespace std::string_literals;
@@ -39,12 +48,42 @@ struct ContextWrapper {
 };
 
 ContextWrapper prepareContext() { return {}; }
-}  // namespace
 
-namespace {
-constexpr auto evaluate = [](auto&&... args) {
-  return ConstructQueryEvaluator::evaluateTerm(AD_FWD(args)...);
-};
+// Test helper that simulates the CONSTRUCT export pipeline for a single
+// `GraphTerm` in isolation. The real pipeline (in `ConstructTripleGenerator`)
+// operates on whole preprocessed templates and batches of result rows; there
+// is no production API for evaluating a single `GraphTerm` to its string
+// representation. This function manually stitches together the individual
+// pipeline stages (preprocessTerm -> evaluateBatch -> instantiateTerm ->
+// formatTerm) with a synthetic single-row batch, so that tests can verify
+// each `GraphTerm` variant independently.
+std::optional<std::string> evaluate(
+    const GraphTerm& term, const ConstructQueryExportContext& exportCtx,
+    PositionInTriple position) {
+  using namespace qlever::constructExport;
+  auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
+
+  auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
+      term, position, exportCtx._variableColumns);
+  if (!preprocessed) return std::nullopt;
+
+  BatchEvaluationResult batchResult;
+  batchResult.numRows_ = 1;
+
+  if (const auto* var = std::get_if<PrecomputedVariable>(&*preprocessed)) {
+    IdCache cache{1};
+    std::vector<size_t> cols{var->columnIndex_};
+    BatchEvaluationContext ctx{exportCtx.idTable_,
+                               exportCtx.resultTableRowIndex_,
+                               exportCtx.resultTableRowIndex_ + 1};
+    batchResult = ConstructBatchEvaluator::evaluateBatch(
+        cols, ctx, exportCtx.localVocab_, exportCtx._qecIndex, cache);
+  }
+
+  auto result = instantiateTerm(*preprocessed, batchResult, 0, rowIdx);
+  if (!result) return std::nullopt;
+  return formatTerm(**result, false);
+}
 }  // namespace
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {

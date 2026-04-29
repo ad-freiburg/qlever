@@ -3,14 +3,14 @@ add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator index)
 add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp
-        IndexScan.cpp Join.cpp Sort.cpp ExportQueryExecutionTrees.cpp
+        IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
-        VariableToColumnMap.cpp
+        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
@@ -18,7 +18,9 @@ add_library(engine
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
-        PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp)
+        PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
+        ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp MaterializedViewsQueryAnalysis.cpp
+        UpdateMetadata.cpp ExternalValues.cpp)
 
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
 

@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 #define QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 
+#include <boost/asio/awaitable.hpp>
 #include <cstdint>
 #include <tuple>
 #include <utility>
@@ -18,18 +19,11 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/IndexRebuilder.h"
+#include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
-#include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 
 namespace qlever::indexRebuilder {
-
-using OwnedBlocksEntry =
-    ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
-using OwnedBlocks = std::vector<OwnedBlocksEntry>;
-using InsertionPositions = std::vector<VocabIndex>;
-using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
-using BlankNodeBlocks = std::vector<uint64_t>;
 
 // Write a new vocabulary that contains all words from `vocab` plus all
 // entries in `entries`. Returns a pair consisting of a vector insertion
@@ -43,32 +37,6 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
 // Turn a vector of `OwnedBlocksEntry`s into a vector of `uint64_t`s
 // representing the block ids of the generated blocks.
 BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
-
-// Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
-// Note: Currently in the header because otherwise in shared libraries we
-// sometimes get in trouble with the ALWAYS_INLINE attribute, but once we have a
-// clean build there we might move it back to the .cpp with the
-// `-fno-semantic-interposition` fl
-// _____________________________________________________________________________
-AD_ALWAYS_INLINE static Id remapVocabId(
-    Id original, const InsertionPositions& insertionPositions) {
-  AD_EXPENSIVE_CHECK(
-      original.getDatatype() == Datatype::VocabIndex,
-      "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
-}
-
-// Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
-// id space left by random allocation of blank node ids.
-Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
-                    uint64_t minBlankNodeIndex);
 
 // Create a copy of the given `permutation` scanned according to `scanSpec`,
 // where all local vocab `Id`s are remapped according to `localVocabMapping`

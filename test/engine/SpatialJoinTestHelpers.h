@@ -6,12 +6,12 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
@@ -297,8 +297,8 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
   for (size_t i = 0; i < table->idTable().numRows(); i++) {
     std::string line = "";
     for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportIds::idToStringAndType(qec->getIndex(),
-                                               table->idTable().at(i, k), {});
+      auto test = ql::exportIds::idToStringAndType(
+          qec->getIndex(), table->idTable().at(i, k), {});
       line += test.value().first;
       line += " ";
     }
@@ -532,6 +532,8 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
+                                   std::nullopt,
+                                   std::nullopt,
                                    std::nullopt,
                                    std::nullopt,
                                    std::nullopt};

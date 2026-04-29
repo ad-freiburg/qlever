@@ -39,6 +39,22 @@ struct Filler {
   }
 };
 
+// Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
+// rows from the right have found a match so far.
+struct RightFiller {
+  std::vector<bool, ad_utility::AllocatorWithLimit<bool>> matchTracker_;
+
+  explicit RightFiller(size_t size,
+                       const ad_utility::AllocatorWithLimit<bool>& allocator)
+      : matchTracker_(size, false, allocator) {}
+
+  AD_ALWAYS_INLINE void track(size_t, size_t size, size_t offset) {
+    if (size > 0) {
+      matchTracker_.at(offset) = true;
+    }
+  }
+};
+
 // Helper class for `IndexNestedLoopJoin::matchLeft` tracks matches to be used
 // by `OptionalJoin`.
 struct Adder {
@@ -202,12 +218,19 @@ class OptionalJoinRange
     return Result::IdTableVocabPair{std::move(resultTable), leftVocab_.clone()};
   }
 };
+
+// Helper function for common pattern.
+template <size_t JOIN_COLUMNS>
+IdTableView<JOIN_COLUMNS> toStaticView(
+    const IdTable& idTable, const std::vector<ColumnIndex>& joinColumns) {
+  return idTable.asColumnSubsetView(joinColumns).asStaticView<JOIN_COLUMNS>();
+}
 }  // namespace detail
 
 // This class implements an index nested loop join using binary search to match
 // entries. The benefit of this method over the "regular" join algorithms is
-// that it doesn't require the right side to be sorted, potentially allowing you
-// to skip an expensive sort operation entirely. The downside is that the left
+// that it doesn't require one side to be sorted, potentially allowing you
+// to skip an expensive sort operation entirely. The downside is that the other
 // side has to be fully materialized. Currently handling undef values is
 // unsupported. `matchLeft` can be used with different types to accommodate
 // different types of joins.
@@ -222,9 +245,7 @@ class IndexNestedLoopJoin {
                       std::shared_ptr<const Result> rightResult)
       : joinColumns_{std::move(joinColumns)},
         leftResult_{std::move(leftResult)},
-        rightResult_{std::move(rightResult)} {
-    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
-  }
+        rightResult_{std::move(rightResult)} {}
 
  private:
   // Checks with entries in `rightTable` match entries in `leftTable`, and
@@ -238,8 +259,10 @@ class IndexNestedLoopJoin {
     for (const auto& rightRow : rightTable) {
       size_t leftOffset = 0;
       size_t leftSize = leftTable.size();
+      // Use `ql::ranges::ref_view` to avoid copying `RowReference` (which has a
+      // deleted copy constructor) on AppleClang.
       for (const auto& [rightId, leftCol] :
-           ::ranges::zip_view(rightRow, leftColumns)) {
+           ::ranges::views::zip(ql::ranges::ref_view{rightRow}, leftColumns)) {
         AD_EXPENSIVE_CHECK(!rightId.isUndefined());
         auto currentStart = leftCol.begin() + leftOffset;
         auto subrange = ql::ranges::equal_range(
@@ -256,8 +279,53 @@ class IndexNestedLoopJoin {
   }
 
  public:
-  // Main function for MINUS and EXISTS operations.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> computeExistance() {
+  // Function for MINUS and EXISTS operations when the right side is fully
+  // materialized.
+  Result::LazyResult computeRightExistance(auto transformationFunc) {
+    std::vector<ColumnIndex> leftColumns;
+    std::vector<ColumnIndex> rightColumns;
+    for (const auto& [leftCol, rightCol] : joinColumns_) {
+      leftColumns.push_back(leftCol);
+      rightColumns.push_back(rightCol);
+    }
+    return ad_utility::callFixedSizeVi(
+        static_cast<int>(joinColumns_.size()),
+        [this, leftColumns = std::move(leftColumns), &rightColumns,
+         transformationFunc =
+             std::move(transformationFunc)](auto JOIN_COLUMNS) {
+          auto rightTable = detail::toStaticView<JOIN_COLUMNS>(
+              rightResult_->idTable(), rightColumns);
+          auto matchHelper =
+              [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
+               transformationFunc = std::move(transformationFunc),
+               rightResult = rightResult_](
+                  auto&& idTable,
+                  LocalVocab localVocab) -> Result::IdTableVocabPair {
+            detail::RightFiller matchTracker{
+                idTable.size(), idTable.getAllocator().template as<bool>()};
+            matchLeft(matchTracker, rightTable,
+                      detail::toStaticView<JOIN_COLUMNS>(idTable, leftColumns));
+            return transformationFunc(AD_FWD(idTable), std::move(localVocab),
+                                      matchTracker.matchTracker_);
+          };
+          if (leftResult_->isFullyMaterialized()) {
+            return Result::LazyResult{std::array{matchHelper(
+                leftResult_->idTable(), leftResult_->getCopyOfLocalVocab())}};
+          }
+          return Result::LazyResult{ad_utility::CachingTransformInputRange{
+              leftResult_->idTables(),
+              [matchHelper = std::move(matchHelper)](auto& pair) {
+                return matchHelper(std::move(pair.idTable_),
+                                   std::move(pair.localVocab_));
+              }}};
+        });
+  }
+
+  // Function for MINUS and EXISTS operations when the left side is fully
+  // materialized.
+  std::vector<char, ad_utility::AllocatorWithLimit<char>>
+  computeLeftExistance() {
+    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Filler matchTracker{
         leftResult_->idTable().size(),
         leftResult_->idTable().getAllocator().as<char>()};
@@ -273,15 +341,13 @@ class IndexNestedLoopJoin {
          &rightColumns](auto JOIN_COLUMNS_PAR) {
           static constexpr size_t JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          IdTableView<JOIN_COLUMNS> leftTable =
-              leftResult_->idTable()
-                  .asColumnSubsetView(leftColumns)
-                  .template asStaticView<JOIN_COLUMNS>();
+          auto leftTable = detail::toStaticView<JOIN_COLUMNS>(
+              leftResult_->idTable(), leftColumns);
           auto matchHelper = [&matchTracker, &leftTable,
                               &rightColumns](const IdTable& idTable) {
-            matchLeft(matchTracker, leftTable,
-                      idTable.asColumnSubsetView(rightColumns)
-                          .template asStaticView<JOIN_COLUMNS>());
+            matchLeft(
+                matchTracker, leftTable,
+                detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
           };
           if (rightResult_->isFullyMaterialized()) {
             matchHelper(rightResult_->idTable());
@@ -300,6 +366,7 @@ class IndexNestedLoopJoin {
       bool yieldOnce, size_t resultWidth,
       ad_utility::SharedCancellationHandle cancellationHandle,
       size_t numColsRight, bool keepJoinColumns) && {
+    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Adder matchTracker{leftResult_->idTable().size(),
                                leftResult_->idTable().getAllocator().as<char>(),
                                std::move(cancellationHandle),
@@ -314,15 +381,14 @@ class IndexNestedLoopJoin {
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
               joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
-          IdTableView<JOIN_COLUMNS> leftTableView =
-              leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
-                  .template asStaticView<JOIN_COLUMNS>();
+          auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
+              leftTable, joinColumnData.jcsLeft());
           auto matchHelper = [&matchTracker, &leftTableView,
                               rightColumns = joinColumnData.jcsRight()](
                                  const IdTable& idTable) {
-            matchLeft(matchTracker, leftTableView,
-                      idTable.asColumnSubsetView(rightColumns)
-                          .template asStaticView<JOIN_COLUMNS>());
+            matchLeft(
+                matchTracker, leftTableView,
+                detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
           };
           IdTable resultTable{resultWidth, leftTable.getAllocator()};
           LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
@@ -363,8 +429,8 @@ class IndexNestedLoopJoin {
                  rightColumns = std::move(rightColumns)](
                     detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
-                            rightTable.asColumnSubsetView(rightColumns)
-                                .template asStaticView<JOIN_COLUMNS>());
+                            detail::toStaticView<JOIN_COLUMNS>(rightTable,
+                                                               rightColumns));
                 }}};
           }
           resultTable.setColumnSubset(joinColumnData.permutationResult());
