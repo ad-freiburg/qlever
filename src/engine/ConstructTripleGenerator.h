@@ -8,77 +8,77 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
-#include <functional>
+#include <gtest/gtest_prod.h>
 
-#include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "global/Constants.h"
-#include "parser/data/ConstructQueryExportContext.h"
+#include "engine/Result.h"
+#include "engine/VariableToColumnMap.h"
+#include "index/Index.h"
 #include "util/CancellationHandle.h"
+#include "util/Iterators.h"
+#include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
 
-// ConstructTripleGenerator: generates StringTriples from
-// query results. It manages the global row offset and transforms result tables
-// and rows into a single continuous range of triples.
+using ad_utility::InputRangeTypeErased;
+using CancellationHandle = ad_utility::SharedCancellationHandle;
+using Triples = ad_utility::sparql_types::Triples;
+using IdCache =
+    ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
+using StringTriple = QueryExecutionTree::StringTriple;
+
+// Generates triples from the CONSTRUCT query results by instantiating the
+// template triple patterns with the values from the result table produced by
+// the WHERE clause of the CONSTRUCT query.
 class ConstructTripleGenerator {
+  friend class ConstructTripleGeneratorTest;
+
  public:
-  using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using StringTriple = QueryExecutionTree::StringTriple;
-  using PreprocessedConstructTemplate =
-      qlever::constructExport::PreprocessedConstructTemplate;
-  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
+  // the number of `IdTable` rows that one batch consists of.
+  static constexpr size_t BATCH_SIZE = 1024;
+  // the number of entries in the `IdCache` for each variable in the construct
+  // clause template.
+  static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
-  // _____________________________________________________________________________
-  ConstructTripleGenerator(
-      PreprocessedConstructTemplate preprocessedTemplateTriples,
-      std::shared_ptr<const Result> result,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationHandle)
-      : preprocessedTemplateTriples_(
-            std::move(preprocessedTemplateTriples.preprocessedTriples_)),
-        result_(std::move(result)),
-        variableColumns_(variableColumns),
-        index_(index),
-        cancellationHandle_(std::move(cancellationHandle)) {}
+  // Instantiates `templateTriples` for each row in `rowIndices` and returns a
+  // lazy range of triples serialized according to `mediaType`.
+  static InputRangeTypeErased<std::string> generateFormattedTriples(
+      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Index& index, CancellationHandle cancellationhandle,
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+      ad_utility::MediaType mediaType);
 
-  // _____________________________________________________________________________
-  // This generator has to be called for each table contained in the result of
-  // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
-  // rowOffsset).
-  //
-  // For each row of the result table (the table that is created as result of
-  // processing the WHERE-clause of a CONSTRUCT-query) it creates the resulting
-  // triples by instantiating the triple-patterns with the values of the
-  // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
-  // of a CONSTRUCT-query). The following pipeline takes place conceptually:
-  // result-table -> result-table Rows -> Triple Patterns -> StringTriples
-  auto generateStringTriplesForResultTable(const TableWithRange& table);
-
-  // _____________________________________________________________________________
-  // Helper function that generates the result of a CONSTRUCT query as a range
-  // of `StringTriple`s.
-  static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> result, uint64_t& resultSize,
-      CancellationHandle cancellationHandle);
+  // Instantiates `templateTriples` for each row in `rowIndices` and returns a
+  // lazy range of `StringTriple`.
+  static InputRangeTypeErased<StringTriple> generateStringTriples(
+      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Index& index, CancellationHandle cancellationhandle,
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
 
  private:
-  // triple templates contained in the graph template of the CONSTRUCT-query.
-  std::vector<PreprocessedTriple> preprocessedTemplateTriples_;
-  // wrapper around the result-table obtained from processing the
-  // WHERE-clause of the CONSTRUCT-query.
-  std::shared_ptr<const Result> result_;
-  // map from Variables to the column idx of the `IdTable` (needed for fetching
-  // the value of a `Variable` for a specific row of the `IdTable`).
-  std::reference_wrapper<const VariableToColumnMap> variableColumns_;
-  std::reference_wrapper<const Index> index_;
-  CancellationHandle cancellationHandle_;
-  size_t rowOffset_ = 0;
+  // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
+  // blank-node-only templates).
+  static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
+
+  // Lazily evaluates all `TableWithRange` values from `rowIndices`, processes
+  // them in batches of `BATCH_SIZE` rows, and returns a flat range of
+  // `EvaluatedTriple`.
+  static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationhandle,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      size_t rowOffset);
+
+  FRIEND_TEST(MakeIdCache, emptyTemplate);
+  FRIEND_TEST(MakeIdCache, singleVariable);
+  FRIEND_TEST(MakeIdCache, multipleVariables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, cannotCancelDuringBatch);
+  FRIEND_TEST(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches);
 };
 
 }  // namespace qlever::constructExport
