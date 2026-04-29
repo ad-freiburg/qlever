@@ -5,53 +5,93 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+env:
+  # Bump this to upgrade emsdk. The version must exist as a tag in the upstream
+  # https://github.com/emscripten-core/emsdk repository. We install emsdk
+  # directly (rather than via the Conan recipe) because the Conan Center recipe
+  # lags behind upstream — at time of writing it tops out at 3.1.73.
+  EMSDK_VERSION: "5.0.6"
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: 'recursive'
-    - name: Install conan package manager
-      run: |
-        sudo apt-get install pipx
-        pipx ensurepath
-        source ~/.bashrc
-        pipx install conan
-      shell: bash
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
-    - name: Set up nodejs v25.
-      uses: actions/setup-node@v6
-      with:
-        node-version: 25
+      - name: Set up emsdk ${{ env.EMSDK_VERSION }}
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
 
-    - name: Get build and host profiles for conan
-      working-directory: ${{github.workspace}}
-      run: |
-        conan profile detect
+      # emsdk shells out to Node during compilation, so a working node has to
+      # be on PATH even though we never invoke it directly.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
 
-    - name: Cache for conan
-      uses: actions/cache@v5
-      env:
-        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
-      with:
-        path: ~/.conan2
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
+      - name: Install conan
+        run: pipx install conan
 
-    - name: Install and run conan. Also create a build directory.
-      working-directory:  ${{github.workspace}}
-      run: conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
+      - name: Configure default conan profile
+        run: conan profile detect --force
 
-    - name: Configure CMake
-      working-directory: ${{github.workspace}}/build
-      run: cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
+      # `compiler.version` in a conan profile isn't a pointer to an installed
+      # binary — emcc is found via PATH (from setup-emsdk) and cross-compile
+      # rules come from Emscripten.cmake (wired in via the profile's
+      # `tools.cmake.cmaketoolchain:user_toolchain`). The version string is a
+      # label that goes into the package-ID hash so wasm-built dependencies
+      # tagged with one emsdk version are never silently reused with another.
+      # Conan validates that label against a closed list in its bundled
+      # settings.yml; that list lags upstream emsdk releases. settings_user.yml
+      # is conan's official extension hook for adding a version the bundled
+      # list doesn't know about yet.
+      - name: Register emsdk version with conan settings
+        run: |
+          cat > ~/.conan2/settings_user.yml <<EOF
+          compiler:
+            emcc:
+              version: ["${EMSDK_VERSION}"]
+          EOF
 
-    - name: Build
-      working-directory: ${{github.workspace}}/build
+      - name: Cache conan packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.conan2/p
+          key: ${{ runner.os }}-conan-emscripten-${{ env.EMSDK_VERSION }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile') }}
+          # On an exact-key miss (e.g. small change to conanfile.txt or the
+          # profile), fall back to the most recent cache for this emsdk
+          # version. Conan reuses unchanged binary packages and only rebuilds
+          # what changed; without this, any change forces a full rebuild of
+          # boost/icu/openssl for wasm64.
+          restore-keys: |
+            ${{ runner.os }}-conan-emscripten-${{ env.EMSDK_VERSION }}-
+            ${{ runner.os }}-conan-emscripten-
 
-      run: cmake --build .
+      - name: Install dependencies via conan
+        run: conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
 
+      - name: Configure CMake
+        run: >
+          cmake -S . -B build -GNinja
+          -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
+          -DCMAKE_BUILD_TYPE=Release
+          -DLOGLEVEL=INFO
+          -DUSE_PARALLEL=true
+          -D_NO_TIMING_TESTS=ON
+          -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON
+          -D_NO_BENCHMARK=ON
+          -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --parallel

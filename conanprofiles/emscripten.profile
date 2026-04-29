@@ -4,16 +4,18 @@ build_type=Release
 compiler=emcc
 compiler.cppstd=20
 compiler.libcxx=libc++
-# emsdk 3.1.73 is the latest version provided by the Conan package manager.
-compiler.version=3.1.73
+# Keep this in sync with the EMSDK_VERSION in
+# .github/workflows/native-build-with-conan-and-emscripten.yml. The Conan
+# Center emsdk recipe lags behind upstream, so emsdk is installed directly
+# (CI uses mymindstorm/setup-emsdk; locally, install emsdk yourself and
+# export EMSDK before running conan).
+compiler.version=5.0.6
 os=Emscripten
 compiler.threads=posix
 
-[tool_requires]
-emsdk/3.1.73
-
 [options]
 icu/*:with_icuio=False
+icu/*:data_packaging=archive
 
 boost/*:without_atomic=True
 boost/*:without_charconv=True
@@ -42,6 +44,7 @@ boost/*:without_wave=True
 
 [conf]
 tools.cmake.cmaketoolchain:generator=Ninja
+tools.cmake.cmaketoolchain:user_toolchain=['{{ os.environ.get("EMSDK", "") }}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake']
 tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions']
 tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions']
 boost/*:tools.build:cxxflags=['-sMEMORY64=1']
