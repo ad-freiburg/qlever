@@ -575,8 +575,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // no value.
   auto setTreeAndCol = [this](auto& side, auto& opAndCol,
                               bool resetPlaceholder) {
-    // if (opAndCol.has_value()) {
-    if (side.isVariable()) {
+    if (opAndCol.has_value()) {
       auto& [op, col] = opAndCol.value();
       op = matchWithKnowledgeGraph(col, std::move(op));
 
@@ -607,9 +606,10 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
-  // Traverse each side of the operation and insert their non-graph-colums to
-  // the plan.
-  auto insertColumnsToPlan = [this, &plan](const auto& opAndCol) {
+  // Traverse each side of the operation and insert columns which are not
+  // related to the join into the plan.
+  auto insertPayloadColumnsToPlan = [this, &plan](const auto& opAndCol,
+                                                  const auto& otherCol) {
     // Ensure we only bind populated columns.
     if (!opAndCol.has_value()) {
       return;
@@ -621,7 +621,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     // of the `variable` to keep the code simpler.
     for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
       ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-      if (columnIndex == col || variable == graphVariable_) {
+      if (columnIndex == col || variable == graphVariable_ ||
+          (otherCol.has_value() &&
+           (otherCol->second == columnIndex || otherCol->second == col))) {
         continue;
       }
 
@@ -637,15 +639,20 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
           columnIndexWithType.columnIndex_ -= 1;
         }
       }
-      // TODO<schaetzr> why this fails? Maybe convert to if?
+      // Ensure all "payload columns" (colums that come with the transitive path
+      // but are irrelevant for the join) are appended to the `variableColumns_`
+      // list.
       AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
       plan->variableColumns_[variable] = columnIndexWithType;
     }
     plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
   };
 
-  insertColumnsToPlan(leftOpAndCol);
-  insertColumnsToPlan(rightOpAndCol);
+  if (leftOpAndCol.has_value()) {
+    insertPayloadColumnsToPlan(leftOpAndCol, rightOpAndCol);
+  } else {
+    insertPayloadColumnsToPlan(rightOpAndCol, leftOpAndCol);
+  }
 
   // Make sure mapping actually points to the last column if it's not one
   // of the regular variables.

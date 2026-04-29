@@ -2499,7 +2499,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return std::nullopt;
+  return {std::nullopt, std::nullopt};
 #else
   // If there are more than two pairs of join columns, we have a graph
   // variable. In that case, we compute the full transitive hull (followed by a
