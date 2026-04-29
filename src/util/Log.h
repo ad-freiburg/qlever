@@ -55,22 +55,7 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
                      {Enum::TRACE, "TRACE"}}};
   static constexpr std::string_view typeName() { return "log level"; }
   using EnumWithStrings::EnumWithStrings;
-  static const LogLevel FATAL;
-  static const LogLevel ERROR;
-  static const LogLevel WARN;
-  static const LogLevel INFO;
-  static const LogLevel DEBUG;
-  static const LogLevel TIMING;
-  static const LogLevel TRACE;
 };
-
-inline const LogLevel LogLevel::FATAL{LogLevel::Enum::FATAL};
-inline const LogLevel LogLevel::ERROR{LogLevel::Enum::ERROR};
-inline const LogLevel LogLevel::WARN{LogLevel::Enum::WARN};
-inline const LogLevel LogLevel::INFO{LogLevel::Enum::INFO};
-inline const LogLevel LogLevel::DEBUG{LogLevel::Enum::DEBUG};
-inline const LogLevel LogLevel::TIMING{LogLevel::Enum::TIMING};
-inline const LogLevel LogLevel::TRACE{LogLevel::Enum::TRACE};
 
 }  // namespace ad_utility
 
@@ -117,10 +102,34 @@ struct LogLock {
 };
 }  // namespace detail
 
-// Set the runtime log level, called from the RuntimeParameters update action.
+// Set the runtime log level. Throws if `level` is more verbose than the
+// compile-time LOGLEVEL, because such messages are compiled out and can never
+// appear regardless of the runtime setting.
 inline void setRuntimeLogLevel(LogLevel level) {
+  if (level.value() > LOGLEVEL) {
+    throw std::runtime_error{
+        "Cannot set runtime log level to \"" + std::string{level.toString()} +
+        "\" because the compile-time log level is \"" +
+        std::string{LogLevel{LOGLEVEL}.toString()} +
+        "\". Recompile with -DLOGLEVEL=" + std::string{level.toString()} +
+        " or higher to enable this log level."};
+  }
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
+
+// RAII guard that temporarily sets the runtime log level for the duration of
+// a scope and restores the previous level on destruction.
+struct ScopedRuntimeLogLevel {
+  LogLevel::Enum previous_;
+  explicit ScopedRuntimeLogLevel(LogLevel::Enum level)
+      : previous_{detail::runtimeLogLevel.exchange(
+            level, std::memory_order_relaxed)} {}
+  ~ScopedRuntimeLogLevel() {
+    detail::runtimeLogLevel.store(previous_, std::memory_order_relaxed);
+  }
+  ScopedRuntimeLogLevel(const ScopedRuntimeLogLevel&) = delete;
+  ScopedRuntimeLogLevel& operator=(const ScopedRuntimeLogLevel&) = delete;
+};
 
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
 // to globally redirect the `AD_LOG_...` macros to another output stream.

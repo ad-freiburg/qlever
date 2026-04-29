@@ -12,6 +12,7 @@
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -98,10 +99,11 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   if (LOGLEVEL < level) {                                       \
     GTEST_SKIP() << "This test requires log level of at least " \
                  << ad_utility::Log::getLevel<level>()          \
-                 << ", but the current log level is "           \
+                 << ", but the compile-time log level is "      \
                  << ad_utility::Log::getLevel<LOGLEVEL>();      \
   }                                                             \
-  ASSERT_GE(LOGLEVEL, level);
+  ASSERT_GE(LOGLEVEL, level);                                   \
+  ad_utility::ScopedRuntimeLogLevel scopedRuntimeLogLevel_{level};
 
 // _____________________________________________________________________________
 
