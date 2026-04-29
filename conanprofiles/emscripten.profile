@@ -42,9 +42,25 @@ boost/*:without_timer=True
 boost/*:without_type_erasure=True
 boost/*:without_wave=True
 
+# CMake-based dependencies pick up emcc via the Emscripten.cmake toolchain
+# wired in below (`tools.cmake.cmaketoolchain:user_toolchain`). Autotools-
+# based ones (icu, openssl) don't read CMake toolchains — they just consult
+# CC/CXX/AR/... in the environment. The Conan Center emsdk recipe used to
+# inject these for us; since we install emsdk directly now, we set them
+# here. The unprefixed names rely on emcc/em++/emar/... being on PATH,
+# which setup-emsdk (CI) and emsdk_env.sh (local) both arrange.
+[buildenv]
+CC=emcc
+CXX=em++
+AR=emar
+NM=emnm
+RANLIB=emranlib
+STRIP=emstrip
+
 [conf]
 tools.cmake.cmaketoolchain:generator=Ninja
 tools.cmake.cmaketoolchain:user_toolchain=['{{ os.environ.get("EMSDK", "") }}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake']
+tools.build:compiler_executables={"c": "emcc", "cpp": "em++"}
 tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions']
 tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions']
 boost/*:tools.build:cxxflags=['-sMEMORY64=1']
