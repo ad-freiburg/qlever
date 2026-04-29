@@ -63,24 +63,27 @@ const auto equalityCheckPrefilterVectors =
 };
 
 //______________________________________________________________________________
-// `evalAndEqualityCheck` evaluates the provided `SparqlExpression` and checks
-// in the following if the resulting vector contains the same
+// `makeEvalAndEqualityCheck` creates a lambda that evaluates the provided
+// `SparqlExpression` and checks in the following if the resulting vector
+// contains the same
 // `<PrefilterExpression, Variable>` pairs in the correct order. If no
 // `<PrefilterExpression, Variable>` pair is provided, the expected value for
 // the `SparqlExpression` is an empty vector.
-const auto evalAndEqualityCheck =
-    [](std::unique_ptr<SparqlExpression> sparqlExpr,
-       std::convertible_to<PrefilterExprVariablePair> auto&&... prefilterArgs) {
-      std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
-      if constexpr (sizeof...(prefilterArgs) > 0) {
-        (prefilterVarPair.emplace_back(
-             std::forward<PrefilterExprVariablePair>(prefilterArgs)),
-         ...);
-      }
-      equalityCheckPrefilterVectors(
-          sparqlExpr->getPrefilterExpressionForMetadata(),
-          std::move(prefilterVarPair));
-    };
+auto makeEvalAndEqualityCheck(const LocalVocabContext& context) {
+  return [&context](std::unique_ptr<SparqlExpression> sparqlExpr,
+                    std::convertible_to<
+                        PrefilterExprVariablePair> auto&&... prefilterArgs) {
+    std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
+    if constexpr (sizeof...(prefilterArgs) > 0) {
+      (prefilterVarPair.emplace_back(
+           std::forward<PrefilterExprVariablePair>(prefilterArgs)),
+       ...);
+    }
+    equalityCheckPrefilterVectors(
+        sparqlExpr->getPrefilterExpressionForMetadata(context),
+        std::move(prefilterVarPair));
+  };
+}
 
 }  // namespace
 
@@ -89,6 +92,9 @@ const auto evalAndEqualityCheck =
 // getPrefilterExpressionForMetadata.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      testGetPrefilterExpressionDefault) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   evalAndEqualityCheck(
       makeUnaryMinusExpression(makeOptLiteralSparqlExpr(IntId(0))));
   evalAndEqualityCheck(
@@ -111,6 +117,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // PrefilterExpression.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExpressionFromSparqlRelational) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const TestDates dt{};
   const Variable var = Variable{"?x"};
   // ?x == BooldId(true) (RelationalExpression Sparql)
@@ -169,6 +178,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // corresponding PrefilterExpression values.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExpressionsToComplexSparqlExpressions) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable varX = Variable{"?x"};
   const Variable varY = Variable{"?y"};
   const Variable varZ = Variable{"?z"};
@@ -184,7 +196,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(
       andSprqlExpr(geSprql(varX, L("\"berlin\"")),
                    neqSprql(varX, L("\"hamburg\""))),
-      pr(andExpr(ge(LVE("\"berlin\"")), neq(LVE("\"hamburg\""))), varX));
+      pr(andExpr(ge(LVE("\"berlin\"", qec->getLocalVocabContext())),
+                 neq(LVE("\"hamburg\"", qec->getLocalVocabContext()))),
+         varX));
   // ?z > <iri> AND ?y > 0 AND ?x < 30.00
   // expected prefilter pairs
   // {<(< 30.00), ?x>, <(> 0), ?y>, <(> <iri>), ?z>}
@@ -192,7 +206,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                                  gtSprql(varY, IntId(0))),
                                     ltSprql(varX, DoubleId(30.00))),
                        pr(lt(DoubleId(30.00)), varX), pr(gt(IntId(0)), varY),
-                       pr(gt(LVE("<iri>")), varZ));
+                       pr(gt(LVE("<iri>", qec->getLocalVocabContext())), varZ));
 
   // ?x == VocabId(10) AND ?y >= VocabId(10)
   // expected prefilter pairs:
@@ -237,7 +251,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                            leSprql(varY, L("\"world\""))),
                                leSprql(varX, VocabId(10)))),
       pr(notExpr(le(VocabId(10))), varX),
-      pr(notExpr(le(LVE("\"world\""))), varY),
+      pr(notExpr(le(LVE("\"world\"", qec->getLocalVocabContext()))), varY),
       pr(notExpr(le(VocabId(10))), varZ));
   // ?x >= 10 AND ?y >= 10
   // expected prefilter pairs:
@@ -279,7 +293,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                             eqSprql(varX, I("<iri/ref10>")))),
                    notSprqlExpr(orSprqlExpr(geSprql(varZ, DoubleId(10)),
                                             eqSprql(varY, BoolId(false))))),
-      pr(notExpr(orExpr(eq(LVE("<iri/ref1>")), eq(LVE("<iri/ref10>")))), varX),
+      pr(notExpr(orExpr(eq(LVE("<iri/ref1>", qec->getLocalVocabContext())),
+                        eq(LVE("<iri/ref10>", qec->getLocalVocabContext())))),
+         varX),
       pr(notExpr(eq(BoolId(false))), varY),
       pr(notExpr(ge(DoubleId(10))), varZ));
   // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
@@ -313,8 +329,10 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
       notSprqlExpr(orSprqlExpr(
           andSprqlExpr(geSprql(varY, VocabId(0)), leSprql(varY, L("\"W\""))),
           notSprqlExpr(geSprql(varX, I("<iri>"))))),
-      pr(notExpr(notExpr(ge(LVE("<iri>")))), varX),
-      pr(notExpr(andExpr(ge(VocabId(0)), le(LVE("\"W\"")))), varY));
+      pr(notExpr(notExpr(ge(LVE("<iri>", qec->getLocalVocabContext())))), varX),
+      pr(notExpr(andExpr(ge(VocabId(0)),
+                         le(LVE("\"W\"", qec->getLocalVocabContext())))),
+         varY));
   // ?z >= 10 AND ?z <= 100 AND ?x >= 10 AND ?x != 50 AND !(?y <= 10) AND
   // !(?city <= VocabId(1000) OR ?city == VocabId(1005))
   // expected prefilter pairs:
@@ -370,6 +388,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // For this test we expect that no PrefilterExpression is available.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getEmptyPrefilterFromSparqlRelational) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable var = Variable{"?x"};
   const Iri iri = I("<Iri>");
   const Literal lit = L("\"lit\"");
@@ -389,6 +410,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // empty PrefilterExpression vector.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getEmptyPrefilterForMoreComplexSparqlExpressions) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable varX = Variable{"?x"};
   const Variable varY = Variable{"?y"};
   const Variable varZ = Variable{"?z"};
@@ -474,6 +498,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      testGetPrefixRegexExpressionFromSparqlExprssions) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
   const auto varY = Variable{"?y"};
   evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
@@ -504,6 +531,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExprForIsDatatypeExpr) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
   // The following cases should return a <Prefilter, Variable> pair.
   evalAndEqualityCheck(isIriSprql(varX), pr(isIri(), varX));
@@ -522,6 +552,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // Test PrefilterExpression creation for SparqlExpression InExpression
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
   evalAndEqualityCheck(inSprqlExpr(varX, IntId(0), VocabId(10)),
                        pr(inExpr({IntId(0), VocabId(10)}), varX));
@@ -536,6 +569,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
 //______________________________________________________________________________
 // Test PrefilterExpression creation for the expression: `YEAR(?var) op INT`.
 TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
+  auto* qec = ad_utility::testing::getQec();
+  auto evalAndEqualityCheck =
+      makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto var = Variable{"?x"};
   // Retrieve the `ValueId` for the pre-filter reference `Date` created with the
   // provided `expectedYear` value.
@@ -570,10 +606,11 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
   evalAndEqualityCheck(
       eqSprql(yearSprqlExpr(ltSprql(var, IntId(2025))), IntId(2025)));
 
-  auto assertThrowsError = [](std::unique_ptr<SparqlExpression> expr,
-                              const std::string& runtimeErrorMessage) {
-    AD_EXPECT_THROW_WITH_MESSAGE(expr->getPrefilterExpressionForMetadata(),
-                                 ::testing::Eq(runtimeErrorMessage));
+  auto assertThrowsError = [qec](std::unique_ptr<SparqlExpression> expr,
+                                 const std::string& runtimeErrorMessage) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        expr->getPrefilterExpressionForMetadata(qec->getLocalVocabContext()),
+        ::testing::Eq(runtimeErrorMessage));
   };
   // Test SparqlExpressions for which we expect that the reference value-type
   // error is thrown.

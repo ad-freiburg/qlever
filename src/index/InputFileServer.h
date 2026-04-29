@@ -60,9 +60,13 @@ class InputFileServer {
                                    : std::optional{std::string{it->value()}};
       }();
 
+      auto bodyPtr = std::make_shared<std::string>(std::move(request.body()));
+      auto factory = [bodyPtr](size_t, std::string_view) {
+        return std::make_unique<StringParallelBuffer>(std::move(*bodyPtr));
+      };
       qlever::InputFileSpecification spec{
-          qlever::InputFileSpecification::FileContents{
-              std::move(request.body())},
+          qlever::InputFileSpecification::BufferFactoryAndDescription{
+              std::move(factory), "<http-request-body>"},
           qlever::Filetype::Turtle, std::move(graph)};
       auto status = queue.pushIfNotFull(std::move(spec));
       switch (status) {

@@ -1,7 +1,11 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_PARSER_PARALLELBUFFER_H
 #define QLEVER_SRC_PARSER_PARALLELBUFFER_H
@@ -20,30 +24,23 @@
  * @brief Abstract base class for certain input buffers.
  *
  * Is able to return a whole block of bytes from some kind of
- * input file/stream via the call to getNextBlock()
- * If It is computationally expensive to get the next bytes (e.g.
- * because they have to be decompressed) this can be done asynchronously
+ * input file/stream via the call to getNextBlock(). If it is
+ * computationally expensive to get the next bytes (e.g. because
+ * they have to be decompressed) this can be done asynchronously
  * between two calls to getNextBlock.
  */
 class ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
   /**
-   * @brief Specify the size of the blocks that are to be retrieved
+   * @brief Specify the size of the blocks that are to be retrieved.
    * @param blocksize  the blocksize (in bytes)
    */
   explicit ParallelBuffer(size_t blocksize) : blocksize_(blocksize) {}
   virtual ~ParallelBuffer() = default;
-  /**
-   * @brief Open a file (in the sense of unix files, can also be a
-   * (network/pipe) stream.
-   * @param filename Name of the file which is to be opened.
-   */
-  virtual void open(const std::string& filename) = 0;
+
   /**
    * @brief Get (approximately) the next blocksize_ bytes from the input stream.
-   *
-   * Only valid after a call to open().
    *
    * @return The next bytes or std::nullopt to signal EOF.
    */
@@ -66,10 +63,10 @@ class ParallelBuffer {
 class ParallelFileBuffer : public ParallelBuffer {
  public:
   using BufferType = ad_utility::UninitializedVector<char>;
-  explicit ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
 
-  // _________________________________________________________________________
-  void open(const std::string& filename) override;
+  // Construct a buffer that reads from `filename` with the given blocksize.
+  // The file is opened immediately upon construction.
+  ParallelFileBuffer(size_t blocksize, const std::string& filename);
 
   // _____________________________________________________
   std::optional<BufferType> getNextBlock() override;
@@ -81,12 +78,17 @@ class ParallelFileBuffer : public ParallelBuffer {
   std::future<size_t> fut_;
 };
 
-// A parallel buffer that reads input from the file in blocks, where each block,
-// except possibly the last, ends with `endRegex`.
+// A parallel buffer that reads input in blocks, where each block, except
+// possibly the last, ends with `endRegex`. It wraps any `ParallelBuffer` as
+// the underlying byte source.
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
-  ParallelBufferWithEndRegex(size_t blocksize, std::string endRegex)
-      : ParallelBuffer{blocksize},
+  // Construct from an already-opened `rawBuffer` and a regex that marks the
+  // end of a statement. The blocksize is derived from `rawBuffer`.
+  ParallelBufferWithEndRegex(std::unique_ptr<ParallelBuffer> rawBuffer,
+                             std::string endRegex)
+      : ParallelBuffer{rawBuffer->getBlocksize()},
+        rawBuffer_{std::move(rawBuffer)},
         endRegex_{endRegex},
         endRegexAsString_{std::move(endRegex)} {}
 
@@ -96,21 +98,38 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   // not found, simply return the rest of the data.
   std::optional<BufferType> getNextBlock() override;
 
-  // Open the file from which the blocks are read.
-  void open(const std::string& filename) override { rawBuffer_.open(filename); }
-
  private:
   // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000,
   // 4000... bytes. We have to do this, because "reverse" regex matching is not
-  // trivial. Returns the st Returns the number of bytes in `vec` until the end
-  // of the regex match, or std::nullopt if the regex was not found at all.
+  // trivial. Returns the number of bytes in `vec` until the end of the regex
+  // match, or std::nullopt if the regex was not found at all.
   static std::optional<size_t> findRegexNearEnd(const BufferType& vec,
                                                 const re2::RE2& regex);
-  ParallelFileBuffer rawBuffer_{blocksize_};
+  std::unique_ptr<ParallelBuffer> rawBuffer_;
   BufferType remainder_;
   re2::RE2 endRegex_;
   std::string endRegexAsString_;
   bool exhausted_ = false;
+};
+
+// A ParallelBuffer that serves a pre-loaded string as a single block.
+class StringParallelBuffer : public ParallelBuffer {
+  std::string content_;
+  bool consumed_ = false;
+
+ public:
+  explicit StringParallelBuffer(std::string content)
+      : ParallelBuffer{content.size()}, content_{std::move(content)} {}
+
+  std::optional<BufferType> getNextBlock() override {
+    if (consumed_) return std::nullopt;
+    consumed_ = true;
+    BufferType buf;
+    buf.resize(content_.size());
+    std::ranges::copy(content_, buf.data());
+    content_.clear();
+    return buf;
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_PARALLELBUFFER_H

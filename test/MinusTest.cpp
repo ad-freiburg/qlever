@@ -144,16 +144,18 @@ TEST(Minus, computeMinus) {
 
 // _____________________________________________________________________________
 TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
   IdTable b = makeIdTableFromVector({{0}});
-  LocalVocabEntry aEntry = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry aEntry =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
   LocalVocab vocabA;
   vocabA.getIndexAndAddIfNotContained(aEntry);
   LocalVocab vocabB;
   vocabB.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"b\""));
+      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext));
 
-  auto* qec = ad_utility::testing::getQec();
   Minus m{qec,
           ad_utility::makeExecutionTree<ValuesForTesting>(
               qec, std::move(a),
@@ -171,8 +173,12 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext);
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -194,7 +200,6 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
                                      {14, 15, 16, 17}});
   IdTable expected = makeIdTableFromVector({{4, 2, 1}, {2, 8, 1}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     Minus m{qec,
@@ -223,8 +228,12 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
+  LocalVocabEntry entryA =
+      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
+  LocalVocabEntry entryB =
+      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext);
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -247,7 +256,6 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
   IdTable expected = makeIdTableFromVector(
       {{1, 3, 3, 5}, {1, 8, 1, 5}, {10, 11, 12, 13}, {14, 15, 16, 17}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool requestLaziness : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     Minus m{qec,
@@ -657,16 +665,15 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\"")};
+  LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
+      "\"Abc\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
   LocalVocab rightVocab{};
-  rightVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Def\"")});
+  rightVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"Def\"",
+                                                qec->getLocalVocabContext()));
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -749,9 +756,8 @@ struct Wrapper {
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Abc\"")};
+  LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
+      "\"Abc\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab{};
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
