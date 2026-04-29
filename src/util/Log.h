@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_UTIL_LOG_H
 #define QLEVER_SRC_UTIL_LOG_H
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
@@ -67,13 +68,13 @@ using enum LogLevel::Enum;
 // Both the compile-time level (LOGLEVEL) and the runtime level must pass for a
 // message to be logged. The LogLock temporary is held for the entire <<
 // chain and released at the semicolon that ends the statement.
-#define AD_LOG(x)                                                              \
-  if (x > LOGLEVEL ||                                                          \
-      x > ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed)) \
-    ;                                                                          \
-  else                                                                         \
-    (ad_utility::detail::LogLock{ad_utility::detail::logMutex},                \
-     ad_utility::Log::getLog<x>())  // NOLINT
+#define AD_LOG(x)                                                     \
+  if (x > LOGLEVEL || x > ::ad_utility::detail::runtimeLogLevel.load( \
+                              std::memory_order_relaxed))             \
+    ;                                                                 \
+  else                                                                \
+    (::ad_utility::detail::LogLock{::ad_utility::detail::logMutex},   \
+     ::ad_utility::Log::getLog<x>())  // NOLINT
 
 // Macros for the different log levels.
 #define AD_LOG_FATAL AD_LOG(LogLevel::Enum::FATAL)
@@ -91,8 +92,10 @@ namespace detail {
 // interleaved (acquired via the comma-operator trick in the AD_LOG macro).
 inline std::mutex logMutex;
 // Runtime log level; messages with a higher level than this are suppressed.
-// Default is INFO so debug output is off unless explicitly requested.
-inline std::atomic<LogLevel::Enum> runtimeLogLevel{LogLevel::Enum::INFO};
+// Defaults to the less verbose of INFO and the compile-time LOGLEVEL so that
+// the runtime level is never set to something the binary cannot log.
+inline std::atomic<LogLevel::Enum> runtimeLogLevel{
+    LOGLEVEL < LogLevel::Enum::INFO ? LOGLEVEL : LogLevel::Enum::INFO};
 
 // Non-[[nodiscard]] wrapper so the comma-operator pattern doesn't trigger
 // -Wunused-value warnings (std::lock_guard itself is [[nodiscard]] in libc++).
@@ -107,29 +110,14 @@ struct LogLock {
 // appear regardless of the runtime setting.
 inline void setRuntimeLogLevel(LogLevel level) {
   if (level.value() > LOGLEVEL) {
-    throw std::runtime_error{
-        "Cannot set runtime log level to \"" + std::string{level.toString()} +
-        "\" because the compile-time log level is \"" +
-        std::string{LogLevel{LOGLEVEL}.toString()} +
-        "\". Recompile with -DLOGLEVEL=" + std::string{level.toString()} +
-        " or higher to enable this log level."};
+    throw std::runtime_error{absl::StrCat(
+        "Cannot set runtime log level to \"", level.toString(),
+        "\" because the compile-time log level is \"",
+        LogLevel{LOGLEVEL}.toString(), "\". Recompile with -DLOGLEVEL=",
+        level.toString(), " or higher to enable this log level.")};
   }
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
-
-// RAII guard that temporarily sets the runtime log level for the duration of
-// a scope and restores the previous level on destruction.
-struct ScopedRuntimeLogLevel {
-  LogLevel::Enum previous_;
-  explicit ScopedRuntimeLogLevel(LogLevel::Enum level)
-      : previous_{detail::runtimeLogLevel.exchange(
-            level, std::memory_order_relaxed)} {}
-  ~ScopedRuntimeLogLevel() {
-    detail::runtimeLogLevel.store(previous_, std::memory_order_relaxed);
-  }
-  ScopedRuntimeLogLevel(const ScopedRuntimeLogLevel&) = delete;
-  ScopedRuntimeLogLevel& operator=(const ScopedRuntimeLogLevel&) = delete;
-};
 
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
 // to globally redirect the `AD_LOG_...` macros to another output stream.

@@ -6,6 +6,7 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -95,15 +96,20 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // Some tests require a certain log level, e.g. but not only because they
 // capture log output and make assertions about it. This macro can be used to
 // skip such tests if the log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
-  if (LOGLEVEL < level) {                                       \
-    GTEST_SKIP() << "This test requires log level of at least " \
-                 << ad_utility::Log::getLevel<level>()          \
-                 << ", but the compile-time log level is "      \
-                 << ad_utility::Log::getLevel<LOGLEVEL>();      \
-  }                                                             \
-  ASSERT_GE(LOGLEVEL, level);                                   \
-  ad_utility::ScopedRuntimeLogLevel scopedRuntimeLogLevel_{level};
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                           \
+  if (LOGLEVEL < level) {                                          \
+    GTEST_SKIP() << "This test requires log level of at least "    \
+                 << ad_utility::Log::getLevel<level>()             \
+                 << ", but the compile-time log level is "         \
+                 << ad_utility::Log::getLevel<LOGLEVEL>();         \
+  }                                                                \
+  ASSERT_GE(LOGLEVEL, level);                                      \
+  absl::Cleanup scopedRuntimeLogLevel_{                            \
+      [previous_ = ::ad_utility::detail::runtimeLogLevel.exchange( \
+           level, std::memory_order_relaxed)]() {                  \
+        ::ad_utility::detail::runtimeLogLevel.store(               \
+            previous_, std::memory_order_relaxed);                 \
+      }};
 
 // _____________________________________________________________________________
 
