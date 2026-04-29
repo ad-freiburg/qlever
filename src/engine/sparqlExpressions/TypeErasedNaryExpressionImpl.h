@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_TYPEERASEDNARYEXPRESSIONIMPL_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_TYPEERASEDNARYEXPRESSIONIMPL_H
 
+#if false
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
@@ -19,6 +20,7 @@ namespace sparqlExpression::detail {
 template <typename T>
 class TypeErasedNaryExpression;
 
+/*
 inline bool isConstantExpressionResult(const ExpressionResult& res) {
   return std::visit(
       [](const auto& el) {
@@ -26,6 +28,7 @@ inline bool isConstantExpressionResult(const ExpressionResult& res) {
       },
       res);
 }
+*/
 
 // Type erased version of the `NaryExpression` class. Much cheaper to compile,
 // but also slower in the execution. It is only template on the signature of its
@@ -199,3 +202,5 @@ static constexpr auto expressionFactory() {
 }  // namespace sparqlExpression::detail
 
 #endif  // QLEVER_SRC_SPARQLEXPRESSIONS_TYPEERASEDNARYEXPRESSIONIMPL_H
+
+#endif

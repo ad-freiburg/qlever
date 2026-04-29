@@ -26,5 +26,5 @@ add_library(sparqlExpressions
 
 qlever_target_link_libraries(sparqlExpressions util index SortPerformanceEstimator)
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
-    target_link_libraries(sparqlExpressions Boost::url)
+    target_link_libraries(sparqlExpressions PRIVATE Boost::url)
 endif()
