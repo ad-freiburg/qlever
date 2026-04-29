@@ -153,6 +153,8 @@ class Server {
   // an "operation" label ("query" / "update") to distinguish operation types.
   std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
       activeOperations_;
+  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> startedOperations_;
+  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
   std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
 
   template <typename T>

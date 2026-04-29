@@ -118,6 +118,12 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   activeOperations_ = meter->CreateInt64UpDownCounter(
       "qlever.active_operations",
       "Number of SPARQL operations currently being processed");
+  startedOperations_ = meter->CreateUInt64Counter(
+      "qlever.started_operations",
+      "Total number of SPARQL operations started since server start");
+  operationErrors_ = meter->CreateUInt64Counter(
+      "qlever.operation_errors",
+      "Errors during the execution of operations (both SPARQL and others)");
   operationDuration_ = meter->CreateDoubleHistogram(
       "qlever.operation_duration", "Total execution time of SPARQL operations",
       "ms");
@@ -182,8 +188,10 @@ void Server::run(const std::string& indexBaseName, bool useText,
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
+      operationErrors_->Add(1, {{"type", "http"}});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
+      operationErrors_->Add(1, {{"type", "internal"}});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -689,6 +697,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           msg, ad_utility::truncateOperationString(operationString)));
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+      startedOperations_->Add(1, {{"operation", "update"}});
       co_return co_await processUpdate(
           std::move(operations), requestTimer, tracer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -697,6 +706,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       ParsedQuery query = std::move(operations[0]);
       AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                            query.hasConstructClause());
+      startedOperations_->Add(1, {{"operation", "query"}});
       co_return co_await processQuery(
           parameters, std::move(query), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -1365,21 +1375,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
+    operationErrors_->Add(1, {{"type", "protocol"}});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+    operationErrors_->Add(1, {{"type", "syntax"}});
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
+    operationErrors_->Add(1, {{"type", "in_use"}});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
+    operationErrors_->Add(1, {{"type", "timeout"}});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
+    // TODO: this includes missing/wrong access token which should actually be a
+    // 403
+    operationErrors_->Add(1, {{"type", "internal"}});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
