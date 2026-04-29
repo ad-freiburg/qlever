@@ -120,9 +120,9 @@ NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
 // provided as a `SparqlExpression*` object.
 CPP_class_template(typename NaryOperation)(
     requires(isOperation<NaryOperation>)) class YearExpressionImpl
-    : public NaryExpressionStronglyTyped<NaryOperation> {
+    : public NaryExpression<NaryOperation> {
  public:
-  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
+  using NaryExpression<NaryOperation>::NaryExpression;
   bool isYearExpression() const override { return true; }
 };
 

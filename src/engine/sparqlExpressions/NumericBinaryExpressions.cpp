@@ -369,9 +369,9 @@ constexpr auto getMergeFunction(bool isNegated) {
 //______________________________________________________________________________
 CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
     requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpressionStronglyTyped<NaryOperation> {
+    : public NaryExpression<NaryOperation> {
  public:
-  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
+  using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       const LocalVocabContext& context, bool isNegated) const override {
