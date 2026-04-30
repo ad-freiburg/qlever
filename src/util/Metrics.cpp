@@ -67,20 +67,20 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   }
 
   // OStream reader — periodic snapshots to stdout for debugging.
-  metrics_sdk::PeriodicExportingMetricReaderOptions ostream_options;
-  ostream_options.export_interval_millis = std::chrono::milliseconds(5000);
-  ostream_options.export_timeout_millis = std::chrono::milliseconds(1000);
-  auto ostream_reader =
+  metrics_sdk::PeriodicExportingMetricReaderOptions ostreamOptions;
+  ostreamOptions.export_interval_millis = std::chrono::milliseconds(5000);
+  ostreamOptions.export_timeout_millis = std::chrono::milliseconds(1000);
+  auto ostreamReader =
       std::make_unique<metrics_sdk::PeriodicExportingMetricReader>(
           std::make_unique<metrics_exp::OStreamMetricExporter>(std::cout),
-          ostream_options);
+          ostreamOptions);
 
   // Pull reader — metrics served via /metrics on the main server port.
-  auto pull_reader = std::make_shared<PullMetricReader>();
+  auto pullReader = std::make_shared<PullMetricReader>();
 
   auto provider = metrics_sdk::MeterProviderFactory::Create();
-  provider->AddMetricReader(std::move(ostream_reader));
-  provider->AddMetricReader(pull_reader);
+  provider->AddMetricReader(std::move(ostreamReader));
+  provider->AddMetricReader(pullReader);
 
   metrics_api::Provider::SetMeterProvider(
       std::shared_ptr<metrics_api::MeterProvider>(std::move(provider)));
@@ -94,7 +94,7 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
                            std::chrono::system_clock::now().time_since_epoch())
                            .count());
 
-  return pull_reader;
+  return pullReader;
 }
 
 ActiveCounterGuard::ActiveCounterGuard(
