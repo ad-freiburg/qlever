@@ -355,28 +355,28 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     std::string s2("#only Comment\n");
     Tokenizer tok(s2);
     tok.skipComments();
-    ASSERT_EQ(tok.data().begin() - s2.data(), 14);
+    ASSERT_EQ(tok.data().data() - s2.data(), 14);
     std::string s("    #comment of some way\n  start");
     tok.reset(s.data(), s.size());
     auto [success2, ws] = tok.getNextToken(tok._tokens.Comment);
     (void)ws;
     ASSERT_FALSE(success2);
     tok.skipWhitespaceAndComments();
-    ASSERT_EQ(tok.data().begin() - s.data(), 27);
+    ASSERT_EQ(tok.data().data() - s.data(), 27);
   }
 
   {
     std::string s2("#only Comment\n");
     TokenizerCtre tok(s2);
     tok.skipComments();
-    ASSERT_EQ(tok.data().begin() - s2.data(), 14);
+    ASSERT_EQ(tok.data().data() - s2.data(), 14);
     std::string s("    #comment of some way\n  start");
     tok.reset(s.data(), s.size());
     auto [success2, ws] = tok.getNextToken<TurtleTokenId::Comment>();
     (void)ws;
     ASSERT_FALSE(success2);
     tok.skipWhitespaceAndComments();
-    ASSERT_EQ(tok.data().begin() - s.data(), 27);
+    ASSERT_EQ(tok.data().data() - s.data(), 27);
   }
 }
 
