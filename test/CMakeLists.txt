@@ -181,7 +181,7 @@ addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
-addLinkAndDiscoverTest(EngineTest engine)
+addLinkAndDiscoverTest(IdTableUtilsTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
@@ -225,6 +225,8 @@ addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
+
+addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
@@ -276,7 +278,7 @@ addLinkAndDiscoverTestNoLibs(StringBatcherTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest parser)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
@@ -294,7 +296,7 @@ addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
-addLinkAndDiscoverTest(CompressorStreamTest engine)
+addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
 
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
@@ -496,6 +498,8 @@ addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 
 addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
+addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
@@ -504,8 +508,13 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest index engine parser)
+addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
+addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(EvaluatedTripleIteratorTest engine)
+addLinkAndDiscoverTest(ExportIdsTest engine parser)
+
+addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
+addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)

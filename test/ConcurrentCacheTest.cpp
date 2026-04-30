@@ -107,7 +107,9 @@ TEST(ConcurrentCache, sequentialComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -138,7 +140,9 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -170,7 +174,9 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());

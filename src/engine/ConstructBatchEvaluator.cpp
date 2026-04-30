@@ -14,73 +14,7 @@
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>> optStringAndType) {
-  if (!optStringAndType.has_value()) return std::nullopt;
-  auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
-}
-
-// _____________________________________________________________________________
-std::optional<EvaluatedTerm> idToEvaluatedTerm(const Index& index, Id id,
-                                               const LocalVocab& localVocab) {
-  return stringAndTypeToEvaluatedTerm(
-      ql::exportIds::idToStringAndType(index, id, localVocab));
-}
-
-// _____________________________________________________________________________
-EvaluatedVariableValues evaluateVariableByColumn(
-    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
-  const size_t numRows = ctx.numRows();
-
-  // Build a `(Id, rowInBatch)` index vector and sort by `Id`. This ensures
-  // that `VocabIndex` IDs form a contiguous, sorted block (see
-  // `idsToStringAndType`), converting vocabulary lookups from random-access
-  // reads to sequential reads for I/O locality.
-  std::vector<std::pair<Id, size_t>> sortedIndices;
-  sortedIndices.reserve(numRows);
-  for (size_t i = 0; i < numRows; ++i) {
-    sortedIndices.emplace_back(col[ctx.firstRow_ + i], i);
-  }
-  ql::ranges::sort(sortedIndices, [](const auto& a, const auto& b) {
-    return a.first < b.first;
-  });
-
-  // Phase 1: check the cache for each sorted ID. Scatter hits directly to
-  // `result`; collect misses for batch resolution.
-  EvaluatedVariableValues result(numRows);
-  std::vector<Id> missIds;
-  std::vector<size_t> missRows;
-  for (const auto& [id, rowInBatch] : sortedIndices) {
-    auto cached = idCache.tryGet(id);
-    if (cached) {
-      result[rowInBatch] = cached.value();
-    } else {
-      missIds.push_back(id);
-      missRows.push_back(rowInBatch);
-    }
-  }
-
-  // Phase 2: batch-resolve cache misses. `missIds` is sorted (collected from
-  // `sortedIndices`), satisfying the `idsToStringAndType` precondition for
-  // sequential VocabIndex I/O. Each miss is inserted into the cache via
-  // `getOrCompute`; duplicate IDs in `missIds` are handled correctly: the
-  // second occurrence is already in cache and the lambda is not called.
-  auto missResolved =
-      ql::exportIds::idsToStringAndType(index, missIds, localVocab);
-  for (size_t i = 0; i < missIds.size(); ++i) {
-    result[missRows[i]] =
-        idCache.getOrCompute(missIds[i], [&missResolved, i](const Id&) {
-          return stringAndTypeToEvaluatedTerm(std::move(missResolved[i]));
-        });
-  }
-  return result;
-}
-
-// _____________________________________________________________________________
-BatchEvaluationResult evaluateBatch(
+BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     ql::span<const size_t> variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
@@ -96,6 +30,72 @@ BatchEvaluationResult evaluateBatch(
   }
 
   return batchResult;
+}
+
+// _____________________________________________________________________________
+std::optional<EvaluatedTerm>
+ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+    std::optional<std::pair<std::string, const char*>> optStringAndType) {
+  if (!optStringAndType.has_value()) return std::nullopt;
+  auto& [str, type] = optStringAndType.value();
+  return std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{std::move(str), type});
+}
+
+// _____________________________________________________________________________
+EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
+    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
+  decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx)
+                           .subspan(ctx.firstRow_, ctx.numRows());
+
+  const size_t numRows = ctx.numRows();
+
+  // Build a `(rowInBatch, Id)` index vector and sort by `Id`. This ensures
+  // that `VocabIndex` IDs form a contiguous, sorted block (see
+  // `idsToStringAndType`), converting vocabulary lookups from random-access
+  // reads to sequential reads for I/O locality.
+  auto sortedIndices = ::ranges::to_vector(::ranges::views::enumerate(col));
+
+  ql::ranges::sort(sortedIndices, {}, ad_utility::second);
+
+  // Phase 1: check the cache for each sorted ID. Scatter hits directly to
+  // `result`; collect misses for batch resolution.
+  EvaluatedVariableValues result(numRows);
+  // Unique `Id`s not found in `idCache`, in sorted order (inherited from
+  // `sortedIndices`). Each entry corresponds to the entry at the same index
+  // in `missRows`.
+  std::vector<Id> missIds;
+  // For each entry in `missIds`, the batch row indices that hold that `Id`.
+  std::vector<absl::InlinedVector<size_t, 3>> missRows;
+  for (const auto& [rowInBatch, id] : sortedIndices) {
+    auto cached = idCache.tryGet(id);
+    if (cached) {
+      result[rowInBatch] = cached.value();
+    } else if (!missIds.empty() && missIds.back() == id) {
+      missRows.back().push_back(static_cast<size_t>(rowInBatch));
+    } else {
+      missIds.push_back(id);
+      missRows.push_back({static_cast<size_t>(rowInBatch)});
+    }
+  }
+
+  // Phase 2: batch-resolve cache misses. `missIds` is deduplicated and sorted
+  // (inherited from `sortedIndices`), satisfying the `idsToStringAndType`
+  // precondition for sequential VocabIndex I/O.
+  auto missResolved =
+      ql::exportIds::idsToStringAndType(index, missIds, localVocab);
+  for (auto&& [id, resolved, rows] :
+       ::ranges::views::zip(missIds, missResolved, missRows)) {
+    const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
+      return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+          std::move(resolved));
+    });
+    for (size_t row : rows) {
+      result[row] = evaluated;
+    }
+  }
+  return result;
 }
 
 }  // namespace qlever::constructExport

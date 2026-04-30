@@ -80,7 +80,7 @@ class ExportQueryExecutionTrees {
   // result (it is already applied by the root operation in the query
   // execution tree). Note that we don't need this for the limit because
   // applying a fixed limit is idempotent. This only works because the query
-  // planner does the exact same `supportsLimit()` check.
+  // planner does the exact same `supportsLimitOffset()` check.
   static void compensateForLimitOffsetClause(
       LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet);
 
@@ -127,9 +127,9 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.
-  static auto constructQueryResultToTriples(
+  static auto constructQueryResultToStringTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructClauseTriples,
+      const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 

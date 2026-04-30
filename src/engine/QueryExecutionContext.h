@@ -98,7 +98,8 @@ class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
-class QueryExecutionContext {
+class QueryExecutionContext
+    : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
@@ -170,6 +171,10 @@ class QueryExecutionContext {
   // cache keys for operations.
   bool disableCaching() const { return disableCaching_; }
 
+  void setDisableCachingOnlyForTesting(bool disableCaching) {
+    disableCaching_ = disableCaching;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -198,6 +203,10 @@ class QueryExecutionContext {
   // Accessors; see `pinResultWithName_` for an explanation.
   auto& pinResultWithName() { return pinResultWithName_; }
   const auto& pinResultWithName() const { return pinResultWithName_; }
+
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
 
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
@@ -245,7 +254,6 @@ class QueryExecutionContext {
   MaterializedViewsManager* materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
-  FRIEND_TEST(OperationTest, disableCachingGlobally);
   bool disableCaching_ = false;
 
   // The last point in time when a websocket update was sent. This is used for

@@ -117,6 +117,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Given that we depend on LocalVocab and Vocab values during evaluation an
   // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
+  const LocalVocabContext& lvc = qet->getLocalVocabContext();
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
   LocalVocab vocab{};
@@ -126,22 +127,22 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id falseId = BoolId(false);
   const Id trueId = BoolId(true);
   const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
-  const LocalVocabEntry augsburg = LVE("\"Augsburg\"");
-  const LocalVocabEntry berlin = LVE("\"Berlin\"");
-  const LocalVocabEntry düsseldorf = LVE("\"Düsseldorf\"");
-  const LocalVocabEntry frankfurt = LVE("\"Frankfurt\"");
-  const LocalVocabEntry hamburg = LVE("\"Hamburg\"");
-  const LocalVocabEntry köln = LVE("\"Köln\"");
-  const LocalVocabEntry münchen = LVE("\"München\"");
-  const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"");
-  const LocalVocabEntry wolfsburg = LVE("\"Wolfsburg\"");
-  const LocalVocabEntry iri0 = LVE("<a>");
-  const LocalVocabEntry iri1 = LVE("<iri>");
-  const LocalVocabEntry iri2 = LVE("<iri>");
-  const LocalVocabEntry iri3 = LVE("<randomiriref>");
-  const LocalVocabEntry iri4 = LVE("<someiri>");
-  const LocalVocabEntry iri5 = LVE("<www-iri.de>");
-  const LocalVocabEntry iriBegin = LVE("<");
+  const LocalVocabEntry augsburg = LVE("\"Augsburg\"", lvc);
+  const LocalVocabEntry berlin = LVE("\"Berlin\"", lvc);
+  const LocalVocabEntry düsseldorf = LVE("\"Düsseldorf\"", lvc);
+  const LocalVocabEntry frankfurt = LVE("\"Frankfurt\"", lvc);
+  const LocalVocabEntry hamburg = LVE("\"Hamburg\"", lvc);
+  const LocalVocabEntry köln = LVE("\"Köln\"", lvc);
+  const LocalVocabEntry münchen = LVE("\"München\"", lvc);
+  const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"", lvc);
+  const LocalVocabEntry wolfsburg = LVE("\"Wolfsburg\"", lvc);
+  const LocalVocabEntry iri0 = LVE("<a>", lvc);
+  const LocalVocabEntry iri1 = LVE("<iri>", lvc);
+  const LocalVocabEntry iri2 = LVE("<iri>", lvc);
+  const LocalVocabEntry iri3 = LVE("<randomiriref>", lvc);
+  const LocalVocabEntry iri4 = LVE("<someiri>", lvc);
+  const LocalVocabEntry iri5 = LVE("<www-iri.de>", lvc);
+  const LocalVocabEntry iriBegin = LVE("<", lvc);
   const Id idAugsburg = getId(augsburg, vocab);
   const Id vocabIdBe = getVocabId("\"Be\"");
   const Id vocabIdBern = getVocabId("\"Bern\"");
@@ -155,12 +156,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id vocabIdMünchen = getVocabId("\"München\"");
   const Id vocabIdStuttgart = getVocabId("\"Stuttgart\"");
   const Id idWolfsburg = getId(wolfsburg, vocab);
-  const Id idB = getId(LVE("\"B\""), vocab);
-  const Id idBe = getId(LVE("\"Be\""), vocab);
-  const Id idBerl = getId(LVE("\"Berl\""), vocab);
-  const Id idHamburgAlt = getId(LVE("\"Hamburg Alt\""), vocab);
+  const Id idB = getId(LVE("\"B\"", lvc), vocab);
+  const Id idBe = getId(LVE("\"Be\"", lvc), vocab);
+  const Id idBerl = getId(LVE("\"Berl\"", lvc), vocab);
+  const Id idHamburgAlt = getId(LVE("\"Hamburg Alt\"", lvc), vocab);
   const Id idStuttgartZuffenhausen =
-      getId(LVE("\"Stuttgart-Zuffenhausen\""), vocab);
+      getId(LVE("\"Stuttgart-Zuffenhausen\"", lvc), vocab);
   const Id idBerlin = getId(berlin, vocab);
   const Id idDüsseldorf = getId(düsseldorf, vocab);
   const Id idFrankfurt = getId(frankfurt, vocab);
@@ -175,7 +176,6 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idIri4 = getId(iri4, vocab);
   const Id idIri5 = getId(iri5, vocab);
   const Id iriStart = getId(iriBegin, vocab);
-  const RdfsVocabulary& indexVocab = qet->getIndex().getVocab();
 
   // Define CompressedBlockMetadata
   const CompressedBlockMetadata b1 = makeBlock(undef, undef);  // 0
@@ -409,7 +409,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           size_t evaluationColumn = 2) {
     std::vector<CompressedBlockMetadata> testBlocks = input;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        expr->evaluate(indexVocab, testBlocks, evaluationColumn),
+        expr->evaluate(lvc, testBlocks, evaluationColumn),
         ::testing::HasSubstr(expected));
   }
 
@@ -433,7 +433,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, testBlocks, 2)),
+    ASSERT_EQ(toVec(expr->evaluate(lvc, testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -458,10 +458,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
-    ASSERT_EQ(
-        toVec(expr->evaluate(
-            indexVocab, input.empty() ? allTestBlocksIsDatatype : input, 2)),
-        adjustedExpected);
+    ASSERT_EQ(toVec(expr->evaluate(
+                  lvc, input.empty() ? allTestBlocksIsDatatype : input, 2)),
+              adjustedExpected);
   }
 
   // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
@@ -503,13 +502,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, dateBlocks, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(lvc, dateBlocks, 2)), expected);
   }
 
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(indexVocab, blocksRegexTest, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(lvc, blocksRegexTest, 2)), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -667,7 +666,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
   makeTest(le(DoubleId(3.1415)), {b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(DoubleId(-11.99999999999999)), {b17, b18}, true);
   makeTest(le(DoubleId(-14.03)), {b18});
-  makeTest(le(LVE("\"Aachen\"")), {b18});
+  makeTest(le(LVE("\"Aachen\"", lvc)), {b18});
   makeTest(le(frankfurt), {b18, b19});
   makeTest(le(hamburg), {b18, b19, b21}, true);
   makeTest(le(undef), {});
@@ -1196,8 +1195,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 // Test the (full) invariant check of `ScanSpecAndBlocks` constructor.
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
-  const auto& vocab = ad_utility::testing::getQec()->getIndex().getVocab();
-  auto blockRanges = gt(IntId(0))->evaluate(vocab, blocks, 2);
+  auto blockRanges = gt(IntId(0))->evaluate(lvc, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
@@ -1219,16 +1217,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)), input);
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)), input);
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)), input);
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)), input);
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)), input);
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)),
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)),
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)),
             std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)),
+  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)),
             std::vector<CompressedBlockMetadata>{});
 }
 
@@ -1245,7 +1243,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(isBlank(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
-  makeTestClone(le(LVE("\"Hello World\"")));
+  makeTestClone(le(LVE("\"Hello World\"", lvc)));
   makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
   makeTestClone(notExpr(ge(referenceDate1)));
   makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
@@ -1256,8 +1254,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
                         orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
   makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
                        notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
-  makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
-                       neq(LVE("<iri/id10>"))));
+  makeTestClone(
+      orExpr(orExpr(le(LVE("<iri/id5>", lvc)), gt(LVE("<iri/id22>", lvc))),
+             neq(LVE("<iri/id10>", lvc))));
   makeTestClone(inExpr({referenceDate2, idDüsseldorf, idHamburg, IntId(0)}));
   makeTestClone(inExpr({falseId, IntId(10), DoubleId(42.5)}, true));
   makeTestClone(prefixRegex(L("prefixPreeefix")));
@@ -1273,8 +1272,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*neq(BoolId(true)) == *eq(BoolId(true)));
   ASSERT_TRUE(*eq(IntId(1)) == *eq(IntId(1)));
   ASSERT_TRUE(*ge(referenceDate1) == *ge(referenceDate1));
-  ASSERT_TRUE(*eq(LVE("<iri>")) == *eq(LVE("<iri>")));
-  ASSERT_FALSE(*gt(LVE("<iri>")) == *gt(LVE("\"iri\"")));
+  ASSERT_TRUE(*eq(LVE("<iri>", lvc)) == *eq(LVE("<iri>", lvc)));
+  ASSERT_FALSE(*gt(LVE("<iri>", lvc)) == *gt(LVE("\"iri\"", lvc)));
   // IsDatatypeExpression
   ASSERT_TRUE(*isBlank() == *isBlank());
   ASSERT_FALSE(*isLit() == *isNum());
@@ -1284,7 +1283,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
               *notExpr(notExpr(ge(VocabId(0)))));
-  ASSERT_TRUE(*notExpr(le(LVE("<iri>"))) == *notExpr(le(LVE("<iri>"))));
+  ASSERT_TRUE(*notExpr(le(LVE("<iri>", lvc))) ==
+              *notExpr(le(LVE("<iri>", lvc))));
   ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
   ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
                *notExpr(ge(VocabId(0))));
@@ -1292,8 +1292,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
               *orExpr(eq(IntId(0)), le(IntId(0))));
   ASSERT_TRUE(*orExpr(isIri(), isLit()) == *orExpr(isIri(), isLit()));
-  ASSERT_TRUE(*orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))) ==
-              *orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))));
+  ASSERT_TRUE(*orExpr(lt(LVE("\"L\"", lvc)), gt(LVE("\"O\"", lvc))) ==
+              *orExpr(lt(LVE("\"L\"", lvc)), gt(LVE("\"O\"", lvc))));
   ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
               *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
@@ -1394,15 +1394,15 @@ TEST_F(PrefilterExpressionOnMetadataTest,
               "RelationalExpression<LT(<)>\nreferenceValue_ : I:20 .\n}child2 "
               "{Prefilter RelationalExpression<GT(>)>\nreferenceValue_ : I:10 "
               ".\n}\n.\n"));
-  EXPECT_THAT(*eq(LVE("\"Sophia\"")),
+  EXPECT_THAT(*eq(LVE("\"Sophia\"", lvc)),
               matcher("Prefilter RelationalExpression<EQ(=)>\nreferenceValue_ "
                       ": \"Sophia\" .\n.\n"));
-  EXPECT_THAT(*neq(LVE("<Iri/custom/value>")),
+  EXPECT_THAT(*neq(LVE("<Iri/custom/value>", lvc)),
               matcher("Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
                       ": <Iri/custom/value> .\n.\n"));
   EXPECT_THAT(
-      *andExpr(orExpr(lt(LVE("\"Bob\"")), ge(LVE("\"Max\""))),
-               neq(LVE("\"Lars\""))),
+      *andExpr(orExpr(lt(LVE("\"Bob\"", lvc)), ge(LVE("\"Max\"", lvc))),
+               neq(LVE("\"Lars\"", lvc))),
       matcher(
           "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
           "LogicalExpression<OR(||)>\nchild1 {Prefilter "
@@ -1412,7 +1412,8 @@ TEST_F(PrefilterExpressionOnMetadataTest,
           "RelationalExpression<NE(!=)>\nreferenceValue_ : \"Lars\" "
           ".\n}\n.\n"));
   EXPECT_THAT(
-      *orExpr(neq(LVE("<iri/custom/v10>")), neq(LVE("<iri/custom/v66>"))),
+      *orExpr(neq(LVE("<iri/custom/v10>", lvc)),
+              neq(LVE("<iri/custom/v66>", lvc))),
       matcher(
           "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
           "RelationalExpression<NE(!=)>\nreferenceValue_ : <iri/custom/v10> "

@@ -16,9 +16,12 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
+#include "engine/QueryExecutionTree.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
+
+using StringTriple = QueryExecutionTree::StringTriple;
 
 // Instantiates a single preprocessed term for a specific row.
 // For constants: returns the precomputed string.
@@ -27,32 +30,36 @@ namespace qlever::constructExport {
 //   prefix/suffix and the blank node row id (rowOffset + actualRowIdx).
 std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
-    size_t rowInBatch, size_t blankNodeRowId);
+    size_t rowIdxInBatch, size_t rowIdxTotal);
 
 // Instantiates all template triples for all rows in a batch. For each row,
 // every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
-// any unbound term are silently dropped. `blankNodeBaseId` is the absolute
+// any unbound term are silently dropped. `batchOffset` is the absolute
 // row ID of the first row in the batch (used to generate unique blank node
 // IDs).
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t blankNodeBaseId);
+    const BatchEvaluationResult& batchResult, size_t batchOffset);
 
 // Format a single term to its string form.
-// `shortForm=true`  (turtle, csv, tsv, string-triples): integers, decimals
+// `includeDataType=false`: integers, decimals
 //   and booleans are emitted without quotes or datatype annotation.
-// `shortForm=false` (N-Triples): all typed literals carry an explicit
+// `includeDataType=true`: all typed literals carry an explicit
 //   `"..."^^<type>` annotation.
 // Terms with `type == nullptr` (IRIs, blank nodes, vocab-indexed literals)
 // are returned as-is regardless of `shortForm`.
-std::string formatTerm(const EvaluatedTermData& term, bool shortForm);
+std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 
 // Formats a triple (subject, predicate, object) according to the output
 // format `format`.
-std::string formatTriple(const EvaluatedTerm& subject,
-                         const EvaluatedTerm& predicate,
-                         const EvaluatedTerm& object,
-                         const ad_utility::MediaType& format);
+std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
+                         const ad_utility::MediaType& mediaType,
+                         bool includeDataType = false);
+
+// Creates a `StringTriple` object. Needed for backwards compatibility with
+// `ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON`
+StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
+                                bool includeDataType = false);
 
 }  // namespace qlever::constructExport
 

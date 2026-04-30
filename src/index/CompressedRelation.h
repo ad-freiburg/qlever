@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
+#include <gtest/gtest_prod.h>
+
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -303,7 +305,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+  ad_utility::TaskQueue<false> blockWriteQueue_ = makeBlockWriteQueue();
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -521,6 +523,13 @@ class CompressedRelationWriter {
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
       T inputs, std::string filename, ad_utility::MemorySize blocksize);
+
+  // Create a `TaskQueue` for the compression and writing of blocks. The number
+  // of threads is determined by the runtime parameter
+  // "permutation-writer-num-threads".
+  static ad_utility::TaskQueue<false> makeBlockWriteQueue();
+  FRIEND_TEST(CompressedRelationWriter,
+              isInitializedWithCorrectNumberOfThreads);
 };
 
 using namespace std::string_view_literals;
@@ -785,6 +794,12 @@ class CompressedRelationReader {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset = {}) const;
+
+  // Retrieve all triples in the given block, ignoring updates. This is used in
+  // `DeltaTriples::vacuum` to determine update triples that have no effect and
+  // thus can be dropped.
+  IdTable readBlockWithoutLocatedTriples(CompressedBlockMetadata block,
+                                         ColumnIndices additionalColumns) const;
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each

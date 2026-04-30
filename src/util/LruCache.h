@@ -1,4 +1,4 @@
-// Copyright 2025-2026 The QLever Authors, in particular
+// Copyright 2025 The QLever Authors, in particular
 // 2025 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 // 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
@@ -42,7 +42,7 @@ class LRUCache {
 
   // Check if `key` is in the cache. If found, move it to the front (most
   // recently used) and return a reference to the cached value wrapped in
-  // `std::optional`. If not found, return `std::nullopt`. Does not insert or
+  // `boost::optional`. If not found, return `boost::none`. Does not insert or
   // compute anything.
   template <typename Key>
   boost::optional<const V&> tryGet(const Key& key) {

@@ -11,7 +11,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
@@ -121,7 +121,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
-    Engine::sort<I>(&idTable, comparison);
+    IdTableUtils::sort<I>(&idTable, comparison);
   });
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();

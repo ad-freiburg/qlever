@@ -172,11 +172,11 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
                                            memoryToUse, false, l);
 }
 
+// Test for static (`<NUM_COLS>) and dynamic (`<0>`) tables. The second
+// argument to `testExternalSorter` is the number of rows, the third argument
+// is the memory limit for the sorter.
 TEST(CompressedExternalIdTable, sorterRandomInputs) {
   using namespace ad_utility::memory_literals;
-  // Test for dynamic (<0>) and static(<3>) tables.
-  // Test the case that there are multiple blocks to merge (many rows but a low
-  // memory limit), but also the case that there is a
   testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB);
@@ -184,6 +184,36 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
   testExternalSorter<0>(NUM_COLS, 0, 1_MB);
+}
+
+// Test that destroying the sorter while an async block-sorting task is still
+// running does not cause a use-after-free (caught by ASAN). This used to be a
+// bug, which was fixed by calling `waitForFuture()` in the destructor of
+// `CompressedExternalIdTableSorter`.
+TEST(CompressedExternalIdTable, stillSortingOnDestruction) {
+  struct SlowDummySorter : SortByOSP {
+    std::vector<size_t> data_ = {1, 2, 3};
+    std::shared_ptr<std::atomic<bool>> sleptOnce_ =
+        std::make_shared<std::atomic<bool>>(false);
+    SlowDummySorter() = default;
+    SlowDummySorter(const SlowDummySorter& other)
+        : SortByOSP(other), data_(other.data_), sleptOnce_(other.sleptOnce_) {
+      if (!sleptOnce_->exchange(true)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+      [[maybe_unused]] volatile auto x = other.data_[0];
+    }
+  };
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::CompressedExternalIdTableSorter<SlowDummySorter, 0> sorter{
+      "stillSortingOnDestruction.dat", NUM_COLS, 10_kB,
+      ad_utility::testing::makeAllocator()};
+  // With 10 kB memory and NUM_COLS (4) columns, blocksize = 10000 / (4*8*2)
+  // = 156 rows. Push enough to trigger exactly one `pushBlock`.
+  auto table = createRandomlyFilledIdTable(200, NUM_COLS);
+  for (const auto& row : table) {
+    sorter.push(row);
+  }
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {

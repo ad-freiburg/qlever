@@ -6,7 +6,6 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -533,6 +532,8 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
+                                   std::nullopt,
+                                   std::nullopt,
                                    std::nullopt,
                                    std::nullopt,
                                    std::nullopt};

@@ -15,14 +15,15 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
+#include "util/VariantRangeFilter.h"
 
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
-  return PrecomputedConstant{
-      std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr)};
+  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{iri.iri(), nullptr})};
 }
 
 // _____________________________________________________________________________
@@ -30,8 +31,8 @@ std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
                                                  PositionInTriple role) {
   if (role == PositionInTriple::OBJECT) {
-    return PrecomputedConstant{
-        std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr)};
+    return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
+        EvaluatedTermData{literal.literal(), nullptr})};
   }
   return std::nullopt;
 }
@@ -57,23 +58,21 @@ ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
     const VariableToColumnMap& variableColumns) {
-  return std::visit(
-      [&role,
-       &variableColumns](const auto& t) -> std::optional<PreprocessedTerm> {
-        using T = std::decay_t<decltype(t)>;
-        if constexpr (std::is_same_v<T, Iri>) {
-          return preprocessIri(t);
-        } else if constexpr (std::is_same_v<T, Literal>) {
-          return preprocessLiteral(t, role);
-        } else if constexpr (std::is_same_v<T, Variable>) {
-          return preprocessVariable(t, variableColumns);
-        } else if constexpr (std::is_same_v<T, BlankNode>) {
-          return preprocessBlankNode(t);
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>);
-        }
-      },
-      term);
+  return term.visit([&role, &variableColumns](
+                        const auto& t) -> std::optional<PreprocessedTerm> {
+    using T = std::decay_t<decltype(t)>;
+    if constexpr (std::is_same_v<T, Iri>) {
+      return preprocessIri(t);
+    } else if constexpr (std::is_same_v<T, Literal>) {
+      return preprocessLiteral(t, role);
+    } else if constexpr (std::is_same_v<T, Variable>) {
+      return preprocessVariable(t, variableColumns);
+    } else if constexpr (std::is_same_v<T, BlankNode>) {
+      return preprocessBlankNode(t);
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  });
 }
 
 // _____________________________________________________________________________
@@ -96,7 +95,7 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  // Tracks which IdTable column indices have already been added to
+  // Tracks which `IdTable` column indices have already been added to
   // `result.uniqueVariableColumns_` to avoid duplicates.
   ad_utility::HashSet<size_t> seenColumns;
 
@@ -104,15 +103,15 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     auto preprocessedTriple = preprocessTriple(triple, variableColumns);
     if (!preprocessedTriple) continue;
 
-    // Collect each unique IdTable column index.
-    // `PrecomputedVariable::columnIndex_` is kept as the original IdTable
+    // Collect each unique `IdTable` column index.
+    // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`
     // column index so that it matches the keys in
     // `BatchEvaluationResult::variablesByColumn_`.
-    for (const auto& term : *preprocessedTriple) {
-      if (const auto* var = std::get_if<PrecomputedVariable>(&term)) {
-        if (seenColumns.insert(var->columnIndex_).second) {
-          result.uniqueVariableColumns_.push_back(var->columnIndex_);
-        }
+    for (const PrecomputedVariable& var :
+         ad_utility::filterRangeOfVariantsByType<PrecomputedVariable>(
+             *preprocessedTriple)) {
+      if (seenColumns.insert(var.columnIndex_).second) {
+        result.uniqueVariableColumns_.push_back(var.columnIndex_);
       }
     }
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));

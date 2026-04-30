@@ -106,13 +106,13 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
-  indexScan->applyLimit(limitOffset);
+  indexScan->applyLimitOffset(limitOffset);
 
   // `ValuesForTesting` doesn't support stripping columns natively.
   auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1, 2}}),
       Vars{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
-  valuesForTesting->applyLimit(limitOffset);
+  valuesForTesting->applyLimitOffset(limitOffset);
 
   auto strippedIndex = QueryExecutionTree::makeTreeWithStrippedColumns(
       indexScan, {Variable{"?s"}});

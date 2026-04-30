@@ -15,14 +15,13 @@
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
-    size_t rowInBatch, size_t blankNodeRowId) {
+    size_t rowIdxInBatch, size_t rowIdxTotal) {
   return std::visit(
       [&](const auto& t) -> std::optional<EvaluatedTerm> {
         using T = std::decay_t<decltype(t)>;
@@ -30,12 +29,12 @@ std::optional<EvaluatedTerm> instantiateTerm(
         if constexpr (std::is_same_v<T, PrecomputedConstant>) {
           return t.evaluatedTerm_;
         } else if constexpr (std::is_same_v<T, PrecomputedVariable>) {
-          return batchResult.getVariable(t.columnIndex_, rowInBatch);
+          return batchResult.getVariable(t.columnIndex_, rowIdxInBatch);
         } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
-          return std::make_shared<const EvaluatedTermData>(
-              absl::StrCat(t.prefix_, blankNodeRowId, t.suffix_), nullptr);
+          return std::make_shared<const EvaluatedTermData>(EvaluatedTermData{
+              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr});
         } else {
-          static_assert(false, "Unhandled variant type");
+          static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
       },
       term);
@@ -44,19 +43,21 @@ std::optional<EvaluatedTerm> instantiateTerm(
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t blankNodeBaseId) {
+    const BatchEvaluationResult& batchResult, size_t batchOffset) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
-    const size_t blankNodeRowId = blankNodeBaseId + rowInBatch;
+    const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (const auto& triple : tmpl.preprocessedTriples_) {
-      auto subject =
-          instantiateTerm(triple[0], batchResult, rowInBatch, blankNodeRowId);
-      auto predicate =
-          instantiateTerm(triple[1], batchResult, rowInBatch, blankNodeRowId);
-      auto object =
-          instantiateTerm(triple[2], batchResult, rowInBatch, blankNodeRowId);
+      auto instantiate = [&triple, &batchResult, rowInBatch,
+                          blankNodeRowId](size_t pos) {
+        return instantiateTerm(triple[pos], batchResult, rowInBatch,
+                               blankNodeRowId);
+      };
+      auto subject = instantiate(0);
+      auto predicate = instantiate(1);
+      auto object = instantiate(2);
       if (subject && predicate && object) {
         triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
       }
@@ -66,46 +67,49 @@ std::vector<EvaluatedTriple> instantiateBatch(
 }
 
 // _____________________________________________________________________________
-std::string formatTerm(const EvaluatedTermData& term, bool shortForm) {
-  if (term.type == nullptr) {
+std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
+  if (term.rdfTermDataType_ == nullptr) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
-    return term.str;
+    return term.rdfTermString_;
   }
   const char* i = XSD_INT_TYPE;
   const char* d = XSD_DECIMAL_TYPE;
   const char* b = XSD_BOOLEAN_TYPE;
-  // Note: XSD_DOUBLE_TYPE values ("NaN", "INF", "-INF") never use short form.
-  if (shortForm && (term.type == i || term.type == d ||
-                    (term.type == b && term.str.length() > 1))) {
-    return term.str;
+
+  // Note: XSD_DOUBLE_TYPE values (for example "NaN", "INF", "-INF") always
+  // include the datatype.
+  if (!includeDataType &&
+      (term.rdfTermDataType_ == i || term.rdfTermDataType_ == d ||
+       (term.rdfTermDataType_ == b && term.rdfTermString_.length() > 1))) {
+    return term.rdfTermString_;
   }
-  return absl::StrCat("\"", term.str, "\"^^<", term.type, ">");
+  return absl::StrCat("\"", term.rdfTermString_, "\"^^<", term.rdfTermDataType_,
+                      ">");
 }
 
 // _____________________________________________________________________________
-std::string formatTriple(const EvaluatedTerm& subject,
-                         const EvaluatedTerm& predicate,
-                         const EvaluatedTerm& object,
-                         const ad_utility::MediaType& format) {
+std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
+                         const ad_utility::MediaType& format,
+                         bool includeDataType) {
   using enum ad_utility::MediaType;
-  static constexpr std::array supportedFormats{turtle, csv, tsv, ntriples};
+  static constexpr std::array supportedFormats{turtle, csv, tsv};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
-  const bool shortForm = (format != ntriples);
-  std::string s = formatTerm(*subject, shortForm);
-  std::string p = formatTerm(*predicate, shortForm);
-  std::string o = formatTerm(*object, shortForm);
+  const auto& [subject, predicate, object] = evaluatedTriple;
 
-  if (format == turtle || format == ntriples) {
+  std::string s = formatTerm(*subject, includeDataType);
+  std::string p = formatTerm(*predicate, includeDataType);
+  std::string o = formatTerm(*object, includeDataType);
+
+  if (format == turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
     // are used as-is, avoiding an unnecessary string copy.
-    if (ql::starts_with(o, "\"")) {
+    if (ql::starts_with(o, '"')) {
       return absl::StrCat(
-          std::move(s), " ", std::move(p), " ",
+          s, " ", p, " ",
           RdfEscaping::validRDFLiteralFromNormalized(std::move(o)), " .\n");
     }
-    return absl::StrCat(std::move(s), " ", std::move(p), " ", std::move(o),
-                        " .\n");
+    return absl::StrCat(s, " ", p, " ", o, " .\n");
 
   } else if (format == csv) {
     return absl::StrCat(RdfEscaping::escapeForCsv(std::move(s)), ",",
@@ -118,5 +122,17 @@ std::string formatTriple(const EvaluatedTerm& subject,
   } else {
     AD_FAIL();  // unreachable
   }
+}
+
+// _____________________________________________________________________________
+StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
+                                bool includeDataType) {
+  const auto& [subject, predicate, object] = evaluatedTriple;
+
+  std::string s = formatTerm(*subject, includeDataType);
+  std::string p = formatTerm(*predicate, includeDataType);
+  std::string o = formatTerm(*object, includeDataType);
+
+  return StringTriple{std::move(s), std::move(p), std::move(o)};
 }
 }  // namespace qlever::constructExport

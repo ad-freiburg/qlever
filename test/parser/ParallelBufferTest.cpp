@@ -16,9 +16,8 @@ TEST(ParallelBuffer, ParallelFileBuffer) {
   of.close();
 
   size_t blocksize = 4;
-  ParallelFileBuffer buf(blocksize);
+  ParallelFileBuffer buf(blocksize, filename);
   EXPECT_EQ(buf.getBlocksize(), blocksize);
-  buf.open(filename);
   std::vector<ParallelFileBuffer::BufferType> expected{
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
 
@@ -30,10 +29,6 @@ TEST(ParallelBuffer, ParallelFileBuffer) {
   ad_utility::deleteFile(filename);
 
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
-
-  // Reading from an unopened buffer throws.
-  ParallelFileBuffer buf2(blocksize);
-  EXPECT_ANY_THROW(buf2.getNextBlock());
 }
 
 // ________________________________________________________
@@ -49,8 +44,9 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
     // letter. The numbers must be at most 5 positions apart from each other.
     // Note: It is crucial that the regex contains exactly one capture group.
     // The end of the capture group determines the end of the block.
-    ParallelBufferWithEndRegex buf(blocksize, "([0-9])[a-z]");
-    buf.open(filename);
+    ParallelBufferWithEndRegex buf(
+        std::make_unique<ParallelFileBuffer>(blocksize, filename),
+        "([0-9])[a-z]");
     std::vector<ParallelFileBuffer::BufferType> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
 
@@ -64,8 +60,8 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
   {
     // The following regex is not found in the data, and the data is too large
     // for one block, so the parsing fails
-    ParallelBufferWithEndRegex buf(blocksize, "([x-z])");
-    buf.open(filename);
+    ParallelBufferWithEndRegex buf(
+        std::make_unique<ParallelFileBuffer>(blocksize, filename), "([x-z])");
     AD_EXPECT_THROW_WITH_MESSAGE(
         buf.getNextBlock(),
         ::testing::ContainsRegex("which marks the end of a statement"));
@@ -74,8 +70,8 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
     // The same example but with a larger blocksize, s.t. the complete input
     // fits into a single block. In this case it is no error that the regex can
     // never be found.
-    ParallelBufferWithEndRegex buf(100, "([x-z])");
-    buf.open(filename);
+    ParallelBufferWithEndRegex buf(
+        std::make_unique<ParallelFileBuffer>(100, filename), "([x-z])");
     std::vector<ParallelFileBuffer::BufferType> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
 
@@ -87,9 +83,6 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegex) {
   }
 
   ad_utility::deleteFile(filename);
-  // Reading from an unopened buffer throws.
-  ParallelBufferWithEndRegex buf2(blocksize, "ab");
-  EXPECT_ANY_THROW(buf2.getNextBlock());
 }
 
 // ________________________________________________________
@@ -108,8 +101,9 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegexLongLookahead) {
     // letter. The numbers must be at most 5 positions apart from each other.
     // Note: It is crucial that the regex contains exactly one capture group.
     // The end of the capture group determines the end of the block.
-    ParallelBufferWithEndRegex buf(blocksize, "([0-9])[a-z]");
-    buf.open(filename);
+    ParallelBufferWithEndRegex buf(
+        std::make_unique<ParallelFileBuffer>(blocksize, filename),
+        "([0-9])[a-z]");
     std::vector<ParallelFileBuffer::BufferType> expected{
         {'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');

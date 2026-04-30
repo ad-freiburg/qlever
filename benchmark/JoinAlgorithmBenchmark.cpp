@@ -43,7 +43,7 @@
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"

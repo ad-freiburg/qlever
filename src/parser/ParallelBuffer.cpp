@@ -1,14 +1,21 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "parser/ParallelBuffer.h"
 
 #include "util/StringUtils.h"
 
 // _________________________________________________________________________
-void ParallelFileBuffer::open(const std::string& filename) {
+ParallelFileBuffer::ParallelFileBuffer(size_t blocksize,
+                                       const std::string& filename)
+    : ParallelBuffer{blocksize}, eof_{false} {
   file_.open(filename, "r");
-  eof_ = false;
   buf_.resize(blocksize_);
   auto task = [&file = this->file_, bs = this->blocksize_,
                &buf = this->buf_]() { return file.read(buf.data(), bs); };
@@ -76,7 +83,7 @@ std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
   // Get the block of data read asynchronously after the previous call
   // to `getNextBlock`.
-  auto rawInput = rawBuffer_.getNextBlock();
+  auto rawInput = rawBuffer_->getNextBlock();
 
   // If there was no more data, return the remainder or `std::nullopt` if
   // it is empty.
@@ -102,7 +109,7 @@ ParallelBufferWithEndRegex::getNextBlock() {
   // last block (then `getNextBlock` will return `std::nullopt`, and we simply
   // concatenate it to the remainder).
   if (!endPosition) {
-    if (rawBuffer_.getNextBlock()) {
+    if (rawBuffer_->getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
           "The regex ", endRegexAsString_,
           " which marks the end of a statement was not found in the current "
@@ -111,7 +118,7 @@ ParallelBufferWithEndRegex::getNextBlock() {
                                               ','),
           "; possible fixes are: "
           "use `--parser-buffer-size` to increase the buffer size or "
-          "use `--parse-parallel false` to disable parallel parsing"));
+          "use `--parallel-parsing false` to disable parallel parsing"));
     }
     endPosition = rawInput->size();
     exhausted_ = true;

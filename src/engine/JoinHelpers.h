@@ -18,6 +18,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
 #include "index/CompressedRelation.h"
 #include "index/Permutation.h"
@@ -246,14 +247,44 @@ inline bool joinColumnsAreAlwaysDefined(
 // Helper function that is commonly used to skip sort operations and use an
 // alternative algorithm that doesn't require sorting instead.
 inline std::shared_ptr<const Result> computeResultSkipChild(
-    const std::shared_ptr<Operation>& operation) {
+    const std::shared_ptr<Operation>& operation, bool requestLaziness) {
   auto children = operation->getChildren();
   AD_CONTRACT_CHECK(children.size() == 1);
   auto child = children.at(0);
   auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
   operation->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
 
-  return child->getResult(true);
+  return child->getResult(requestLaziness);
+}
+
+// Common functionality from `Minus` and `ExistsJoin` to check if the algorithm
+// is suitable to be applied.
+inline bool rightIndexNestedLoopJoinIsPossible(
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right,
+    const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) {
+  auto sort = std::dynamic_pointer_cast<Sort>(left->getRootOperation());
+  return sort && left->getSizeEstimate() >= right->getSizeEstimate() &&
+         joinColumnsAreAlwaysDefined(matchedColumns, left, right);
+}
+
+// Common functionality from `Minus` and `ExistsJoin` to check if the algorithm
+// is suitable to be applied and if yes return the proper results.
+inline std::optional<
+    std::pair<std::shared_ptr<const Result>, std::shared_ptr<const Result>>>
+tryGetResultsForLeftIndexNestedLoopJoin(
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right) {
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side. It currently doesn't support undef.
+  auto sort = std::dynamic_pointer_cast<Sort>(right->getRootOperation());
+  if (!sort || left->getSizeEstimate() > right->getSizeEstimate()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = left->getResult(false);
+  auto rightRes = computeResultSkipChild(sort, true);
+  return std::optional{std::pair{std::move(leftRes), std::move(rightRes)}};
 }
 }  // namespace qlever::joinHelpers
 

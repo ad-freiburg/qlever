@@ -209,7 +209,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   // return the original tree, without stripping any columns.
   if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
                          [&variablesToKeep](const Variable& variable) {
-                           return variablesToKeep.contains(variable);
+                           return ad_utility::contains(variablesToKeep,
+                                                       variable);
                          })) {
     return qet;
   }
@@ -227,7 +228,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
       "`LIMIT` and `OFFSET` are applied by "
       "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
       "implementations.");
-  resultTree->applyLimit(rootOperation->getLimitOffset());
+  resultTree->applyLimitOffset(rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but

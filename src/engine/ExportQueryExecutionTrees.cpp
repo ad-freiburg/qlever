@@ -261,7 +261,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 }
 
 // _____________________________________________________________________________
-auto ExportQueryExecutionTrees::constructQueryResultToTriples(
+auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
@@ -270,12 +270,14 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require
   // materializing the whole result).
+  // TODO<joka921> check the complete semantics of LIMIT/OFFSET
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
-  return qlever::constructExport::ConstructTripleGenerator(
-             constructTriples, std::move(result), qet.getVariableColumns(),
-             qet.getQec()->getIndex(), std::move(cancellationHandle))
-      .generateStringTriples(std::move(rowIndices));
+
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(constructTriples, qet.getVariableColumns(),
+                            qet.getQec()->getIndex(), cancellationHandle,
+                            std::move(rowIndices), limitAndOffset._offset);
 }
 
 // _____________________________________________________________________________
@@ -286,7 +288,7 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(
+  auto generator = constructQueryResultToStringTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
 
@@ -451,14 +453,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum ad_utility::MediaType;
-  static constexpr std::array supportedFormats{
-      octetStream, csv, tsv, turtle, qleverJson, ntriples};
+  static constexpr std::array supportedFormats{octetStream, csv, tsv, turtle,
+                                               qleverJson};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   // TODO<joka921> Use a proper error message, or check that we get a more
   // reasonable error from upstream.
   AD_CONTRACT_CHECK(format != MediaType::turtle);
-  AD_CONTRACT_CHECK(format != MediaType::ntriples);
   AD_CONTRACT_CHECK(format != MediaType::qleverJson);
 
   // This call triggers the possibly expensive computation of the query result
@@ -472,7 +473,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    std::erase(selectedColumnIndices, std::nullopt);
+    ql::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -761,8 +762,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
   static constexpr std::array supportedFormats{
-      octetStream, csv,    tsv,      sparqlXml,         sparqlJson,
-      qleverJson,  turtle, ntriples, binaryQleverExport};
+      octetStream, csv,        tsv,    sparqlXml,
+      sparqlJson,  qleverJson, turtle, binaryQleverExport};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   if constexpr (format == octetStream || format == binaryQleverExport) {
@@ -775,18 +776,23 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   AD_CONTRACT_CHECK(format != qleverJson);
 
   result->logResultSize();
+  uint64_t resultSize = 0;
 
-  [[maybe_unused]] uint64_t resultSize = 0;
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
-  qlever::constructExport::ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
-  for (const auto& tripleString :
-       std::move(generator).generateAllFormattedTriples(std::move(rowIndices),
-                                                        format)) {
-    STREAMABLE_YIELD(tripleString);
+  auto triples = qlever::constructExport::ConstructTripleGenerator::
+      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
+                               qet.getQec()->getIndex(), cancellationHandle,
+                               std::move(rowIndices), limitAndOffset._offset,
+                               format);
+
+  for (const std::string& triple : triples) {
+    STREAMABLE_YIELD(triple);
   }
 }
 
@@ -838,7 +844,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimit()) {
+  if (qet.supportsLimitOffset()) {
     limitOffsetClause._offset = 0;
   }
 }
@@ -877,15 +883,15 @@ ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv,        tsv,        octetStream,        turtle,  sparqlXml,
-      sparqlJson, qleverJson, binaryQleverExport, ntriples};
+      csv,       tsv,        octetStream, turtle,
+      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson, binaryQleverExport,
-                                  ntriples>{}(compute, mediaType);
+                                  sparqlJson, qleverJson, binaryQleverExport>{}(
+          compute, mediaType);
 
   return [](auto range) -> cppcoro::generator<std::string> {
     for (auto&& item : range) {

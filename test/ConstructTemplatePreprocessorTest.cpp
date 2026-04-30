@@ -9,10 +9,8 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
-#include "engine/ConstructQueryEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "index/Index.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 
 namespace qlever::constructExport {
@@ -20,8 +18,7 @@ namespace qlever::constructExport {
 // `PrintTo` overloads so gmock shows human-readable output instead of raw
 // bytes.
 void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
-  *os << "PrecomputedConstant{str: \"" << c.evaluatedTerm_->str
-      << "\", type: \"" << c.evaluatedTerm_->type << "\"}";
+  *os << "PrecomputedConstant{\"" << c.evaluatedTerm_ << "\"}";
 }
 void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
   *os << "PrecomputedVariable{" << v.columnIndex_ << "}";
@@ -42,32 +39,14 @@ using Triples = ad_utility::sparql_types::Triples;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;
 
-// Minimal context wrapper for tests
-struct ContextWrapper {
-  Index index_{ad_utility::makeUnlimitedAllocator<Id>()};
-  Result resultTable_{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
-  VariableToColumnMap variableColumns_{};
-
-  ConstructQueryExportContext createContextForRow(size_t row,
-                                                  size_t rowOffset = 0) const {
-    return {row,
-            resultTable_.idTable(),
-            resultTable_.localVocab(),
-            variableColumns_,
-            index_,
-            rowOffset};
-  }
-};
-
 // Composable matchers for `PreprocessedTerm` variants.
 // see https://github.com/google/googletest/blob/main/docs/reference/matchers.md
 static constexpr auto matchesPrecomputedConstant = [](const auto& value) {
   // only match the string, not the type field.
   return ::testing::VariantWith<PrecomputedConstant>(
       AD_FIELD(PrecomputedConstant, evaluatedTerm_,
-               ::testing::Pointee(
-                   AD_FIELD(EvaluatedTermData, str, std::string(value)))));
+               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString_,
+                                           std::string(value)))));
 };
 
 static constexpr auto matchesPrecomputedVariable = [](const auto& columnIdx) {

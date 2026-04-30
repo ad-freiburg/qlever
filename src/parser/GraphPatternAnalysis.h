@@ -43,7 +43,8 @@ struct BasicGraphPatternsInvariantTo {
             T, pq::Optional, pq::Union, pq::Subquery, pq::TransPath,
             pq::BasicGraphPattern, pq::Service, pq::PathQuery, pq::SpatialQuery,
             pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
-            pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery>);
+            pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery,
+            pq::ExternalValuesQuery>);
     return false;
   }
 };

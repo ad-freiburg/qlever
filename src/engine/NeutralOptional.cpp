@@ -54,8 +54,9 @@ bool NeutralOptional::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
 void NeutralOptional::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) const {
-  tree_->applyLimit(limitOffset);
+    const LimitOffsetClause& limitOffset) {
+  tree_ = tree_->clone();
+  tree_->applyLimitOffset(limitOffset);
 }
 
 // _____________________________________________________________________________

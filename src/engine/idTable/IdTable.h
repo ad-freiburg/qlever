@@ -119,9 +119,14 @@ class IdTable {
   // Make the number of (statically known) columns accessible to the outside.
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
-  // concatenated.
-  using Storage = detail::VectorWithElementwiseMove<ColumnStorage>;
-  using ViewSpans = std::vector<ql::span<const T>>;
+  // concatenated. We use `InlinedVector` to make the creation of non-owning
+  // `IdTableView`s cheaper (they still need to allocate storage for each
+  // column). Also the moving of `IdTable`s becomes cheaper, as the moved-from
+  // object still needs the storage for the (moved-from) columns.
+  static constexpr size_t numInlinedColumns = 10;
+  using Storage = detail::VectorWithElementwiseMove<
+      ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
+  using ViewSpans = absl::InlinedVector<ql::span<const T>, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 

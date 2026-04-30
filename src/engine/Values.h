@@ -10,13 +10,16 @@
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
-class Values : public Operation {
+class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:
   std::vector<float> multiplicities_;
-
   SparqlValues parsedValues_;
+
+ protected:
+  // Accessors for the parsed values.
+  SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
   // Create operation from parsed values. This calls `sanitizeValues`.

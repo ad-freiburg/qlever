@@ -234,11 +234,9 @@ class ValueGetterTester {
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
-    auto litOrIri =
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            literal);
-    auto idx =
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
+    auto idx = localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(
+            std::move(literal), testContext.qec->getLocalVocabContext()));
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
     EXPECT_THAT(res, expected);

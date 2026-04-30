@@ -8,7 +8,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -276,7 +276,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols);
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of

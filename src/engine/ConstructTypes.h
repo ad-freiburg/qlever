@@ -21,24 +21,25 @@ namespace qlever::constructExport {
 // Canonical representation of a resolved RDF term stored in the LRU cache.
 //
 // Two fundamentally different representations are used, distinguished by
-// whether `type` is null:
-// 1) type != nullptr: `str` represnents an encoded literal (directly encoded
-// into `ValueId`). `str` is the raw unquoted value (e.g. "42" for an xsd:int,
-// "3.14" for an xsd:decimal). `type` points to the compile-time XSD type string
-// constant (e.g. XSD_INT_TYPE).  Whether to emit the short form ("42") or the
-// fully-qualified form ("\"42\"^^<xsd:integer>") is decided at formatting time
-// by formatTerm.
-// 2)  type == nullptr: an IRI, a blank node, or a vocabulary-indexed literal.
-// `str` already holds the complete, ready-to-emit serialized
-// form (e.g. "<http://example.org/>", "\"hello\"@en"). No further formatting is
-// needed; the value is returned as-is for every format.
+// whether `rdfTermDataType_` is null:
+// 1) `rdfTermDataType_` != nullptr: `rdfTermString_` represents an encoded
+// literal (directly encoded into `ValueId`). `rdfTermString_` is the raw
+// unquoted value (e.g. `42` for an xsd:int, `3.14` for an xsd:decimal). `type`
+// points to the compile-time XSD type string constant (e.g. XSD_INT_TYPE).
+// Whether to emit the short form ("42") or the fully-qualified form
+// ("\"42\"^^<xsd:integer>") is decided at formatting time by `formatTerm`.
+// 2) `rdfTermDataType` == nullptr: an IRI, a blank node, or a
+// vocabulary-indexed literal. `rdfTermString_` already holds the complete,
+// ready-to-emit serialized form (e.g. "<http://example.org/>", "\"hello\"@en").
+// No further formatting is needed; the value is returned as-is for every
+// format. This is the legacy format returned by `ExportIds::idToStringAndType`.
 struct EvaluatedTermData {
-  std::string str;
-  const char* type;  // non-null iff encoded literal (case 1 above)
+  std::string rdfTermString_;
+  const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
 };
 
-// Shared ownership of EvaluatedTermData. The shared_ptr allows cheap copying
-// when the same Id appears in multiple rows or is reused from the LRU cache.
+// Shared ownership of `EvaluatedTermData`. The shared_ptr allows cheap copying
+// when the same `Id` appears in multiple rows or is reused from the `IdCache`.
 using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 
 // A constant (`Iri` or `Literal`) whose string value is fully known at
@@ -79,14 +80,12 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
 // Result of preprocessing all CONSTRUCT template triples. Contains the
-// preprocessed triples and the unique variable column indices that need to be
-// evaluated for each row of the result-table.
+// preprocessed triples and the unique variable column indices (indices into the
+// `IdTable` that the variables in the construct template correspond to).
 struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
-  // The set of IdTable column indices that appear in the template triples,
-  // in order of first encounter. Each `PrecomputedVariable::columnIndex_`
-  // is the original IdTable column index and matches the keys in
-  // `BatchEvaluationResult::variablesByColumn_`.
+  // The dedupicated set of `IdTable` column indices that appear in the template
+  // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
 };
 

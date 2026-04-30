@@ -136,10 +136,10 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // consecutive range of IDs. For its usage see below.
 template <typename S>
 CPP_concept StoresStringOrId =
-    ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, IdOrLiteralOrIri,
+    ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, IdOrLocalVocabEntry,
                              std::pair<Id, Id>>;
-// Convert a string or `IdOrLiteralOrIri` value into the (possibly empty) range
-// of corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
+// Convert a string or `IdOrLocalVocabEntry` value into the (possibly empty)
+// range of corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
 // and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
 // the usage of this function easier.
@@ -147,7 +147,7 @@ CPP_template(typename S)(requires StoresStringOrId<S>) auto makeValueId(
     const S& value, const EvaluationContext* context) {
   if constexpr (ad_utility::SimilarToAny<S, ValueId, std::pair<Id, Id>>) {
     return value;
-  } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
+  } else if constexpr (ad_utility::isSimilar<S, IdOrLocalVocabEntry>) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
       return res;

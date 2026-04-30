@@ -36,13 +36,6 @@ inline std::atomic<size_t>& BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() {
   return value;
 }
 
-// When merging the vocabulary, this many finished words are buffered
-// before they are written to the output.
-inline std::atomic<size_t>& BATCH_SIZE_VOCABULARY_MERGE() {
-  static std::atomic<size_t> value = 10'000'000;
-  return value;
-}
-
 // When the BZIP2 parser encounters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
 // exception was "real" or only because we cut a statement in the middle. Once

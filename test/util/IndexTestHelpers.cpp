@@ -26,13 +26,14 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
   BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
-  BATCH_SIZE_VOCABULARY_MERGE() = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
                          // some tests (i.e. polygon testing in Spatial Joins)
                          // require a larger buffer size
+  // By default, don't add ql:has-word triples in test indices.
+  index.addHasWordTriples() = false;
   return index;
 }
 
@@ -125,18 +126,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::PSO), 0, 1);
     checkConsistencyForCol0IdAndPermutation(
-        predicateId, indexImpl.getPermutation(POS), 1, 0);
+        predicateId, indexImpl.getPermutation(Permutation::Enum::POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OPS), 1,
+        col0IdTag);
     checkConsistencyForCol0IdAndPermutation(
-        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
+        objectId, indexImpl.getPermutation(Permutation::Enum::OSP), 0,
+        col0IdTag);
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
@@ -216,24 +217,22 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
-    if (c.encodedIriManager.has_value()) {
-      // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !ql::ends_with(prefix, '>'));
-        prefixes.push_back(prefix.substr(1));
-      }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      throw std::runtime_error("The text index is not available in C++17 mode");
+#else
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
@@ -282,6 +281,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
+#endif
     }
   }
   if (!c.usePatterns || !c.loadAllPermutations) {
@@ -349,7 +349,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
     std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
-    std::unique_ptr<QueryExecutionContext> qec_ =
+    std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
@@ -376,9 +376,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>(),
                    std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
-  return qec;
+  return contextMap.at(c).qec_.get();
 }
 
 // _____________________________________________________________________________
@@ -401,8 +399,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static const EncodedIriManager encodedIriManager;
-    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
+    auto id = literalOrIri.toValueId(index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

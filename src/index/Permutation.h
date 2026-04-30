@@ -1,6 +1,12 @@
-// Copyright 2018 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_PERMUTATION_H
 #define QLEVER_SRC_INDEX_PERMUTATION_H
@@ -9,6 +15,7 @@
 #include <memory>
 #include <string>
 
+#include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
@@ -16,6 +23,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/HashSet.h"
 #include "util/Log.h"
 
 // Forward declaration of `IdTable`
@@ -62,6 +70,10 @@ class Permutation {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
+  // The permutation type. It is required by `IndexScan` for determining the
+  // correct semantics.
+  enum struct Type { NORMAL, INTERNAL, MATERIALIZED_VIEW };
+
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -76,9 +88,10 @@ class Permutation {
                        std::optional<std::string> readableName = std::nullopt);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false,
-                    bool useGraphPostProcessing = true);
+  void loadFromDisk(
+      const std::string& onDiskBase, bool loadInternalPermutation = false,
+      Type permutationType = Type::NORMAL,
+      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -191,6 +204,9 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
+  // _______________________________________________________
+  Type permutationType() const { return permutationType_; }
+
   // Returns the number of triples in the permutation excluding updates (located
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
@@ -221,6 +237,10 @@ class Permutation {
   // has already been destroyed.
   std::shared_ptr<const MaterializedView> materializedView() const;
 
+  // Check whether a column was marked to possibly contain undef values.
+  ColumnIndexAndTypeInfo::UndefStatus getColumnUndefStatus(
+      ColumnIndex col) const;
+
  private:
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
@@ -244,11 +264,15 @@ class Permutation {
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
-  bool isInternalPermutation_ = false;
+  Type permutationType_ = Type::NORMAL;
 
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.
   std::weak_ptr<const MaterializedView> materializedView_;
+
+  // For materialized views unlike the regular index permutations, some columns
+  // may be undefined.
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

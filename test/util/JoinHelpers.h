@@ -14,7 +14,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Join.h"
 #include "engine/idTable/IdTable.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 

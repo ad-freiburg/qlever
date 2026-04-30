@@ -74,7 +74,7 @@ struct MagicServiceQuery {
   };
 
   // Helper that returns a readable name for the type of `MagicServiceQuery`.
-  virtual constexpr std::string_view name() const = 0;
+  virtual std::string_view name() const = 0;
 
  protected:
   // Utility functions for variables in the magic service configuration triples

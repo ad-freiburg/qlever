@@ -10,8 +10,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_EXPORTIDS_H
-#define QLEVER_SRC_ENGINE_EXPORTIDS_H
+#ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
+#define QLEVER_SRC_INDEX_EXPORTIDS_H
 
 #include <optional>
 #include <string>
@@ -32,13 +32,13 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
 using Literal = ad_utility::triple_component::Literal;
 
-// Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped, so for
+// Convert the `id` to a `Literal`. Datatypes are always stripped, so for
 // literals (this includes IDs that directly store their value, like Doubles)
 // the datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is
 // false, IRIs are converted to literals without a datatype, which is
 // equivalent to the behavior of the SPARQL STR(...) function. If
 // 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with
-// non'-xsd:string' datatypes (including encoded IDs) return 'std::nullopt'.
+// non-`xsd:string` datatypes (including encoded IDs) return `std::nullopt`.
 // These semantics are useful for the string expressions in
 // StringExpressions.cpp.
 std::optional<Literal> idToLiteral(
@@ -104,15 +104,22 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
 std::optional<std::pair<std::string, const char*>>
 idToStringAndTypeForEncodedValue(Id id);
 
-// _____________________________________________________________________________
+// Convert an `EncodedVal` ID to a `LiteralOrIri` by looking up the encoded
+// IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
-// Convert an `Id` to (string, XSD-type). The `index` is used for `VocabIndex` /
-// `TextRecordIndex` lookups; `localVocab` for `LocalVocabIndex` lookups.
-// Template parameters:
-//   removeQuotesAndAngleBrackets — strip leading/trailing delimiters
-//   returnOnlyLiterals           — return nullopt for IRIs
-//   EscapeFunction               — applied to the result string
+// Convert the `id` to a human-readable string. The `index` is used to resolve
+// `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
+// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
+// is applied to the resulting string if it is not of a numeric type.
+//
+// Return value: If the `Id` encodes a numeric value (integer, double, etc.)
+// then the `string` (first element of the pair) will be the number as a
+// string without quotation marks, and the second element of the pair will
+// contain the corresponding XSD-datatype as an URI. For all other values and
+// datatypes, the second element of the pair will be empty and the first
+// element will have the format `"stringContent"^^datatypeUri`. If the `id`
+// holds the `Undefined` value, then `std::nullopt` is returned.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -216,4 +223,4 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
 
 }  // namespace ql::exportIds
 
-#endif  // QLEVER_SRC_ENGINE_EXPORTIDS_H
+#endif  // QLEVER_SRC_INDEX_EXPORTIDS_H

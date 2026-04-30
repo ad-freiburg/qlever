@@ -25,7 +25,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
-#include "index/Engine.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
