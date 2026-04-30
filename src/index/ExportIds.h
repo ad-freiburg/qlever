@@ -108,6 +108,34 @@ idToStringAndTypeForEncodedValue(Id id);
 // IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
+// Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
+// options and `escapeFunction`. Returns `std::nullopt` when
+// `returnOnlyLiterals` is true and `word` is not a literal.
+template <bool removeQuotesAndAngleBrackets = false,
+          bool returnOnlyLiterals = false,
+          typename EscapeFunction = ql::identity>
+std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+    const LiteralOrIri& word,
+    EscapeFunction&& escapeFunction = EscapeFunction{}) {
+  if constexpr (returnOnlyLiterals) {
+    if (!word.isLiteral()) {
+      return std::nullopt;
+    }
+  }
+  if (word.isIri()) {
+    if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+      return std::pair{std::move(blankNodeString.value()), nullptr};
+    }
+  }
+  if constexpr (removeQuotesAndAngleBrackets) {
+    // TODO<joka921> Can we get rid of the string copying here?
+    return std::pair{
+        escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
+        nullptr};
+  }
+  return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+}
+
 // Convert the `id` to a human-readable string. The `index` is used to resolve
 // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
 // used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
@@ -134,25 +162,10 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
   }
 
-  auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
-      -> std::optional<std::pair<std::string, const char*>> {
-    if constexpr (returnOnlyLiterals) {
-      if (!word.isLiteral()) {
-        return std::nullopt;
-      }
-    }
-    if (word.isIri()) {
-      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
-        return std::pair{std::move(blankNodeString.value()), nullptr};
-      }
-    }
-    if constexpr (removeQuotesAndAngleBrackets) {
-      // TODO<joka921> Can we get rid of the string copying here?
-      return std::pair{
-          escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-          nullptr};
-    }
-    return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+  auto formatWord = [&escapeFunction](const LiteralOrIri& word) {
+    return literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                       returnOnlyLiterals>(word,
+                                                           escapeFunction);
   };
 
   switch (id.getDatatype()) {
@@ -162,10 +175,10 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
-      return handleIriOrLiteral(
+      return formatWord(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
-      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
+      return formatWord(encodedIdToLiteralOrIri(id, index.getImpl()));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -209,13 +222,31 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
     }
   }
 
-  // Resolve the contiguous `VocabIndex` block in sorted (vocabulary-position)
-  // order, giving sequential I/O access to the on-disk vocabulary file.
-  for (size_t i = vocabBegin;
-       i < ids.size() && ids[i].getDatatype() == Datatype::VocabIndex; ++i) {
-    results[i] =
-        idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-            index, ids[i], localVocab, escapeFunction);
+  // Resolve the contiguous `VocabIndex` block in a single batch call.
+  // `lookupBatch` expects raw `size_t` indices and returns a span of
+  // `string_view`s backed by PMR memory kept alive by the returned shared_ptr.
+  size_t vocabEnd = vocabBegin;
+  while (vocabEnd < ids.size() &&
+         ids[vocabEnd].getDatatype() == Datatype::VocabIndex) {
+    ++vocabEnd;
+  }
+
+  if (vocabBegin < vocabEnd) {
+    std::vector<size_t> rawIndices;
+    rawIndices.reserve(vocabEnd - vocabBegin);
+
+    for (size_t i = vocabBegin; i < vocabEnd; ++i) {
+      rawIndices.push_back(ids[i].getVocabIndex().get());
+    }
+
+    auto batchResult = index.getImpl().getVocab().lookupBatch(rawIndices);
+    for (size_t i = vocabBegin; i < vocabEnd; ++i) {
+      std::string_view sv = (*batchResult)[i - vocabBegin];
+      results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                               returnOnlyLiterals>(
+          LiteralOrIri::fromStringRepresentation(std::string{sv}),
+          escapeFunction);
+    }
   }
 
   return results;
