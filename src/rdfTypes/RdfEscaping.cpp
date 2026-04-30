@@ -90,8 +90,12 @@ void unescapeStringAndNumericEscapes(std::string_view input,
                                                            size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
       AD_CONTRACT_CHECK(iterator + length <= endIterator);
-      auto unesc =
-          hexadecimalCharactersToUtf8(std::string_view(iterator, length));
+      // Use the (begin, end) iterator-pair constructor rather than
+      // (pointer, length): newer libc++ no longer implicitly converts its
+      // wrapped string-view iterator to `const char*`, which broke the
+      // `string_view(iter, length)` form.
+      auto unesc = hexadecimalCharactersToUtf8(
+          std::string_view(iterator, iterator + length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
     } else {
       (void)outputIterator;
