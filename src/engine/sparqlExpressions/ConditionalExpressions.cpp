@@ -18,7 +18,7 @@ struct IfImpl {
   CPP_template(typename I, typename E)(
       requires SingleExpressionResult<I>&& SingleExpressionResult<E>&&
           std::is_rvalue_reference_v<I&&>&& std::is_rvalue_reference_v<E&&>)
-      IdOrLiteralOrIri
+      IdOrLocalVocabEntry
       operator()(EffectiveBooleanValueGetter::Result condition, I&& i,
                  E&& e) const {
     if (condition == EffectiveBooleanValueGetter::Result::True) {
@@ -28,15 +28,17 @@ struct IfImpl {
     }
     AD_CORRECTNESS_CHECK(condition ==
                          EffectiveBooleanValueGetter::Result::Undef);
-    return IdOrLiteralOrIri{Id::makeUndefined()};
+    return IdOrLocalVocabEntry{Id::makeUndefined()};
   }
 };
 
-// This macro implements an expression that evaluates the `IF()` function, but
-// will be extended below by additional member functions.
-NARY_EXPRESSION(IfExpressionImpl, 3,
-                FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
-                   ActualValueGetter>);
+// This class implements an expression that evaluates the `IF()` function, but
+// will be extended below by additional member functions. It always uses
+// `NaryExpressionStronglyTyped` explicitly because `ActualValueGetter` doesn't
+// have a uniform result type, and therefore cannot be type-erased.
+using IfExpressionImpl = NaryExpressionStronglyTyped<
+    detail::Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
+                            ActualValueGetter, ActualValueGetter>>>;
 
 // The actual `IfExpression` class that adds an override for
 // `isResultAlwaysDefined`.
@@ -120,16 +122,16 @@ class CoalesceExpression : public VariadicExpression {
         0, ctx->size(),
         [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
         [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{ctx->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
-                IdOrLiteralOrIri{Id::makeUndefined()});
+                IdOrLocalVocabEntry{Id::makeUndefined()});
     if (result.empty()) {
       return result;
     }
 
     ctx->cancellationHandle_->throwIfCancelled();
 
-    auto isUnbound = [](const IdOrLiteralOrIri& x) {
+    auto isUnbound = [](const IdOrLocalVocabEntry& x) {
       return (std::holds_alternative<Id>(x) &&
               std::get<Id>(x) == Id::makeUndefined());
     };
@@ -138,7 +140,7 @@ class CoalesceExpression : public VariadicExpression {
         CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
                             &result, ctx)(typename T)(T && childResult)(
             requires SingleExpressionResult<T> && isConstantResult<T>) {
-      IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
+      IdOrLocalVocabEntry constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
@@ -179,7 +181,7 @@ class CoalesceExpression : public VariadicExpression {
             // Skip all the indices where the result is already bound from a
             // previous child.
             if (i == *unboundIdxIt) {
-              if (IdOrLiteralOrIri val{std::move(*generatorIterator)};
+              if (IdOrLocalVocabEntry val{std::move(*generatorIterator)};
                   isUnbound(val)) {
                 nextUnboundIndices.push_back(i);
               } else {

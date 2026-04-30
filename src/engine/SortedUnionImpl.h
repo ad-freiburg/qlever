@@ -8,10 +8,10 @@
 #include <optional>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "engine/Union.h"
 #include "engine/idTable/IdTable.h"
+#include "index/LocalVocab.h"
 
 namespace sortedUnion {
 // Helper struct that has the same layout as Result::IdTableVocabPair but

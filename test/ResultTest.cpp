@@ -6,6 +6,7 @@
 
 #include "engine/Result.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
@@ -163,29 +164,30 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
   EXPECT_THROW(result.runOnNewChunkComputed(
                    [](const IdTableVocabPair&, std::chrono::microseconds) {},
-                   [](bool) {}),
+                   [](Result::GeneratorState) {}),
                ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
+  auto* queryExecutionContext = ad_utility::testing::getQec();
   auto idTable1 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}});
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   Result result{
-      [](auto& t1, auto& t2, auto& t3) -> Result::Generator {
+      [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
         std::this_thread::sleep_for(1ms);
         LocalVocab localVocab{};
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::Literal::literalWithoutQuotes(
-                "Test")});
+        localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes("Test",
+                                                  qec->getLocalVocabContext()));
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
         co_yield {t2.clone(), LocalVocab{}};
         std::this_thread::sleep_for(5ms);
         co_yield {t3.clone(), LocalVocab{}};
-      }(idTable1, idTable2, idTable3),
+      }(queryExecutionContext, idTable1, idTable2, idTable3),
       {}};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;
@@ -208,8 +210,8 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
           EXPECT_GE(duration, 5ms);
         }
       },
-      [&](bool error) {
-        EXPECT_FALSE(error);
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::FINISHED);
         finishedConsuming = true;
       });
 
@@ -234,14 +236,43 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
       [&](const IdTableVocabPair&, std::chrono::microseconds) {
         ++callCounterGenerator;
       },
-      [&](bool error) {
-        EXPECT_TRUE(error);
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::FAILED);
         ++callCounterFinished;
       });
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       consumeGenerator(result.idTables()),
       HasSubstr("verifyRunOnNewChunkCallsFinishOnError"), std::runtime_error);
+
+  EXPECT_EQ(callCounterGenerator, 0);
+  EXPECT_EQ(callCounterFinished, 1);
+}
+
+// _____________________________________________________________________________
+TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
+  Result result{[]() -> Result::Generator {
+                  throw ad_utility::CancellationException{
+                      "verifyRunOnNewChunkCallsFinishOnCancellation"};
+                  co_return;
+                }(),
+                {}};
+  uint32_t callCounterGenerator = 0;
+  uint32_t callCounterFinished = 0;
+
+  result.runOnNewChunkComputed(
+      [&](const IdTableVocabPair&, std::chrono::microseconds) {
+        ++callCounterGenerator;
+      },
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::CANCELLED);
+        ++callCounterFinished;
+      });
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      consumeGenerator(result.idTables()),
+      HasSubstr("verifyRunOnNewChunkCallsFinishOnCancellation"),
+      ad_utility::CancellationException);
 
   EXPECT_EQ(callCounterGenerator, 0);
   EXPECT_EQ(callCounterFinished, 1);
@@ -262,8 +293,8 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
         [&](const IdTableVocabPair&, std::chrono::microseconds) {
           ++callCounterGenerator;
         },
-        [&](bool error) {
-          EXPECT_FALSE(error);
+        [&](Result::GeneratorState state) {
+          EXPECT_EQ(state, Result::GeneratorState::FINISHED);
           ++callCounterFinished;
         });
 

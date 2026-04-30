@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
 
@@ -37,6 +37,9 @@ class Result {
     IdTableVocabPair(IdTable idTable, LocalVocab localVocab)
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
+
+  // Helper enum to indicate the state of a generator after consumption.
+  enum class GeneratorState { FINISHED, CANCELLED, FAILED };
 
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
@@ -160,16 +163,18 @@ class Result {
   // generator and passed this new `IdTableVocabPair` along with microsecond
   // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
-  // generator is consumed at least partially, with `true` if an exception
-  // occurred during consumption or with `false` when the generator is done
-  // processing or abandoned and destroyed.
+  // generator is consumed at least partially, with `GeneratorState::FAILED` if
+  // an exception occurred during consumption, with `GeneratorState::CANCELLED`
+  // if said exception is a cancellation exception or with
+  // `GeneratorState::FINISHED` when the generator is done processing or
+  // abandoned and destroyed.
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
           onNewChunk,
-      std::function<void(bool)> onGeneratorFinished);
+      std::function<void(GeneratorState)> onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
   // the entries yielded by the generator into a cacheable `IdTable`. Once

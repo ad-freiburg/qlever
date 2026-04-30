@@ -157,7 +157,7 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLocalVocabEntry>) {
       resultFromBinarySearch =
           std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {
@@ -322,7 +322,8 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // more results if we have more arguments on the right side that can possibly
   // match, so we reduce the `reductionFactor`.
   reductionFactor /= children.size() - 1;
-  auto sizeEstimate = inputSizeEstimate / reductionFactor;
+  auto sizeEstimate =
+      inputSizeEstimate / std::max(reductionFactor, uint64_t{1});
 
   // By default, we have to linearly scan over the input and write the output.
   size_t costEstimate = inputSizeEstimate + sizeEstimate;
@@ -444,19 +445,20 @@ static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
 template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression* child0 = children_.at(0).get();
   const SparqlExpression* child1 = children_.at(1).get();
 
   const auto tryGetPrefilterExprVariablePairVec =
-      [](const SparqlExpression* child0, const SparqlExpression* child1,
-         bool reversed) -> std::vector<PrefilterExprVariablePair> {
+      [&context](const SparqlExpression* child0, const SparqlExpression* child1,
+                 bool reversed) -> std::vector<PrefilterExprVariablePair> {
     const auto& optVariableIsYearPair = getOptVariableAndIsYear(child0);
     if (!optVariableIsYearPair.has_value()) return {};
     const auto& [variable, prefilterDate] = optVariableIsYearPair.value();
     const auto& optReferenceValue =
-        detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(child1, context);
     if (!optReferenceValue.has_value()) return {};
     return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
         optReferenceValue.value(), variable, reversed, prefilterDate);
@@ -512,7 +514,7 @@ std::string InExpression::getCacheKey(
 // it (see `NotExpression` in PrefilterExpressionIndex.h).
 std::vector<PrefilterExprVariablePair>
 InExpression::getPrefilterExpressionForMetadata(
-    [[maybe_unused]] bool isNegated) const {
+    const LocalVocabContext& context, [[maybe_unused]] bool isNegated) const {
   AD_CORRECTNESS_CHECK(children_.size() >= 1);
   auto var = children_.front()->getVariableOrNullopt();
   if (!var.has_value()) {
@@ -523,8 +525,8 @@ InExpression::getPrefilterExpressionForMetadata(
   referenceValues.reserve(children_.size());
   for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
     auto optReferenceValue =
-        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
-            expr.get());
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(expr.get(),
+                                                            context);
     if (!optReferenceValue.has_value()) {
       return {};
     }

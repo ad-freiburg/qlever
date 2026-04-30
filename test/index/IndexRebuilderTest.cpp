@@ -115,8 +115,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  auto makeVocabEntry = [](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str)};
+  auto makeVocabEntry = [&oldIndex](std::string_view str) {
+    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -271,24 +271,20 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                DEFAULT_GRAPH_IRI)}
-               .toValueId(index.getVocab(), index.encodedIriManager())
+               .toValueId(index)
                .value();
 
-  index.deltaTriplesManager().modify<void>([&cancellationHandle,
-                                            g](DeltaTriples& deltaTriples) {
-    LocalVocabEntry entry1{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<a2>")};
-    LocalVocabEntry entry2{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<d2>")};
-    auto a2 = Id::makeFromLocalVocabIndex(&entry1);
-    auto d2 = Id::makeFromLocalVocabIndex(&entry2);
-    deltaTriples.insertTriples(
-        cancellationHandle,
-        {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
-         IdTriple<0>{std::array{V(0), d2, B(1), g}}});
-  });
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
+        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        auto a2 = Id::makeFromLocalVocabIndex(&entry1);
+        auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
+             IdTriple<0>{std::array{V(0), d2, B(1), g}}});
+      });
 
   auto [state, vocabEntries, rawBlocks] =
       index.deltaTriplesManager()
@@ -404,7 +400,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
-  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = "/tmp/createPermutationWriterTask";
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
@@ -468,7 +464,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                  DeltaTriples& deltaTriples) {
       auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                    DEFAULT_GRAPH_IRI)}
-                   .toValueId(index.getVocab(), index.encodedIriManager())
+                   .toValueId(index)
                    .value();
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
@@ -487,7 +483,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -536,8 +532,7 @@ TEST(IndexRebuilder, serverIntegration) {
   Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   server.initialize(indexName, false);
   auto performRequest = [&threadPool, &server](auto& request) {
-    namespace http = boost::beast::http;
-    using ResT = std::optional<http::response<http::string_body>>;
+    using ResT = ad_utility::httpUtils::ResponseT;
     auto task =
         server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
                                               ResT>(request);
@@ -562,10 +557,8 @@ TEST(IndexRebuilder, serverIntegration) {
   auto response1 = future1.get();
   auto response2 = future2.get();
 
-  ASSERT_TRUE(response1.has_value());
-  ASSERT_TRUE(response2.has_value());
-  EXPECT_EQ(response1.value().base().result(), boost::beast::http::status::ok);
-  EXPECT_EQ(response2.value().base().result(),
+  EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
   // We use this config as a proxy for the index rebuilder having finished
@@ -575,8 +568,7 @@ TEST(IndexRebuilder, serverIntegration) {
   auto request3 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
-  ASSERT_TRUE(response3.has_value());
-  EXPECT_EQ(response3.value().base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
   EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
 

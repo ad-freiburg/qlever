@@ -62,6 +62,11 @@ struct CommonConfig {
   // TODO: We have not tested this mode in a while. In particular, it is
   // unlikely to work when updates are involved.
   bool onlyPsoAndPos_ = false;
+
+  // Option to add `ql:has-word` triples for each word in each literal. For
+  // each literal, a triple `<literal> ql:has-word "word"` is added for each
+  // word in the literal. This is useful for keyword search in literals.
+  bool addHasWordTriples_ = false;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -175,6 +180,16 @@ struct EngineConfig : CommonConfig {
   // that only rely on the `NamedQueryCache` which can be populated
   // separately).
   bool doNotLoadPermutations_ = false;
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  std::vector<std::string> serviceAllowedIriPrefixes_;
+
+  // If set to true, caching is disabled for all operations. Default is
+  // to for each operation query the corresponding runtime parameter.
+  QueryExecutionContext::DisableCaching disableCaching_ =
+      QueryExecutionContext::DisableCaching::FromRuntimeParameter;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -189,6 +204,7 @@ class Qlever {
   mutable NamedResultCache namedResultCache_;
   mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
+  QueryExecutionContext::DisableCaching disableCaching_;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -268,8 +284,7 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         *index_.getBlankNodeManager());
+    namedResultCache_.readFromSerializer(serializer, allocator_, index_);
   }
 
   // Low-level access to the QLever API, use with care.

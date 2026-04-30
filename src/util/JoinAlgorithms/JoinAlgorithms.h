@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -762,7 +763,7 @@ struct JoinSide {
   [[no_unique_address]] const End end_;
   const Projection& projection_;
   // Dummy, only required for a better interface of `makeJoinSide` below.
-  [[no_unique_address]] std::type_identity<ProjectedElT> projectedElT_{};
+  [[no_unique_address]] ql::type_identity<ProjectedElT> projectedElT_{};
   CurrentBlocks currentBlocks_{};
   CurrentBlocks undefBlocks_{};
 
@@ -781,7 +782,7 @@ template <typename It, typename End, typename Projection>
 JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 
 template <typename It, typename End, typename Projection, typename ProjectedElT>
-JoinSide(It, End, const Projection&, std::type_identity<ProjectedElT>)
+JoinSide(It, End, const Projection&, ql::type_identity<ProjectedElT>)
     -> JoinSide<It, End, Projection, ProjectedElT>;
 
 // Create a `JoinSide` object from a range of `blocks` and a `projection`. Note
@@ -797,7 +798,7 @@ auto makeJoinSide(Blocks& blocks, const Projection& projection) {
 // explicitly.
 template <typename Blocks, typename Projection, typename ProjectedEl>
 auto makeJoinSide(Blocks& blocks, const Projection& projection,
-                  std::type_identity<ProjectedEl> tg) {
+                  ql::type_identity<ProjectedEl> tg) {
   return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection, tg};
 }
@@ -1048,10 +1049,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 
   // Combine all elements from all blocks on the left with all elements from all
   // blocks on the right and add them to the result.
+  template <bool reversed = false>
   void addCartesianProduct(const LeftBlocks& blocksLeft,
                            const RightBlocks& blocksRight) {
-    static_cast<Derived*>(this)->addCartesianProductImpl(blocksLeft,
-                                                         blocksRight);
+    static_cast<Derived*>(this)->template addCartesianProductImpl<reversed>(
+        blocksLeft, blocksRight);
   }
 
   // Handle non-matching rows from the left side for an optional join or a minus
@@ -1438,10 +1440,12 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // left.
   void addRemainingUndefPairs() {
     if constexpr (potentiallyHasUndef) {
-      addCartesianProduct(leftSide_.currentBlocks_, rightSide_.undefBlocks_);
+      addCartesianProduct<false>(leftSide_.currentBlocks_,
+                                 rightSide_.undefBlocks_);
       consumeRemainingBlocks<false>(leftSide_, rightSide_.undefBlocks_);
 
-      addCartesianProduct(leftSide_.undefBlocks_, rightSide_.currentBlocks_);
+      addCartesianProduct<true>(leftSide_.undefBlocks_,
+                                rightSide_.currentBlocks_);
       consumeRemainingBlocks<true>(rightSide_, leftSide_.undefBlocks_);
 
       compatibleRowAction_.flush();
@@ -1600,15 +1604,33 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   using Base::Base;
 
   // Implement the `addCartesianProduct` customization point with the default
-  // behavior.
+  // behavior. If `reversed` is false, we assume that the Cartesian product is
+  // added not by matching iterating over the right side for every row of the
+  // left side, but by matching iterating over the left side for every row of
+  // the right side.
+  template <bool reversed>
   void addCartesianProductImpl(const LeftBlocks& blocksLeft,
                                const RightBlocks& blocksRight) {
-    for (const auto& [lBlock, rBlock] :
-         ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
+    auto setInput = [this](const auto& lBlock, const auto& rBlock) {
       this->compatibleRowAction_.setInput(lBlock.fullBlock(),
                                           rBlock.fullBlock());
-      this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
-                                         rBlock.getIndexRange());
+    };
+    if constexpr (reversed) {
+      for (const auto& [rBlock, lBlock] :
+           ::ranges::views::cartesian_product(blocksRight, blocksLeft)) {
+        setInput(lBlock, rBlock);
+        for (const auto& [j, i] : ::ranges::views::cartesian_product(
+                 rBlock.getIndexRange(), lBlock.getIndexRange())) {
+          this->compatibleRowAction_.addRow(i, j);
+        }
+      }
+    } else {
+      for (const auto& [lBlock, rBlock] :
+           ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
+        setInput(lBlock, rBlock);
+        this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
+                                           rBlock.getIndexRange());
+      }
     }
   }
 
@@ -1692,8 +1714,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
   // single IdTable-like thing.
   // TODO<joka921> mitigate this requirement, or at least assess how expensive
   // it is.
+  template <bool reversed>
   void addCartesianProductImpl(const LeftBlocks& blocksLeft,
                                const RightBlocks& blocksRight) {
+    static_assert(!reversed, "Not implemented.");
     auto isEmpty = [](const auto& side) {
       return side.empty() || side.front().fullBlock().empty();
     };
@@ -1721,18 +1745,24 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
       IdTable table(numCols, allocator);
-
+      LocalVocab vocab;
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
         const auto& staticView = block.fullBlock().template asStaticView<0>();
         for (size_t idx : block.getIndexRange()) {
           table.push_back(staticView[idx]);
         }
+        vocab.mergeWith(block.fullBlock().getLocalVocab());
       }
-      return table;
+      // Note: We use `IdTableAndFirstCols` here because it allows us to combine
+      // an `IdTable`  with a `LocalVocab` in a way that the
+      // `AddCombinedRowAdder` understands. The `1` template argument is
+      // actually a dummy, as we will never access the data via the
+      // `getFirstCols` interface.
+      return makeIdTableAndFirstCols<1>(std::move(table), std::move(vocab));
     };
-    IdTable leftTable = materializeBlocksAsTable(blocksLeft);
-    IdTable rightTable = materializeBlocksAsTable(blocksRight);
+    auto leftTable = materializeBlocksAsTable(blocksLeft);
+    auto rightTable = materializeBlocksAsTable(blocksRight);
 
     // If either table is empty, we don't have to do anything (same as above).
     // TODO<joka921> Check if this case can happen at all, or whether we can
@@ -1742,8 +1772,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
     }
 
     // Extract the last join columns, on which we have to perform the join.
-    auto lastColLeft = leftTable.getColumn(numJoinColumns_ - 1);
-    auto lastColRight = rightTable.getColumn(numJoinColumns_ - 1);
+    auto lastColLeft =
+        leftTable.template asStaticView<0>().getColumn(numJoinColumns_ - 1);
+    auto lastColRight =
+        rightTable.template asStaticView<0>().getColumn(numJoinColumns_ - 1);
 
     this->compatibleRowAction_.setInput(leftTable, rightTable);
     // Set up actions for the single-column join on the last column.
@@ -1830,9 +1862,9 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
       ql::ranges::range_value_t<std::decay_t<RightBlocks>>>;
   static_assert(std::is_same_v<ProjectedLeft, ProjectedRight>);
   auto leftSide = detail::makeJoinSide(leftBlocks, ql::identity{},
-                                       std::type_identity<ProjectedLeft>{});
+                                       ql::type_identity<ProjectedLeft>{});
   auto rightSide = detail::makeJoinSide(rightBlocks, ql::identity{},
-                                        std::type_identity<ProjectedLeft>{});
+                                        ql::type_identity<ProjectedLeft>{});
   using LeftSide = decltype(leftSide);
   using RightSide = decltype(rightSide);
   detail::BlockZipperJoinImplForSpecialOptionalJoin<

@@ -341,3 +341,58 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
   return DateYearOrDuration(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
+
+// _____________________________________________________________________________
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
+    const DateYearOrDuration& rhs) const {
+  if (isDate() && rhs.isDate()) {
+    // `Date` - `Date` => `DayTimeDuration` ; getting time between the two
+    // `Date`s.
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+
+    std::optional<DayTimeDuration> difference = ownDate - otherDate;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` - `DayTimeDuration` => `Date`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+    return DateYearOrDuration{ownDuration - otherDuration};
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` - `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<Date> difference = ownDate - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isLongYear() && rhs.isLongYear()) {
+    //  `LargeYear` - `LargeYear` => `LargeYear` or `Date`.
+    int64_t year1 = getYear();
+    int64_t year2 = rhs.getYear();
+    int64_t result = year1 - year2;
+    if (result >= Date::minYear && result <= Date::maxYear) {
+      // The result year can be constructed as a `Date`.
+      return DateYearOrDuration{Date(result, 1, 1)};
+    } else {
+      // The result year will also be a `LargeYear`.
+      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
+    }
+  }
+
+  // The following will not be implemented (not viable):
+  //  `DayTimeDuration` - `Date`,
+  //  `DayTimeDuration` - `LargeYear`.
+
+  // No viable subtraction.
+  return std::nullopt;
+}
+#endif
