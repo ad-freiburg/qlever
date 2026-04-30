@@ -127,6 +127,19 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   operationDuration_ = meter->CreateDoubleHistogram(
       "qlever.operation_duration", "Total execution time of SPARQL operations",
       "ms");
+  freeQueryMemory_ = meter->CreateInt64ObservableGauge(
+      "qlever.free_query_memory", "Amount of memory left for query processing",
+      "B");
+  freeQueryMemory_->AddCallback(
+      [](opentelemetry::metrics::ObserverResult result, void* state) {
+        auto* self = static_cast<Server*>(state);
+
+        auto observer =
+            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
+        observer->Observe(self->allocator_.amountMemoryLeft().getBytes());
+      },
+      this);
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *

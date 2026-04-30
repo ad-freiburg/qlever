@@ -9,6 +9,8 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <opentelemetry/metrics/async_instruments.h>
+
 #include <string>
 #include <vector>
 
@@ -156,6 +158,8 @@ class Server {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> startedOperations_;
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
   std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      freeQueryMemory_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
