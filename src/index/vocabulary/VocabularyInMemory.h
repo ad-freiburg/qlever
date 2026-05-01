@@ -68,13 +68,10 @@ class VocabularyInMemory
 
   // Streaming variant of lookupBatch.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    auto gen = [](const VocabularyInMemory* self, VocabLookupInput input)
-        -> cppcoro::generator<VocabBatchLookupResult> {
-      for (auto& batch : input) {
-        co_yield self->lookupBatch(batch);
-      }
-    }(this, std::move(input));
-    return VocabLookupOutput{std::move(gen)};
+    return VocabLookupOutput{
+        ad_utility::InputRangeTypeErased(std::move(input)) |
+        ql::views::transform(
+            [this](ql::span<size_t> batch) { return lookupBatch(batch); })};
   }
 
   // Conversion function that is used by the Mixin base class.
