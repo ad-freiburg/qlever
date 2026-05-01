@@ -66,20 +66,10 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
     return nullptr;
   }
 
-  // OStream reader — periodic snapshots to stdout for debugging.
-  metrics_sdk::PeriodicExportingMetricReaderOptions ostreamOptions;
-  ostreamOptions.export_interval_millis = std::chrono::milliseconds(5000);
-  ostreamOptions.export_timeout_millis = std::chrono::milliseconds(1000);
-  auto ostreamReader =
-      std::make_unique<metrics_sdk::PeriodicExportingMetricReader>(
-          std::make_unique<metrics_exp::OStreamMetricExporter>(std::cout),
-          ostreamOptions);
-
   // Pull reader — metrics served via /metrics on the main server port.
   auto pullReader = std::make_shared<PullMetricReader>();
 
   auto provider = metrics_sdk::MeterProviderFactory::Create();
-  provider->AddMetricReader(std::move(ostreamReader));
   provider->AddMetricReader(pullReader);
 
   metrics_api::Provider::SetMeterProvider(
