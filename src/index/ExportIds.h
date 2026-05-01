@@ -247,7 +247,6 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
           escapeFunction);
     }
   }
-
   return results;
 }
 
