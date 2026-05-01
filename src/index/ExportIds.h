@@ -230,7 +230,6 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
          ids[vocabEnd].getDatatype() == Datatype::VocabIndex) {
     ++vocabEnd;
   }
-
   if (vocabBegin < vocabEnd) {
     std::vector<size_t> rawIndices;
     rawIndices.reserve(vocabEnd - vocabBegin);

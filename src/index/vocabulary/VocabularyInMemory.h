@@ -14,6 +14,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 #include "util/Generator.h"
+#include "util/InputRangeUtils.h"
 #include "util/Serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
@@ -68,10 +69,9 @@ class VocabularyInMemory
 
   // Streaming variant of lookupBatch.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    return VocabLookupOutput{
-        ad_utility::InputRangeTypeErased(std::move(input)) |
-        ql::views::transform(
-            [this](ql::span<size_t> batch) { return lookupBatch(batch); })};
+    return VocabLookupOutput{ql::views::transform(
+        std::move(input),
+        [this](std::vector<size_t>& batch) { return lookupBatch(batch); })};
   }
 
   // Conversion function that is used by the Mixin base class.
