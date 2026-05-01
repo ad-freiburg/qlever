@@ -13,7 +13,6 @@
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -34,6 +33,7 @@
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -389,14 +389,21 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
+  // Collect the first exception thrown by any worker so it can be rethrown to
+  // the caller after `threadPool.join()`. Without this, exceptions escaping a
+  // `net::post` handler call `std::terminate` and exceptions from a detached
+  // `co_spawn` are silently swallowed.
+  ad_utility::ExceptionCollector exceptionCollector;
+
   if (index.usePatterns()) {
-    net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
+    net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
+                                                   &insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
           [&insertionPositions](const Id& oldId) {
             return remapVocabId(oldId, insertionPositions);
           });
       newIndex.writePatternsToFile();
-    });
+    }));
   }
 
   using enum Permutation::Enum;
@@ -425,10 +432,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
             newIndex, getPermutation(a), getPermutation(b), isInternal,
             locatedTriplesSharedState, localVocabMapping, insertionPositions,
             blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-        net::detached);
+        std::ref(exceptionCollector));
   }
 
   threadPool.join();
+  exceptionCollector.rethrow();
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
