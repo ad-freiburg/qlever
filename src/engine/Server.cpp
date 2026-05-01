@@ -73,6 +73,13 @@ Server::Server(
       metricsReader_(std::move(metricsReader)) {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
+
+  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
+      "qlever", "0.0.1");
+  memoryQueryTotal_ = meter->CreateUInt64Counter(
+      "qlever.memory_query_total",
+      "Total amount of memory for query processing", "B");
+  memoryQueryTotal_->Add(maxMem.getBytes());
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
@@ -127,10 +134,10 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   operationDuration_ = meter->CreateDoubleHistogram(
       "qlever.operation_duration", "Total execution time of SPARQL operations",
       "ms");
-  freeQueryMemory_ = meter->CreateInt64ObservableGauge(
-      "qlever.free_query_memory", "Amount of memory left for query processing",
+  memoryQueryFree_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_query_free", "Amount of memory left for query processing",
       "B");
-  freeQueryMemory_->AddCallback(
+  memoryQueryFree_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void* state) {
         auto* self = static_cast<Server*>(state);
 

@@ -159,7 +159,8 @@ class Server {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
   std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      freeQueryMemory_;
+      memoryQueryFree_;
+  std::shared_ptr<opentelemetry::metrics::Counter<uint64_t>> memoryQueryTotal_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
