@@ -70,7 +70,7 @@ class VocabularyInMemory
   // Streaming variant of lookupBatch.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return VocabLookupOutput{ql::views::transform(
-        std::move(input),
+        ad_utility::allView(std::move(input)),
         [this](std::vector<size_t>& batch) { return lookupBatch(batch); })};
   }
 
