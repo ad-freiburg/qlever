@@ -11,6 +11,7 @@
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/ExceptionHandling.h"
 #include "util/FsstCompressor.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
@@ -132,11 +133,26 @@ CPP_template(typename UnderlyingVocabulary,
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
     size_t numBlocksLargerWhenCompressed_ = 0u;
+    // Captures the first exception thrown by any of the worker threads below
+    // so it can be rethrown from `finishImpl()`. Must be declared before
+    // `writeQueue_`/`writeThread_` because the thread body captures it via
+    // `this` and starts running immediately during construction.
+    ad_utility::ExceptionCollector exceptionCollector_;
     ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
         writeQueue_{5};
     ad_utility::JThread writeThread_{[this] {
-      while (auto opt = writeQueue_.pop()) {
-        opt.value()();
+      try {
+        while (auto opt = writeQueue_.pop()) {
+          opt.value()();
+        }
+      } catch (...) {
+        // The exception came either from a write task that ran here, or was
+        // forwarded via `pushException` by a failing compress worker.
+        // Capture it and unblock any compress worker still waiting on
+        // `writeQueue_.push(idx, ...)`.
+        auto ex = std::current_exception();
+        exceptionCollector_(ex);
+        writeQueue_.pushException(std::move(ex));
       }
     }};
     std::atomic<size_t> queueIndex_ = 0;
@@ -180,6 +196,10 @@ CPP_template(typename UnderlyingVocabulary,
       writeQueue_.finish();
       AD_CORRECTNESS_CHECK(writeThread_.joinable());
       writeThread_.join();
+      // If any worker captured an exception, propagate it now — before
+      // touching `underlyingWriter_`/`decoders_`, whose state may be
+      // partially written and would silently produce a corrupt vocabulary.
+      exceptionCollector_.rethrowIfException();
       underlyingWriter_.finish();
       ad_utility::serialization::FileWriteSerializer decoderWriter(
           filenameDecoders_);
@@ -227,28 +247,38 @@ CPP_template(typename UnderlyingVocabulary,
                                this, idx = queueIndex_++,
                                isExternalBuffer =
                                    std::move(isExternalBuffer_)]() mutable {
-        auto bulkResult = CompressionWrapper::compressAll(words);
-        writeQueue_.push(std::pair{
-            idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
-                  isExternalBuffer = std::move(isExternalBuffer)]() {
-              auto& [buffer, views, decoder] = bulkResult;
-              auto compressedSize = getSize(views);
-              compressedSize_ += compressedSize;
-              ++numBlocks_;
-              numBlocksLargerWhenCompressed_ +=
-                  static_cast<size_t>(compressedSize > uncompressedSize);
-              size_t i = 0;
-              for (auto& word : views) {
-                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
-                                                  decltype(word), bool>) {
-                  underlyingWriter_(word, isExternalBuffer.at(i));
-                  ++i;
-                } else {
-                  underlyingWriter_(word);
+        try {
+          auto bulkResult = CompressionWrapper::compressAll(words);
+          writeQueue_.push(std::pair{
+              idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
+                    isExternalBuffer = std::move(isExternalBuffer)]() {
+                auto& [buffer, views, decoder] = bulkResult;
+                auto compressedSize = getSize(views);
+                compressedSize_ += compressedSize;
+                ++numBlocks_;
+                numBlocksLargerWhenCompressed_ +=
+                    static_cast<size_t>(compressedSize > uncompressedSize);
+                size_t i = 0;
+                for (auto& word : views) {
+                  if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
+                                                    decltype(word), bool>) {
+                    underlyingWriter_(word, isExternalBuffer.at(i));
+                    ++i;
+                  } else {
+                    underlyingWriter_(word);
+                  }
                 }
-              }
-              decoders_.emplace_back(decoder);
-            }});
+                decoders_.emplace_back(decoder);
+              }});
+        } catch (...) {
+          // If `compressAll` (or any push attempt before our index is reached)
+          // throws, capture the exception and abort `writeQueue_`. Otherwise
+          // sibling compress workers waiting on `push(idx', ...)` for a later
+          // index would block forever, since our `idx` will never be pushed.
+          auto ex = std::current_exception();
+          exceptionCollector_(ex);
+          writeQueue_.pushException(std::move(ex));
+        }
       };
       compressQueue_.push(std::move(compressAndWrite));
       wordBuffer_.clear();

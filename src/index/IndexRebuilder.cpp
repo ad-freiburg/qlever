@@ -88,6 +88,11 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       [tag = 0](const InsertionInfo& info) {
         return std::tie(info.insertionPosition_, tag);
       });
+  // Finish explicitly so that exceptions from the writer's worker threads
+  // (compression / disk write) propagate to the caller. Letting the
+  // `unique_ptr` finish via destructor would funnel them through
+  // `terminateIfThrows` and silently kill the process.
+  vocabWriter->finish();
   return localVocabMapping;
 }
 }  // namespace
