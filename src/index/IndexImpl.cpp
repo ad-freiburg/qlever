@@ -482,8 +482,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
-                                  allocator_));
+      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
+                                  2_MB * NumColumnsIndexBuilding, allocator_));
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
