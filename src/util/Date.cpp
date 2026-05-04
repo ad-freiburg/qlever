@@ -140,7 +140,7 @@ std::optional<int64_t> Date::toEpochInt() const {
 }
 
 // _____________________________________________________________________________
-Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
+Date Date::makeFromEpoch(Seconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
   // Shift the timestamp according to the given `TimeZone`offset.
   timestamp = timestamp + std::chrono::hours{offset};
