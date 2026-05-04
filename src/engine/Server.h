@@ -150,17 +150,26 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
-  // Metrics instruments — created in run() from the global MeterProvider.
-  // No-op instruments are used when metrics are disabled. Both instruments use
-  // an "operation" label ("query" / "update") to distinguish operation types.
+  // SPARQL Operation metrics
+  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
+      startedSparqlOperations_;
   std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
-      activeOperations_;
-  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> startedOperations_;
-  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
+      runningSparqlOperations_;
+  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
+      finishedSparqlOperations_;
   std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
+  // Update metrics
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument> updatedTriples_;
+  // Error metrics
+  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
+  // Memory metrics
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryQueryFree_;
   std::shared_ptr<opentelemetry::metrics::Counter<uint64_t>> memoryQueryTotal_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      memoryCacheUsed_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      memoryCacheTotal_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;

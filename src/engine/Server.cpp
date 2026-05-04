@@ -76,9 +76,9 @@ Server::Server(
 
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
-  memoryQueryTotal_ = meter->CreateUInt64Counter(
-      "qlever.memory_query_total",
-      "Total amount of memory for query processing", "B");
+  memoryQueryTotal_ =
+      meter->CreateUInt64Counter("qlever.memory_query_total",
+                                 "Memory allocated for query processing", "By");
   memoryQueryTotal_->Add(maxMem.getBytes());
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
@@ -122,21 +122,24 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
-  activeOperations_ = meter->CreateInt64UpDownCounter(
-      "qlever.active_operations",
+  startedSparqlOperations_ = meter->CreateUInt64Counter(
+      "qlever.sparql_operations_started",
+      "Number of SPARQL operations started since server start");
+  runningSparqlOperations_ = meter->CreateInt64UpDownCounter(
+      "qlever.sparql_operations_running",
       "Number of SPARQL operations currently being processed");
-  startedOperations_ = meter->CreateUInt64Counter(
-      "qlever.started_operations",
-      "Total number of SPARQL operations started since server start");
+  finishedSparqlOperations_ = meter->CreateUInt64Counter(
+      "qlever.sparql_operations_finished",
+      "Number of SPARQL operations successfully finished since server start");
   operationErrors_ = meter->CreateUInt64Counter(
       "qlever.operation_errors",
       "Errors during the execution of operations (both SPARQL and others)");
   operationDuration_ = meter->CreateDoubleHistogram(
-      "qlever.operation_duration", "Total execution time of SPARQL operations",
-      "ms");
+      "qlever.operation_duration",
+      "Execution time of successful SPARQL operations", "ms");
   memoryQueryFree_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_query_free", "Amount of memory left for query processing",
-      "B");
+      "qlever.memory_query_free", "Available memory for query processing",
+      "By");
   memoryQueryFree_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void* state) {
         auto* self = static_cast<Server*>(state);
@@ -145,6 +148,49 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
             opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
                 opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
         observer->Observe(self->allocator_.amountMemoryLeft().getBytes());
+      },
+      this);
+  memoryCacheTotal_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_cache_total", "Memory allocated for caching", "By");
+  memoryCacheTotal_->AddCallback(
+      [](opentelemetry::metrics::ObserverResult result, void*) {
+        auto observer =
+            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
+        observer->Observe(
+            globalRuntimeParameters.rlock()->cacheMaxSize_.get().getBytes());
+      },
+      nullptr);
+  memoryCacheUsed_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_cache_used", "Memory used for caching", "By");
+  memoryCacheUsed_->AddCallback(
+      [](opentelemetry::metrics::ObserverResult result, void* state) {
+        auto* self = static_cast<Server*>(state);
+        auto& cache = self->cache_;
+        auto totalSize = cache.nonPinnedSize() + cache.pinnedSize();
+
+        auto observer =
+            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
+        observer->Observe(totalSize.getBytes());
+      },
+      this);
+  updatedTriples_ = meter->CreateInt64ObservableGauge(
+      "qlever.updated_triples",
+      "Number of triples that are updated relative to the index");
+  updatedTriples_->AddCallback(
+      [](opentelemetry::metrics::ObserverResult result, void* state) {
+        auto* self = static_cast<Server*>(state);
+
+        auto observer =
+            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
+        observer->Observe(
+            self->index()
+                .deltaTriplesManager()
+                .getCurrentLocatedTriplesSharedState()
+                ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
+                .numTriples());
       },
       this);
 
@@ -717,7 +763,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           msg, ad_utility::truncateOperationString(operationString)));
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      startedOperations_->Add(1, {{"operation", "update"}});
+      startedSparqlOperations_->Add(1, {{"operation", "update"}});
       co_return co_await processUpdate(
           std::move(operations), requestTimer, tracer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -726,7 +772,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       ParsedQuery query = std::move(operations[0]);
       AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                            query.hasConstructClause());
-      startedOperations_->Add(1, {{"operation", "query"}});
+      startedSparqlOperations_->Add(1, {{"operation", "query"}});
       co_return co_await processQuery(
           parameters, std::move(query), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -1093,7 +1139,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
-  ad_utility::metrics::ActiveCounterGuard queryGuard{*activeOperations_,
+  ad_utility::metrics::ActiveCounterGuard queryGuard{*runningSparqlOperations_,
                                                      "query"};
 
   auto mediaTypes = determineMediaTypes(params, request);
@@ -1154,6 +1200,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", opentelemetry::nostd::string_view{"query"}}},
       opentelemetry::context::Context{});
+  finishedSparqlOperations_->Add(1, {{"operation", "query"}});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1258,7 +1305,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
-  ad_utility::metrics::ActiveCounterGuard updateGuard{*activeOperations_,
+  ad_utility::metrics::ActiveCounterGuard updateGuard{*runningSparqlOperations_,
                                                       "update"};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -1340,6 +1387,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", opentelemetry::nostd::string_view{"update"}}},
       opentelemetry::context::Context{});
+  finishedSparqlOperations_->Add(1, {{"operation", "update"}});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
