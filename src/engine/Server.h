@@ -167,11 +167,10 @@ class Server {
   // Memory metrics
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryQueryFree_;
-  std::shared_ptr<opentelemetry::metrics::Counter<uint64_t>> memoryQueryTotal_;
+  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryCacheUsed_;
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      memoryCacheLimit_;
+  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;

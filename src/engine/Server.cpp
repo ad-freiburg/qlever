@@ -77,13 +77,18 @@ Server::Server(
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   memoryQueryTotal_ =
-      meter->CreateUInt64Counter("qlever.memory_query_limit",
-                                 "Memory allocated for query processing", "By");
-  memoryQueryTotal_->Add(maxMem.getBytes());
+      meter->CreateInt64Gauge("qlever.memory_query_limit",
+                              "Memory allocated for query processing", "By");
+  memoryQueryTotal_->Record(maxMem.getBytes());
+  memoryCacheLimit_ = meter->CreateInt64Gauge(
+      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSize(newValue);
+        memoryCacheLimit_->Record(newValue.getBytes());
+      });
   globalRuntimeParameters.wlock()->cacheMaxSizeSingleEntry_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
@@ -150,17 +155,6 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
         observer->Observe(self->allocator_.amountMemoryLeft().getBytes());
       },
       this);
-  memoryCacheLimit_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
-  memoryCacheLimit_->AddCallback(
-      [](opentelemetry::metrics::ObserverResult result, void*) {
-        auto observer =
-            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
-                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
-        observer->Observe(
-            globalRuntimeParameters.rlock()->cacheMaxSize_.get().getBytes());
-      },
-      nullptr);
   memoryCacheUsed_ = meter->CreateInt64ObservableGauge(
       "qlever.memory_cache_used", "Memory used for caching", "By");
   memoryCacheUsed_->AddCallback(

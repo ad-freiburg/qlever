@@ -426,6 +426,8 @@ set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
 set(WITH_STL ON CACHE BOOL "" FORCE)
 set(WITH_FUNC_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_2 ON CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         opentelemetry-cpp
         GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
