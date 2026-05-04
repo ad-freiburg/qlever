@@ -400,8 +400,6 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     const DateYearOrDuration& rhs) const {
-  // For the implementation of the addition, the `operator-` implementations
-  // will be used, because: a + b = a - (-b) = a - (0 - b).
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
     //  `DayTimeDuration` + `DayTimeDuration` => `DayTimeDuration`.
     const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
