@@ -157,11 +157,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                   std::make_pair(toBits(h),
                                  Id::makeFromVocabIndex(VocabIndex::make(7))),
                   std::make_pair(toBits(j),
-                                 Id::makeFromVocabIndex(VocabIndex::make(14))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(13))),
                   std::make_pair(toBits(l),
-                                 Id::makeFromVocabIndex(VocabIndex::make(16))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(15))),
                   std::make_pair(toBits(m), Id::makeFromVocabIndex(
-                                                VocabIndex::make(17)))));
+                                                VocabIndex::make(16)))));
 
   Index::Vocab newVocab;
   newVocab.resetToType(type);
@@ -179,12 +179,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(9)], HAS_PATTERN_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(10)], HAS_PREDICATE_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(11)], QLEVER_INTERNAL_GRAPH_IRI);
-  EXPECT_EQ(newVocab[VocabIndex::make(12)], LANGUAGE_PREDICATE);
-  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<i>");
-  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<j>");
-  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
-  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
-  EXPECT_EQ(newVocab[VocabIndex::make(17)], "<m>");
+  EXPECT_EQ(newVocab[VocabIndex::make(12)], "<i>");
+  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<j>");
+  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<k>");
+  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<l>");
+  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
 }
 
 // _____________________________________________________________________________
