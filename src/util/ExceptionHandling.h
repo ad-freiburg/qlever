@@ -189,7 +189,7 @@ class ExceptionCollector {
                 << std::endl;
     throwIfSafe_(
         [this]() { std::rethrow_exception(std::move(firstException_)); },
-        "in `ExceptionCollector` destructor");
+        std::string_view{"in `ExceptionCollector` destructor"});
   }
 
   // Stores the first non-null exception. Subsequent exceptions are logged.
