@@ -75,8 +75,8 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
     return std::nullopt;
   }
 
-  Date::Seconds date1 = epoch1.value();
-  Date::Seconds date2 = epoch2.value();
+  Date::Milliseconds date1 = epoch1.value();
+  Date::Milliseconds date2 = epoch2.value();
 
   DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
   auto difference = date1 - date2;
@@ -84,9 +84,11 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
     durationType = DayTimeDuration::Type::Negative;
     difference = -difference;
   }
-  // Get total seconds.
+  // Get total seconds by converting stored milliseconds to seconds.
   auto second =
-      std::chrono::duration_cast<std::chrono::seconds>(difference).count();
+      std::chrono::duration_cast<std::chrono::milliseconds>(difference)
+          .count() /
+      1'000.0;
   // Only passing seconds to `DayTimeDuration`. The object itself will convert
   // the input to days, hours, minutes and seconds.
   return DayTimeDuration{durationType, 0, 0, 0, second};
@@ -99,24 +101,22 @@ std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
     return std::nullopt;
   }
   auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Seconds newDate =
-      epochLhs.value() -
-      std::chrono::seconds(totalMillisecondsRhs /
-                           1'000);  // milliseconds to seconds
+  Date::Milliseconds newDate =
+      epochLhs.value() - std::chrono::milliseconds(totalMillisecondsRhs);
   return makeFromEpoch(newDate, getTimeZone());
 }
 
 // _____________________________________________________________________________
-std::optional<Date::Seconds> Date::toEpoch() const {
+std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
   auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
-    Date::Seconds result =
+    Date::Milliseconds result =
         sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
-        duration_cast<seconds>(
+        duration_cast<milliseconds>(
             second);  // Here all times are converted to a UTC time.
     return result;
   } else {
@@ -127,7 +127,7 @@ std::optional<Date::Seconds> Date::toEpoch() const {
 
 // _____________________________________________________________________________
 std::optional<int64_t> Date::toEpochInt() const {
-  std::optional<Date::Nanoseconds> result = toEpoch();
+  std::optional<Date::Milliseconds> result = toEpoch();
   if (!result.has_value()) {
     return std::nullopt;  // Invalid date.
   } else {
@@ -140,7 +140,7 @@ std::optional<int64_t> Date::toEpochInt() const {
 }
 
 // _____________________________________________________________________________
-Date Date::makeFromEpoch(Seconds timestamp, TimeZone tz) {
+Date Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
   // Shift the timestamp according to the given `TimeZone`offset.
   timestamp = timestamp + std::chrono::hours{offset};

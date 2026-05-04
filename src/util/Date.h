@@ -180,6 +180,7 @@ class Date {
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
+  using Milliseconds = std::chrono::sys_time<std::chrono::milliseconds>;
   using Seconds = std::chrono::sys_time<std::chrono::seconds>;
 #endif
   /// Construct a `Date` from values for the different components. If any of the
@@ -352,12 +353,12 @@ class Date {
 
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
-  std::optional<Seconds> toEpoch() const;
+  std::optional<Milliseconds> toEpoch() const;
   // Uses `toEpoch` to return the Epoch time in seconds.
   std::optional<int64_t> toEpochInt() const;
 
   // From a Unix Epoch timestamp, construct the corresponding `Date`.
-  static Date makeFromEpoch(Seconds timestamp, TimeZone tz);
+  static Date makeFromEpoch(Milliseconds timestamp, TimeZone tz);
 #endif
 
   static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);

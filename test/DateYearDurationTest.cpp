@@ -534,44 +534,46 @@ TEST(Date, toEpoch) {
   {
     using namespace std::chrono;
 
-    // Seconds tests.
-    auto sec = [](sys_time<seconds> v) { return v.time_since_epoch().count(); };
+    // Turns the seconds timestamp into number of milliseconds
+    auto ms = [](sys_time<milliseconds> v) {
+      return v.time_since_epoch().count();
+    };
 
     Date date = Date(1344, 2, 11, 10, 12, 0);
-    sys_time<std::chrono::seconds> timestamp =
-        sys_time<std::chrono::seconds>{seconds{-19'751'089'680}};
+    sys_time<std::chrono::milliseconds> timestamp =
+        sys_time<std::chrono::milliseconds>{seconds{-19'751'089'680}};
     auto result = date.toEpoch();
     ASSERT_TRUE(result);
-    EXPECT_EQ(sec(timestamp), sec(result.value()));
+    EXPECT_EQ(ms(timestamp), ms(result.value()));
 
     date = Date(1970, 1, 1, 0, 0, 0);
-    timestamp = sys_time<std::chrono::seconds>{seconds{0}};
+    timestamp = sys_time<std::chrono::milliseconds>{seconds{0}};
     result = date.toEpoch();
     ASSERT_TRUE(result);
-    EXPECT_EQ(sec(timestamp), sec(result.value()));
+    EXPECT_EQ(ms(timestamp), ms(result.value()));
 
     date = Date(1969, 12, 31, 23, 59, 20);
-    timestamp = sys_time<seconds>{seconds{-40}};
+    timestamp = sys_time<milliseconds>{seconds{-40}};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_EQ(sec(timestamp), sec(date.toEpoch().value()));
+    EXPECT_EQ(ms(timestamp), ms(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 1, 1, 1);
-    timestamp = sys_time<seconds>{seconds{3661}};
+    timestamp = sys_time<milliseconds>{seconds{3661}};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_EQ(sec(timestamp), sec(date.toEpoch().value()));
+    EXPECT_EQ(ms(timestamp), ms(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 0, 0, 20.235);
     auto second = duration<double>{20.235};
-    timestamp = sys_time<seconds>{duration_cast<seconds>(second)};
+    timestamp = sys_time<milliseconds>{duration_cast<seconds>(second)};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_NEAR(sec(timestamp), sec(date.toEpoch().value()), 500000);
+    EXPECT_NEAR(ms(timestamp), ms(date.toEpoch().value()), 500000);
 
     date = Date(1999, 2, 1, 8, 15, 13.098);
     second = duration<double>{13.098};
-    timestamp =
-        sys_time<seconds>{seconds{917856900}} + duration_cast<seconds>(second);
+    timestamp = sys_time<milliseconds>{seconds{917856900}} +
+                duration_cast<seconds>(second);
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_NEAR(sec(timestamp), sec(date.toEpoch().value()), 500000);
+    EXPECT_NEAR(ms(timestamp), ms(date.toEpoch().value()), 500000);
 
     // Test invalid `Date`.
     date = Date(1970, 11, 31, 13, 24, 24);
@@ -585,8 +587,8 @@ TEST(Date, toEpoch) {
     Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC.
     for (int i = 1; i < 24; i++) {
       Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i.
-      // Difference in hours is converted to seconds to be compared.
-      long long expected = static_cast<long long>(i) * 60 * 60;
+      // Difference in hours is converted to milliseconds to be compared.
+      long long expected = static_cast<long long>(i) * 60 * 60 * 1'000;
       EXPECT_EQ(expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
       date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
