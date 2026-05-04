@@ -2,14 +2,17 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <array>
 #include <atomic>
+#include <sstream>
 #include <stdexcept>
 
 #include "./util/GTestHelpers.h"
 #include "util/ExceptionHandling.h"
+#include "util/Log.h"
 #include "util/jthread.h"
 
 // _____________________________________________________________________________
@@ -98,18 +101,40 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
 
 // _____________________________________________________________________________
 TEST(ExceptionCollector, asCompletionHandler) {
+  std::ostringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{
+      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
+
   ad_utility::ExceptionCollector collector;
   try {
     throw std::runtime_error{"first"};
   } catch (...) {
     collector(std::current_exception());
   }
-  // Additional exceptions are logged; only the first one is rethrown.
+  // Additional `std::exception`s are logged with their message; only the first
+  // one is rethrown.
   try {
     throw std::logic_error{"second"};
   } catch (...) {
     collector(std::current_exception());
   }
+  EXPECT_THAT(
+      logStream.str(),
+      ::testing::AllOf(::testing::HasSubstr("Additional exception captured"),
+                       ::testing::HasSubstr("second")));
+
+  // Additional exceptions that do not derive from `std::exception` exercise
+  // the catch-all branch and are logged with a generic message.
+  try {
+    throw 42;
+  } catch (...) {
+    collector(std::current_exception());
+  }
+  EXPECT_THAT(
+      logStream.str(),
+      ::testing::HasSubstr("Additional exception of unknown type captured"));
+
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       collector.rethrow(), ::testing::StrEq("first"), std::runtime_error);
 }
