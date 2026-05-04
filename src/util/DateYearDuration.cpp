@@ -437,7 +437,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
   //  `DayTimeDuration` + `Date`,
   //  `DayTimeDuration` + `LargeYear`.
 
-  // No viable subtraction.
+  // No viable addition.
   return std::nullopt;
 }
 #endif
