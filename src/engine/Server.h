@@ -138,6 +138,15 @@ class Server {
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
   };
   ad_utility::Synchronized<IndexAndViews> indexAndViews_;
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  IndexAndViews indexAndViewsSnapshot() const {
+    return *indexAndViews_.rlock();
+  }
+
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
@@ -264,12 +273,13 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
-  auto prepareOperation(std::shared_ptr<Index> index,
-                        std::string_view operationName,
-                        std::string_view operationSPARQL,
-                        ad_utility::websocket::MessageSender& messageSender,
-                        const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk);
+  auto prepareOperation(
+      std::shared_ptr<Index> index,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      std::string_view operationName, std::string_view operationSPARQL,
+      ad_utility::websocket::MessageSender& messageSender,
+      const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
+      bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,

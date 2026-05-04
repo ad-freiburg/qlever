@@ -298,8 +298,9 @@ auto Server::setupCancellationHandle(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    std::shared_ptr<Index> index, std::string_view operationName,
-    std::string_view operationSPARQL,
+    std::shared_ptr<Index> index,
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+    std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender& messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk) {
@@ -331,7 +332,7 @@ auto Server::prepareOperation(
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   auto qec = std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, this->materializedViewsManager(),
+      &namedResultCache_, std::move(materializedViewsManager),
       std::ref(messageSender), pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
@@ -367,10 +368,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
-  // Acquire the current index exactly once for the whole request so that a
-  // concurrent rebuild that swaps in a new index does not change which
-  // instance is observed between the helpers called below.
-  auto index = this->index();
+  // Acquire the current index and the materialized views manager exactly once
+  // for the whole request, under a single read lock. This way a concurrent
+  // rebuild that swaps both in cannot make different helpers observe a
+  // mismatched (index, manager) pair.
+  auto [index, materializedViewsManager] = indexAndViewsSnapshot();
 
   // Log some basic information about the request. Start with an empty line so
   // that in a low-traffic scenario (or when the query processing is very fast),
@@ -592,7 +594,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
-    this->materializedViewsManager()->loadView(name.value());
+    materializedViewsManager->loadView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
@@ -648,7 +650,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery, &index, this](
+       &requestTimer, &plannedQuery, &index, &materializedViewsManager, this](
           std::vector<ParsedQuery> operations, std::string operationName,
           const std::string operationString,
           std::function<bool(const ParsedQuery&)> expectedOperation,
@@ -664,8 +666,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         createMessageSender(queryHub_, request, operationString);
 
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(index, operationName, operationString, messageSender,
-                         parameters, timeLimit.value(), accessTokenOk);
+        prepareOperation(index, materializedViewsManager, operationName,
+                         operationString, messageSender, parameters,
+                         timeLimit.value(), accessTokenOk);
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
@@ -1487,8 +1490,9 @@ void Server::writeMaterializedView(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
-  auto index = this->index();
-  auto manager = this->materializedViewsManager();
+  // Acquire the index and the manager via a single read lock so they are
+  // guaranteed to come from the same swap generation.
+  auto [index, manager] = indexAndViewsSnapshot();
   auto parsedQuery = SparqlParser::parseQuery(
       &index->encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
@@ -1508,8 +1512,7 @@ void Server::writeMaterializedView(
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto index = this->index();
-  auto oldManager = this->materializedViewsManager();
+  auto [index, oldManager] = indexAndViewsSnapshot();
   // Warn if state that won't carry over to the rebuilt index was previously
   // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
   // with a fresh, empty `MaterializedViewsManager`.
