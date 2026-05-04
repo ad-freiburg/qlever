@@ -134,8 +134,8 @@ TEST(ExceptionCollector, isThreadSafe) {
   ad_utility::ExceptionCollector collector;
   {
     constexpr int numThreads = 16;
-    std::array<ad_utility::JThread, numThreads> threads;
     std::atomic<int> ready = 0;
+    std::array<ad_utility::JThread, numThreads> threads;
     for (int i = 0; i < numThreads; ++i) {
       threads.at(i) = ad_utility::JThread{[&collector, &ready, i] {
         ++ready;
