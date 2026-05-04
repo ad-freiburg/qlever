@@ -855,6 +855,10 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  auto defaultGraph =
+      TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
+          .toValueId(testQec->getIndex().getImpl())
+          .value();
   const auto& localVocabContext = testQec->getLocalVocabContext();
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
@@ -868,13 +872,13 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
     deltaTriples.insertTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
-                     Id::makeFromBool(true)}}});
+                     Id::makeFromBool(true), defaultGraph}}});
     LocalVocabEntry entry2 =
         LocalVocabEntry::fromStringRepresentation("<other>", localVocabContext);
     deltaTriples.deleteTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
-                     Id::makeFromBool(false)}}});
+                     Id::makeFromBool(false), defaultGraph}}});
 
     deltaTriples.writeToDisk();
   }
@@ -896,7 +900,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                     AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                 ::testing::Eq("<test>")),
                     AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                ::testing::Eq("<other>"))));
+                                ::testing::Eq("<other>")),
+                    AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                ::testing::Eq(LANGUAGE_PREDICATE))));
 
     std::vector<IdTriple<>> insertedTriples;
     ql::ranges::copy(
@@ -911,7 +917,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                                  LocalVocabEntry::fromStringRepresentation(
                                      "<test>", localVocabContext))
                              .value()),
-                     Id::makeFromBool(true)}})));
+                     Id::makeFromBool(true), defaultGraph}})));
     std::vector<IdTriple<>> deletedTriples;
     ql::ranges::copy(
         deltaTriples.triplesToHandlesNormal_.triplesDeleted_ | ql::views::keys,
@@ -925,7 +931,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                                  LocalVocabEntry::fromStringRepresentation(
                                      "<other>", localVocabContext))
                              .value()),
-                     Id::makeFromBool(false)}})));
+                     Id::makeFromBool(false), defaultGraph}})));
   }
 }
 
@@ -963,7 +969,9 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                       Eq(iri1))),
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri2)))));
+                                      Eq(iri2))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(LANGUAGE_PREDICATE)))));
 
   using OBE =
       ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
@@ -1013,7 +1021,9 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                       Eq(iri1))),
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri2)))));
+                                      Eq(iri2))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(LANGUAGE_PREDICATE)))));
 
   EXPECT_THAT(ownedBlocks, ElementsAre());
 }
@@ -1104,9 +1114,12 @@ qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
       Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
   Id secondNewEntry =
       Id::fromBits(originalVocab.at(1)->positionInVocab().upperBound_.get());
+  Id thirdNewEntry =
+      Id::fromBits(originalVocab.at(2)->positionInVocab().upperBound_.get());
 
   idMapping.insertionPositions_.push_back(firstNewEntry.getVocabIndex());
   idMapping.insertionPositions_.push_back(secondNewEntry.getVocabIndex());
+  idMapping.insertionPositions_.push_back(thirdNewEntry.getVocabIndex());
   ql::ranges::sort(idMapping.insertionPositions_);
   idMapping.localVocabMapping_.emplace(
       Id::makeFromLocalVocabIndex(originalVocab.at(0)).getBits(),
@@ -1114,6 +1127,9 @@ qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
   idMapping.localVocabMapping_.emplace(
       Id::makeFromLocalVocabIndex(originalVocab.at(1)).getBits(),
       secondNewEntry);
+  idMapping.localVocabMapping_.emplace(
+      Id::makeFromLocalVocabIndex(originalVocab.at(2)).getBits(),
+      thirdNewEntry);
   idMapping.blankNodeBlocks_.emplace_back(
       blankNodeBlocks.at(0).blockIndices_.at(0));
   idMapping.minBlankNodeIndex_ = minBlankNodeIndex;
@@ -1146,7 +1162,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
 
   auto originalSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
   auto [originalVocab, blankNodeBlocks] = deltaTriples.copyLocalVocab();
-  ASSERT_EQ(originalVocab.size(), 2);
+  ASSERT_EQ(originalVocab.size(), 3);
   ASSERT_EQ(blankNodeBlocks.size(), 1);
   ASSERT_EQ(blankNodeBlocks.at(0).blockIndices_.size(), 1);
 
@@ -1198,9 +1214,9 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
         VocabIndex::make(id.getVocabIndex().get() + offset));
   };
 
-  Id newX = add(x, 2);
+  Id newX = add(x, 3);
   Id newGraph = add(graph, 1);
-  Id newNext = add(getId("<next>"), 2);
+  Id newNext = add(getId("<next>"), 3);
 
   ASSERT_EQ(insertedTriples.size(), 3);
   EXPECT_THAT(insertedTriples.at(0).ids(),
