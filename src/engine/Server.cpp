@@ -77,7 +77,7 @@ Server::Server(
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   memoryQueryTotal_ =
-      meter->CreateUInt64Counter("qlever.memory_query_total",
+      meter->CreateUInt64Counter("qlever.memory_query_limit",
                                  "Memory allocated for query processing", "By");
   memoryQueryTotal_->Add(maxMem.getBytes());
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -123,22 +123,22 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   startedSparqlOperations_ = meter->CreateUInt64Counter(
-      "qlever.sparql_operations_started",
+      "qlever.sparql_operation.started",
       "Number of SPARQL operations started since server start");
   runningSparqlOperations_ = meter->CreateInt64UpDownCounter(
-      "qlever.sparql_operations_running",
+      "qlever.sparql_operation.running",
       "Number of SPARQL operations currently being processed");
   finishedSparqlOperations_ = meter->CreateUInt64Counter(
-      "qlever.sparql_operations_finished",
+      "qlever.sparql_operation.finished",
       "Number of SPARQL operations successfully finished since server start");
   operationErrors_ = meter->CreateUInt64Counter(
       "qlever.operation_errors",
       "Errors during the execution of operations (both SPARQL and others)");
-  operationDuration_ = meter->CreateDoubleHistogram(
-      "qlever.operation_duration",
+  sparqlOperationDuration_ = meter->CreateDoubleHistogram(
+      "qlever.sparql_operation.duration",
       "Execution time of successful SPARQL operations", "ms");
   memoryQueryFree_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_query_free", "Available memory for query processing",
+      "qlever.memory_query_available", "Available memory for query processing",
       "By");
   memoryQueryFree_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void* state) {
@@ -150,9 +150,9 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
         observer->Observe(self->allocator_.amountMemoryLeft().getBytes());
       },
       this);
-  memoryCacheTotal_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_cache_total", "Memory allocated for caching", "By");
-  memoryCacheTotal_->AddCallback(
+  memoryCacheLimit_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
+  memoryCacheLimit_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void*) {
         auto observer =
             opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
@@ -175,10 +175,10 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
         observer->Observe(totalSize.getBytes());
       },
       this);
-  updatedTriples_ = meter->CreateInt64ObservableGauge(
-      "qlever.updated_triples",
+  deltaTriplesMetric_ = meter->CreateInt64ObservableGauge(
+      "qlever.delta_triples",
       "Number of triples that are updated relative to the index");
-  updatedTriples_->AddCallback(
+  deltaTriplesMetric_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void* state) {
         auto* self = static_cast<Server*>(state);
 
@@ -1018,7 +1018,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
-    operationErrors_->Add(1, {{"error", "system_error"}});
+    operationErrors_->Add(1, {{"type", "system_error"}});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -1035,7 +1035,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
-    operationErrors_->Add(1, {{"error", "send_streamable_response"}});
+    operationErrors_->Add(1, {{"type", "send_streamable_response"}});
   }
 }
 
@@ -1196,7 +1196,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
-  operationDuration_->Record(
+  sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", opentelemetry::nostd::string_view{"query"}}},
       opentelemetry::context::Context{});
@@ -1383,7 +1383,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
-  operationDuration_->Record(
+  sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", opentelemetry::nostd::string_view{"update"}}},
       opentelemetry::context::Context{});

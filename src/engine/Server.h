@@ -157,9 +157,11 @@ class Server {
       runningSparqlOperations_;
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
       finishedSparqlOperations_;
-  std::unique_ptr<opentelemetry::metrics::Histogram<double>> operationDuration_;
+  std::unique_ptr<opentelemetry::metrics::Histogram<double>>
+      sparqlOperationDuration_;
   // Update metrics
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument> updatedTriples_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      deltaTriplesMetric_;
   // Error metrics
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
   // Memory metrics
@@ -169,7 +171,7 @@ class Server {
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryCacheUsed_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      memoryCacheTotal_;
+      memoryCacheLimit_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;

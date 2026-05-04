@@ -10,7 +10,6 @@
 #include "util/Metrics.h"
 
 #include <chrono>
-#include <iostream>
 #include <memory>
 #include <string>
 
@@ -78,7 +77,7 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   auto meter =
       metrics_api::Provider::GetMeterProvider()->GetMeter("qlever", "0.0.1");
   auto startTimeMetric = meter->CreateUInt64Counter(
-      "qlever.start_time_seconds",
+      "qlever.server.start_time",
       "Unix timestamp (seconds) when the QLever server was started", "s");
   startTimeMetric->Add(std::chrono::duration_cast<std::chrono::seconds>(
                            std::chrono::system_clock::now().time_since_epoch())
