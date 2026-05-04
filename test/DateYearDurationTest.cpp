@@ -615,18 +615,16 @@ TEST(Date, Subtraction) {
 
 // _____________________________________________________________________________
 TEST(Date, toEpochInt) {
+  using namespace testing;
   Date date = Date(1970, 1, 1, 0, 0, 0);
   auto result = date.toEpochInt();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result.value(), 0);
+  EXPECT_THAT(result, Optional(Eq(0)));
   date = Date(1999, 1, 1, 10, 12, 0);
   result = date.toEpochInt();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result.value(), 915'185'520);
+  EXPECT_THAT(result, Optional(Eq(915'185'520)));
   date = Date(1949, 2, 11, 10, 12, 0);
   result = date.toEpochInt();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result.value(), -659'108'880);
+  EXPECT_THAT(result, Optional(Eq(-659'108'880)));
   // Invalid date
   date = Date(1998, 2, 30, 10, 12, 0);
   result = date.toEpochInt();

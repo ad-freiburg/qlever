@@ -114,7 +114,7 @@ struct ExtractEpoch {
     }
     return Id::makeFromInt(epoch.value());
 #else
-    return Id::makeUndefined();
+    throw std::runtime_error("This function is not supported for CPP17.")
 #endif
   }
 };
