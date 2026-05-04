@@ -8,6 +8,7 @@
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Forward.h"
+#include "util/Generator.h"
 
 namespace {
 using namespace vocabulary_test;
@@ -145,4 +146,62 @@ TEST(VocabularyOnDisk, ErrorOnNonAscendingIds) {
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
+}
+
+TEST(VocabularyOnDisk, LookupBatch) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatch"};
+  auto vocab = creator.createVocabulary(words);
+
+  // Batch lookup in non-sequential order.
+  std::array<size_t, 3> indices{2, 0, 3};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "beta");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "42");
+
+  // Empty batch.
+  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
+}
+
+TEST(VocabularyOnDisk, LookupBatchesStreamed) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamed"};
+  auto vocab = creator.createVocabulary(words);
+
+  // Create a generator that yields two batches.
+  auto makeBatches = []() -> cppcoro::generator<std::vector<size_t>> {
+    co_yield std::vector<size_t>{2, 0, 3};
+    co_yield std::vector<size_t>{1};
+  };
+
+  auto streamedResults =
+      vocab.lookupBatchesStreamed(VocabLookupInput{makeBatches()});
+
+  // Collect results from the stream.
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& r : streamedResults) {
+    results.push_back(std::move(r));
+  }
+  ASSERT_EQ(results.size(), 2);
+
+  // Verify first batch matches individual lookupBatch.
+  {
+    std::array<size_t, 3> indices{2, 0, 3};
+    auto expected = vocab.lookupBatch(indices);
+    ASSERT_EQ(results[0]->size(), expected->size());
+    for (size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*results[0])[i], (*expected)[i]);
+    }
+  }
+
+  // Verify second batch.
+  {
+    std::array<size_t, 1> indices{1};
+    auto expected = vocab.lookupBatch(indices);
+    ASSERT_EQ(results[1]->size(), expected->size());
+    EXPECT_EQ((*results[1])[0], (*expected)[0]);
+  }
 }
