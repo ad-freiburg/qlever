@@ -9,6 +9,8 @@
 
 #include "index/GraphNameManager.h"
 
+#include "util/Serializer/FileSerializer.h"
+
 // _____________________________________________________________________________
 GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
                                    uint64_t nextUnallocatedGraph)
@@ -19,6 +21,40 @@ GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
 ad_utility::triple_component::Iri GraphNameManager::allocateNewGraph() {
   return ad_utility::triple_component::Iri::fromIriref(
       absl::StrCat("<", prefixWithoutBraces_, nextUnallocatedGraph_++, ">"));
+}
+
+// _____________________________________________________________________________
+void GraphNameManager::writeToDisk() const {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  auto path = filenameForPersisting_.value();
+  auto tempPath = path;
+  tempPath += ".tmp";
+  ad_utility::serialization::FileWriteSerializer serializer{tempPath.c_str()};
+  serializer | *this;
+  std::filesystem::rename(tempPath, path);
+}
+
+// _____________________________________________________________________________
+void GraphNameManager::readFromDisk() {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  if (!std::filesystem::exists(filenameForPersisting_.value())) {
+    return;
+  }
+
+  ad_utility::serialization::FileReadSerializer serializer{
+      filenameForPersisting_.value().c_str()};
+  serializer | *this;
+}
+
+// _____________________________________________________________________________
+void GraphNameManager::setFilenameForPersistingAndReadFromDisk(
+    std::filesystem::path filename) {
+  filenameForPersisting_ = std::move(filename);
+  readFromDisk();
 }
 
 // _____________________________________________________________________________

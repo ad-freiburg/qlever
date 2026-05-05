@@ -300,9 +300,3 @@ GraphNameManager& Index::graphNameManager() {
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
 }
-
-// ____________________________________________________________________________
-const std::optional<std::filesystem::path>&
-Index::getPersistedGraphNameManager() const {
-  return pimpl_->getPersistedGraphNameManager();
-}

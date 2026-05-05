@@ -29,6 +29,9 @@ class GraphNameManager {
   // there may be "gaps" in the actually used graphs.
   ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 1;
 
+  // File where the state is persisted to.
+  std::optional<std::filesystem::path> filenameForPersisting_;
+
   FRIEND_TEST(GraphNameManager, storeAndRestoreData);
   FRIEND_TEST(IndexImpl, graphNameManagerIntegration);
 
@@ -53,6 +56,13 @@ class GraphNameManager {
        << namespaceManager.nextUnallocatedGraph_.load() << ")";
     return os;
   }
+
+  // Write the state to disk to persist it between restarts.
+  void writeToDisk() const;
+  // Read the state from disk to restore it after a restart.
+  void readFromDisk();
+  // Sets the file where the state is persisted to and tries to read the state.
+  void setFilenameForPersistingAndReadFromDisk(std::filesystem::path filename);
 
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;

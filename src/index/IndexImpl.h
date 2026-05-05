@@ -206,8 +206,6 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
   GraphNameManager graphNameManager_ = GraphNameManager();
-  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
-      std::nullopt;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -269,10 +267,6 @@ class IndexImpl {
 
   GraphNameManager& graphNameManager() { return graphNameManager_; }
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const {
-    return graphNameManagerStateFile_;
-  }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
