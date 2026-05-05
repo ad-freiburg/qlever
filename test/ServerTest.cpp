@@ -390,18 +390,29 @@ TEST(ServerTest, checkAccessToken) {
 }
 
 // _____________________________________________________________________________
-MATCHER_P(ContentTypeIs, contentType,
-          absl::StrCat("Content-Type is ", negation ? "not " : "",
-                       contentType)) {
-  auto it = arg.find(http::field::content_type);
+MATCHER_P2(HeaderFieldIs, field, matcher,
+           absl::StrCat(std::string{boost::beast::http::to_string(field)}, " ",
+                        testing::DescribeMatcher<std::string>(matcher,
+                                                              negation))) {
+  auto it = arg.find(field);
   if (it == arg.end()) {
-    *result_listener << "which has no Content-Type header";
+    *result_listener << "which has no " << field << " header";
     return false;
   }
-  auto actualContentType = it->value();
-  *result_listener << "which has Content-Type " << actualContentType;
-  return actualContentType == contentType;
+  auto fieldValue = it->value();
+  *result_listener << "which has " << field << " with " << fieldValue;
+  return testing::ExplainMatchResult(matcher, fieldValue, result_listener);
 }
+
+// _____________________________________________________________________________
+auto ContentTypeIs = [](const std::string& contentType) {
+  return HeaderFieldIs(http::field::content_type, testing::StrEq(contentType));
+};
+
+// _____________________________________________________________________________
+auto LocationIs = [](const std::string& location) {
+  return HeaderFieldIs(http::field::location, testing::StrEq(location));
+};
 
 // _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
@@ -508,4 +519,75 @@ TEST(ServerTest, gspDelete) {
   };
   testDelete("default", StatusIs(http::status::ok));
   testDelete("graph=foo", StatusIs(http::status::not_found));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPostImpl = [](const SimulateHttpRequest& simulateHttpRequest,
+                         const std::string& body, const auto& bodyMatcher,
+                         ad_utility::source_location l =
+                             AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+
+    auto request = makeRequest(
+        http::verb::post, "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+        {{http::field::authorization, "Bearer accessToken"},
+         {http::field::host, "example.org"},
+         {http::field::content_type, "text/turtle"}},
+        body);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  auto setupTest = [&testPostImpl](std::string indexInput,
+                                   bool persistUpdates) {
+    std::string indexBasename = "ServerTest_gspPostCreateNewGraph";
+    TestIndexConfig c{std::move(indexInput)};
+    c.indexType = qlever::Filetype::NQuad;
+    auto index = makeTestIndex(indexBasename, c);
+    SimulateHttpRequest::ServerSettings settings;
+    settings.persistUpdates = persistUpdates;
+    SimulateHttpRequest simulateHttpRequest{indexBasename, settings};
+    return std::bind_front(testPostImpl, std::move(simulateHttpRequest));
+  };
+
+  // NOTE: `SimulateHttpRequest` starts a new `Server` for every call. This
+  // means that effectively there is a restart between every call and the index
+  // and updates are loaded from disk for each call.
+  {
+    // With an empty index the allocated graphs start at 1 and are persisted
+    // across restarts of the server.
+    auto testPost = setupTest("", true);
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2"));
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3"));
+  }
+  {
+    // When updates are not persisted, the newly created graphs always start at
+    // the value determined during the index build. Because the index is empty
+    // this starts at 1 here.
+    auto testPost = setupTest("", false);
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+  }
+  {
+    // The index already contains an allocated graph so the newly generated
+    // graphs start after that.
+    auto testPost = setupTest(
+        "<a> <b> <c> "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/graph/6> .",
+        true);
+    testPost("<a> <b> <c>",
+             LocationIs(
+                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7"));
+  }
 }
