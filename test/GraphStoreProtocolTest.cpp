@@ -115,20 +115,23 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
                            "detected in \"application/unknown\"."));
   };
 
-  auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
-  runTests(
-      [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformPost(request, graph, index,
-                                                 index.graphNameManager());
-      },
-      true);
-  runTests(
-      [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformTsop(request, graph, index);
-      },
-      false);
   {
-    // TODO: do some auto cleanup, here but also in the other tests
+    auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
+    runTests(
+        [&index](http::request<http::string_body> request,
+                 GraphOrDefault graph) {
+          return GraphStoreProtocol::transformPost(request, graph, index,
+                                                   index.graphNameManager());
+        },
+        true);
+    runTests(
+        [&index](http::request<http::string_body> request,
+                 GraphOrDefault graph) {
+          return GraphStoreProtocol::transformTsop(request, graph, index);
+        },
+        false);
+  }
+  {
     auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
     EXPECT_THAT(
         GraphStoreProtocol::transformPost(
