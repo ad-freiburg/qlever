@@ -547,7 +547,12 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     SimulateHttpRequest::ServerSettings settings;
     settings.persistUpdates = persistUpdates;
     SimulateHttpRequest simulateHttpRequest{indexBasename, settings};
-    return std::bind_front(testPostImpl, std::move(simulateHttpRequest));
+    return [simulateHttpRequest = std::move(simulateHttpRequest),
+            &testPostImpl](const std::string& body, const std::string& graph) {
+      testPostImpl(
+          simulateHttpRequest, body,
+          testing::AllOf(LocationIs(graph), StatusIs(http::status::created)));
+    };
   };
 
   // NOTE: `SimulateHttpRequest` starts a new `Server` for every call. This
@@ -558,14 +563,11 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     // across restarts of the server.
     auto testPost = setupTest("", true);
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2");
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3");
   }
   {
     // When updates are not persisted, the newly created graphs always start at
@@ -573,11 +575,9 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     // this starts at 1 here.
     auto testPost = setupTest("", false);
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
   }
   {
     // The index already contains an allocated graph so the newly generated
@@ -587,7 +587,6 @@ TEST(ServerTest, gspPostCreateNewGraph) {
         "<http://qlever.cs.uni-freiburg.de/builtin-functions/graph/6> .",
         true);
     testPost("<a> <b> <c>",
-             LocationIs(
-                 "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7"));
+             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7");
   }
 }
