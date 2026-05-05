@@ -149,9 +149,14 @@ Date Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
   auto days = std::chrono::floor<std::chrono::days>(timestamp);
   std::chrono::year_month_day date = std::chrono::year_month_day{days};
 
+  auto time = timestamp - days;
   // Extract time from remaining seconds.
-  auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
+  auto seconds = std::chrono::floor<std::chrono::seconds>(time);
   std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
+
+  // Extract remaining milliseconds to later reconstruct the seconds correctly.
+  auto milliseconds =
+      std::chrono::floor<std::chrono::milliseconds>(time - seconds);
 
   // The methods `year`, `month`, `day` return
   // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
@@ -162,7 +167,8 @@ Date Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
               static_cast<int>(static_cast<unsigned>(date.day())),
               static_cast<int>(remainder.hours().count()),
               static_cast<int>(remainder.minutes().count()),
-              static_cast<double>(remainder.seconds().count()),
+              static_cast<double>(remainder.seconds().count() +
+                                  (milliseconds.count() / 1'000.0)),
               tz};
 }
 
