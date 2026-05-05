@@ -13,6 +13,7 @@
 #include "IndexTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Join.h"
+#include "engine/HashJoin.h"
 #include "engine/idTable/IdTable.h"
 #include "index/IdTableUtils.h"
 #include "util/Forward.h"
@@ -86,6 +87,32 @@ inline auto makeJoinLambda() {
         Join join{qec, leftTree, rightTree, jc1, jc2, true, false};
         return join.join(a, b, result);
       }};
+}
+
+/*
+* @brief Returns a lambda for calling 'HashJoin::hashJoin' via
+*  `ad_utility::callFixedSize`.
+*/
+inline auto makeHashJoinLambdaNew() {
+  return ad_utility::ApplyAsValueIdentity{
+      [](auto /*valueIdentityA*/, auto /*valueIdentityB*/,
+         auto /*valueIdentityC*/,
+         const IdTable& a, ColumnIndex jc1, const IdTable& b, ColumnIndex jc2,
+         IdTable* result) {
+            bool leftIsSmaller = a.numRows() <= b.numRows();
+          std::vector<std::optional<Variable>> leftVariables{{Variable{"?x"}}};
+          leftVariables.resize(a.numColumns());
+          std::vector<std::optional<Variable>> rightVariables{{Variable{"?x"}}};
+          rightVariables.resize(b.numColumns());
+          auto* qec = ad_utility::testing::getQec();
+          auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
+          auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
+          HashJoin hashJoin{qec, leftTree, rightTree, jc1, jc2, true, false};
+          auto joinResult = hashJoin.hashJoin(leftTree->getResult(), rightTree->getResult(), leftIsSmaller);
+          *result = joinResult.idTable().clone();
+         }};
 }
 
 #endif  // QLEVER_TEST_UTIL_JOINHELPERS_H

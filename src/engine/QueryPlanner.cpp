@@ -31,6 +31,7 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/HashJoin.h"
 #include "engine/Load.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
@@ -2326,6 +2327,12 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
       makeSubtreePlan<Join>(_qec, a._qet, b._qet, jcs[0][0], jcs[0][1]);
   mergeSubtreePlanIds(plan, a, b);
   candidates.push_back(std::move(plan));
+
+  // "HashJoin" Case:
+  SubtreePlan hashJoinPlan =
+      makeSubtreePlan<HashJoin>(_qec, a._qet, b._qet, jcs[0][0], jcs[0][1]);
+  mergeSubtreePlanIds(hashJoinPlan, a, b);
+  candidates.push_back(std::move(hashJoinPlan));
 
   return candidates;
 }
