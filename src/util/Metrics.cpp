@@ -74,16 +74,6 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   metrics_api::Provider::SetMeterProvider(
       std::shared_ptr<metrics_api::MeterProvider>(std::move(provider)));
 
-  auto meter =
-      metrics_api::Provider::GetMeterProvider()->GetMeter("qlever", "0.0.1");
-  auto startTimeMetric = meter->CreateInt64Gauge(
-      "qlever.server.start_time",
-      "Unix timestamp when the QLever server was started", "s");
-  startTimeMetric->Record(
-      std::chrono::duration_cast<std::chrono::seconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count());
-
   return pullReader;
 }
 

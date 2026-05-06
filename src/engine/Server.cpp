@@ -127,6 +127,14 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
+
+  auto startTimeMetric = meter->CreateInt64Gauge(
+      "qlever.server.start_time",
+      "Unix timestamp when the QLever server was started", "s");
+  startTimeMetric->Record(
+      std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count());
   startedSparqlOperations_ = meter->CreateUInt64Counter(
       "qlever.sparql_operation.started",
       "Number of SPARQL operations started since server start");
