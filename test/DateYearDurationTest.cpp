@@ -635,6 +635,15 @@ TEST(Date, toEpochInt) {
   result = date.toEpochInt();
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result.value(), -659'108'880);
+  // Larger epoch times.
+  date = Date(1344, 2, 11, 10, 12, 0);
+  result = date.toEpochInt();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), -19'751'089'680);
+  date = Date(2489, 5, 13, 11, 22, 0);
+  result = date.toEpochInt();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), 16'389'602'520);
   // Invalid date
   date = Date(1998, 2, 30, 10, 12, 0);
   result = date.toEpochInt();
