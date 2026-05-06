@@ -202,19 +202,34 @@ float HashJoin::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t HashJoin::getCostEstimate() {
+  // 1. Fetch necessary information
   // Set cost estimate to infinity if hash join is not supported due to:
   // compare estimated size of hash map with available memory.
   auto leftSize = left_->getSizeEstimate();
   auto rightSize = right_->getSizeEstimate();
+  auto leftCost = left_->getCostEstimate();
+  auto rightCost = right_->getCostEstimate();
   bool leftIsSmaller = leftSize <= rightSize;
   size_t buildSize = leftIsSmaller ? leftSize : rightSize;
   size_t numCols = leftIsSmaller ? 
                    left_->getResultWidth() : right_->getResultWidth();
   ad_utility::MemorySize estimatedHashMapSize = 
     ad_utility::MemorySize::bytes(buildSize * numCols * sizeof(Id));
-  // TODO: sollte noch verfeinert werden.
+
+  // Max value to return for excludes.
+  // We want to return a value, that is bigger than any possible combination
+  // of Sort + Join of children, but not bigger than `std::numeric_limits<size_t>::max()`, because then we can get an
+  // overflow.
+  auto calculateMaxSize = [this, leftSize, rightSize, leftCost, rightCost]() {
+    size_t sortCost = leftSize * log(leftSize) + rightSize * log(rightSize);
+    size_t joinCost = getSizeEstimateBeforeLimit() + leftCost + rightCost;
+    return sortCost + joinCost + 1;
+  };
+  size_t maxSize = calculateMaxSize();
+
+  // 2. Excludes
   if (estimatedHashMapSize > allocator().amountMemoryLeft()) {
-    return std::numeric_limits<size_t>::max();
+    return maxSize;
   }
 
   // If both sides are sorted on the join column, prefer the merge join (Join
@@ -225,8 +240,9 @@ size_t HashJoin::getCostEstimate() {
   };
   if (isSortedOnJoinCol(left_, leftJoinCol_) &&
       isSortedOnJoinCol(right_, rightJoinCol_)) {
-    return std::numeric_limits<size_t>::max();
+    return maxSize;
   }
+
   // If the bigger side is already sorted on the join column, a merge join is
   // more efficient than hashing.
   auto biggerResultSortedOn =
@@ -234,16 +250,17 @@ size_t HashJoin::getCostEstimate() {
   if (!biggerResultSortedOn.empty()) {
     auto biggerJoinCol = leftIsSmaller ? rightJoinCol_ : leftJoinCol_;
     if (biggerResultSortedOn[0] == biggerJoinCol) {
-      return std::numeric_limits<size_t>::max();
+      return maxSize;
     }
   }
 
-  // Exclude index scans
-  if (std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation()) ||
+  // Exclude if both sides are IndexScans
+  if (std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation()) &&
       std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation())) {
-    return std::numeric_limits<size_t>::max();
+    return maxSize;
   }
 
+  // 3. Actual calculation of cost estimate
   // Build HashMap + Probe HashMap + Cost of Subtrees
   size_t costBuild = leftSize;
   size_t costProbe = rightSize;
