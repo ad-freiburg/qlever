@@ -18,9 +18,9 @@ add_library(engine
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
-        PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
-        ConstructTemplatePreprocessor.cpp ConstructBatchEvaluator.cpp MaterializedViewsQueryAnalysis.cpp
-        UpdateMetadata.cpp ExternalValues.cpp)
+        PermutationSelector.cpp ConstructTripleGenerator.cpp
+        ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
+        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp)
 
 qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
 

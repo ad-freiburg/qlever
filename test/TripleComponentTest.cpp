@@ -233,7 +233,7 @@ TEST(TripleComponent, toValueId) {
     EXPECT_THAT(lve.lowerBoundInVocab_, boundMatcher);
     EXPECT_THAT(lve.upperBoundInVocab_, boundMatcher);
   };
-  expectLocalVocab(iri("<notexisting>"), 6);
+  expectLocalVocab(iri("<notexisting>"), 5);
   expectLocalVocab(lit("\"a\""), 0);
   expectLocalVocab(lit("\"b\""), 1);
 }
@@ -266,8 +266,8 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto idOrBounds = tc.toValueIdOrBounds(index);
     EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
-    auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral())
-                              : LocalVocabEntry(tc.getIri());
+    auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral(), index)
+                              : LocalVocabEntry(tc.getIri(), index);
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);
@@ -278,9 +278,9 @@ TEST(TripleComponent, toValueIdOrBounds) {
   expectBounds(lit("\"a\""), bounds(0, 0));
   expectBounds(lit("\"b\""), bounds(1, 1));
   expectBounds(iri("<a>"), bounds(1, 1));
-  expectBounds(iri("<k>"), bounds(6, 6));
-  expectBounds(iri("<xx>"), bounds(7, 7));
-  expectBounds(iri("<yy>"), bounds(8, 8));
+  expectBounds(iri("<k>"), bounds(5, 5));
+  expectBounds(iri("<xx>"), bounds(6, 6));
+  expectBounds(iri("<yy>"), bounds(7, 7));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {

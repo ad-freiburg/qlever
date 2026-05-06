@@ -13,6 +13,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
+#include "index/LocalVocabEntry.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
@@ -27,42 +28,38 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
  protected:
   // Blank node manager and allocator that can be used when we don't really
   // care about blank nodes and allocation details.
-  ad_utility::BlankNodeManager blankNodeManager_;
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Serialize and immediately deserialize and return the `value`.
   NamedResultCache::Value serializeAndDeserializeValue(
-      const NamedResultCache::Value& value, ad_utility::BlankNodeManager& bm,
+      const NamedResultCache::Value& value,
       ad_utility::AllocatorWithLimit<Id> allocator) const {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
     NamedResultCache::Value result;
     result.allocatorForSerialization_ = std::move(allocator);
-    result.blankNodeManagerForSerialization_.emplace(bm);
+    result.contextForSerialization_ = &qec_->getIndex().getImpl();
     readSerializer >> result;
     return result;
   }
 
-  // Overload that uses the default member variables, cannot be const, because
-  // the calls might modify the `BlankNodeManager` or the `LocalVocab`.
+  // Overload that uses the default member variables.
   NamedResultCache::Value serializeAndDeserializeValue(
       const NamedResultCache::Value& value) {
-    return serializeAndDeserializeValue(value, blankNodeManager_, alloc_);
+    return serializeAndDeserializeValue(value, alloc_);
   }
 };
 
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
-  // we need to setup a dummy index somewhere, because otherwise the comparison
-  // of `IdTable`s won't work;
-  [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
   LocalVocab localVocab;
-  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/test>"));
+  [[maybe_unused]] auto local =
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -128,15 +125,14 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
+  const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/1>"));
+      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/2>"));
+      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
@@ -156,15 +152,14 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   EXPECT_EQ(cache.numEntries(), 2);
 
-  auto qec = ad_utility::testing::getQec();
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              *qec->getIndex().getBlankNodeManager());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
 
@@ -192,15 +187,14 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
 
-  auto qec = ad_utility::testing::getQec();
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              *qec->getIndex().getBlankNodeManager());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);

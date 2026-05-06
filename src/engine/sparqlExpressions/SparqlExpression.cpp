@@ -115,6 +115,7 @@ Estimates SparqlExpression::getEstimatesForFilterExpression(
 // `getPrefilterExpressionForMetadata` method declared there.
 std::vector<PrefilterExprVariablePair>
 SparqlExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   return {};
 };

@@ -278,9 +278,9 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
 TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab{};
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Test\"")});
+  localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"Test\"",
+                                                qec->getLocalVocabContext()));
 
   {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
