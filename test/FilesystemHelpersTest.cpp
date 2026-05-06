@@ -19,7 +19,7 @@
 #include "util/Log.h"
 
 namespace fs = std::filesystem;
-using qlever::util::filesWithPrefixExist;
+using qlever::util::doesDirectoryContainFileWithBasename;
 using ::testing::HasSubstr;
 
 namespace {
@@ -64,34 +64,34 @@ void touch(const fs::path& p) {
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, emptyDirectoryReturnsFalse) {
+TEST(DoesDirectoryContainFileWithBasename, emptyDirectoryReturnsFalse) {
   TempDir tmp;
-  EXPECT_FALSE(filesWithPrefixExist(tmp.path().string() + "/"));
+  EXPECT_FALSE(doesDirectoryContainFileWithBasename(tmp.path().string() + "/"));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, unrelatedFilesDoNotConflict) {
+TEST(DoesDirectoryContainFileWithBasename, unrelatedFilesDoNotConflict) {
   TempDir tmp;
   touch(tmp.path() / "other.txt");
   touch(tmp.path() / "readme.md");
   touch(tmp.path() / "ndex.bin");  // off-by-one on the prefix on purpose
 
   auto base = tmp.path() / "index";
-  EXPECT_FALSE(filesWithPrefixExist(base.string()));
+  EXPECT_FALSE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, exactMatchReturnsTrue) {
+TEST(DoesDirectoryContainFileWithBasename, exactMatchReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index";
   touch(conflict);
 
   auto base = tmp.path() / "index";
-  EXPECT_TRUE(filesWithPrefixExist(base.string()));
+  EXPECT_TRUE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, prefixMatchReturnsTrue) {
+TEST(DoesDirectoryContainFileWithBasename, prefixMatchReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index.vocabulary";
   touch(conflict);
@@ -99,77 +99,76 @@ TEST(FilesWithPrefixExist, prefixMatchReturnsTrue) {
   touch(tmp.path() / "other.txt");
 
   auto base = tmp.path() / "index";
-  EXPECT_TRUE(filesWithPrefixExist(base.string()));
+  EXPECT_TRUE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, prefixMatchingSubdirectoryReturnsTrue) {
+TEST(DoesDirectoryContainFileWithBasename,
+     prefixMatchingSubdirectoryReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index.dir";
   fs::create_directory(conflict);
 
   auto base = tmp.path() / "index";
-  EXPECT_TRUE(filesWithPrefixExist(base.string()));
+  EXPECT_TRUE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, nonExistentParentDirectoryIsOk) {
+TEST(DoesDirectoryContainFileWithBasename, nonExistentParentDirectoryIsOk) {
   TempDir tmp;
   auto base = tmp.path() / "does" / "not" / "exist" / "index";
-  EXPECT_FALSE(filesWithPrefixExist(base.string()));
+  EXPECT_FALSE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, parentIsNotADirectoryReturnsTrue) {
+TEST(DoesDirectoryContainFileWithBasename, parentIsNotADirectoryReturnsTrue) {
   TempDir tmp;
   auto fileAsParent = tmp.path() / "iAmAFile";
   touch(fileAsParent);
 
   // baseName treats `fileAsParent` as the parent directory.
   auto base = fileAsParent / "index";
-  EXPECT_TRUE(filesWithPrefixExist(base.string()));
+  EXPECT_TRUE(doesDirectoryContainFileWithBasename(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(FilesWithPrefixExist, trailingSlashHasNoFilenameComponent) {
+TEST(DoesDirectoryContainFileWithBasename,
+     trailingSlashHasNoFilenameComponent) {
   TempDir tmp;
   // A path ending in a separator has an empty filename() in std::filesystem.
   std::string base = tmp.path().string() + "/";
   touch(tmp.path() / "some-file.txt");
-  EXPECT_TRUE(filesWithPrefixExist(base));
+  EXPECT_TRUE(doesDirectoryContainFileWithBasename(base));
 }
 
 // _____________________________________________________________________________
-TEST(PrefixPathIsInsideDirectory, differentPaths) {
-  using qlever::util::prefixPathIsInsideDirectory;
-  EXPECT_TRUE(prefixPathIsInsideDirectory(
-      "/path/to/directory/subdirectory/file", "/path/to/directory/file"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("directory/subdirectory/file",
-                                          "directory/file"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("subdirectory/file", "file"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory(
-      "/path/to/directory/subdirectory/file", "/path/to/directory/file/"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/path/"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path", "/some/path/"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/path"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/"));
-  EXPECT_FALSE(
-      prefixPathIsInsideDirectory("/some/path/file", "/some/path/other/file"));
+TEST(IsSubdirectoryOf, differentPaths) {
+  using qlever::util::isSubdirectoryOf;
+  EXPECT_TRUE(isSubdirectoryOf("/path/to/directory/subdirectory/file",
+                               "/path/to/directory/file"));
   EXPECT_TRUE(
-      prefixPathIsInsideDirectory("/some/path/other/file", "/some/path/file"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("/", "/"));
-  EXPECT_TRUE(prefixPathIsInsideDirectory("/other-file", "/file-inside-root"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/other-file", "/path/"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../", "/some/path"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../malicious-file",
-                                           "/some/path"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../malicious-path/",
-                                           "/some/path"));
-  EXPECT_FALSE(prefixPathIsInsideDirectory(
-      "/some/path/other/../../malicious-path/", "/some/path/"));
+      isSubdirectoryOf("directory/subdirectory/file", "directory/file"));
+  EXPECT_TRUE(isSubdirectoryOf("subdirectory/file", "file"));
+  EXPECT_FALSE(isSubdirectoryOf("/path/to/directory/subdirectory/file",
+                                "/path/to/directory/file/"));
+  EXPECT_TRUE(isSubdirectoryOf("/some/path/", "/some/path/"));
+  EXPECT_FALSE(isSubdirectoryOf("/some/path", "/some/path/"));
+  EXPECT_TRUE(isSubdirectoryOf("/some/path/", "/some/path"));
+  EXPECT_TRUE(isSubdirectoryOf("/some/path/", "/some/"));
+  EXPECT_FALSE(isSubdirectoryOf("/some/path/file", "/some/path/other/file"));
+  EXPECT_TRUE(isSubdirectoryOf("/some/path/other/file", "/some/path/file"));
+  EXPECT_TRUE(isSubdirectoryOf("/", "/"));
+  EXPECT_TRUE(isSubdirectoryOf("/other-file", "/file-inside-root"));
+  EXPECT_FALSE(isSubdirectoryOf("/other-file", "/path/"));
+  EXPECT_FALSE(isSubdirectoryOf("/some/path/../../", "/some/path"));
+  EXPECT_FALSE(
+      isSubdirectoryOf("/some/path/../../malicious-file", "/some/path"));
+  EXPECT_FALSE(
+      isSubdirectoryOf("/some/path/../../malicious-path/", "/some/path"));
+  EXPECT_FALSE(isSubdirectoryOf("/some/path/other/../../malicious-path/",
+                                "/some/path/"));
 
   // This only works if the test is not run inside `/`, but this should be fine.
-  EXPECT_FALSE(prefixPathIsInsideDirectory("/malicious-path", "relative-path"));
-  EXPECT_FALSE(
-      prefixPathIsInsideDirectory("../malicious-path", "relative-path"));
+  EXPECT_FALSE(isSubdirectoryOf("/malicious-path", "relative-path"));
+  EXPECT_FALSE(isSubdirectoryOf("../malicious-path", "relative-path"));
 }

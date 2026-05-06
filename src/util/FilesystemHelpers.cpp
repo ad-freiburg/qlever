@@ -7,9 +7,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
-#define QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
-
 #include "util/FilesystemHelpers.h"
 
 #include <filesystem>
@@ -22,7 +19,7 @@ namespace qlever::util {
 namespace fs = std::filesystem;
 
 // _____________________________________________________________________________
-bool filesWithPrefixExist(const std::string& baseName) {
+bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
   fs::path base = fs::absolute(baseName);
   fs::path dir = base.parent_path();
   if (!fs::exists(dir)) {
@@ -42,8 +39,8 @@ bool filesWithPrefixExist(const std::string& baseName) {
 }
 
 // _____________________________________________________________________________
-bool prefixPathIsInsideDirectory(const std::string& path,
-                                 const std::string& containerPath) {
+bool isSubdirectoryOf(const std::string& path,
+                      const std::string& containerPath) {
   auto normalize = [](const auto& p) {
     return fs::weakly_canonical(fs::absolute(p)).parent_path();
   };
@@ -51,5 +48,3 @@ bool prefixPathIsInsideDirectory(const std::string& path,
 }
 
 }  // namespace qlever::util
-
-#endif  // QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H

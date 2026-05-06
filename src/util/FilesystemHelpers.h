@@ -13,17 +13,18 @@
 #include <string>
 
 namespace qlever::util {
-// Return true if the filesystem contains a file with the prefix `baseName`.
-// If no such file exists, this function returns false, and it is safe to write
-// an index with the given `baseName` without overwriting any existing files.
-bool filesWithPrefixExist(const std::string& baseName);
+// Return `true` if the directory from `path` contains at least one file whose
+// name starts with the base name of `path`; otherwise return `false`. If the
+// base name is empty, return `false` if and only if the directory is empty.
+bool doesDirectoryContainFileWithBasename(const std::string& path);
 
-// Return true iff `path` is a transitive subdirectory of `containerPath`.
-// Filenames in the path are ignored, so `/path/to/directory/subdirectory/file`
-// counts as subdirectory of `/path/to/directory/file`, but not as subdirectory
-// of `/path/to/directory/file/`.
-bool prefixPathIsInsideDirectory(const std::string& path,
-                                 const std::string& containerPath);
+// Return `true` if the directory from `path1` is a subdirectory of the
+// directory from `path2`; otherwise return `false`.
+//
+// NOTE: The paths are canonicalized. For example, `/to/dir1/../dir2/sub/base`
+// (as `path1`) would be detected as a subdirectory of `/to/dir2/` (as `path2`),
+// but not of `/to/dir1/` (as `path2`).
+bool isSubdirectoryOf(const std::string& path1, const std::string& path2);
 }  // namespace qlever::util
 
 #endif  // QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
