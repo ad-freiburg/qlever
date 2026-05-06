@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <ostream>
 #include <random>
 
 #include "backports/three_way_comparison.h"
@@ -14,6 +15,7 @@
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 #include "util/json.h"
@@ -30,6 +32,10 @@ class QueryId {
 
   friend void to_json(nlohmann::json& json, const QueryId& queryId) {
     json = queryId.id_;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const QueryId& queryId) {
+    return os << queryId.id_;
   }
 
  public:
@@ -122,22 +128,48 @@ class QueryRegistry {
   std::optional<OwningQueryId> uniqueIdFromString(std::string id,
                                                   std::string_view query) {
     auto queryId = QueryId::idFromString(std::move(id));
-    bool success = registry_->wlock()->try_emplace(queryId, query).second;
-    if (success) {
-      // Avoid undefined behavior when the registry is no longer alive at the
-      // time the `OwningQueryId` is destroyed.
-      std::weak_ptr<SynchronizedType> weakRegistry = registry_;
-      return OwningQueryId{
-          std::move(queryId),
-          [weakRegistry = std::move(weakRegistry)](const QueryId& qid) {
-            AD_CORRECTNESS_CHECK(!qid.empty());
-            // Registry might be destroyed already, do nothing in this case.
-            if (auto registry = weakRegistry.lock()) {
-              registry->wlock()->erase(qid);
-            }
-          }};
+    /// Capture the entry's `startedAt_` while the lock is held so the value
+    /// logged here matches what `getActiveQueries()` reports for this query.
+    std::chrono::system_clock::time_point startedAt;
+    {
+      auto lockedMap = registry_->wlock();
+      auto [it, success] = lockedMap->try_emplace(queryId, query);
+      if (!success) {
+        return std::nullopt;
+      }
+      startedAt = it->second.startedAt_;
     }
-    return std::nullopt;
+    auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           startedAt.time_since_epoch())
+                           .count();
+    AD_LOG_METRIC << nlohmann::json{{"event", "start"},
+                                    {"query-id", queryId},
+                                    {"started-at", startedAtMs},
+                                    {"query", query}}
+                         .dump()
+                  << std::endl;
+    // Avoid undefined behavior when the registry is no longer alive at the
+    // time the `OwningQueryId` is destroyed.
+    std::weak_ptr<SynchronizedType> weakRegistry = registry_;
+    return OwningQueryId{
+        std::move(queryId),
+        [weakRegistry = std::move(weakRegistry)](const QueryId& qid) {
+          AD_CORRECTNESS_CHECK(!qid.empty());
+          // Registry might be destroyed already, do nothing in this case.
+          if (auto registry = weakRegistry.lock()) {
+            /// Wall-clock instant at which the query exited the registry.
+            auto endedAtMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+            AD_LOG_METRIC << nlohmann::json{{"event", "end"},
+                                            {"query-id", qid},
+                                            {"ended-at", endedAtMs}}
+                                 .dump()
+                          << std::endl;
+            registry->wlock()->erase(qid);
+          }
+        }};
   }
 
   // Generates a unique pseudo-random OwningQueryId object for this registry

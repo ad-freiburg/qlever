@@ -34,10 +34,11 @@ enum class LogLevel {
   FATAL = 0,
   ERROR = 1,
   WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
+  METRIC = 3,
+  INFO = 4,
+  DEBUG = 5,
+  TIMING = 6,
+  TRACE = 7
 };
 
 // Macros for the different log levels.
@@ -45,6 +46,7 @@ enum class LogLevel {
 #define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
 #define AD_LOG_WARN AD_LOG(LogLevel::WARN)
 #define AD_LOG_INFO AD_LOG(LogLevel::INFO)
+#define AD_LOG_METRIC AD_LOG(LogLevel::METRIC)
 #define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
@@ -109,11 +111,12 @@ class Log {
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
     using P = ConstexprMapPair<LogLevel, std::string_view>;
-    constexpr ConstexprMap map{std::array<P, 7>{
+    constexpr ConstexprMap map{std::array<P, 8>{
         P(TRACE, "TRACE"),
         P(TIMING, "TIMING"),
         P(DEBUG, "DEBUG"),
         P(INFO, "INFO"),
+        P(METRIC, "METRIC"),
         P(WARN, "WARN"),
         P(ERROR, "ERROR"),
         P(FATAL, "FATAL"),
