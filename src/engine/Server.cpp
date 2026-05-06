@@ -1498,6 +1498,12 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         "Can't build the index at the specified location, some files already "
         "exist there!"};
   }
+  if (!qlever::util::prefixPathIsInsideDirectory(indexBaseName,
+                                                 index_.getOnDiskBase())) {
+    throw std::runtime_error{
+        "Index must be built inside the same directory the current index is "
+        "located in!"};
+  }
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // We don't directly `co_await` because of lifetime issues (bugs) in the

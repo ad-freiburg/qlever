@@ -592,8 +592,21 @@ TEST(IndexRebuilder, serverIntegration) {
   auto request4 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request3).get(),
+      performRequest(request4).get(),
       ::testing::HasSubstr("some files already exist"));
+
+  // The index has to reside within the same directory as the original index.
+  auto request5 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request5).get(),
+      ::testing::HasSubstr("inside the same directory"));
+
+  auto request6 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request6).get(),
+      ::testing::HasSubstr("inside the same directory"));
 
   threadPool.join();
 }

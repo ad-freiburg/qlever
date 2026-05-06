@@ -19,8 +19,10 @@
 #include "backports/algorithm.h"
 
 namespace qlever::util {
+namespace fs = std::filesystem;
+
+// _____________________________________________________________________________
 bool filesWithPrefixExist(const std::string& baseName) {
-  namespace fs = std::filesystem;
   fs::path base = fs::absolute(baseName);
   fs::path dir = base.parent_path();
   if (!fs::exists(dir)) {
@@ -38,6 +40,16 @@ bool filesWithPrefixExist(const std::string& baseName) {
         return ql::starts_with(name, prefix);
       });
 }
+
+// _____________________________________________________________________________
+bool prefixPathIsInsideDirectory(const std::string& path,
+                                 const std::string& containerPath) {
+  auto normalize = [](const auto& p) {
+    return fs::weakly_canonical(fs::absolute(p)).parent_path();
+  };
+  return ::ranges::starts_with(normalize(path), normalize(containerPath));
+}
+
 }  // namespace qlever::util
 
 #endif  // QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H

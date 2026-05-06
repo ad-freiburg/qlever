@@ -138,3 +138,38 @@ TEST(FilesWithPrefixExist, trailingSlashHasNoFilenameComponent) {
   touch(tmp.path() / "some-file.txt");
   EXPECT_TRUE(filesWithPrefixExist(base));
 }
+
+// _____________________________________________________________________________
+TEST(PrefixPathIsInsideDirectory, differentPaths) {
+  using qlever::util::prefixPathIsInsideDirectory;
+  EXPECT_TRUE(prefixPathIsInsideDirectory(
+      "/path/to/directory/subdirectory/file", "/path/to/directory/file"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("directory/subdirectory/file",
+                                          "directory/file"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("subdirectory/file", "file"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory(
+      "/path/to/directory/subdirectory/file", "/path/to/directory/file/"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/path/"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path", "/some/path/"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/path"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("/some/path/", "/some/"));
+  EXPECT_FALSE(
+      prefixPathIsInsideDirectory("/some/path/file", "/some/path/other/file"));
+  EXPECT_TRUE(
+      prefixPathIsInsideDirectory("/some/path/other/file", "/some/path/file"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("/", "/"));
+  EXPECT_TRUE(prefixPathIsInsideDirectory("/other-file", "/file-inside-root"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/other-file", "/path/"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../", "/some/path"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../malicious-file",
+                                           "/some/path"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/some/path/../../malicious-path/",
+                                           "/some/path"));
+  EXPECT_FALSE(prefixPathIsInsideDirectory(
+      "/some/path/other/../../malicious-path/", "/some/path/"));
+
+  // This only works if the test is not run inside `/`, but this should be fine.
+  EXPECT_FALSE(prefixPathIsInsideDirectory("/malicious-path", "relative-path"));
+  EXPECT_FALSE(
+      prefixPathIsInsideDirectory("../malicious-path", "relative-path"));
+}
