@@ -19,7 +19,7 @@
 #include "util/Log.h"
 
 namespace fs = std::filesystem;
-using qlever::util::ensureNoConflictingFiles;
+using qlever::util::filesWithPrefixExist;
 using ::testing::HasSubstr;
 
 namespace {
@@ -64,38 +64,34 @@ void touch(const fs::path& p) {
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, emptyDirectoryDoesNotThrow) {
+TEST(FilesWithPrefixExist, emptyDirectoryReturnsFalse) {
   TempDir tmp;
-  const auto base = tmp.path() / "index";
-  EXPECT_NO_THROW(ensureNoConflictingFiles(base.string()));
+  EXPECT_FALSE(filesWithPrefixExist(tmp.path().string() + "/"));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, unrelatedFilesDoNotConflict) {
+TEST(FilesWithPrefixExist, unrelatedFilesDoNotConflict) {
   TempDir tmp;
   touch(tmp.path() / "other.txt");
   touch(tmp.path() / "readme.md");
   touch(tmp.path() / "ndex.bin");  // off-by-one on the prefix on purpose
 
   auto base = tmp.path() / "index";
-  EXPECT_NO_THROW(ensureNoConflictingFiles(base.string()));
+  EXPECT_FALSE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, exactMatchThrows) {
+TEST(FilesWithPrefixExist, exactMatchReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index";
   touch(conflict);
 
   auto base = tmp.path() / "index";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(base.string()),
-      "Conflicting file would be overwritten: " + conflict.string(),
-      std::runtime_error);
+  EXPECT_TRUE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, prefixMatchThrows) {
+TEST(FilesWithPrefixExist, prefixMatchReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index.vocabulary";
   touch(conflict);
@@ -103,59 +99,42 @@ TEST(EnsureNoConflictingFilesTest, prefixMatchThrows) {
   touch(tmp.path() / "other.txt");
 
   auto base = tmp.path() / "index";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(base.string()),
-      "Conflicting file would be overwritten: " + conflict.string(),
-      std::runtime_error);
+  EXPECT_TRUE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, prefixMatchingSubdirectoryThrows) {
+TEST(FilesWithPrefixExist, prefixMatchingSubdirectoryReturnsTrue) {
   TempDir tmp;
   auto conflict = tmp.path() / "index.dir";
   fs::create_directory(conflict);
 
   auto base = tmp.path() / "index";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(base.string()),
-      "Conflicting file would be overwritten: " + conflict.string(),
-      std::runtime_error);
+  EXPECT_TRUE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, nonExistentParentDirectoryIsOk) {
+TEST(FilesWithPrefixExist, nonExistentParentDirectoryIsOk) {
   TempDir tmp;
   auto base = tmp.path() / "does" / "not" / "exist" / "index";
-  EXPECT_NO_THROW(ensureNoConflictingFiles(base.string()));
+  EXPECT_FALSE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, parentIsNotADirectoryThrows) {
+TEST(FilesWithPrefixExist, parentIsNotADirectoryReturnsTrue) {
   TempDir tmp;
   auto fileAsParent = tmp.path() / "iAmAFile";
   touch(fileAsParent);
 
   // baseName treats `fileAsParent` as the parent directory.
   auto base = fileAsParent / "index";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(base.string()),
-      "Parent path is not a directory: " + fileAsParent.string(),
-      std::runtime_error);
+  EXPECT_TRUE(filesWithPrefixExist(base.string()));
 }
 
 // _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, emptyBaseNameThrows) {
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(""),
-      HasSubstr("Please provide a valid `baseName`"), std::runtime_error);
-}
-
-// _____________________________________________________________________________
-TEST(EnsureNoConflictingFilesTest, trailingSlashHasNoFilenameComponent) {
+TEST(FilesWithPrefixExist, trailingSlashHasNoFilenameComponent) {
   TempDir tmp;
   // A path ending in a separator has an empty filename() in std::filesystem.
   std::string base = tmp.path().string() + "/";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ensureNoConflictingFiles(base),
-      "The `baseName` has no filename component: " + base, std::runtime_error);
+  touch(tmp.path() / "some-file.txt");
+  EXPECT_TRUE(filesWithPrefixExist(base));
 }

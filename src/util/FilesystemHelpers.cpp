@@ -13,41 +13,30 @@
 #include "util/FilesystemHelpers.h"
 
 #include <filesystem>
-#include <stdexcept>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 
 namespace qlever::util {
-void ensureNoConflictingFiles(const std::string& baseName) {
-  if (baseName.empty()) {
-    throw std::runtime_error{"Please provide a valid `baseName`"};
-  }
+bool filesWithPrefixExist(const std::string& baseName) {
   namespace fs = std::filesystem;
   fs::path base = fs::absolute(baseName);
   fs::path dir = base.parent_path();
-  std::string prefix = base.filename().string();
-
-  if (prefix.empty()) {
-    throw std::runtime_error{"The `baseName` has no filename component: " +
-                             baseName};
-  }
-
   if (!fs::exists(dir)) {
-    return;
+    return false;
   }
 
   if (!fs::is_directory(dir)) {
-    throw std::runtime_error{"Parent path is not a directory: " + dir.string()};
+    return true;
   }
 
-  for (const auto& entry : fs::directory_iterator(dir)) {
-    std::string name = entry.path().filename().string();
-    if (ql::starts_with(name, prefix)) {
-      throw std::runtime_error{"Conflicting file would be overwritten: " +
-                               entry.path().string()};
-    }
-  }
+  std::string prefix = base.filename().string();
+  return ql::ranges::any_of(
+      fs::directory_iterator(dir), [&prefix](const auto& entry) {
+        std::string name = entry.path().filename().string();
+        return ql::starts_with(name, prefix);
+      });
 }
 }  // namespace qlever::util
 

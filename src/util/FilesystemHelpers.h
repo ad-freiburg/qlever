@@ -13,9 +13,10 @@
 #include <string>
 
 namespace qlever::util {
-// Check if `baseName` is a prefix of an already existing file. If yes, throw an
-// exception, otherwise do nothing.
-void ensureNoConflictingFiles(const std::string& baseName);
+// Return true if the filesystem contains a file with the prefix `baseName`.
+// If no such file exists, this function returns false, and it is safe to write
+// an index with the given `baseName` without overwriting any existing files.
+bool filesWithPrefixExist(const std::string& baseName);
 }  // namespace qlever::util
 
 #endif  // QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H

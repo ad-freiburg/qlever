@@ -591,8 +591,9 @@ TEST(IndexRebuilder, serverIntegration) {
   // it.
   auto request4 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
-  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request3).get(),
-                               ::testing::HasSubstr("Conflicting file"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request3).get(),
+      ::testing::HasSubstr("some files already exist"));
 
   threadPool.join();
 }

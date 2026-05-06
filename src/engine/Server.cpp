@@ -1493,7 +1493,11 @@ void Server::writeMaterializedView(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
-  qlever::util::ensureNoConflictingFiles(indexBaseName);
+  if (qlever::util::filesWithPrefixExist(indexBaseName)) {
+    throw std::runtime_error{
+        "Can't build the index at the specified location, some files already "
+        "exist there!"};
+  }
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // We don't directly `co_await` because of lifetime issues (bugs) in the
