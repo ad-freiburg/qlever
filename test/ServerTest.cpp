@@ -7,6 +7,7 @@
 #include <boost/beast/http.hpp>
 
 #include "ServerTestHelpers.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -588,5 +589,40 @@ TEST(ServerTest, gspPostCreateNewGraph) {
         true);
     testPost("<a> <b> <c>",
              "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7");
+  }
+  {
+    auto request =
+        makeRequest(http::verb::post, "/?default",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    "<a> <b> <c>");
+    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, StatusIs(http::status::ok));
+  }
+  {
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    "<a> <b> <c>");
+    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, StatusIs(http::status::ok));
+  }
+
+  {
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    "");
+    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
+    EXPECT_THAT([&]() { simulateHttpRequest.processRaw(request); },
+                testing::Throws<HttpError>(AD_PROPERTY(
+                    HttpError, status, testing::Eq(http::status::no_content))));
   }
 }

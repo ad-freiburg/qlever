@@ -33,6 +33,7 @@ class GraphNameManager {
   std::optional<std::filesystem::path> filenameForPersisting_;
 
   FRIEND_TEST(GraphNameManager, storeAndRestoreData);
+  FRIEND_TEST(GraphNameManager, readFromDisk);
   FRIEND_TEST(IndexImpl, graphNameManagerIntegration);
 
  public:
@@ -68,6 +69,8 @@ class GraphNameManager {
     serializer | arg.prefixWithoutBraces_;
     serializer | arg.nextUnallocatedGraph_;
   }
+
+  bool operator==(const GraphNameManager&) const = default;
 };
 
 #endif  // QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H

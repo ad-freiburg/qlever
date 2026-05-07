@@ -244,6 +244,20 @@ CPP_template(typename Json)(
   return createJsonResponse(j.dump(4), request, status);
 }
 
+// Create a HttpResponse with status 204 No Content.
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createResponseWithEmptyBody(http::status
+                                                                  status,
+                                                              const RequestType&
+                                                                  request,
+                                                              std::optional<
+                                                                  MediaType>
+                                                                  mediaType) {
+  return createHttpResponseFromString("", status, mediaType,
+                                      request.keep_alive(), request.version());
+}
+
 // Create a HttpResponse with status 404 Not Found.
 CPP_template(typename RequestType)(
     requires HttpRequest<

@@ -28,7 +28,7 @@ struct SimulateHttpRequest {
     bool loadAllPermutations = true;
     bool persistUpdates = false;
   };
-  ServerSettings serverSettings_;
+  ServerSettings serverSettings_{};
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {

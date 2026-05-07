@@ -1354,7 +1354,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     // HTTP mandates empty response bodies for the status codes 1xx, 204 and
     // 304.
     auto resp =
-        createHttpResponseFromString("", responseStatus, request, std::nullopt);
+        createResponseWithEmptyBody(responseStatus, request, std::nullopt);
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
@@ -1535,3 +1535,5 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // Explicit template instantiation for unit test helper function
 template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
     SimpleRequest&);
+template Awaitable<http::response<http::string_body>>
+Server::onlyForTestingProcess(SimpleRequest&);
