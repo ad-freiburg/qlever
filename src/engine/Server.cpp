@@ -127,7 +127,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     }
   }
 
-  initializeMetrics();
+  metrics_ = initializeMetrics();
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -1575,6 +1575,7 @@ Server::ServerMetrics Server::initializeMetrics() {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
 
+  // Configure the metrics
   ServerMetrics metrics{
       meter->CreateInt64Gauge(
           "qlever.server.start_time",
@@ -1612,6 +1613,7 @@ Server::ServerMetrics Server::initializeMetrics() {
       std::move(metrics.memoryCacheLimit_)
 
   };
+  // Record initial values
   metrics.startTimeMetric_->Record(
       std::chrono::duration_cast<std::chrono::seconds>(
           std::chrono::system_clock::now().time_since_epoch())
@@ -1620,6 +1622,8 @@ Server::ServerMetrics Server::initializeMetrics() {
       std::chrono::duration_cast<std::chrono::seconds>(
           std::chrono::system_clock::now().time_since_epoch())
           .count());
+  // Record default value `0` once so that the metric/label combination is
+  // visible from the beginning.
   ad_utility::metrics::initializeCounter(metrics.startedSparqlOperations_.get(),
                                          "operation", {"query", "update"});
   ad_utility::metrics::initializeCounter(metrics.runningSparqlOperations_.get(),
@@ -1633,6 +1637,7 @@ Server::ServerMetrics Server::initializeMetrics() {
        "send_streamable_response", "protocol", "in_use"});
   ad_utility::metrics::initializeCounter(metrics.httpErrors.get(), "type",
                                          {"internal", "http"});
+  // Set up the callback for asynchronous metrics.
   metrics.deltaTriplesMetric_->AddCallback(
       [](opentelemetry::metrics::ObserverResult result, void* state) {
         auto* self = static_cast<Server*>(state);
@@ -1670,6 +1675,8 @@ Server::ServerMetrics Server::initializeMetrics() {
         observer->Observe(totalSize.getBytes());
       },
       this);
+
+  return metrics;
 }
 
 // For helper function `Server::onlyForTestingProcess`
