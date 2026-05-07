@@ -9,6 +9,7 @@
 #include <absl/strings/str_format.h>
 
 #include "global/Constants.h"
+#include "util/DateYearDuration.h"
 
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
@@ -95,7 +96,8 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 }
 
 // _____________________________________________________________________________
-std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
+std::optional<DateYearOrDuration> Date::operator-(
+    const DayTimeDuration& rhs) const {
   auto epochLhs = toEpoch();
   if (!epochLhs.has_value()) {
     return std::nullopt;
@@ -140,7 +142,7 @@ std::optional<int64_t> Date::toEpochInt() const {
 }
 
 // _____________________________________________________________________________
-Date Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
+DateYearOrDuration Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
   int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
   // Shift the timestamp according to the given `TimeZone`offset.
   timestamp = timestamp + std::chrono::hours{offset};
@@ -158,18 +160,24 @@ Date Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
   auto milliseconds =
       std::chrono::floor<std::chrono::milliseconds>(time - seconds);
 
-  // The methods `year`, `month`, `day` return
-  // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
-  // static casts are necessary. For `month` and `day` only `operator unsigned`
-  // is supported, therefore two casts are necessary.
-  return Date{static_cast<int>(date.year()),
-              static_cast<int>(static_cast<unsigned>(date.month())),
-              static_cast<int>(static_cast<unsigned>(date.day())),
-              static_cast<int>(remainder.hours().count()),
-              static_cast<int>(remainder.minutes().count()),
-              static_cast<double>(remainder.seconds().count() +
-                                  (milliseconds.count() / 1'000.0)),
-              tz};
+  auto year = static_cast<int>(date.year());
+  // Check if the result can be stored in a `Date`.
+  if (-9999 <= year && year <= 9999) {
+    // The methods `year`, `month`, `day` return
+    // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
+    // static casts are necessary. For `month` and `day` only `operator
+    // unsigned` is supported, therefore two casts are necessary.
+    return DateYearOrDuration{
+        Date{year, static_cast<int>(static_cast<unsigned>(date.month())),
+             static_cast<int>(static_cast<unsigned>(date.day())),
+             static_cast<int>(remainder.hours().count()),
+             static_cast<int>(remainder.minutes().count()),
+             static_cast<double>(remainder.seconds().count() +
+                                 (milliseconds.count() / 1'000.0)),
+             tz}};
+  } else {  // nNeeds to be stored as a `LargeYear`.
+    return DateYearOrDuration{year, DateYearOrDuration::Type::Year};
+  }
 }
 
 #endif

@@ -963,15 +963,26 @@ TEST(DateYearOrDuration, Subtraction) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 10, 10, 0));
     result = date - duration;
     ASSERT_TRUE(result);
-    EXPECT_EQ(
-        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, 2)).toStringAndType(),
-        result.value().toStringAndType());
+    EXPECT_EQ(DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, 2)),
+              result.value());
 
     date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, -4));  // UTC - 4
     result = date - duration;
-    EXPECT_EQ(
-        DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, -4)).toStringAndType(),
-        result.value().toStringAndType());
+    EXPECT_EQ(DateYearOrDuration(Date(2000, 4, 18, 10, 0, 0, -4)),
+              result.value());
+    // Test for `LargeYear` as result.
+    date = DateYearOrDuration(Date(-9999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 365, 0, 0, 0));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    date = DateYearOrDuration(Date(9999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 365, 0, 0, 0));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
   }
   {
     // Test for `LargeYear` - `LargeYear`.
