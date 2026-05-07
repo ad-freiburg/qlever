@@ -50,6 +50,17 @@ class ActiveCounterGuard {
   std::string operation_;
 };
 
+// Initializes a counter so that it appears in the metrics output by adding 0.
+// This is done for the counter `counter` with the label `labelKey` once for
+// each value in `labelValues`.
+template <typename T>
+void initializeCounter(T* counter, std::string labelKey,
+                       const std::vector<std::string>& labelValues) {
+  for (const auto& value : labelValues) {
+    counter->Add(0, {{labelKey, value}});
+  }
+}
+
 }  // namespace ad_utility::metrics
 
 #endif  // QLEVER_SRC_UTIL_METRICS_H

@@ -26,7 +26,6 @@ namespace metrics_sdk = opentelemetry::sdk::metrics;
 namespace metrics_exp = opentelemetry::exporter::metrics;
 
 namespace ad_utility::metrics {
-
 namespace {
 
 // Pull-based MetricReader that serializes metrics to Prometheus text format
@@ -80,13 +79,11 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
 ActiveCounterGuard::ActiveCounterGuard(
     metrics_api::UpDownCounter<int64_t>& counter, std::string operation)
     : counter_(counter), operation_(std::move(operation)) {
-  counter_.Add(1,
-               {{"operation", opentelemetry::nostd::string_view{operation_}}});
+  counter_.Add(1, {{"operation", operation_}});
 }
 
 ActiveCounterGuard::~ActiveCounterGuard() {
-  counter_.Add(-1,
-               {{"operation", opentelemetry::nostd::string_view{operation_}}});
+  counter_.Add(-1, {{"operation", operation_}});
 }
 
 }  // namespace ad_utility::metrics

@@ -156,27 +156,34 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
-  // SPARQL Operation metrics
-  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
-      startedSparqlOperations_;
-  std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
-      runningSparqlOperations_;
-  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
-      finishedSparqlOperations_;
-  std::unique_ptr<opentelemetry::metrics::Histogram<double>>
-      sparqlOperationDuration_;
-  // Update metrics
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      deltaTriplesMetric_;
-  // Error metrics
-  std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> operationErrors_;
-  // Memory metrics
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      memoryQueryFree_;
-  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      memoryCacheUsed_;
-  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
+  struct ServerMetrics {
+    // Index metrics
+    std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> startTimeMetric_;
+    std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> indexLoadMetric_;
+    // SPARQL Operation metrics
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
+        startedSparqlOperations_;
+    std::unique_ptr<opentelemetry::metrics::UpDownCounter<int64_t>>
+        runningSparqlOperations_;
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
+        finishedSparqlOperations_;
+    std::unique_ptr<opentelemetry::metrics::Histogram<double>>
+        sparqlOperationDuration_;
+    // Update metrics
+    std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+        deltaTriplesMetric_;
+    // Error metrics
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> sparqlErrors;
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors;
+    // Memory metrics
+    std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+        memoryQueryFree_;
+    std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
+    std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+        memoryCacheUsed_;
+    std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
+  };
+  ServerMetrics metrics_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -419,6 +426,15 @@ class Server {
   // index. This assumes that the access token has already been checked and no
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+
+  // Configures the metrics that are recorded by the server and sets up the
+  // callbacks for asynchronous metrics.
+  //
+  // Synchronous metrics (e.g. number of currently running queries) are updated
+  // continuously (when queries begin or end). Asynchronous metrics (e.g.
+  // current memory usage) are measured at the time when the metrics are
+  // retrieved.
+  ServerMetrics initializeMetrics();
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H
