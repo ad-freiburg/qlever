@@ -356,8 +356,9 @@ class Date {
   // Therefore the return type is `DateYearOrDuration`.
   std::optional<DateYearOrDuration> operator-(const DayTimeDuration& rhs) const;
 
-  // Calculates `Date` that is time of the `DayTimeDuration` later.
-  std::optional<Date> operator+(const DayTimeDuration& rhs) const;
+  // Calculates `Date` that is time of the `DayTimeDuration` later. As seen
+  // above this can result in a `LargeYear`.
+  std::optional<DateYearOrDuration> operator+(const DayTimeDuration& rhs) const;
 
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.

@@ -109,30 +109,15 @@ std::optional<DateYearOrDuration> Date::operator-(
 }
 
 // _____________________________________________________________________________
-std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
+std::optional<DateYearOrDuration> Date::operator+(
+    const DayTimeDuration& rhs) const {
   auto epochLhs = toEpoch();
   if (!epochLhs.has_value()) {
     return std::nullopt;
   }
   auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
   Date::Milliseconds newDate =
-      epochLhs.value() +
-      std::chrono::nanoseconds(totalMillisecondsRhs *
-                               1'000'000);  // milliseconds to nanoseconds
-  return makeFromEpoch(newDate, getTimeZone());
-}
-
-// _____________________________________________________________________________
-std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
-  auto epochLhs = toEpoch();
-  if (!epochLhs.has_value()) {
-    return std::nullopt;
-  }
-  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Nanoseconds newDate =
-      epochLhs.value() +
-      std::chrono::nanoseconds(totalMillisecondsRhs *
-                               1'000'000);  // milliseconds to nanoseconds
+      epochLhs.value() + std::chrono::milliseconds(totalMillisecondsRhs);
   return makeFromEpoch(newDate, getTimeZone());
 }
 
