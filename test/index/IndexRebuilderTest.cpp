@@ -76,6 +76,18 @@ void deleteVocabFiles(const std::string& vocabBasename,
     ad_utility::deleteFile(vocabBasename + suffix);
   }
 }
+
+// Helper function to get the sorted indices into the correct format.
+InsertionPositions makeInsertionPositions(
+    const std::vector<VocabIndex>& indices) {
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(indices));
+  std::vector<InsertionInfo> tmp =
+      indices | ql::views::transform([](VocabIndex index) {
+        return InsertionInfo{index, "", Id::makeUndefined()};
+      }) |
+      ::ranges::to<std::vector>;
+  return eytzingerBuild(tmp);
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -94,7 +106,8 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   auto getId = ad_utility::testing::makeGetId(oldIndex);
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab({}, oldIndex.getVocab(), vocabPrefix);
-  EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
+  EXPECT_THAT(insertionPositions, ::testing::SizeIs(1))
+      << "We expect one uninitialized element.";
   EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
 
   for (const auto& suffix : getVocabSuffixesForType(type.value())) {
@@ -138,12 +151,13 @@ TEST(IndexRebuilder, materializeLocalVocab) {
       materializeLocalVocab(entries, oldIndex.getVocab(), vocabPrefix);
   EXPECT_THAT(
       insertionPositions,
-      ::testing::ElementsAre(
-          c.getVocabIndex(), e.getVocabIndex(), g.getVocabIndex(),
-          Id::fromBits(h.positionInVocab().upperBound_.get()).getVocabIndex(),
-          k.getVocabIndex(),
-          Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex(),
-          Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex()));
+      ::testing::ElementsAreArray(makeInsertionPositions(
+          {c.getVocabIndex(), e.getVocabIndex(), g.getVocabIndex(),
+           Id::fromBits(h.positionInVocab().upperBound_.get()).getVocabIndex(),
+           k.getVocabIndex(),
+           Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex(),
+           Id::fromBits(l.positionInVocab().upperBound_.get())
+               .getVocabIndex()})));
   auto toBits = [](const LocalVocabEntry& entry) {
     return Id::makeFromLocalVocabIndex(&entry).getBits();
   };
@@ -199,8 +213,8 @@ TEST(IndexRebuilder, flattenBlankNodeBlocks) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapVocabId) {
-  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
-                                  VocabIndex::make(7)};
+  InsertionPositions insertionPositionsA = makeInsertionPositions(
+      {VocabIndex::make(3), VocabIndex::make(5), VocabIndex::make(7)});
 
   EXPECT_EQ(remapVocabId(V(0), insertionPositionsA), V(0));
   EXPECT_EQ(remapVocabId(V(1), insertionPositionsA), V(1));
@@ -212,7 +226,8 @@ TEST(IndexRebuilder, remapVocabId) {
   EXPECT_EQ(remapVocabId(V(7), insertionPositionsA), V(10));
   EXPECT_EQ(remapVocabId(V(8), insertionPositionsA), V(11));
 
-  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
+  InsertionPositions insertionPositionsB =
+      makeInsertionPositions({VocabIndex::make(0), VocabIndex::make(1)});
   EXPECT_EQ(remapVocabId(V(0), insertionPositionsB), V(1));
   EXPECT_EQ(remapVocabId(V(1), insertionPositionsB), V(3));
   EXPECT_EQ(remapVocabId(V(2), insertionPositionsB), V(4));
@@ -302,8 +317,8 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       {Id::makeFromLocalVocabIndex(vocabEntries.at(1)).getBits(),
        Id::makeFromVocabIndex(VocabIndex::make(5))}};
 
-  std::vector<VocabIndex> insertionPositions{VocabIndex::make(1),
-                                             VocabIndex::make(4)};
+  InsertionPositions insertionPositions =
+      makeInsertionPositions({VocabIndex::make(1), VocabIndex::make(4)});
   std::vector<uint64_t> blankNodeBlocks{rawBlocks.at(0).blockIndices_.at(0)};
   uint64_t minBlankNodeIndex = 1;
   std::vector<ColumnIndex> additionalColumns{
@@ -410,7 +425,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   ad_utility::HashMap<Id::T, Id> localVocabMapping;
-  std::vector<VocabIndex> insertionPositions;
+  InsertionPositions insertionPositions = makeInsertionPositions({});
   std::vector<uint64_t> blankNodeBlocks;
   auto task = createPermutationWriterTask(
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),

@@ -11,6 +11,7 @@
 #include "index/IndexRebuilder.h"
 
 #include <array>
+#include <bit>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -41,19 +42,6 @@
 namespace qlever::indexRebuilder {
 
 namespace {
-
-// Helper struct that stores where a local vocab entry should be inserted into
-// the original vocab and what the original `Id` of the local vocab entry was
-// (so that we can create the mapping from old.
-struct InsertionInfo {
-  // The position indicates the gap between the actual values, so 0 means that
-  // the local vocab entry should be inserted before the first entry of the
-  // original vocab, 1 means that it should be inserted between the first and
-  // second entry of the original vocab, etc.
-  VocabIndex insertionPosition_;
-  std::string_view word_;
-  Id originalId_;
-};
 
 // Merge the local vocab entries with the original vocab and write a new
 // vocabulary. Returns a mapping from the old local vocab `Id`s bit
@@ -93,6 +81,37 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
 }  // namespace
 
 // _____________________________________________________________________________
+InsertionPositions eytzingerBuild(
+    const std::vector<InsertionInfo>& insertionInfo) {
+  size_t numElements = insertionInfo.size();
+  if (numElements == 0) {
+    return InsertionPositions(1);
+  }
+  // Pad to the next "complete tree" size (2^h - 1 nodes). A complete tree
+  // ensures every search path exits at the same depth, which makes the rank
+  // computation in `remapVocabId` a simple subtraction.
+  size_t paddedSize = std::bit_ceil(numElements + 1) - 1;
+  InsertionPositions result(paddedSize + 1, VocabIndex::max());
+
+  auto rec = [&](auto& self, size_t i, size_t k) -> size_t {
+    if (k <= paddedSize) {
+      i = self(self, i, 2 * k);
+      // In-order positions beyond `numElements` keep the sentinel value
+      // (`VocabIndex::max()`), which is greater than any real query value, so
+      // they never contribute to the rank.
+      if (i < numElements) {
+        result[k] = insertionInfo[i].insertionPosition_;
+      }
+      i++;
+      i = self(self, i, 2 * k + 1);
+    }
+    return i;
+  };
+  rec(rec, 0, 1);
+  return result;
+}
+
+// _____________________________________________________________________________
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
     const std::string& newIndexName) {
@@ -117,10 +136,8 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
 
   LocalVocabMapping localVocabMapping =
       mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
-  auto denseInfo = insertInfo |
-                   ql::views::transform(&InsertionInfo::insertionPosition_) |
-                   ::ranges::to<std::vector>;
-  return std::make_tuple(std::move(denseInfo), std::move(localVocabMapping));
+  return std::make_tuple(eytzingerBuild(insertInfo),
+                         std::move(localVocabMapping));
 }
 
 // _____________________________________________________________________________
@@ -138,12 +155,22 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
+  constexpr size_t blockSize =
+      util::L1_CACHE_LINE_SIZE / sizeof(InsertionPositions::value_type);
+  auto value = original.getVocabIndex();
+  size_t i = 1;
+  while (i < insertionPositions.size()) {
+#if defined(__GNUC__) || defined(__clang__)
+    __builtin_prefetch(insertionPositions.data() + i * blockSize);
+#endif
+    i = 2 * i + (insertionPositions[i] <= value);
+  }
+  // Because `eytzingerBuild` pads the layout to a complete tree of size
+  // `2^h - 1`, every search path exits at depth `h`, so `i` is in
+  // `[insertionPositions.size(), 2 * insertionPositions.size())` and the path
+  // bits below the leading 1-bit form the rank directly.
+  size_t offset = i - insertionPositions.size();
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
 }
 
 // _____________________________________________________________________________
@@ -191,7 +218,6 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
-  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
