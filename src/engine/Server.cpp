@@ -189,10 +189,10 @@ void Server::run(const std::string& indexBaseName, bool useText,
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
-      metrics_.sparqlErrors->Add(1, {{"type", "http"}});
+      metrics_.httpErrors->Add(1, {{"type", "http"}});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
-      metrics_.sparqlErrors->Add(1, {{"type", "internal"}});
+      metrics_.httpErrors->Add(1, {{"type", "internal"}});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
