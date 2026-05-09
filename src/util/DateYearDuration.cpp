@@ -344,7 +344,6 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   if (isDate() && rhs.isDate()) {
@@ -410,7 +409,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     const Date& ownDate = getDateUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
 
-    std::optional<Date> sum = ownDate + otherDuration;
+    std::optional<DateYearOrDuration> sum = ownDate + otherDuration;
     if (!sum.has_value()) {
       return std::nullopt;
     } else {

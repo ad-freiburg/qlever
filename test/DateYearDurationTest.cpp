@@ -1150,6 +1150,19 @@ TEST(DateYearOrDuration, Addition) {
     result = date + duration;
     EXPECT_EQ(DateYearOrDuration(Date(2000, 4, 19, 6, 20, 0, -4)),
               result.value());
+    // Test for `LargeYear` as result.
+    date = DateYearOrDuration(Date(9999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 365, 0, 0, 0));
+    result = date + duration;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
+    date = DateYearOrDuration(Date(-9999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 365, 0, 0, 0));
+    result = date + duration;
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(result.value().isLongYear());
   }
   {
     // Test for `LargeYear` addition.
