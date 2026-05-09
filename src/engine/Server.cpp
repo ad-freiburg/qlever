@@ -295,7 +295,7 @@ auto Server::setupCancellationHandle(
 // ____________________________________________________________________________
 auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
-    ad_utility::websocket::MessageSender& messageSender,
+    ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
@@ -324,9 +324,15 @@ auto Server::prepareOperation(
               : "")
       << "\n"
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
+  auto sharedMessageSender =
+      std::make_shared<ad_utility::websocket::MessageSender>(
+          std::move(messageSender));
   auto qec = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_, std::ref(messageSender),
+      &namedResultCache_, &materializedViewsManager_,
+      [sharedMessageSender](std::string json) {
+        (*sharedMessageSender)(std::move(json));
+      },
       pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
@@ -656,8 +662,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         createMessageSender(queryHub_, request, operationString);
 
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, operationString, messageSender,
-                         parameters, timeLimit.value(), accessTokenOk);
+        prepareOperation(operationName, operationString,
+                         std::move(messageSender), parameters,
+                         timeLimit.value(), accessTokenOk);
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
