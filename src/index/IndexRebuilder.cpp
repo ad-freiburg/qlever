@@ -159,10 +159,18 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
       util::L1_CACHE_LINE_SIZE / sizeof(InsertionPositions::value_type);
   auto value = original.getVocabIndex();
   size_t i = 1;
-  while (i < insertionPositions.size()) {
+  // Stop issuing prefetches once `i * blockSize` would leave the array. The
+  // last `log2(blockSize)` iterations would otherwise prefetch addresses
+  // beyond the array (up to ~4x its size), pulling unrelated heap data into
+  // L3 and polluting the cache for the rest of the rebuild pipeline.
+  const size_t prefetchLimit = insertionPositions.size() / blockSize;
+  while (i < prefetchLimit) {
 #if defined(__GNUC__) || defined(__clang__)
     __builtin_prefetch(insertionPositions.data() + i * blockSize);
 #endif
+    i = 2 * i + (insertionPositions[i] <= value);
+  }
+  while (i < insertionPositions.size()) {
     i = 2 * i + (insertionPositions[i] <= value);
   }
   // Because `eytzingerBuild` pads the layout to a complete tree of size
