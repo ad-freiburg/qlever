@@ -25,24 +25,6 @@
 
 namespace qlever::indexRebuilder {
 
-// Helper struct that stores where a local vocab entry should be inserted into
-// the original vocab and what the original `Id` of the local vocab entry was
-// (so that we can create the mapping from old.
-struct InsertionInfo {
-  // The position indicates the gap between the actual values, so 0 means that
-  // the local vocab entry should be inserted before the first entry of the
-  // original vocab, 1 means that it should be inserted between the first and
-  // second entry of the original vocab, etc.
-  VocabIndex insertionPosition_;
-  std::string_view word_;
-  Id originalId_;
-};
-
-// Helper function to turn a sorted vector to a in-order binary tree
-// representation for efficient cache access.
-InsertionPositions eytzingerBuild(
-    const std::vector<InsertionInfo>& insertionInfo);
-
 // Write a new vocabulary that contains all words from `vocab` plus all
 // entries in `entries`. Returns a pair consisting of a vector insertion
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old

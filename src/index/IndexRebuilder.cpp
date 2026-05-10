@@ -11,7 +11,6 @@
 #include "index/IndexRebuilder.h"
 
 #include <array>
-#include <bit>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -42,6 +41,19 @@
 namespace qlever::indexRebuilder {
 
 namespace {
+
+// Helper struct that stores where a local vocab entry should be inserted into
+// the original vocab and what the original `Id` of the local vocab entry was
+// (so that we can create the mapping from old.
+struct InsertionInfo {
+  // The position indicates the gap between the actual values, so 0 means that
+  // the local vocab entry should be inserted before the first entry of the
+  // original vocab, 1 means that it should be inserted between the first and
+  // second entry of the original vocab, etc.
+  VocabIndex insertionPosition_;
+  std::string_view word_;
+  Id originalId_;
+};
 
 // Merge the local vocab entries with the original vocab and write a new
 // vocabulary. Returns a mapping from the old local vocab `Id`s bit
@@ -81,37 +93,6 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
 }  // namespace
 
 // _____________________________________________________________________________
-InsertionPositions eytzingerBuild(
-    const std::vector<InsertionInfo>& insertionInfo) {
-  size_t numElements = insertionInfo.size();
-  if (numElements == 0) {
-    return InsertionPositions(1);
-  }
-  // Pad to the next "complete tree" size (2^h - 1 nodes). A complete tree
-  // ensures every search path exits at the same depth, which makes the rank
-  // computation in `remapVocabId` a simple subtraction.
-  size_t paddedSize = std::bit_ceil(numElements + 1) - 1;
-  InsertionPositions result(paddedSize + 1, VocabIndex::max());
-
-  auto rec = [&](auto& self, size_t i, size_t k) -> size_t {
-    if (k <= paddedSize) {
-      i = self(self, i, 2 * k);
-      // In-order positions beyond `numElements` keep the sentinel value
-      // (`VocabIndex::max()`), which is greater than any real query value, so
-      // they never contribute to the rank.
-      if (i < numElements) {
-        result[k] = insertionInfo[i].insertionPosition_;
-      }
-      i++;
-      i = self(self, i, 2 * k + 1);
-    }
-    return i;
-  };
-  rec(rec, 0, 1);
-  return result;
-}
-
-// _____________________________________________________________________________
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
     const std::string& newIndexName) {
@@ -136,8 +117,10 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
 
   LocalVocabMapping localVocabMapping =
       mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
-  return std::make_tuple(eytzingerBuild(insertInfo),
-                         std::move(localVocabMapping));
+  auto denseInfo = insertInfo |
+                   ql::views::transform(&InsertionInfo::insertionPosition_) |
+                   ::ranges::to<std::vector>;
+  return std::make_tuple(std::move(denseInfo), std::move(localVocabMapping));
 }
 
 // _____________________________________________________________________________
@@ -150,35 +133,69 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
+namespace {
+// Shared core: full `upper_bound` over `insertionPositions`. Returned by both
+// `remapVocabId` overloads when the cached hint is unhelpful (or absent).
+AD_ALWAYS_INLINE size_t fullUpperBoundOffset(
+    VocabIndex value, const InsertionPositions& insertionPositions) {
+  return ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, value, std::less{}));
+}
+
+// Shared core: assemble the result `Id` from the original value plus the
+// computed offset.
+AD_ALWAYS_INLINE Id assembleRemapped(VocabIndex value, size_t offset) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+}
+}  // namespace
+
+// _____________________________________________________________________________
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  constexpr size_t blockSize =
-      util::L1_CACHE_LINE_SIZE / sizeof(InsertionPositions::value_type);
   auto value = original.getVocabIndex();
-  size_t i = 1;
-  // Stop issuing prefetches once `i * blockSize` would leave the array. The
-  // last `log2(blockSize)` iterations would otherwise prefetch addresses
-  // beyond the array (up to ~4x its size), pulling unrelated heap data into
-  // L3 and polluting the cache for the rest of the rebuild pipeline.
-  const size_t prefetchLimit = insertionPositions.size() / blockSize;
-  while (i < prefetchLimit) {
-#if defined(__GNUC__) || defined(__clang__)
-    __builtin_prefetch(insertionPositions.data() + i * blockSize);
-#endif
-    i = 2 * i + (insertionPositions[i] <= value);
+  return assembleRemapped(value,
+                          fullUpperBoundOffset(value, insertionPositions));
+}
+
+// _____________________________________________________________________________
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions,
+                                 size_t& hint) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  auto value = original.getVocabIndex();
+  const size_t n = insertionPositions.size();
+
+  // Step 1: is the cached hint still the upper_bound for `value`?
+  //   Left-ok:  hint == 0  ||  insertionPositions[hint - 1] <= value
+  //   Right-ok: hint == n  ||  insertionPositions[hint]      >  value
+  bool leftOk = (hint == 0) || (insertionPositions[hint - 1] <= value);
+  bool rightOk = (hint == n) || (insertionPositions[hint] > value);
+  if (leftOk && rightOk) [[likely]] {
+    return assembleRemapped(value, hint);
   }
-  while (i < insertionPositions.size()) {
-    i = 2 * i + (insertionPositions[i] <= value);
+
+  // Step 2: if the hint was too low (very common on monotone input that
+  // crosses one insertion boundary at a time), peek `hint + 1`.
+  if (!rightOk) {
+    size_t h = hint + 1;
+    if (h == n || insertionPositions[h] > value) {
+      hint = h;
+      return assembleRemapped(value, hint);
+    }
   }
-  // Because `eytzingerBuild` pads the layout to a complete tree of size
-  // `2^h - 1`, every search path exits at depth `h`, so `i` is in
-  // `[insertionPositions.size(), 2 * insertionPositions.size())` and the path
-  // bits below the leading 1-bit form the rank directly.
-  size_t offset = i - insertionPositions.size();
-  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+
+  // Step 3: full fallback. We use the unbounded `upper_bound` (rather than
+  // bounding it by `hint`) because the always-hit `n/2` first-mid keeps the
+  // top of the binary-search tree hot in L1 -- a bounded fallback would
+  // start each search at a different `mid` and lose that locality.
+  hint = fullUpperBoundOffset(value, insertionPositions);
+  return assembleRemapped(value, hint);
 }
 
 // _____________________________________________________________________________
@@ -226,6 +243,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
@@ -234,9 +252,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, LimitOffsetClause{});
 
+  // Iterating a permutation column-by-column hands `remapVocabId` a stream
+  // of ids that is monotone-non-decreasing within long runs (always so for
+  // the leading column; locally so for the others). The hinted overload
+  // exploits this. The hint persists across columns - it'll be wrong on the
+  // first call after a column switch and self-correct on the second.
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
-                  mappedId = Id::makeUndefined()](Id& id) mutable {
+                  mappedId = Id::makeUndefined(),
+                  vocabHint = size_t{0}](Id& id) mutable {
     if (lastId.getBits() == id.getBits()) {
       id = mappedId;
       return;
@@ -245,7 +269,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions);
+      id = remapVocabId(id, insertionPositions, vocabHint);
     } else if (datatype == LocalVocabIndex) {
       id = localVocabMapping.at(id.getBits());
     } else if (datatype == BlankNodeIndex) {
@@ -426,8 +450,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   if (index.usePatterns()) {
     net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
-          [&insertionPositions](const Id& oldId) {
-            return remapVocabId(oldId, insertionPositions);
+          [&insertionPositions, hint = size_t{0}](const Id& oldId) mutable {
+            return remapVocabId(oldId, insertionPositions, hint);
           });
       newIndex.writePatternsToFile();
     });

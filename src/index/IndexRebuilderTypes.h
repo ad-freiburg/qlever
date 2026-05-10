@@ -11,7 +11,6 @@
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
-#include "util/AlignedVector.h"
 #include "util/BlankNodeManager.h"
 #include "util/HashMap.h"
 
@@ -19,7 +18,7 @@ namespace qlever::indexRebuilder {
 using OwnedBlocksEntry =
     ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
 using OwnedBlocks = std::vector<OwnedBlocksEntry>;
-using InsertionPositions = util::CacheAlignedVector<VocabIndex>;
+using InsertionPositions = std::vector<VocabIndex>;
 using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
 using BlankNodeBlocks = std::vector<uint64_t>;
 
