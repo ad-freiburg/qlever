@@ -528,23 +528,6 @@ TEST(ServerTest, gspDelete) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, gspPost) {
-  // TODO: this is only a regression test for a special case; test more broadly
-  // and also the delta triples after the operation
-  {
-    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
-    auto request =
-        makeRequest(http::verb::post, "/?graph=foo",
-                    {{http::field::authorization, "Bearer accessToken"},
-                     {http::field::host, "example.org"},
-                     {http::field::content_type, "text/turtle"}},
-                    "");
-    auto response = simulateHttpRequest.processRaw(request);
-    EXPECT_THAT(response, StatusIs(http::status::no_content));
-  }
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, gspPostCreateNewGraph) {
   auto testPost = [](const SimulateHttpRequest& simulateHttpRequest,
                      auto request, const auto& bodyMatcher,

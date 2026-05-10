@@ -132,22 +132,15 @@ CPP_template(typename RequestType)(requires HttpRequest<RequestType>) ResponseT
     createHttpResponseFromGenerator(cppcoro::generator<std::string>&& body,
                                     http::status status,
                                     const RequestType& request,
-                                    std::optional<MediaType> mediaType,
-                                    bool doPreparePayload) {
+                                    std::optional<MediaType> mediaType) {
   ResponseT response{status, request.version()};
   if (mediaType.has_value()) {
     response.set(http::field::content_type, toString(mediaType.value()));
   }
   setBody(response, request, std::move(body));
   response.keep_alive(request.keep_alive());
-  if (doPreparePayload) {
-    // Set Content-Length (if available) or Transfer-Encoding to `chunked`.
-    // NOTE: `prepare_payload()` throws an error if it cannot guarantee that the
-    // body is empty when it should be according to HTTP. The body size cannot
-    // be determined for our `streamable_body` so we don't want to call it in
-    // certain cases.
-    response.prepare_payload();
-  }
+  // Set Content-Length and Transfer-Encoding.
+  response.prepare_payload();
   return response;
 }
 
@@ -199,12 +192,9 @@ CPP_template(typename RequestType)(
                                                         const RequestType&
                                                             request,
                                                         std::optional<MediaType>
-                                                            mediaType,
-                                                        bool doPreparePayload =
-                                                            true) {
+                                                            mediaType) {
   return createHttpResponseFromGenerator(detail::toGenerator(std::move(body)),
-                                         status, request, mediaType,
-                                         doPreparePayload);
+                                         status, request, mediaType);
 }
 
 // Create a HttpResponse from a string with status 200 OK. Otherwise behaves
@@ -227,7 +217,7 @@ CPP_template(typename RequestType)(
                                                    const RequestType& request,
                                                    MediaType mediaType) {
   return createHttpResponseFromGenerator(std::move(generator), http::status::ok,
-                                         request, mediaType, true);
+                                         request, mediaType);
 }
 
 // Create a HttpResponse from a string with status 200 OK and mime type
@@ -235,8 +225,8 @@ CPP_template(typename RequestType)(
 // createHttpResponseFromString.
 static auto createJsonResponse(std::string text, const auto& request,
                                http::status status = http::status::ok) {
-  return createHttpResponseFromString(std::move(text), status, request,
-                                      MediaType::json);
+  return createHttpResponseFromGenerator(detail::toGenerator(std::move(text)),
+                                         status, request, MediaType::json);
 }
 
 template <typename T>
@@ -252,25 +242,6 @@ CPP_template(typename Json)(
                                                   http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);
-}
-
-// Create a HttpResponse with an empty body.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createResponseWithEmptyBody(http::status
-                                                                  status,
-                                                              const RequestType&
-                                                                  request,
-                                                              std::optional<
-                                                                  MediaType>
-                                                                  mediaType) {
-  auto resp =
-      createHttpResponseFromString("", status, request, mediaType, false);
-  // `prepare_payload` throws an error if it cannot guarantee that the response
-  // body is empty. The size is unknown for `streamable_body`. So don't
-  // call it and set `Content-Length` manually.
-  resp.content_length(0);
-  return resp;
 }
 
 // Create a HttpResponse with status 404 Not Found.
