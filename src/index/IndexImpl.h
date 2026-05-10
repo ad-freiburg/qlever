@@ -53,20 +53,21 @@ using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
-// Several data that are passed along between different phases of the
-// index builder.
-struct IndexBuilderDataBase {
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+// Return type of `IndexImpl::buildPartialVocabularies`.
+struct BuildPartialVocabulariesResult {
+  using TripleVec =
+      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+  // The i-th entry is the actual number of triples of the i-th batch, which
+  // belongs to the i-th partial vocabulary. It might be slightly different
+  // from the specified `batchSize` because of internally added triples.
+  std::vector<size_t> numTriplesPerPartialVocab_;
+  std::unique_ptr<TripleVec> idTriples_;
 };
 
-// All the data from IndexBuilderDataBase and (unsorted) external ID triples.
-struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
-  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
-  // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
-  // The number of triples for each partial vocabulary. This also depends on the
-  // number of additional language filter triples.
-  std::vector<size_t> actualPartialSizes;
+// Data produced after parsing: vocabulary metadata and unsorted ID triples.
+struct IndexBuilderDataAsExternalVector {
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+  BuildPartialVocabulariesResult parsedTriples_;
 };
 
 // Store the "normal" triples sorted by the first permutation, together with
@@ -78,15 +79,11 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
       internalTriplesPso_;
 };
-// All the data from IndexBuilderDataBase and a ExternalSorter that stores all
-// ID triples sorted by the first permutation.
-struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
+// Vocabulary metadata and ID triples sorted by the first permutation.
+struct IndexBuilderDataAsFirstPermutationSorter {
   using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   SorterPtr sorter_;
-  IndexBuilderDataAsFirstPermutationSorter(const IndexBuilderDataBase& base,
-                                           SorterPtr sorter)
-      : IndexBuilderDataBase{base}, sorter_{std::move(sorter)} {}
-  IndexBuilderDataAsFirstPermutationSorter() = default;
 };
 
 class IndexImpl {
@@ -510,6 +507,13 @@ class IndexImpl {
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
 
+  // Parse all triples from `parser` in batches of `linesPerPartial`, write one
+  // partial vocabulary file per batch, and return the accumulated ID triples
+  // together with per-batch size information. The memory used by the item
+  // allocator is freed when this function returns.
+  BuildPartialVocabulariesResult buildPartialVocabularies(
+      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
@@ -530,7 +534,8 @@ class IndexImpl {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, auto localIds,
+      std::unique_ptr<ItemMapArray> items,
+      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   // Return a Turtle parser that parses the given file. The parser will be

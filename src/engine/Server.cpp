@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -12,7 +13,6 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <sstream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -33,10 +33,10 @@
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
-#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -1496,6 +1496,18 @@ void Server::writeMaterializedView(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
+  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
+    throw std::runtime_error{absl::StrCat(
+        "Can't build index with base name \"", indexBaseName,
+        "\" because there are already files with the same base name "
+        "in the same directory")};
+  }
+  if (!qlever::util::isSubdirectoryOf(indexBaseName, index_.getOnDiskBase())) {
+    throw std::runtime_error{absl::StrCat(
+        "Can't build index with base name \"", indexBaseName,
+        "\" because it is not located in the same directory as the "
+        "current index")};
+  }
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // We don't directly `co_await` because of lifetime issues (bugs) in the
