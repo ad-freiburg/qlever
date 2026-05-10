@@ -11,6 +11,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <filesystem>
 
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -520,8 +521,23 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       ad_utility::Exception);
 }
 
+namespace {
+// Get rid of previous files with the specified prefix.
+void cleanFilesWithPrefix(std::string_view prefix) {
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(".")) {
+    std::string name = entry.path().filename().string();
+    if (ql::starts_with(name, prefix)) {
+      ad_utility::deleteFile(name);
+    }
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
+  cleanFilesWithPrefix("my-name");
+  cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -570,6 +586,27 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
   EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+
+  // The index with the same name already exists, so we don't want to overwrite
+  // it.
+  auto request4 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request4).get(),
+      ::testing::HasSubstr("already files with the same base name"));
+
+  // The index has to reside within the same directory as the original index.
+  auto request5 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request5).get(),
+      ::testing::HasSubstr("not located in the same directory"));
+
+  auto request6 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request6).get(),
+      ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }
