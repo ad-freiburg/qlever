@@ -1535,5 +1535,3 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // Explicit template instantiation for unit test helper function
 template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
     SimpleRequest&);
-template Awaitable<http::response<http::string_body>>
-Server::onlyForTestingProcess(SimpleRequest&);

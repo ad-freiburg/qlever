@@ -416,6 +416,11 @@ auto LocationIs = [](const std::string& location) {
 };
 
 // _____________________________________________________________________________
+auto HasHeader = [](http::field field) {
+  return HeaderFieldIs(field, testing::Not(testing::IsEmpty()));
+};
+
+// _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
           absl::StrCat("status is ", negation ? "not " : "",
                        testing::PrintToString(status))) {
@@ -523,24 +528,46 @@ TEST(ServerTest, gspDelete) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, gspPostCreateNewGraph) {
-  auto testPostImpl = [](const SimulateHttpRequest& simulateHttpRequest,
-                         const std::string& body, const auto& bodyMatcher,
-                         ad_utility::source_location l =
-                             AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
+TEST(ServerTest, gspPost) {
+  // TODO: this is only a regression test for a special case; test more broadly
+  // and also the delta triples after the operation
+  {
+    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    "");
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, StatusIs(http::status::no_content));
+  }
+}
 
-    auto request = makeRequest(
-        http::verb::post, "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
-        {{http::field::authorization, "Bearer accessToken"},
-         {http::field::host, "example.org"},
-         {http::field::content_type, "text/turtle"}},
-        body);
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPost = [](const SimulateHttpRequest& simulateHttpRequest,
+                     auto request, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
     auto response = simulateHttpRequest.processRaw(request);
     EXPECT_THAT(response, bodyMatcher);
   };
-  auto setupTest = [&testPostImpl](std::string indexInput,
-                                   bool persistUpdates) {
+  auto testPostCreateNewGraph =
+      [&testPost](const SimulateHttpRequest& simulateHttpRequest,
+                  const std::string& body, const auto& bodyMatcher,
+                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        auto request =
+            makeRequest(http::verb::post,
+                        "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+                        {{http::field::authorization, "Bearer accessToken"},
+                         {http::field::host, "example.org"},
+                         {http::field::content_type, "text/turtle"}},
+                        body);
+        testPost(simulateHttpRequest, request, bodyMatcher, l);
+      };
+  auto setupTest = [&testPostCreateNewGraph](std::string indexInput,
+                                             bool persistUpdates) {
     std::string indexBasename = "ServerTest_gspPostCreateNewGraph";
     TestIndexConfig c{std::move(indexInput)};
     c.indexType = qlever::Filetype::NQuad;
@@ -549,10 +576,11 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     settings.persistUpdates = persistUpdates;
     SimulateHttpRequest simulateHttpRequest{indexBasename, settings};
     return [simulateHttpRequest = std::move(simulateHttpRequest),
-            &testPostImpl](const std::string& body, const std::string& graph) {
-      testPostImpl(
-          simulateHttpRequest, body,
-          testing::AllOf(LocationIs(graph), StatusIs(http::status::created)));
+            &testPostCreateNewGraph](const std::string& body,
+                                     const std::string& expectedCreatedGraph) {
+      testPostCreateNewGraph(simulateHttpRequest, body,
+                             testing::AllOf(LocationIs(expectedCreatedGraph),
+                                            StatusIs(http::status::created)));
     };
   };
 
@@ -562,67 +590,52 @@ TEST(ServerTest, gspPostCreateNewGraph) {
   {
     // With an empty index the allocated graphs start at 1 and are persisted
     // across restarts of the server.
-    auto testPost = setupTest("", true);
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2");
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3");
+    auto test = setupTest("", true);
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3");
   }
   {
     // When updates are not persisted, the newly created graphs always start at
     // the value determined during the index build. Because the index is empty
     // this starts at 1 here.
-    auto testPost = setupTest("", false);
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+    auto test = setupTest("", false);
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
   }
   {
     // The index already contains an allocated graph so the newly generated
     // graphs start after that.
-    auto testPost = setupTest(
+    auto test = setupTest(
         "<a> <b> <c> "
         "<http://qlever.cs.uni-freiburg.de/builtin-functions/graph/6> .",
         true);
-    testPost("<a> <b> <c>",
-             "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7");
   }
-  {
-    auto request =
-        makeRequest(http::verb::post, "/?default",
-                    {{http::field::authorization, "Bearer accessToken"},
-                     {http::field::host, "example.org"},
-                     {http::field::content_type, "text/turtle"}},
-                    "<a> <b> <c>");
-    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
-    auto response = simulateHttpRequest.processRaw(request);
-    EXPECT_THAT(response, StatusIs(http::status::ok));
-  }
-  {
-    auto request =
-        makeRequest(http::verb::post, "/?graph=foo",
-                    {{http::field::authorization, "Bearer accessToken"},
-                     {http::field::host, "example.org"},
-                     {http::field::content_type, "text/turtle"}},
-                    "<a> <b> <c>");
-    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
-    auto response = simulateHttpRequest.processRaw(request);
-    EXPECT_THAT(response, StatusIs(http::status::ok));
-  }
-
-  {
-    auto request =
-        makeRequest(http::verb::post, "/?graph=foo",
-                    {{http::field::authorization, "Bearer accessToken"},
-                     {http::field::host, "example.org"},
-                     {http::field::content_type, "text/turtle"}},
-                    "");
-    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
-    EXPECT_THAT([&]() { simulateHttpRequest.processRaw(request); },
-                testing::Throws<HttpError>(AD_PROPERTY(
-                    HttpError, status, testing::Eq(http::status::no_content))));
-  }
+  auto IsPostNoCreatedGraph = [](http::status status) {
+    return testing::AllOf(StatusIs(status),
+                          testing::Not(HasHeader(http::field::location)));
+  };
+  // Here we only care that logic for creating a new graph doesn't fire. The
+  // updated triples are not the primary concern here.
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?default",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?graph=foo",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
 }
