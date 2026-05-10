@@ -233,7 +233,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
         });
 
     // Run `makeIndexScan` and check the error message.
-    QueryExecutionContext qec{*std::get<1>(plan)};
+    auto& qec = const_cast<QueryExecutionContext&>(*std::get<1>(plan));
     AD_EXPECT_THROW_WITH_MESSAGE(manager.makeIndexScan(&qec, viewQuery),
                                  ::testing::HasSubstr(expectedError));
   };
@@ -938,7 +938,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  Variable{"?o"}}};
-    QueryExecutionContext qec{*std::get<1>(writePlan)};
+    auto& qec = const_cast<QueryExecutionContext&>(*std::get<1>(writePlan));
     auto scan = manager.makeIndexScan(&qec, query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
@@ -1219,7 +1219,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     SpatialJoinConfiguration config{
         LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, V{"?a"}, V{"?b"}};
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }");
-    QueryExecutionContext qec{*std::get<1>(plan)};
+    auto& qec = const_cast<QueryExecutionContext&>(*std::get<1>(plan));
     // `SpatialJoin` has no children.
     SpatialJoin sj{&qec, config, std::nullopt, std::nullopt};
     EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());

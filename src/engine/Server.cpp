@@ -324,15 +324,9 @@ auto Server::prepareOperation(
               : "")
       << "\n"
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
-  auto sharedMessageSender =
-      std::make_shared<ad_utility::websocket::MessageSender>(
-          std::move(messageSender));
   auto qec = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_,
-      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
-        (*sharedMessageSender)(std::move(json));
-      },
+      &namedResultCache_, &materializedViewsManager_, std::move(messageSender),
       pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,

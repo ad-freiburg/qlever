@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/functional/any_invocable.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
@@ -108,7 +109,7 @@ class QueryExecutionContext
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       MaterializedViewsManager* materializedViewsManager,
-      std::function<void(std::string)> updateCallback =
+      absl::AnyInvocable<void(std::string) const> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
       DisableCaching = DisableCaching::FromRuntimeParameter);
@@ -226,7 +227,7 @@ class QueryExecutionContext
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
-  std::function<void(std::string)> updateCallback_;
+  absl::AnyInvocable<void(std::string) const> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the
   // mutex. `areWebsocketUpdatesEnabled_` is exposed so it can be disabled at a

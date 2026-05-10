@@ -118,7 +118,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
   // cache-entry to a pinned cache entry
-  QueryExecutionContext qecCopy{*qec};
+  auto& qecCopy = const_cast<QueryExecutionContext&>(*qec);
   qecCopy._pinResult = true;
   NeutralElementOperation n4{&qecCopy};
   EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
@@ -872,9 +872,8 @@ TEST(OperationTest, disableCachingForOperation) {
 // _____________________________________________________________________________
 TEST(OperationTest, disableCachingGlobally) {
   auto qecPtr = getQec();
-  auto qecCopy = *qecPtr;
-  qecCopy.setDisableCachingOnlyForTesting(true);
-  auto* qec = &qecCopy;
+  qecPtr->setDisableCachingOnlyForTesting(true);
+  auto* qec = qecPtr;
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
