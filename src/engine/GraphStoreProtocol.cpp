@@ -94,7 +94,7 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
       [location](ResponseMiddleware::ResponseT&& response, const auto&) {
         response.result(http::status::created);
         response.set(http::field::location, location);
-        return response;
+        return std::move(response);
       });
 }
 
