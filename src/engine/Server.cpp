@@ -1352,7 +1352,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     // HTTP mandates empty response bodies for the status codes 1xx, 204 and
     // 304.
     auto resp =
-        createHttpResponseFromString("", responseStatus, request, std::nullopt);
+        createResponseWithEmptyBody(responseStatus, request, std::nullopt);
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
