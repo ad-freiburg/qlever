@@ -515,7 +515,9 @@ TEST(ServerTest, gspPost) {
   // TODO: this is only a regression test for a special case; test more broadly
   // and also the delta triples after the operation
   {
-    SimulateHttpRequest simulateHttpRequest{"ServerTest_gspPostCreateNewGraph"};
+    auto baseName = "ServerTest_gspPost";
+    makeTestIndex(baseName, "");
+    SimulateHttpRequest simulateHttpRequest{baseName};
     auto request =
         makeRequest(http::verb::post, "/?graph=foo",
                     {{http::field::authorization, "Bearer accessToken"},
