@@ -72,8 +72,10 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
 // Check that `computeResult` works correctly.
 TEST(ExternalValues, computeResult) {
   // `ExternalValues` only works with caching disabled.
-  auto* testQec = ad_utility::testing::getQec("<x> <x> <x> .");
-  testQec->setDisableCachingOnlyForTesting(true);
+  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecCopy = *testQecOrig;
+  testQecCopy.setDisableCachingOnlyForTesting(true);
+  auto* testQec = &testQecCopy;
 
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
@@ -96,9 +98,11 @@ TEST(ExternalValues, computeResult) {
 // Test the `updateValues` method.
 TEST(ExternalValues, updateValues) {
   auto runTest = [](bool cachingDisabled) {
-    auto* testQec = ad_utility::testing::getQec();
+    auto testQec = ad_utility::testing::getQec();
+    auto qecCopy = *testQec;
     if (cachingDisabled) {
-      testQec->setDisableCachingOnlyForTesting(true);
+      qecCopy.setDisableCachingOnlyForTesting(true);
+      testQec = &qecCopy;
     }
     ValuesComponents initialValues{{TC{1}, TC{2}}, {TC{3}, TC{4}}};
     ExternalValues externalValuesOp(
@@ -168,8 +172,10 @@ TEST(ExternalValues, updateValuesFailsWithDifferentOrder) {
 // Test `clone` functionality.
 TEST(ExternalValues, clone) {
   // `ExternalValues` only work with caching disabled.
-  auto* testQec = ad_utility::testing::getQec("<x> <x> <x> .");
-  testQec->setDisableCachingOnlyForTesting(true);
+  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecCopy = *testQecOrig;
+  testQecCopy.setDisableCachingOnlyForTesting(true);
+  auto* testQec = &testQecCopy;
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   ExternalValues valuesOperation(

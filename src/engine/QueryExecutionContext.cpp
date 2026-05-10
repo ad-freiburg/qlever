@@ -27,9 +27,8 @@ QueryExecutionContext::QueryExecutionContext(
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     MaterializedViewsManager* materializedViewsManager,
-    absl::AnyInvocable<void(std::string) const> updateCallback,
-    const bool pinSubtrees, const bool pinResult,
-    const DisableCaching disableCaching)
+    std::function<void(std::string)> updateCallback, const bool pinSubtrees,
+    const bool pinResult, const DisableCaching disableCaching)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(index),
