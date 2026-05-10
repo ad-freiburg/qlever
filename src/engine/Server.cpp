@@ -330,8 +330,9 @@ auto Server::prepareOperation(
   auto qec = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, &materializedViewsManager_,
-      [sharedMessageSender = std::move(sharedMessageSender)](
-          std::string json) { (*sharedMessageSender)(std::move(json)); },
+      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
+        (*sharedMessageSender)(std::move(json));
+      },
       pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
