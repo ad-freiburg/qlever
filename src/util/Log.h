@@ -12,6 +12,7 @@
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 
+#include <algorithm>
 #include <atomic>
 #include <iostream>
 #include <locale>
@@ -94,9 +95,8 @@ inline std::mutex logMutex;
 // Runtime log level; messages with a higher level than this are suppressed.
 // Defaults to the less verbose of INFO and the compile-time LOGLEVEL so that
 // the runtime level is never set to something the binary cannot log.
-inline std::atomic<LogLevel::Enum> runtimeLogLevel{
-    LOGLEVEL < LogLevel::Enum::INFO ? LOGLEVEL : LogLevel::Enum::INFO};
-
+inline std::atomic<LogLevel::Enum> runtimeLogLevel =
+    std::min(LOGLEVEL, LogLevel::Enum::INFO);
 // Non-[[nodiscard]] wrapper so the comma-operator pattern doesn't trigger
 // -Wunused-value warnings (std::lock_guard itself is [[nodiscard]] in libc++).
 struct LogLock {
@@ -111,9 +111,9 @@ struct LogLock {
 inline void setRuntimeLogLevel(LogLevel level) {
   if (level.value() > LOGLEVEL) {
     throw std::runtime_error{absl::StrCat(
-        "Cannot set runtime log level to \"", level.toString(),
-        "\" because the compile-time log level is \"",
-        LogLevel{LOGLEVEL}.toString(), "\". Recompile with -DLOGLEVEL=",
+        "Cannot set runtime log level to `", level.toString(),
+        "` because the compile-time log level is `",
+        LogLevel{LOGLEVEL}.toString(), "`. Recompile with -DLOGLEVEL=",
         level.toString(), " or higher to enable this log level.")};
   }
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
@@ -163,7 +163,7 @@ class Log {
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << getTimeStamp() << " - " << getLevel<LEVEL>() << ": ";
+           << getTimeStamp() << " - " << LogLevel{LEVEL}.toString() << ": ";
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
@@ -171,11 +171,6 @@ class Log {
   static std::string getTimeStamp() {
     return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
                             absl::LocalTimeZone());
-  }
-
-  template <LogLevel::Enum LEVEL>
-  static QL_CONSTEVAL std::string_view getLevel() {
-    return LogLevel::descriptions_[static_cast<size_t>(LEVEL)].second;
   }
 };
 }  // namespace ad_utility

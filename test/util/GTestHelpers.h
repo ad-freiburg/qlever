@@ -99,9 +99,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 #define SKIP_IF_LOGLEVEL_IS_LOWER(level)                           \
   if (LOGLEVEL < level) {                                          \
     GTEST_SKIP() << "This test requires log level of at least "    \
-                 << ad_utility::Log::getLevel<level>()             \
+                 << ad_utility::LogLevel{level}.toString()         \
                  << ", but the compile-time log level is "         \
-                 << ad_utility::Log::getLevel<LOGLEVEL>();         \
+                 << ad_utility::LogLevel{LOGLEVEL}.toString();     \
   }                                                                \
   ASSERT_GE(LOGLEVEL, level);                                      \
   absl::Cleanup scopedRuntimeLogLevel_{                            \

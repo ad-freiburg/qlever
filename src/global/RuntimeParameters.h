@@ -5,6 +5,8 @@
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
 
+#include <algorithm>
+
 #include "util/Log.h"
 #include "util/Parameters.h"
 
@@ -185,9 +187,7 @@ struct RuntimeParameters {
   // The runtime log level. Messages with a higher level are suppressed. The
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{
-      LogLevel{LOGLEVEL < LogLevel::Enum::INFO ? LOGLEVEL
-                                               : LogLevel::Enum::INFO},
-      "log-level"};
+      LogLevel{std::min(LOGLEVEL, LogLevel::Enum::INFO)}, "log-level"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
