@@ -772,6 +772,11 @@ class RdfMultifileParser : public RdfParserBase {
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
+
+  // Parse a single file and push all resulting triple batches (and any
+  // exception) into `finishedBatchQueue_`.
+  void parseFileAndPushBatches(const qlever::InputFileSpecification& file,
+                               ad_utility::MemorySize bufferSize);
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

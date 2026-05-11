@@ -86,11 +86,11 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     if (!config.inputFiles_.empty()) {
-      AD_CORRECTNESS_CHECK(!config.getTurtleFilesViaServer_);
+      AD_CORRECTNESS_CHECK(!config.inputServerPort_.has_value());
       index.createFromFiles(config.inputFiles_);
     } else {
-      AD_CORRECTNESS_CHECK(config.getTurtleFilesViaServer_);
-      auto server = InputFileServer{};
+      AD_CORRECTNESS_CHECK(config.inputServerPort_.has_value());
+      auto server = InputFileServer{config.inputServerPort_.value()};
       server.run();
       index.getImpl().createFromTurtleStringGenerator(server.getFiles());
     }

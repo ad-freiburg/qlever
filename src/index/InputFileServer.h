@@ -6,7 +6,6 @@
 #define QLEVER_INPUTFILESERVER_H
 
 #include <absl/cleanup/cleanup.h>
-#include <absl/functional/bind_front.h>
 
 #include "index/InputFileSpecification.h"
 #include "util/Log.h"
@@ -16,9 +15,9 @@
 
 class InputFileServer {
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
-      queue{20};
+      queue_{20};
   ad_utility::JThread serverThread_;
-  unsigned short port = 9874;
+  unsigned short port_;
   bool isRunning_ = false;
   std::function<void(void)> shutDown_;
 
@@ -31,73 +30,40 @@ class InputFileServer {
     return websocketHandlerDummy;
   };
 
+  // Parse the Content-Type header to determine the RDF filetype. Defaults to
+  // Turtle if the header is absent or contains an unrecognized value.
+  static qlever::Filetype filetypeFromContentType(
+      const http::request<http::string_body>& request);
+
+  // Respond to a `Can-Upload` probe with 200 OK or 429 Too Many Requests.
+  http::response<http::string_body> handleCanUploadQuery(
+      const http::request<http::string_body>& request);
+
+  // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
+  http::response<http::string_body> handleFinishSignal(
+      const http::request<http::string_body>& request);
+
+  // Parse the request body as RDF data and enqueue it for index building.
+  http::response<http::string_body> handleFileUpload(
+      http::request<http::string_body> request);
+
+  // Dispatch the incoming request to the appropriate handler.
+  http::response<http::string_body> computeResponse(
+      http::request<http::string_body> request);
+
   net::awaitable<void> processRequest(http::request<http::string_body> request,
                                       auto&& send) {
     try {
-      auto it = request.find("Can-Upload");
-      if (it != request.end()) {
-        bool canPush = queue.canPush();
-        auto status =
-            canPush ? http::status::ok : http::status::too_many_requests;
-        co_await send(ad_utility::httpUtils::createHttpResponseFromString(
-            "Responding to Can-Upload query with status code ", status, request,
-            ad_utility::MediaType::textPlain));
-        co_return;
-      }
-
-      it = request.find("Finish-Index-Building");
-      if (it != request.end() && it->value() == "true") {
-        AD_LOG_INFO << "Acquired the finishing signal" << std::endl;
-        queue.finish();
-        co_await send(ad_utility::httpUtils::createOkResponse(
-            "received signal for finishing", request,
-            ad_utility::MediaType::textPlain));
-        co_return;
-      }
-      std::optional<std::string> graph = [&request]() {
-        auto it = request.find("graph");
-        return it == request.end() ? std::nullopt
-                                   : std::optional{std::string{it->value()}};
-      }();
-
-      auto bodyPtr = std::make_shared<std::string>(std::move(request.body()));
-      auto factory = [bodyPtr](size_t, std::string_view) {
-        return std::make_unique<StringParallelBuffer>(std::move(*bodyPtr));
-      };
-      qlever::InputFileSpecification spec{
-          qlever::InputFileSpecification::BufferFactoryAndDescription{
-              std::move(factory), "<http-request-body>"},
-          qlever::Filetype::Turtle, std::move(graph)};
-      auto status = queue.pushIfNotFull(std::move(spec));
-      switch (status) {
-        using enum decltype(queue)::Status;
-        case Pushed:
-          co_await send(ad_utility::httpUtils::createOkResponse(
-              "successfully registered a file for parsing", request,
-              ad_utility::MediaType::textPlain));
-          break;
-        case Full:
-          co_await send(ad_utility::httpUtils::createHttpResponseFromString(
-              "input file queue is currently full, please send the file later",
-              http::status::too_many_requests, request,
-              ad_utility::MediaType::textPlain));
-          break;
-        case Finished:
-          co_await send(ad_utility::httpUtils::createHttpResponseFromString(
-              "tried to send a file after the signal for finishing was already "
-              "sent",
-              http::status::forbidden, request,
-              ad_utility::MediaType::textPlain));
-          break;
-      }
-      co_return;
+      co_await send(computeResponse(std::move(request)));
     } catch (const std::exception& e) {
-      AD_LOG_INFO << "InputFileServer::processRequest received an exception"
-                  << std::endl;
+      AD_LOG_INFO << "InputFileServer::processRequest received an exception: "
+                  << e.what() << std::endl;
     }
   }
 
  public:
+  explicit InputFileServer(unsigned short port) : port_{port} {}
+
   void run() {
     serverThread_ = ad_utility::JThread([this]() {
       auto handler = [this](auto request, auto&& send) {
@@ -106,7 +72,7 @@ class InputFileServer {
       auto cleanup = absl::Cleanup{
           []() { AD_LOG_INFO << "Stopped running the HTTP Server"; }};
       HttpServer<decltype(handler), decltype(websocketHandlerDummy)> server{
-          port, "0.0.0.0", 1, handler, websocketSupplier};
+          port_, "0.0.0.0", 1, handler, websocketSupplier};
       shutDown_ = [&server]() { server.shutDown(); };
       server.run();
     });
@@ -118,7 +84,7 @@ class InputFileServer {
     auto cleanup = absl::Cleanup{[]() {
       AD_LOG_INFO << "InputFileServer::getFiles was finished..." << std::endl;
     }};
-    while (auto opt = queue.pop()) {
+    while (auto opt = queue_.pop()) {
       co_yield opt.value();
     }
   }

@@ -222,6 +222,37 @@ TEST(ThreadSafeQueue, PushException) {
 }
 
 // ________________________________________________________________
+TEST(ThreadSafeQueue, PushIfNotFull) {
+  using enum ThreadSafeQueue<size_t>::Status;
+
+  // Returns Pushed when the queue has free capacity.
+  {
+    ThreadSafeQueue<size_t> queue{5};
+    EXPECT_EQ(queue.pushIfNotFull(42), Pushed);
+    EXPECT_EQ(queue.pop(), 42);
+  }
+
+  // Returns Full immediately when the queue is at max capacity (no blocking).
+  {
+    ThreadSafeQueue<size_t> queue{2};
+    EXPECT_EQ(queue.pushIfNotFull(1), Pushed);
+    EXPECT_EQ(queue.pushIfNotFull(2), Pushed);
+    // Queue is now full — must return Full without blocking.
+    EXPECT_EQ(queue.pushIfNotFull(3), Full);
+    // After popping one element there is capacity again.
+    EXPECT_EQ(queue.pop(), 1);
+    EXPECT_EQ(queue.pushIfNotFull(4), Pushed);
+  }
+
+  // Returns Finished after finish() has been called.
+  {
+    ThreadSafeQueue<size_t> queue{5};
+    queue.finish();
+    EXPECT_EQ(queue.pushIfNotFull(99), Finished);
+  }
+}
+
+// ________________________________________________________________
 TEST(ThreadSafeQueue, DisablePush) {
   auto runTest = [](auto queue) {
     using Queue = decltype(queue);

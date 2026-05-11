@@ -75,7 +75,10 @@ struct IndexBuilderConfig : CommonConfig {
   // `src/engine/LibQleverExample.cpp` for an example use.
   std::vector<InputFileSpecification> inputFiles_;
 
-  bool getTurtleFilesViaServer_ = false;
+  // If set, the index builder starts an HTTP server on this port to receive
+  // RDF input data, instead of reading from `inputFiles_`. See
+  // `InputFileServer` for the server protocol.
+  std::optional<unsigned short> inputServerPort_;
 
   // QLever's parses the input in chunks of this size. The chunk size must be
   // large enough, so that every statement from the input data (triple, quad,

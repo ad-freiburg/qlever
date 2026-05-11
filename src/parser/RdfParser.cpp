@@ -1343,39 +1343,37 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
   return result;
 }
 
+// _____________________________________________________________________________
+void RdfMultifileParser::parseFileAndPushBatches(
+    const qlever::InputFileSpecification& file,
+    ad_utility::MemorySize bufferSize) {
+  try {
+    auto parser =
+        makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(), bufferSize);
+    while (auto batch = parser->getBatch()) {
+      bool active = finishedBatchQueue_.push(std::move(batch.value()));
+      if (!active) {
+        // The queue was finished prematurely; stop to avoid deadlocks.
+        return;
+      }
+    }
+  } catch (...) {
+    finishedBatchQueue_.pushException(std::current_exception());
+  }
+}
+
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
     InputFileServer::FileRange fileSpecs,
     const EncodedIriManager* encodedIriManager)
     : RdfParserBase(encodedIriManager) {
-  using namespace qlever;
-
-  // This lambda parses a single file and pushes the results and all occurring
-  // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this, encodedIriManager](
-                       const InputFileSpecification& file,
-                       ad_utility::MemorySize bufferSize) {
-    try {
-      auto parser =
-          makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
-      while (auto batch = parser->getBatch()) {
-        bool active = finishedBatchQueue_.push(std::move(batch.value()));
-        if (!active) {
-          return;
-        }
-      }
-    } catch (...) {
-      finishedBatchQueue_.pushException(std::current_exception());
-    }
-  };
-
-  // Feed all file specs from the generator to the `parsingQueue_`.
   auto makeParsers =
       [gen = std::make_shared<InputFileServer::FileRange>(std::move(fileSpecs)),
-       parseFile, this]() {
+       this]() {
         for (auto& file : *gen) {
           bool active = parsingQueue_.push(
-              absl::bind_front(parseFile, file, DEFAULT_PARSER_BUFFER_SIZE));
+              absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches,
+                               this, file, DEFAULT_PARSER_BUFFER_SIZE));
           if (!active) {
             break;
           }
@@ -1392,40 +1390,13 @@ RdfMultifileParser::RdfMultifileParser(
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
-  using namespace qlever;
-
-  // This lambda parses a single file and pushes the results and all occurring
-  // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this, encodedIriManager](
-                       const InputFileSpecification& file,
-                       ad_utility::MemorySize bufferSize) {
-    try {
-      auto parser =
-          makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
-      while (auto batch = parser->getBatch()) {
-        bool active = finishedBatchQueue_.push(std::move(batch.value()));
-        if (!active) {
-          // The queue was finished prematurely, stop this thread. This is
-          // important to avoid deadlocks.
-          return;
-        }
-      }
-    } catch (...) {
-      finishedBatchQueue_.pushException(std::current_exception());
-    }
-  };
-
-  // Feed all the input files to the `parsingQueue_`. After the call to
-  // `finish()` returns, the parsing has completed and all the results have
-  // been pushed into the `finishedBatchQueue`, which we then also finish to
-  // inform the consuming code, that there will be no more parse results.
-  auto makeParsers = [files, bufferSize, this, parseFile]() {
+  auto makeParsers = [files, bufferSize, this]() {
     for (const auto& file : files) {
-      bool active =
-          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
+      bool active = parsingQueue_.push(
+          absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches, this,
+                           file, bufferSize));
       if (!active) {
-        // The queue was finished prematurely, stop this thread. This is
-        // important to avoid deadlocks.
+        // The queue was finished prematurely; stop to avoid deadlocks.
         break;
       }
     }

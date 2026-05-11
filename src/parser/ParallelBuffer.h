@@ -112,22 +112,22 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   bool exhausted_ = false;
 };
 
-// A ParallelBuffer that serves a pre-loaded string as a single block.
+// A ParallelBuffer that serves a pre-loaded string in chunks of `blocksize`.
 class StringParallelBuffer : public ParallelBuffer {
   std::string content_;
-  bool consumed_ = false;
+  size_t offset_ = 0;
 
  public:
-  explicit StringParallelBuffer(std::string content)
-      : ParallelBuffer{content.size()}, content_{std::move(content)} {}
+  explicit StringParallelBuffer(std::string content, size_t blocksize)
+      : ParallelBuffer{blocksize}, content_{std::move(content)} {}
 
   std::optional<BufferType> getNextBlock() override {
-    if (consumed_) return std::nullopt;
-    consumed_ = true;
+    if (offset_ >= content_.size()) return std::nullopt;
+    size_t chunkSize = std::min(blocksize_, content_.size() - offset_);
     BufferType buf;
-    buf.resize(content_.size());
-    std::ranges::copy(content_, buf.data());
-    content_.clear();
+    buf.resize(chunkSize);
+    std::ranges::copy_n(content_.data() + offset_, chunkSize, buf.data());
+    offset_ += chunkSize;
     return buf;
   }
 };
