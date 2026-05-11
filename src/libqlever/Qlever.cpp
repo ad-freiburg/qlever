@@ -87,12 +87,11 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (!config.onlyAddTextIndex_) {
     if (!config.inputFiles_.empty()) {
       AD_CORRECTNESS_CHECK(!config.inputServerPort_.has_value());
-      index.createFromFiles(config.inputFiles_);
+      index.createFromFileVector(config.inputFiles_);
     } else {
       AD_CORRECTNESS_CHECK(config.inputServerPort_.has_value());
       auto server = InputFileServer{config.inputServerPort_.value()};
-      server.run();
-      index.getImpl().createFromTurtleStringGenerator(server.getFiles());
+      index.getImpl().createFromFileRange(server.run());
     }
   }
 

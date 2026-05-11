@@ -1,19 +1,27 @@
+// Copyright 2025 The QLever Authors, in particular:
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
-// Created by kalmbacj on 2025-09-12.
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_INPUTFILESERVER_H
-#define QLEVER_INPUTFILESERVER_H
+#ifndef QLEVER_INDEX_INPUTFILESERVER_H
+#define QLEVER_INDEX_INPUTFILESERVER_H
 
 #include <absl/cleanup/cleanup.h>
 
 #include "index/InputFileSpecification.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
+  using Request = http::request<http::string_body>;
+  using Response = http::response<http::string_body>;
+
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
       queue_{20};
   ad_utility::JThread serverThread_;
@@ -32,27 +40,21 @@ class InputFileServer {
 
   // Parse the Content-Type header to determine the RDF filetype. Defaults to
   // Turtle if the header is absent or contains an unrecognized value.
-  static qlever::Filetype filetypeFromContentType(
-      const http::request<http::string_body>& request);
+  static qlever::Filetype filetypeFromContentType(const Request& request);
 
   // Respond to a `Can-Upload` probe with 200 OK or 429 Too Many Requests.
-  http::response<http::string_body> handleCanUploadQuery(
-      const http::request<http::string_body>& request);
+  Response handleCanUploadQuery(const Request& request);
 
   // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
-  http::response<http::string_body> handleFinishSignal(
-      const http::request<http::string_body>& request);
+  Response handleFinishSignal(const Request& request);
 
   // Parse the request body as RDF data and enqueue it for index building.
-  http::response<http::string_body> handleFileUpload(
-      http::request<http::string_body> request);
+  Response handleFileUpload(Request request);
 
   // Dispatch the incoming request to the appropriate handler.
-  http::response<http::string_body> computeResponse(
-      http::request<http::string_body> request);
+  Response computeResponse(Request request);
 
-  net::awaitable<void> processRequest(http::request<http::string_body> request,
-                                      auto&& send) {
+  net::awaitable<void> processRequest(Request request, auto&& send) {
     try {
       co_await send(computeResponse(std::move(request)));
     } catch (const std::exception& e) {
@@ -61,41 +63,18 @@ class InputFileServer {
     }
   }
 
+  // Yield each InputFileSpecification from the queue as a coroutine.
+  cppcoro::generator<qlever::InputFileSpecification> getFilesRange();
+
  public:
   explicit InputFileServer(unsigned short port) : port_{port} {}
 
-  void run() {
-    serverThread_ = ad_utility::JThread([this]() {
-      auto handler = [this](auto request, auto&& send) {
-        return processRequest(std::move(request), AD_FWD(send));
-      };
-      auto cleanup = absl::Cleanup{
-          []() { AD_LOG_INFO << "Stopped running the HTTP Server"; }};
-      HttpServer<decltype(handler), decltype(websocketHandlerDummy)> server{
-          port_, "0.0.0.0", 1, handler, websocketSupplier};
-      shutDown_ = [&server]() { server.shutDown(); };
-      server.run();
-    });
-    isRunning_ = true;
-  }
+  // Start the HTTP server and return a range that yields the uploaded file
+  // specifications as they arrive. The range is exhausted when
+  // `Finish-Index-Building: true` is received.
+  ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> run();
 
-  using FileRange = cppcoro::generator<qlever::InputFileSpecification>;
-  FileRange getFiles() {
-    auto cleanup = absl::Cleanup{[]() {
-      AD_LOG_INFO << "InputFileServer::getFiles was finished..." << std::endl;
-    }};
-    while (auto opt = queue_.pop()) {
-      co_yield opt.value();
-    }
-  }
-
-  ~InputFileServer() {
-    AD_LOG_INFO << "Destroying the InputFileServer...." << std::endl;
-    if (isRunning_) {
-      shutDown_();
-    }
-    AD_LOG_INFO << "... Done destroying the InputFileServer...." << std::endl;
-  }
+  ~InputFileServer();
 };
 
-#endif  // QLEVER_INPUTFILESERVER_H
+#endif  // QLEVER_INDEX_INPUTFILESERVER_H

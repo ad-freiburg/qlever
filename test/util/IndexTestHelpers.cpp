@@ -228,7 +228,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
     }
-    index.createFromFiles({spec});
+    index.createFromFileVector({spec});
     if (c.createTextIndex) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       throw std::runtime_error("The text index is not available in C++17 mode");

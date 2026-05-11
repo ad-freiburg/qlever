@@ -887,9 +887,11 @@ std::vector<TurtleTriple> parseFromFile(
     ad_utility::MemorySize bufferSize = 1_kB) {
   auto parser = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-      return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
-                    encodedIriManager(),
-                    bufferSize};
+      return Parser{
+          ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+              std::vector<qlever::InputFileSpecification>{
+                  {filename, qlever::Filetype::Turtle, std::nullopt}}),
+          encodedIriManager(), bufferSize};
     } else {
       return Parser{
           std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
@@ -1234,9 +1236,11 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-          return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
-                        encodedIriManager(),
-                        40_B};
+          return Parser{
+              ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+                  std::vector<qlever::InputFileSpecification>{
+                      {filename, qlever::Filetype::Turtle, std::nullopt}}),
+              encodedIriManager(), 40_B};
         } else {
           return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
                         encodedIriManager(),
@@ -1357,7 +1361,9 @@ TEST(RdfParserTest, multifileParser) {
                        useParallelParser);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
-    Parser p{specs, encodedIriManager()};
+    Parser p{ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+                 std::move(specs)),
+             encodedIriManager()};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));

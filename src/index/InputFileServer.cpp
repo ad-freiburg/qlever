@@ -1,5 +1,10 @@
 // Copyright 2025 The QLever Authors, in particular:
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "InputFileServer.h"
 
@@ -10,7 +15,7 @@ using namespace ad_utility::httpUtils;
 
 // _____________________________________________________________________________
 qlever::Filetype InputFileServer::filetypeFromContentType(
-    const http::request<http::string_body>& request) {
+    const Request& request) {
   auto it = request.find(http::field::content_type);
   if (it == request.end()) {
     return qlever::Filetype::Turtle;
@@ -33,8 +38,8 @@ qlever::Filetype InputFileServer::filetypeFromContentType(
 }
 
 // _____________________________________________________________________________
-http::response<http::string_body> InputFileServer::handleCanUploadQuery(
-    const http::request<http::string_body>& request) {
+InputFileServer::Response InputFileServer::handleCanUploadQuery(
+    const Request& request) {
   auto status =
       queue_.canPush() ? http::status::ok : http::status::too_many_requests;
   return createHttpResponseFromString("Responding to Can-Upload query", status,
@@ -43,8 +48,8 @@ http::response<http::string_body> InputFileServer::handleCanUploadQuery(
 }
 
 // _____________________________________________________________________________
-http::response<http::string_body> InputFileServer::handleFinishSignal(
-    const http::request<http::string_body>& request) {
+InputFileServer::Response InputFileServer::handleFinishSignal(
+    const Request& request) {
   AD_LOG_INFO << "Acquired the finishing signal" << std::endl;
   queue_.finish();
   return createHttpResponseFromString("received signal for finishing",
@@ -54,8 +59,7 @@ http::response<http::string_body> InputFileServer::handleFinishSignal(
 }
 
 // _____________________________________________________________________________
-http::response<http::string_body> InputFileServer::handleFileUpload(
-    http::request<http::string_body> request) {
+InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
   std::optional<std::string> graph = [&request]() {
     auto it = request.find("graph");
     return it == request.end() ? std::nullopt
@@ -98,8 +102,7 @@ http::response<http::string_body> InputFileServer::handleFileUpload(
 }
 
 // _____________________________________________________________________________
-http::response<http::string_body> InputFileServer::computeResponse(
-    http::request<http::string_body> request) {
+InputFileServer::Response InputFileServer::computeResponse(Request request) {
   if (request.find("Can-Upload") != request.end()) {
     return handleCanUploadQuery(request);
   }
@@ -108,4 +111,43 @@ http::response<http::string_body> InputFileServer::computeResponse(
     return handleFinishSignal(request);
   }
   return handleFileUpload(std::move(request));
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<qlever::InputFileSpecification>
+InputFileServer::getFilesRange() {
+  auto cleanup = absl::Cleanup{[]() {
+    AD_LOG_INFO << "InputFileServer::getFiles was finished..." << std::endl;
+  }};
+  while (auto opt = queue_.pop()) {
+    co_yield opt.value();
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>
+InputFileServer::run() {
+  serverThread_ = ad_utility::JThread([this]() {
+    auto handler = [this](auto request, auto&& send) {
+      return processRequest(std::move(request), AD_FWD(send));
+    };
+    auto cleanup = absl::Cleanup{
+        []() { AD_LOG_INFO << "Stopped running the HTTP Server"; }};
+    HttpServer<decltype(handler), decltype(websocketHandlerDummy)> server{
+        port_, "0.0.0.0", 1, handler, websocketSupplier};
+    shutDown_ = [&server]() { server.shutDown(); };
+    server.run();
+  });
+  isRunning_ = true;
+  return ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
+      getFilesRange()};
+}
+
+// _____________________________________________________________________________
+InputFileServer::~InputFileServer() {
+  AD_LOG_INFO << "Destroying the InputFileServer...." << std::endl;
+  if (isRunning_) {
+    shutDown_();
+  }
+  AD_LOG_INFO << "... Done destroying the InputFileServer...." << std::endl;
 }

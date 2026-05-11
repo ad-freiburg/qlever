@@ -25,13 +25,13 @@
 #include "index/EncodedIriManager.h"
 #include "index/InputFileSpecification.h"
 // TODO<joka921> Only extract the typedefs.
-#include "index/InputFileServer.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
 #include "parser/data/BlankNode.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
 #include "util/TaskQueue.h"
@@ -723,16 +723,11 @@ class RdfMultifileParser : public RdfParserBase {
   explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {};
 
-  // Construct the parser from a vector of file specifications and eagerly start
-  // parsing them on background threads.
+  // Construct the parser from a type-erased input range of file specifications.
   RdfMultifileParser(
-      const std::vector<qlever::InputFileSpecification>& files,
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
-
-  // Construct the parser from a generator of turtle file contents.
-  RdfMultifileParser(InputFileServer::FileRange turtleFileContents,
-                     const EncodedIriManager* encodedIriManager);
 
   // This function is needed for the interface, but always throws an exception.
   // `getBatch` (below) has to be used instead.

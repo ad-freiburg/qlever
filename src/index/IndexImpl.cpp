@@ -80,15 +80,16 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::vector<Index::InputFileSpecification>& files) const {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
+    const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
       "The buffer size of the RDF parser must be greater than zero");
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
-  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
-                                              parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(
+      std::move(files), &encodedIriManager(), parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -374,27 +375,17 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFiles(
+void IndexImpl::createFromFileVector(
     std::vector<Index::InputFileSpecification> files) {
-  auto makeParser = [this](auto&& files) {
-    updateInputFileSpecificationsAndLog(files, useParallelParser_);
-    return makeRdfParser(AD_FWD(files));
-  };
-  return createFromFilesImpl(std::move(files), makeParser);
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
+  createFromFileRange(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+          std::move(files)));
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromTurtleStringGenerator(
-    InputFileServer::FileRange files) {
-  auto makeParser = [this](auto&& files) -> std::unique_ptr<RdfParserBase> {
-    return std::make_unique<RdfMultifileParser>(std::move(files),
-                                                &encodedIriManager());
-  };
-  return createFromFilesImpl(std::move(files), makeParser);
-}
-// _____________________________________________________________________________
-template <typename Files, typename MakeParser>
-void IndexImpl::createFromFilesImpl(Files&& files, MakeParser makeParser) {
+void IndexImpl::createFromFileRange(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -407,7 +398,7 @@ void IndexImpl::createFromFilesImpl(Files&& files, MakeParser makeParser) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeParser(AD_FWD(files)));
+      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

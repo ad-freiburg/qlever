@@ -1364,34 +1364,12 @@ void RdfMultifileParser::parseFileAndPushBatches(
 
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
-    InputFileServer::FileRange fileSpecs,
-    const EncodedIriManager* encodedIriManager)
-    : RdfParserBase(encodedIriManager) {
-  auto makeParsers =
-      [gen = std::make_shared<InputFileServer::FileRange>(std::move(fileSpecs)),
-       this]() {
-        for (auto& file : *gen) {
-          bool active = parsingQueue_.push(
-              absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches,
-                               this, file, DEFAULT_PARSER_BUFFER_SIZE));
-          if (!active) {
-            break;
-          }
-        }
-        parsingQueue_.finish();
-        finishedBatchQueue_.finish();
-      };
-  feederThread_ = ad_utility::JThread{makeParsers};
-}
-
-// ______________________________________________________________
-RdfMultifileParser::RdfMultifileParser(
-    const std::vector<qlever::InputFileSpecification>& files,
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
-  auto makeParsers = [files, bufferSize, this]() {
-    for (const auto& file : files) {
+  auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
+    for (auto& file : files) {
       bool active = parsingQueue_.push(
           absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches, this,
                            file, bufferSize));
@@ -1403,7 +1381,7 @@ RdfMultifileParser::RdfMultifileParser(
     parsingQueue_.finish();
     finishedBatchQueue_.finish();
   };
-  feederThread_ = ad_utility::JThread{makeParsers};
+  feederThread_ = ad_utility::JThread{std::move(makeParsers)};
 }
 
 // _____________________________________________________________________________

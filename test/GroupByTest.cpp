@@ -101,7 +101,7 @@ class GroupByTest : public ::testing::Test {
     _index.setKbName("group_by_test");
     _index.setTextName("group_by_test");
     _index.setOnDiskBase("group_ty_test");
-    _index.createFromFiles(
+    _index.createFromFileVector(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
     TextIndexBuilder textIndexBuilder{ad_utility::makeUnlimitedAllocator<Id>(),
                                       _index.getOnDiskBase()};
