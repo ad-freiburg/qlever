@@ -104,7 +104,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                  << ad_utility::LogLevel{LOGLEVEL}.toString();     \
   }                                                                \
   ASSERT_GE(LOGLEVEL, level);                                      \
-  absl::Cleanup scopedRuntimeLogLevel_{                            \
+  absl::Cleanup scopedRuntimeLogLevelAddedBySkipIfLoglevelIsLower{ \
       [previous_ = ::ad_utility::detail::runtimeLogLevel.exchange( \
            level, std::memory_order_relaxed)]() {                  \
         ::ad_utility::detail::runtimeLogLevel.store(               \
