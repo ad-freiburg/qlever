@@ -27,22 +27,13 @@ namespace indexRebuilder {
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the most performance critical code of the
 // rebuild.
-//
-// There are two overloads:
-//
-// (1) Stateless - performs a fresh `std::upper_bound` on every call. Use this
-//     when consecutive queries have no predictable relationship (e.g. when
-//     the input id stream is in arbitrary order).
-//
-// (2) Hinted - takes an in/out `hint` that the caller carries across calls.
-//     The hint stores the offset returned by the previous call. On each
-//     call we first check whether the hint is still the right answer and
-//     whether `hint + 1` is, before falling back to a full `upper_bound`
-//     (which then refreshes the hint). This gives a ~10-15x speedup when
-//     consecutive queries are monotone-non-decreasing or repeat the same
-//     value, and is essentially as fast as the stateless variant on
-//     fully random input. Initialize `hint` to `0` for the first call;
-//     do NOT reset it between calls (it self-corrects).
+// The overload with the extra `hint` argument checks the position denoted by
+// this `hint` first to see if it's the one we're searching for. If it is, the
+// hint is unchanged for the next call. If it's not, the next position is
+// checked and the hint is updated to that position if it's the correct one. If
+// neither of them is correct, we fall back the to normal computation using
+// `ql::ranges::upper_bound`. This can significantly speed up remapping when
+// there are long sequences of ids that are mostly monotonically increasing.
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions,
                 size_t& hint);

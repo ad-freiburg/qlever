@@ -248,11 +248,6 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, LimitOffsetClause{});
 
-  // Iterating a permutation column-by-column hands `remapVocabId` a stream
-  // of ids that is monotone-non-decreasing within long runs (always so for
-  // the leading column; locally so for the others). The hinted overload
-  // exploits this. The hint persists across columns - it'll be wrong on the
-  // first call after a column switch and self-correct on the second.
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
                   mappedId = Id::makeUndefined(),
