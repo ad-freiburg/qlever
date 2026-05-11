@@ -107,19 +107,16 @@ class GraphStoreProtocol {
                                                             rawRequest,
                                                         const GraphOrDefault&
                                                             graph) {
-    std::optional<ad_utility::triple_component::Iri> gspLocation =
-        [&rawRequest]() -> std::optional<ad_utility::triple_component::Iri> {
-      if (rawRequest.find(boost::beast::http::field::host) !=
-          rawRequest.end()) {
-        return ad_utility::triple_component::Iri::fromIriref(
-            "<http://" +
-            std::string(rawRequest[boost::beast::http::field::host]) + "/" +
-            GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX + ">");
-      }
-      return std::nullopt;
-    }();
-    return gspLocation.has_value() && std::holds_alternative<GraphRef>(graph) &&
-           gspLocation.value() == std::get<GraphRef>(graph);
+    if (!std::holds_alternative<GraphRef>(graph) ||
+        rawRequest.find(boost::beast::http::field::host) == rawRequest.end()) {
+      return false;
+    }
+    ad_utility::triple_component::Iri graphStoreLocation =
+        ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
+            "<http://",
+            std::string(rawRequest[boost::beast::http::field::host]), "/",
+            GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, +">"));
+    return graphStoreLocation == std::get<GraphRef>(graph);
   }
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery

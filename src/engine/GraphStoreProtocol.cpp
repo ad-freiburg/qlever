@@ -88,12 +88,11 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
     const ad_utility::triple_component::Iri& graphIri) {
   namespace http = boost::beast::http;
-  std::string_view iri = graphIri.toStringRepresentation();
-  std::string location(iri.substr(1, iri.size() - 2));
   return ResponseMiddleware(
-      [location](ResponseMiddleware::ResponseT&& response, const auto&) {
+      [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
         response.result(http::status::created);
-        response.set(http::field::location, location);
+        response.set(http::field::location,
+                     asStringViewUnsafe(graphIri.getContent()));
         return std::move(response);
       });
 }

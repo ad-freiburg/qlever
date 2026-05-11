@@ -554,7 +554,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     std::string indexBasename = "ServerTest_gspPostCreateNewGraph";
     TestIndexConfig c{std::move(indexInput)};
     c.indexType = qlever::Filetype::NQuad;
-    auto index = makeTestIndex(indexBasename, c);
+    auto index = makeTestIndex(indexBasename, std::move(c));
     SimulateHttpRequest::ServerSettings settings;
     settings.persistUpdates = persistUpdates;
     SimulateHttpRequest simulateHttpRequest{indexBasename, settings};

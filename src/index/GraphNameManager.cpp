@@ -9,6 +9,8 @@
 
 #include "index/GraphNameManager.h"
 
+#include <filesystem>
+
 #include "util/Serializer/FileSerializer.h"
 
 // _____________________________________________________________________________

@@ -42,13 +42,14 @@ struct ResponseMiddleware {
   ResponseT applyQuery(ResponseT response) const {
     AD_CONTRACT_CHECK(
         std::holds_alternative<QueryMiddleware>(func_),
-        "Got no `UpdateMetadata` but middleware expects metadata");
+        "Got no `UpdateMetadata` but the middleware expects metadata");
     return std::get<QueryMiddleware>(func_)(std::move(response));
   }
   ResponseT applyUpdate(ResponseT response,
                         const std::vector<UpdateMetadata>& metadata) const {
-    AD_CONTRACT_CHECK(std::holds_alternative<UpdateMiddleware>(func_),
-                      "Got `UpdateMetadata` but middleware takes no metadata");
+    AD_CONTRACT_CHECK(
+        std::holds_alternative<UpdateMiddleware>(func_),
+        "Got `UpdateMetadata` but the middleware takes no metadata");
     return std::get<UpdateMiddleware>(func_)(std::move(response), metadata);
   }
 };

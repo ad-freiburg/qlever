@@ -62,7 +62,7 @@ class GraphNameManager {
   void writeToDisk() const;
   // Read the state from disk to restore it after a restart.
   void readFromDisk();
-  // Sets the file where the state is persisted to and tries to read the state.
+  // Set the file where the state is persisted to and try to read the state.
   void setFilenameForPersistingAndReadFromDisk(std::filesystem::path filename);
 
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
