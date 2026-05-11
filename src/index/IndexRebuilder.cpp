@@ -441,8 +441,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   if (index.usePatterns()) {
     net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
-          [&insertionPositions, hint = size_t{0}](const Id& oldId) mutable {
-            return remapVocabId(oldId, insertionPositions, hint);
+          [&insertionPositions](const Id& oldId) {
+            return remapVocabId(oldId, insertionPositions);
           });
       newIndex.writePatternsToFile();
     });
