@@ -254,6 +254,18 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
+    // Mimic `QueryExecutionTree::getJoinColumns` and make sure to get a query
+    // plan that is sorted the correct way.
+    pq._isInternalSort = IsInternalSort::True;
+    pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
+                  ql::views::filter([&visibleVars = pq.getVisibleVariables()](
+                                        const Variable& variable) {
+                    return ad_utility::contains(visibleVars, variable);
+                  }) |
+                  ql::views::transform([](const Variable& variable) {
+                    return VariableOrderKey{variable};
+                  }) |
+                  ::ranges::to<std::vector>;
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
     // Hide non-visible variables in the subtree, so that they are not
