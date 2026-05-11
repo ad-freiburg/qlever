@@ -2,7 +2,7 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
-add_library(basicParser ParallelBuffer.cpp Tokenizer.cpp LiteralOrIri.cpp)
+add_library(basicParser ParallelBuffer.cpp Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp)
 qlever_target_link_libraries(basicParser util rdfTypes parserData)
 
 add_library(parser
@@ -30,6 +30,5 @@ add_library(parser
         MaterializedViewQuery.cpp
         GraphPatternAnalysis.cpp
         ExternalValuesQuery.cpp
-        WordsAndDocsFileParser.cpp
 )
 qlever_target_link_libraries(parser basicParser sparqlParser parserData sparqlExpressions rdfEscaping global util index rdfTypes)
