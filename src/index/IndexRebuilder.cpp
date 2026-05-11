@@ -134,18 +134,17 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 
 // _____________________________________________________________________________
 namespace {
-// Shared core: full `upper_bound` over `insertionPositions`. Returned by both
-// `remapVocabId` overloads when the cached hint is unhelpful (or absent).
-AD_ALWAYS_INLINE size_t fullUpperBoundOffset(
+// Compute by what offset `value` needs to be increase to fit in the new index.
+AD_ALWAYS_INLINE size_t computeIndexOffset(
     VocabIndex value, const InsertionPositions& insertionPositions) {
   return ql::ranges::distance(
       insertionPositions.begin(),
       ql::ranges::upper_bound(insertionPositions, value, std::less{}));
 }
 
-// Shared core: assemble the result `Id` from the original value plus the
-// computed offset.
-AD_ALWAYS_INLINE Id assembleRemapped(VocabIndex value, size_t offset) {
+// Apply `offset` to `value` and return the new `VocabIndex` resulting from
+// this.
+AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
   return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
 }
 }  // namespace
@@ -157,8 +156,7 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
   auto value = original.getVocabIndex();
-  return assembleRemapped(value,
-                          fullUpperBoundOffset(value, insertionPositions));
+  return applyOffset(value, computeIndexOffset(value, insertionPositions));
 }
 
 // _____________________________________________________________________________
@@ -168,34 +166,32 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
+  AD_EXPENSIVE_CHECK(hint <= insertionPositions.size(),
+                     "Hint must be a valid index into the insertion positions "
+                     "or equal to its size.");
   auto value = original.getVocabIndex();
-  const size_t n = insertionPositions.size();
+  auto isUpperBound = [value, &insertionPositions](size_t candidate) {
+    return candidate == insertionPositions.size() ||
+           insertionPositions[candidate] > value;
+  };
 
-  // Step 1: is the cached hint still the upper_bound for `value`?
-  //   Left-ok:  hint == 0  ||  insertionPositions[hint - 1] <= value
-  //   Right-ok: hint == n  ||  insertionPositions[hint]      >  value
-  bool leftOk = (hint == 0) || (insertionPositions[hint - 1] <= value);
-  bool rightOk = (hint == n) || (insertionPositions[hint] > value);
-  if (leftOk && rightOk) [[likely]] {
-    return assembleRemapped(value, hint);
-  }
-
-  // Step 2: if the hint was too low (very common on monotone input that
-  // crosses one insertion boundary at a time), peek `hint + 1`.
-  if (!rightOk) {
-    size_t h = hint + 1;
-    if (h == n || insertionPositions[h] > value) {
-      hint = h;
-      return assembleRemapped(value, hint);
+  // Check if the cached hint is still the upper_bound for `value`.
+  if (isUpperBound(hint)) [[likely]] {
+    if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+      return applyOffset(value, hint);
+    }
+  } else {
+    // Try the next index if we're no longer the upper bound.
+    size_t next = hint + 1;
+    if (isUpperBound(next)) [[likely]] {
+      hint = next;
+      return applyOffset(value, hint);
     }
   }
 
-  // Step 3: full fallback. We use the unbounded `upper_bound` (rather than
-  // bounding it by `hint`) because the always-hit `n/2` first-mid keeps the
-  // top of the binary-search tree hot in L1 -- a bounded fallback would
-  // start each search at a different `mid` and lose that locality.
-  hint = fullUpperBoundOffset(value, insertionPositions);
-  return assembleRemapped(value, hint);
+  // Fallback and write the hint for the next iteration.
+  hint = computeIndexOffset(value, insertionPositions);
+  return applyOffset(value, hint);
 }
 
 // _____________________________________________________________________________
