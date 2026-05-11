@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -168,6 +169,8 @@ class Server {
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
 
+  std::string originalBasename_;
+
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
@@ -277,7 +280,7 @@ class Server {
       std::shared_ptr<Index> index,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       std::string_view operationName, std::string_view operationSPARQL,
-      ad_utility::websocket::MessageSender& messageSender,
+      ad_utility::websocket::MessageSender messageSender,
       const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
       bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;

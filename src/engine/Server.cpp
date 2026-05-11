@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -12,7 +13,6 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <sstream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -33,10 +33,10 @@
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
-#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -88,6 +88,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
                         std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
+  originalBasename_ = indexBaseName;
   auto index = this->index();
   index->usePatterns() = usePatterns;
   index->loadAllPermutations() = loadAllPermutations;
@@ -301,7 +302,7 @@ auto Server::prepareOperation(
     std::shared_ptr<Index> index,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     std::string_view operationName, std::string_view operationSPARQL,
-    ad_utility::websocket::MessageSender& messageSender,
+    ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
@@ -330,10 +331,16 @@ auto Server::prepareOperation(
               : "")
       << "\n"
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
+  auto sharedMessageSender =
+      std::make_shared<ad_utility::websocket::MessageSender>(
+          std::move(messageSender));
   auto qec = std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(materializedViewsManager),
-      std::ref(messageSender), pinSubtrees, pinResult);
+      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
+        (*sharedMessageSender)(std::move(json));
+      },
+      pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
@@ -667,7 +674,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(index, materializedViewsManager, operationName,
-                         operationString, messageSender, parameters,
+                         operationString, std::move(messageSender), parameters,
                          timeLimit.value(), accessTokenOk);
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
@@ -1510,6 +1517,18 @@ void Server::writeMaterializedView(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
+  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
+    throw std::runtime_error{absl::StrCat(
+        "Can't build index with base name \"", indexBaseName,
+        "\" because there are already files with the same base name "
+        "in the same directory")};
+  }
+  if (!qlever::util::isSubdirectoryOf(indexBaseName, originalBasename_)) {
+    throw std::runtime_error{absl::StrCat(
+        "Can't build index with base name \"", indexBaseName,
+        "\" because it is not located in the same directory as the "
+        "current index")};
+  }
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto [index, oldManager] = indexAndViewsSnapshot();
