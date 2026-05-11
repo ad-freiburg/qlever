@@ -38,6 +38,7 @@ class CopyableAtomic : public std::atomic<T> {
 
  public:
   using Base::Base;
+  using Base::value_type;
   CopyableAtomic(const CopyableAtomic& rhs) : Base{rhs.load()} {}
   CopyableAtomic& operator=(const CopyableAtomic& rhs) {
     static_cast<Base&>(*this) = rhs.load();
