@@ -25,19 +25,8 @@ struct RuntimeParameters {
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
 
-  // Serializers for the `LogLevel` enum, used by `LogLevelParameter`.
-  struct LogLevelFromString {
-    LogLevel operator()(const std::string& s) const {
-      return LogLevel::fromString(s);
-    }
-  };
-  struct LogLevelToString {
-    std::string operator()(LogLevel level) const {
-      return std::string{level.toString()};
-    }
-  };
   using LogLevelParameter =
-      ad_utility::Parameter<LogLevel, LogLevelFromString, LogLevelToString>;
+      ad_utility::Parameter<LogLevel, LogLevel::FromString, LogLevel::ToString>;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE

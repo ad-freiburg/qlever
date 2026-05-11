@@ -6,7 +6,6 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
-#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -95,21 +94,17 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // _____________________________________________________________________________
 // Some tests require a certain log level, e.g. but not only because they
 // capture log output and make assertions about it. This macro can be used to
-// skip such tests if the log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                           \
-  if (LOGLEVEL < level) {                                          \
-    GTEST_SKIP() << "This test requires log level of at least "    \
-                 << ad_utility::LogLevel{level}.toString()         \
-                 << ", but the compile-time log level is "         \
-                 << ad_utility::LogLevel{LOGLEVEL}.toString();     \
-  }                                                                \
-  ASSERT_GE(LOGLEVEL, level);                                      \
-  absl::Cleanup scopedRuntimeLogLevelAddedBySkipIfLoglevelIsLower{ \
-      [previous_ = ::ad_utility::detail::runtimeLogLevel.exchange( \
-           level, std::memory_order_relaxed)]() {                  \
-        ::ad_utility::detail::runtimeLogLevel.store(               \
-            previous_, std::memory_order_relaxed);                 \
-      }};
+// skip such tests if the runtime log level is too low.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                       \
+  if (::ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed) <  \
+      (level)) {                                                               \
+    GTEST_SKIP() << "This test requires a runtime log level of at least "      \
+                 << ad_utility::LogLevel{level}.toString()                     \
+                 << ", but the current runtime log level is "                  \
+                 << ad_utility::LogLevel{::ad_utility::detail::runtimeLogLevel \
+                                             .load(std::memory_order_relaxed)} \
+                        .toString();                                           \
+  }
 
 // _____________________________________________________________________________
 
