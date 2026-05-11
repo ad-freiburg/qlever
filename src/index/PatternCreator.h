@@ -131,7 +131,7 @@ class PatternCreator {
   explicit PatternCreator(std::string basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{std::move(basename)},
-        tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
+        tripleBuffer_(100'000, filename_ + ".tripleBufferForPatterns.dat"),
         tripleSorter_{
             std::make_unique<PSOSorter>(
                 filename_ + ".additionalTriples.pso.dat", memoryLimit / 2,

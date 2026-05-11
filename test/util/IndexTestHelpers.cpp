@@ -4,6 +4,9 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
+
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -359,8 +362,24 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
   if (!contextMap.contains(c)) {
-    std::string testIndexBasename =
-        "_staticGlobalTestIndex" + std::to_string(contextMap.size());
+    // Derive a per-test basename from the currently running gtest. Different
+    // test binaries (running in parallel via `ctest -j`) never share a test
+    // name, so this avoids clashes on shared index files.
+    //
+    // The `"noTest"` fallback is only there because the benchmarking code
+    // (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) also calls `getQec()`,
+    // and in that context there is no currently running gtest. Unit tests
+    // themselves always go through the `testInfo` branch.
+    const auto* testInfo =
+        ::testing::UnitTest::GetInstance()->current_test_info();
+    std::string testKey = testInfo ? absl::StrCat(testInfo->test_suite_name(),
+                                                  "_", testInfo->name())
+                                   : std::string{"noTest"};
+    // Test names from parameterized tests can contain `/`, which is not a
+    // valid character in our basenames.
+    testKey = absl::StrReplaceAll(testKey, {{"/", "_"}});
+    std::string testIndexBasename = "_staticGlobalTestIndex" + testKey + "_" +
+                                    std::to_string(contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
                      for (const std::string& indexFilename :

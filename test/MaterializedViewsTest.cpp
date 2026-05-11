@@ -679,7 +679,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Write fake view metadata with unsupported version.
       nlohmann::json viewInfo = {{"version", 0}};
       ad_utility::makeOfstream(
-          "_materializedViewsTestIndex.view.testView5.viewinfo.json")
+          absl::StrCat(testIndexBase_, ".view.testView5.viewinfo.json"))
           << viewInfo.dump() << std::endl;
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -697,7 +697,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Remove the `query` key from the metadata JSON file.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView6.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("query");
       ad_utility::makeOfstream(metadataFilename)
@@ -719,7 +719,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // file, in particular, no `UndefStatus`.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView7.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView7.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("columns");
       viewInfo["columns"] = std::vector<std::string>{"?s", "?p", "?o", "?g"};
@@ -749,7 +749,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     Permutation testPermutation{Permutation::Enum::SPO,
                                 ad_utility::makeUnlimitedAllocator<Id>()};
     const std::string testView1Filename =
-        "_materializedViewsTestIndex.view.testView1";
+        absl::StrCat(testIndexBase_, ".view.testView1");
     // A materialized view permutation does not have a corresponding internal
     // permutation.
     EXPECT_ANY_THROW(testPermutation.loadFromDisk(
@@ -1473,7 +1473,8 @@ constexpr std::string_view geoBoundingBoxesViewQuery = R"(
 
 // Automatic `BIND` push-down for bounding boxes in `SpatialJoin`.
 TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
-  const std::string onDiskBase = "_materializedViewRewriteSpatialJoin";
+  const std::string onDiskBase =
+      materializedViewsTestHelpers::makeMaterializedViewsTestBasename();
   const std::string viewName = "geoms";
 
   // Initialize engine on test index.
@@ -1587,7 +1588,8 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
       " <m2> <p2> <http://example.com/> . \n"
       " <m2> <p3> \"abc\" . \n"
       " <s2> <p3> <o3> . \n";
-  const std::string onDiskBase = "_materializedViewRewriteChain";
+  const std::string onDiskBase =
+      materializedViewsTestHelpers::makeMaterializedViewsTestBasename();
   const std::string viewName = "testViewChain";
 
   // Initialized libqlever.

@@ -59,12 +59,25 @@ inline void removeTestIndex(const std::string& basename) {
 }
 
 // _____________________________________________________________________________
+// Derive a basename that includes the currently running gtest's test name.
+inline std::string makeMaterializedViewsTestBasename() {
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  // Test names from parameterized tests can contain `/`, which is not valid in
+  // a filesystem path. Replace it with `_`.
+  std::string name =
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
+  std::replace(name.begin(), name.end(), '/', '_');
+  return absl::StrCat("_materializedViewsTestIndex_", name);
+}
+
 class MaterializedViewsTest : public ::testing::Test {
  private:
   std::shared_ptr<qlever::Qlever> qlv_;
 
  protected:
-  const std::string testIndexBase_ = "_materializedViewsTestIndex";
+  const std::string testIndexBase_ = makeMaterializedViewsTestBasename();
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
 
