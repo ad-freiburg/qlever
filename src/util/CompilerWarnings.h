@@ -44,6 +44,15 @@
   _Pragma("GCC diagnostic push")             \
       _Pragma("GCC diagnostic ignored \"-Waggressive-loop-optimizations\"")
 
+// Disable the `dangling-reference` warning, which produces false positives
+// when `std::visit` returns a reference or when a reference is bound to the
+// result of an immediately-invoked lambda that returns a reference to a static
+// local. The warning was introduced in GCC 13; the pragma is a no-op on
+// earlier versions that don't know the flag.
+#define DISABLE_DANGLING_REFERENCE_WARNINGS \
+  _Pragma("GCC diagnostic push")            \
+      _Pragma("GCC diagnostic ignored \"-Wdangling-reference\"")
+
 // Re-enable the warnings disabled by the last `DISABLE_...` call.
 #define GCC_REENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 
@@ -54,6 +63,7 @@
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_FREE_NONHEAP_WARNINGS
 #define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
+#define DISABLE_DANGLING_REFERENCE_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 

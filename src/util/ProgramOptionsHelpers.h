@@ -11,6 +11,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/CompilerWarnings.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -106,9 +107,14 @@ class ParameterToProgramOptionFactory {
   template <auto ParameterPtr>
   auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
-    // value of the command-line option.
+    // value of the command-line option. GCC's `-Wdangling-reference` fires
+    // here because it cannot prove that the reference returned by `rlock()`
+    // does not point into the temporary lock guard rather than into the
+    // persistent underlying `RuntimeParameters` object.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     const auto& param =
         std::invoke(ParameterPtr, *globalRuntimeParameters.rlock());
+    GCC_REENABLE_WARNINGS
     auto defaultValue = param.get();
     // This is needed for types that boost can't convert to string.
     auto defaultValueAsString = param.toString();
