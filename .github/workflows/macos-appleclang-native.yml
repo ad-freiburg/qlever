@@ -55,7 +55,7 @@ jobs:
       - name: Test
         id: complete_tests
         working-directory: ${{github.workspace}}/build/test
-        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j .
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(sysctl -n hw.ncpu) .
 
       - name: Running and printing the benchmark examples.
         working-directory: ${{github.workspace}}/build
