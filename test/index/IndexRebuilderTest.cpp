@@ -220,9 +220,9 @@ TEST(IndexRebuilder, remapVocabId) {
 
 // _____________________________________________________________________________
 // Same expected values as `remapVocabId`, but exercising the hinted overload.
-// The hint is intentionally re-used across all calls (the same way the
-// production call site does it) and across non-monotone inputs to verify
-// that it self-corrects.
+// The hint is intentionally reused across all calls (the same way the
+// production call site does it) and across non-monotone inputs to verify that
+// it self-corrects.
 TEST(IndexRebuilder, remapVocabIdHinted) {
   std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
                                   VocabIndex::make(7)};
