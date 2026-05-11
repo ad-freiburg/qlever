@@ -46,4 +46,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(BlockSizeLocatedTriplesBenchmark index)
 
+    addAndLinkBenchmark(LocatedTriplesInsertScenariosBenchmark index)
+
 endif()
