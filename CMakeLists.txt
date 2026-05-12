@@ -298,7 +298,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
+    # Unreliable on large translation units; formatting is enforced by clang-format anyway.
+    add_compile_options(-Wno-misleading-indentation)
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
