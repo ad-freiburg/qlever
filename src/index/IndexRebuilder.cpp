@@ -33,6 +33,7 @@
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
@@ -133,6 +134,7 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
+DISABLE_ATTRIBUTE_WARNINGS
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
@@ -145,6 +147,7 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
   return Id::makeFromVocabIndex(
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
+GCC_REENABLE_WARNINGS
 
 // _____________________________________________________________________________
 std::optional<Id> tryRemapBlankNodeId(Id original,

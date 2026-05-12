@@ -44,6 +44,13 @@
   _Pragma("GCC diagnostic push")             \
       _Pragma("GCC diagnostic ignored \"-Waggressive-loop-optimizations\"")
 
+// Disable the `attributes` warning (mostly happens on functions marked
+// AD_ALWAYS_INLINE which are used in ways that do not allow inline (e.g. across
+// translation units).
+#define DISABLE_ATTRIBUTE_WARNINGS \
+  _Pragma("GCC diagnostic push")   \
+      _Pragma("GCC diagnostic ignored \"-Wattributes\"")
+
 // Re-enable the warnings disabled by the last `DISABLE_...` call.
 #define GCC_REENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 
@@ -54,6 +61,7 @@
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_FREE_NONHEAP_WARNINGS
 #define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
+#define DISABLE_ATTRIBUTE_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 
