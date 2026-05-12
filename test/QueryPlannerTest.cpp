@@ -2656,6 +2656,13 @@ TEST(QueryPlanner, Exists) {
                           h::IndexScanFromStrings("?s", "?p", "?o",
                                                   {Permutation::Enum::SPO,
                                                    Permutation::Enum::SOP}))));
+  h::expect("SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "?p", "<o>",
+                                                  {Permutation::Enum::OSP}),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO}))));
 }
 
 // _____________________________________________________________________________
