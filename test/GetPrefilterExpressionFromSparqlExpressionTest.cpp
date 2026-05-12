@@ -620,12 +620,16 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
                        pr(inExpr({}), var));
   // For Double reference values, the year is rounded to the nearest integer.
   evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), DoubleId(2000.7)),
-                       pr(ge(getDateId(2002)), var));
+                       pr(ge(getDateId(2001)), var));
+  evalAndEqualityCheck(geSprql(yearSprqlExpr(var), DoubleId(2000.7)),
+                       pr(ge(getDateId(2001)), var));
   evalAndEqualityCheck(
       eqSprql(yearSprqlExpr(var), DoubleId(1999.5)),
       pr(andExpr(lt(getDateId(2001)), ge(getDateId(2000))), var));
+  evalAndEqualityCheck(ltSprql(yearSprqlExpr(var), DoubleId(-10.3)),
+                       pr(lt(getDateId(-10)), var));
   evalAndEqualityCheck(leSprql(yearSprqlExpr(var), DoubleId(-10.3)),
-                       pr(lt(getDateId(-9)), var));
+                       pr(lt(getDateId(-10)), var));
   evalAndEqualityCheck(
       neqSprql(yearSprqlExpr(var), DoubleId(2030.4)),
       pr(orExpr(lt(getDateId(2030)), ge(getDateId(2031))), var));

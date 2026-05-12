@@ -974,19 +974,26 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
     return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
   }
   ValueId valueId = std::get<ValueId>(referenceValue);
-  int year;
   switch (valueId.getDatatype()) {
     case Int:
-      year = valueId.getInt();
-      break;
-    case Double:
-      year = static_cast<int>(std::round(valueId.getDouble()));
-      break;
+      return makePrefilterExpressionYearImpl(
+          comparison, static_cast<int>(valueId.getInt()));
+    case Double: {
+      int year;
+      // Account for rounding semantics.
+      using enum CompOp;
+      if constexpr (comparison == LT || comparison == GE) {
+        year = static_cast<int>(std::ceil(valueId.getDouble()));
+      } else if constexpr (comparison == GT || comparison == LE) {
+        year = static_cast<int>(std::floor(valueId.getDouble()));
+      } else {
+        year = static_cast<int>(std::round(valueId.getDouble()));
+      }
+      return makePrefilterExpressionYearImpl(comparison, year);
+    }
     default:
       return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
   }
-
-  return makePrefilterExpressionYearImpl(comparison, year);
 }
 
 //______________________________________________________________________________
