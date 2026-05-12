@@ -26,20 +26,18 @@ class PrefixRegexExpression : public SparqlExpression {
   // If the variable is wrapped inside a `STR()` function, this is set to true.
   bool childIsStrExpression_ = false;
 
+ public:
   // The `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, otherwise an exception will be
   // thrown.
   PrefixRegexExpression(Ptr child, std::string prefixRegex, Variable variable);
-
- public:
-  PrefixRegexExpression(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression& operator=(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression(const PrefixRegexExpression&) noexcept = delete;
-  PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
-      delete;
+  PrefixRegexExpression(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression& operator=(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression(const PrefixRegexExpression&) = delete;
+  PrefixRegexExpression& operator=(const PrefixRegexExpression&) = delete;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override;
+      const LocalVocabContext& context, bool isNegated) const override;
 
   // Check if the children of this expression allow for the prefix regex
   // optimization. If this is the case, a `PrefixRegexExpression` is returned,
@@ -65,9 +63,9 @@ class PrefixRegexExpression : public SparqlExpression {
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.
-  static void checkCancellation(const EvaluationContext* context,
-                                ad_utility::source_location location =
-                                    ad_utility::source_location::current());
+  static void checkCancellation(
+      const EvaluationContext* context,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC());
 
   // Check if `regex` is a prefix regex which means that it starts with `^` and
   // contains no other "special" regex characters like `*` or `.`. If this check
@@ -76,11 +74,17 @@ class PrefixRegexExpression : public SparqlExpression {
   static std::optional<std::string> getPrefixRegex(std::string regex);
 
   FRIEND_TEST(RegexExpression, getPrefixRegex);
+  FRIEND_TEST(RegexExpression, makePrefixMatchExpression);
 };
 
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags);
+
+// Make a custom `ql:prefix-match` expression which allows for efficient
+// prefix search.
+SparqlExpression::Ptr makePrefixMatchExpression(
+    SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix);
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_REGEXEXPRESSION_H

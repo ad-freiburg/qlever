@@ -80,7 +80,7 @@ Checks all the getters of the class with the wanted memory sizes.
 */
 void checkAllMemorySizeGetter(
     const ad_utility::MemorySize& m, const AllMemoryUnitSizes& ms,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace{generateLocationTrace(l)};
 
   ASSERT_EQ(m.getBytes(), ms.bytes);

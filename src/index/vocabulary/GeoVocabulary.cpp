@@ -68,6 +68,9 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   const void* ptr = &invalidGeoInfoBuffer;
   auto info = GeometryInfo::fromWktLiteral(word);
   if (info.has_value()) {
+    if (!info.value().getMetricArea().isValid()) {
+      ++numInvalidPolygonArea_;
+    }
     ptr = &info.value();
   } else {
     ++numInvalidGeometries_;
@@ -89,6 +92,11 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
                 << " invalid WKT literal"
                 << (numInvalidGeometries_ == 1 ? "" : "s") << std::endl;
+  }
+  if (numInvalidPolygonArea_ > 0) {
+    AD_LOG_WARN << "Geometry preprocessing could not compute the area for "
+                << numInvalidPolygonArea_ << " malformed polygon geometr"
+                << (numInvalidPolygonArea_ == 1 ? "y" : "ies") << std::endl;
   }
 }
 

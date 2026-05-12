@@ -5,8 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H
 #define QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H
 
-#include <functional>
-
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 
 // This file contains helper functions and macros to suppress false-positive

@@ -88,3 +88,17 @@ TEST(TimeTracerTest, exceptions) {
   AD_EXPECT_THROW_WITH_MESSAGE(tracer.beginTrace("test"),
                                testing::HasSubstr("The trace has ended."));
 }
+
+TEST(TimeTracerTest, reset) {
+  ad_utility::timer::TimeTracer tracer("test");
+  tracer.beginTrace("a");
+  tracer.endTrace("a");
+  tracer.endTrace("test");
+  tracer.reset();
+  tracer.beginTrace("f");
+  tracer.endTrace("f");
+  tracer.endTrace("test");
+  EXPECT_THAT(
+      tracer.getJSONShort(),
+      HasKeyMatching("test", testing::AllOf(HasKey("total"), HasKey("f"))));
+}

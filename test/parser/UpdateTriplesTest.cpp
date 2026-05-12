@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "parser/UpdateTriples.h"
 #include "util/CompilerWarnings.h"
 
@@ -20,9 +21,11 @@ TEST(UpdateTriples, DefaultConstructor) {
 
 // _____________________________________________________________________________
 TEST(UpdateTriples, ConstructorsAndAssignments) {
+  auto* qec = ad_utility::testing::getQec();
   LocalVocab l;
-  auto iri = LocalVocabEntry::iriref("<hallo>");
-  l.getIndexAndAddIfNotContained(LocalVocabEntry{iri});
+  auto iri =
+      LocalVocabEntry::fromIriref("<hallo>", qec->getLocalVocabContext());
+  l.getIndexAndAddIfNotContained(iri);
   std::vector<SparqlTripleSimpleWithGraph> triples;
 
   SparqlTripleSimpleWithGraph triple{V{"?x"}, V{"?y"}, V{"?z"},
@@ -31,9 +34,8 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
 
   // Check that the `UpdateTriples tr` consist of exactly the single `triple` as
   // specified above and that the local vocab was also correctly porpagated.
-  auto testTriples = [&](auto&& tr,
-                         ad_utility::source_location loc =
-                             ad_utility::source_location::current()) {
+  auto testTriples = [&](auto&& tr, ad_utility::source_location loc =
+                                        AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     EXPECT_EQ(tr.triples_, triples);
     EXPECT_THAT(tr.localVocab_.getAllWordsForTesting(),

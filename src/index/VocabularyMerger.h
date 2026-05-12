@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
@@ -81,7 +82,7 @@ struct VocabularyMetaData {
     // words that start with the `prefix_` have to be passed in consecutively
     // and their indices have to be consecutive and ascending.
     bool addIfWordMatches(std::string_view word, size_t wordIndex) {
-      if (!word.starts_with(prefix_)) {
+      if (!ql::starts_with(word, prefix_)) {
         return false;
       }
       if (!beginWasSeen_) {
@@ -193,8 +194,6 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
-
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
@@ -230,13 +229,18 @@ class VocabularyMerger {
       return entry_.iriOrLiteral();
     }
 
+    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
+
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
 
-  constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
-    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q.entry_.iriOrLiteral().size());
+  struct SizeOfQueueWord {
+    ad_utility::MemorySize operator()(const QueueWord& q) const {
+      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                           q.entry_.iriOrLiteral().size());
+    }
   };
+  constexpr static SizeOfQueueWord sizeOfQueueWord{};
 
   // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
@@ -246,7 +250,7 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
+      void writeQueueWordsToIdMap(std::vector<QueueWord>& buffer,
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
@@ -257,12 +261,6 @@ class VocabularyMerger {
     lastTripleComponent_ = std::nullopt;
     idMaps_.clear();
   }
-
-  // Inner helper function for the parallel pipeline, which performs the actual
-  // write to the IdMaps. Format of argument is `<mapToWriteTo<internalId,
-  // globalId>>`.
-  void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
 // ____________________________________________________________________________
@@ -280,16 +278,15 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-template <typename T>
-void writeMappedIdsToExtVec(const T& input,
-                            const ad_utility::HashMap<Id, Id>& map,
-                            std::unique_ptr<TripleVec>* writePtr);
+void writeMappedIdsToExtVec(
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
@@ -308,7 +305,7 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-ItemVec vocabMapsToVector(ItemMapArray& map);
+ItemVec vocabMapsToVector(const ItemMapArray& map);
 
 // _____________________________________________________________________________________________________________
 /**
@@ -324,6 +321,6 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
 }  // namespace ad_utility::vocabulary_merger
 
-#include "VocabularyMergerImpl.h"
+#include "index/VocabularyMergerImpl.h"
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYMERGER_H

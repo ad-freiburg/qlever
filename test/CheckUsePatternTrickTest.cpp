@@ -30,7 +30,7 @@ ParsedQuery parseWhereClause(const std::string& whereClause) {
 auto expectContained = [](const std::string& whereClause,
                           const std::string& variable,
                           bool shouldBeContained = true,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectContained");
   auto pq = parseWhereClause(whereClause);
   bool b = isVariableContainedInGraphPattern(Variable{variable},
@@ -46,7 +46,7 @@ auto expectContained = [](const std::string& whereClause,
 // does not contain the `variable`.
 auto expectNotContained = [](const std::string& whereClause,
                              const std::string& variable,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectNotContained");
   expectContained(whereClause, variable, false);
 };
@@ -65,7 +65,7 @@ const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
 // Test that `whereClause`, when parsed as the WHERE clause of a SPARQL query,
 // contains the variables `?x`, `?y`, and `?z`, but not the variable `?not`.
 auto expectXYZContained(const std::string& whereClause,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectContained");
   expectContained(whereClause, "?x");
   expectContained(whereClause, "?y");
@@ -111,7 +111,7 @@ auto expectFirstTripleSuitableForPatternTrick =
            sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
            countedVariable = std::nullopt,
        bool shouldBeSuitable = true,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace =
           generateLocationTrace(l, "expectFirstTripleSuitableForPatternTrick");
       auto pq = SparqlParser::parseQuery(encodedIriManager(), query);
@@ -135,7 +135,7 @@ auto expectFirstTripleNotSuitableForPatternTrick =
        const std::optional<
            sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
            countedVariable = std::nullopt,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "firstTripleNotSuitable");
       expectFirstTripleSuitableForPatternTrick(query, "", "", countedVariable,
                                                false);
@@ -196,7 +196,7 @@ TEST(CheckUsePatternTrick, isTripleSuitable) {
 auto expectQuerySuitableForPatternTrick =
     [](const std::string& query, const std::string& subjectVariable,
        const std::string& predicateVariable, bool shouldBeSuitable = true,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "expectQuerySuitable");
       auto pq = SparqlParser::parseQuery(encodedIriManager(), query);
       auto querySuitable = checkUsePatternTrick::checkUsePatternTrick(&pq);
@@ -212,8 +212,7 @@ auto expectQuerySuitableForPatternTrick =
 
 // Expect that the pattern trick cannot be applied to the given `query`.
 auto expectQueryNotSuitableForPatternTrick =
-    [](const std::string& query,
-       source_location l = source_location::current()) {
+    [](const std::string& query, source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "expectQueryNotSuitable");
       expectQuerySuitableForPatternTrick(query, "", "", false);
     };

@@ -7,7 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <stdexcept>
 
 #include "backports/keywords.h"

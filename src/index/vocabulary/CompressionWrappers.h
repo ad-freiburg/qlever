@@ -81,6 +81,7 @@ struct DecoderMultiplexer {
     ENABLE_CLANG_WARNINGS
   }
   size_t numDecoders() const { return decoders_.size(); }
+  const Decoders& getDecoders() const { return decoders_; }
 };
 }  // namespace detail
 

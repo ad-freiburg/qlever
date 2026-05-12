@@ -1,7 +1,13 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// 2024 Hannah Bast <bast@cs.uni-freiburg.de>
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "rdfTypes/Iri.h"
 
@@ -9,25 +15,39 @@
 
 #include <utility>
 
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
-#include "util/StringUtils.h"
 
 using namespace std::string_view_literals;
 
 namespace ad_utility::triple_component {
-// ____________________________________________________________________________
-Iri::Iri(std::string iri) : iri_{std::move(iri)} {}
 
 // ____________________________________________________________________________
-Iri::Iri(const Iri& prefix, NormalizedStringView suffix)
-    : iri_{absl::StrCat("<"sv, asStringViewUnsafe(prefix.getContent()),
-                        asStringViewUnsafe(suffix), ">"sv)} {};
+template <bool isOwning>
+BasicIri<isOwning>::BasicIri(StorageType iri) : iri_{std::move(iri)} {}
 
 // ____________________________________________________________________________
-NormalizedStringView Iri::getContent() const {
+template <bool isOwning>
+NormalizedStringView BasicIri<isOwning>::getContent() const {
   return asNormalizedStringViewUnsafe(iri_).substr(1, iri_.size() - 2);
+}
+
+// ____________________________________________________________________________
+template <bool isOwning>
+BasicIri<isOwning> BasicIri<isOwning>::fromStringRepresentation(StorageType s) {
+  AD_CORRECTNESS_CHECK(ql::starts_with(s, "<") || ql::starts_with(s, "@"));
+  return BasicIri{std::move(s)};
+}
+
+template class BasicIri<true>;
+template class BasicIri<false>;
+
+// ____________________________________________________________________________
+// Iri (owning) method implementations.
+// ____________________________________________________________________________
+
+Iri Iri::fromStringRepresentation(std::string s) {
+  return Iri{BasicIri<true>::fromStringRepresentation(std::move(s))};
 }
 
 // ____________________________________________________________________________
@@ -38,49 +58,22 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
       absl::StrCat(stringWithBrackets.substr(0, first + 1),
                    asStringViewUnsafe(RdfEscaping::normalizeIriWithBrackets(
                        stringWithBrackets.substr(first))),
-                   ">"sv)};
+                   ">")};
 }
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
-  AD_CORRECTNESS_CHECK(!stringWithoutBrackets.starts_with('<') &&
-                       !stringWithoutBrackets.ends_with('>'));
-  return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};
+  AD_CORRECTNESS_CHECK(!ql::starts_with(stringWithoutBrackets, '<') &&
+                       !ql::ends_with(stringWithoutBrackets, '>'));
+  return Iri{absl::StrCat("<", stringWithoutBrackets, ">")};
 }
 
 // ____________________________________________________________________________
 Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
-  return Iri{prefix, asNormalizedStringViewUnsafe(suffixNormalized)};
-}
-
-// ____________________________________________________________________________
-Iri Iri::getBaseIri(bool domainOnly) const {
-  AD_CORRECTNESS_CHECK(iri_.starts_with('<') && iri_.ends_with('>'), iri_);
-  // Check if we have a scheme and find the first `/` after that (or the first
-  // `/` at all if there is no scheme).
-  size_t pos = iri_.find(schemePattern);
-  if (pos == std::string::npos) {
-    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri_ << "\""
-                << " (but we accept it anyway)" << std::endl;
-    pos = 1;
-  } else {
-    pos += schemePattern.size();
-  }
-  pos = iri_.find('/', pos);
-  // Return the IRI with `/` appended in the following two cases: the IRI has
-  // the empty path, or `domainOnly` is false and the final `/` is missing.
-  if (pos == std::string::npos ||
-      (!domainOnly && iri_[iri_.size() - 2] != '/')) {
-    return fromIrirefWithoutBrackets(
-        absl::StrCat(std::string_view(iri_).substr(1, iri_.size() - 2), "/"sv));
-  }
-  // If `domainOnly` is true, remove the path part.
-  if (domainOnly) {
-    return fromIrirefWithoutBrackets(std::string_view(iri_).substr(1, pos));
-  }
-  // Otherwise, return the IRI as is.
-  return *this;
+  return Iri{absl::StrCat(
+      "<", asStringViewUnsafe(prefix.getContent()),
+      asStringViewUnsafe(asNormalizedStringViewUnsafe(suffixNormalized)), ">")};
 }
 
 // ____________________________________________________________________________
@@ -109,15 +102,33 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
 }
 
 // ____________________________________________________________________________
-Iri Iri::fromStringRepresentation(std::string s) {
-  AD_CORRECTNESS_CHECK(s.starts_with("<") || s.starts_with("@"));
-  return Iri{std::move(s)};
+Iri Iri::getBaseIri(bool domainOnly) const {
+  AD_CORRECTNESS_CHECK(ql::starts_with(iri(), '<') && ql::ends_with(iri(), '>'),
+                       iri());
+  // Check if we have a scheme and find the first `/` after that (or the first
+  // `/` at all if there is no scheme).
+  size_t pos = iri().find(schemePattern);
+  if (pos == std::string::npos) {
+    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri() << "\""
+                << " (but we accept it anyway)" << std::endl;
+    pos = 1;
+  } else {
+    pos += schemePattern.size();
+  }
+  pos = iri().find('/', pos);
+  // Return the IRI with `/` appended in the following two cases: the IRI has
+  // the empty path, or `domainOnly` is false and the final `/` is missing.
+  if (pos == std::string::npos ||
+      (!domainOnly && iri()[iri().size() - 2] != '/')) {
+    return fromIrirefWithoutBrackets(
+        absl::StrCat(std::string_view(iri()).substr(1, iri().size() - 2), "/"));
+  }
+  // If `domainOnly` is true, remove the path part.
+  if (domainOnly) {
+    return fromIrirefWithoutBrackets(std::string_view(iri()).substr(1, pos));
+  }
+  // Otherwise, return the IRI as is.
+  return *this;
 }
-
-// ____________________________________________________________________________
-const std::string& Iri::toStringRepresentation() const { return iri_; }
-
-// ____________________________________________________________________________
-std::string& Iri::toStringRepresentation() { return iri_; }
 
 }  // namespace ad_utility::triple_component

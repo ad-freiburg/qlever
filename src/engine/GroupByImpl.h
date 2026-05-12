@@ -121,11 +121,11 @@ class GroupByImpl : public Operation {
   // function returns the starting index of the last block of this `idTable`.
   // The argument `currentGroupBlock` is used to store the values of the group
   // by columns for the current group.
-  CPP_template(int COLS,
-               typename T)(requires ranges::invocable<T, size_t, size_t>) size_t
-      searchBlockBoundaries(const T& onBlockChange,
-                            const IdTableView<COLS>& idTable,
-                            GroupBlock& currentGroupBlock) const;
+  template <int COLS, typename T>
+  QL_CONCEPT_OR_NOTHING(requires ranges::invocable<T, size_t, size_t>)
+  size_t searchBlockBoundaries(const T& onBlockChange,
+                               const IdTableView<COLS>& idTable,
+                               GroupBlock& currentGroupBlock) const;
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>
@@ -445,7 +445,8 @@ class GroupByImpl : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function of `evaluateAlias`.
   // 1. In the Expressions for the aliases of this GROUP BY, replace all
@@ -464,7 +465,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator,
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator,
       std::vector<HashMapAggregateInformation>& info,
       const std::vector<HashMapGroupedVariableInformation>& substitutions);
 
@@ -476,7 +478,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function to evaluate the child expression of an aggregate function.
   // Only `COUNT(*)` does not have a single child, so we make a special case for
@@ -531,8 +534,8 @@ class GroupByImpl : public Operation {
           std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
           size_t endIndex,
           const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          IdTable* resultTable, LocalVocab* localVocab,
-          const Allocator& allocator);
+          IdTable* resultTable, const LocalVocabContext& context,
+          LocalVocab* localVocab, const Allocator& allocator);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
@@ -631,7 +634,7 @@ class GroupByImpl : public Operation {
 // _____________________________________________________________________________
 namespace groupBy::detail {
 template <typename A>
-concept VectorOfAggregationData =
+CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 

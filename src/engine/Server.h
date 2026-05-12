@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -12,12 +13,13 @@
 #include <string>
 #include <vector>
 
-#include "ExecuteUpdate.h"
-#include "engine/Engine.h"
+#include "engine/ExecuteUpdate.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
@@ -35,6 +37,11 @@ CPP_concept QueryOrUpdate =
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
 
+// Forward declaration for testing.
+namespace serverTestHelpers {
+struct SimulateHttpRequest;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -42,11 +49,13 @@ class Server {
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  FRIEND_TEST(IndexRebuilder, serverIntegration);
+  friend serverTestHelpers::SimulateHttpRequest;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -54,14 +63,16 @@ class Server {
   //! Initialize the server.
   void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false);
+                  bool persistUpdates = false,
+                  std::vector<std::string> preloadMaterializedViews = {});
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run(const std::string& indexBaseName, bool useText,
            bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false);
+           bool persistUpdates = false,
+           std::vector<std::string> preloadMaterializedViews = {});
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -71,17 +82,47 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
+  // As the `QueryExecutionTree` stores a raw pointer to the
+  // `QueryExecutionContext`, We additionally store the context as a
+  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
+  // server code.
   struct PlannedQuery {
+   private:
+    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
+    // is destroyed after it. The `QueryExecutionTree` holds operations with
+    // raw `_executionContext` pointers to the QEC, and their lazy result
+    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
+    // last `shared_ptr` and is destroyed first, the QEC is freed while the
+    // operations still reference it.
+    std::shared_ptr<const QueryExecutionContext> qec_;
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
+
+   public:
+    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+                 const QueryExecutionContext& qec)
+        : qec_{qec.shared_from_this()},
+          parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)} {
+      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+    }
+
+    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+    ParsedQuery& parsedQuery() { return parsedQuery_; }
+    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
+    const QueryExecutionTree& queryExecutionTree() const {
+      return queryExecutionTree_;
+    }
   };
 
  private:
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
+  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
@@ -102,12 +143,17 @@ class Server {
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
 
+  // Indicates if an index rebuild is currently in progress so that we prevent
+  // triggering this twice.
+  std::atomic_bool rebuildInProgress_{false};
+
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
   using TimeLimit = std::chrono::milliseconds;
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+  using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -140,6 +186,12 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, ResponseT&& send);
 
+  // Helper function for unit tests, calls `process` with the given request and
+  // returns the response that would have been sent.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
+
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
@@ -167,10 +219,10 @@ class Server {
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
-  // For an executed update create a json with some stats on the update (timing,
+  // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
-      const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
+      const Index& index, const LocatedTriplesState& locatedTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
@@ -180,7 +232,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           std::vector<ParsedQuery>&& updates,
-          const ad_utility::Timer& requestTimer,
+          const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
@@ -202,7 +254,7 @@ class Server {
   //  Prepare the execution of an operation
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
-                        ad_utility::websocket::MessageSender& messageSender,
+                        ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
@@ -212,10 +264,13 @@ class Server {
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
-  // in the named query cache. Throws if named pinning is required, but the
-  // access token is not okay.
+  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
+  // expected to be the variable name of a column (without leading `?`) on which
+  // a geometry index should be built. Throws if named pinning is required, but
+  // the access token is not okay.
   static void configurePinnedResultWithName(
-      const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
@@ -245,11 +300,11 @@ class Server {
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
-  template <std::invocable Function,
-            typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
-                                  Function function,
-                                  SharedCancellationHandle handle);
+  CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
+      requires ql::concepts::invocable<Function>)
+      Awaitable<T> computeInNewThread(
+          boost::asio::static_thread_pool& threadPool, Function function,
+          SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -296,6 +351,7 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+  FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
@@ -316,6 +372,22 @@ class Server {
           ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
+
+  // Given a name and query, compute the query result and write a new
+  // materialized view of this result to disk. This assumes that the access
+  // token has already been checked.
+  void writeMaterializedView(
+      const std::string& name,
+      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      TimeLimit timeLimit);
+  FRIEND_TEST(MaterializedViewsTest, serverIntegration);
+
+  // Trigger an index rebuild with `indexBaseName` as the base name for the new
+  // index. This assumes that the access token has already been checked and no
+  // other build is currently in progress.
+  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

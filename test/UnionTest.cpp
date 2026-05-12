@@ -79,8 +79,7 @@ TEST(Union, computeUnionLarge) {
 // _____________________________________________________________________________
 TEST(Union, computeUnionLazy) {
   auto runTest = [](bool nonLazyChildren, bool invisibleSubtreeColumns,
-                    ad_utility::source_location loc =
-                        ad_utility::source_location::current()) {
+                    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(loc);
     auto* qec = ad_utility::testing::getQec();
     qec->getQueryTreeCache().clearAll();
@@ -353,16 +352,16 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test1\""));
+  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test2\""));
+  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));
@@ -690,7 +689,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union2{qec, values, index};
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -698,7 +697,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union3{qec, index, values};
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -706,7 +705,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union4{qec, index, index};
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);

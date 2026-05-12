@@ -31,10 +31,6 @@ auto lit = [](std::string_view s) {
   return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
 };
 
-auto iriref = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(iri(s));
-};
-
 // Convenient access to constants for "infinity" and "not a number". The
 // spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
@@ -128,7 +124,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 }
 
 auto expectTrue = [](const ExpressionResult& result,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -136,7 +132,7 @@ auto expectTrue = [](const ExpressionResult& result,
 };
 
 auto expectFalse = [](const ExpressionResult& result,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -146,7 +142,7 @@ auto expectFalse = [](const ExpressionResult& result,
 // Assert that the given `expression`, when evaluated on the `TestContext` (see
 // above), has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -156,7 +152,7 @@ auto expectTrueBoolean = [](const SparqlExpression& expression,
 
 // Similar to `expectTrueBoolean`, but assert that the boolean is `false`.
 auto expectFalseBoolean = [](const SparqlExpression& expression,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -165,7 +161,7 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
 };
 
 auto expectUndefined = [](const SparqlExpression& expression,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectUndefined was called here");
   auto result = evaluateOnTestContext(expression);
   if (std::holds_alternative<Id>(result)) {
@@ -188,7 +184,7 @@ auto expectUndefined = [](const SparqlExpression& expression,
 template <typename T, typename U>
 auto testLessThanGreaterThanEqualHelper(
     std::pair<T, U> lessThanPair, std::pair<T, U> greaterThanPair,
-    std::pair<T, U> equalPair, source_location l = source_location::current()) {
+    std::pair<T, U> equalPair, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualHelper was called here");
   auto True = expectTrueBoolean;
@@ -221,9 +217,10 @@ auto testLessThanGreaterThanEqualHelper(
 // `ValueId` before the call; the second element  is ...; both elements are ...
 // Requires that both `leftValue` and `rightValue` are numeric constants.
 template <typename L, typename R>
-void testLessThanGreaterThanEqual(
-    std::pair<L, R> lessThanPair, std::pair<L, R> greaterThanPair,
-    std::pair<L, R> equalPair, source_location l = source_location::current()) {
+void testLessThanGreaterThanEqual(std::pair<L, R> lessThanPair,
+                                  std::pair<L, R> greaterThanPair,
+                                  std::pair<L, R> equalPair,
+                                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace =
       generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
 
@@ -241,7 +238,7 @@ void testLessThanGreaterThanEqual(
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
 void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testNotEqualHelper was called here");
@@ -264,7 +261,7 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
 }
 
 void testUndefHelper(auto leftValueIn, auto rightValueIn,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testUndefHelper was called here");
@@ -290,7 +287,7 @@ void testUndefHelper(auto leftValueIn, auto rightValueIn,
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
 void testNotEqual(auto leftValue, auto rightValue,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
 }
@@ -322,31 +319,39 @@ TEST(RelationalExpression, DoubleAndDouble) {
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri, IdOrLiteralOrIri>(
-      {lit("alpha"), lit("beta")}, {lit("sigma"), lit("delta")},
-      {lit("epsilon"), lit("epsilon")});
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, IdOrLocalVocabEntry>(
+      {lve("alpha"), lve("beta")}, {lve("sigma"), lve("delta")},
+      {lve("epsilon"), lve("epsilon")});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions.
   // TODO<joka921> Add an example for strings that are bytewise different but
   // equal on the unicode level (e.g.`ä` vs `a + dots`.
-  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
-  // IdOrLiteralOrIri>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry,
+  // IdOrLocalVocabEntry>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
-  auto stringVec = VectorWithMemoryLimit<IdOrLiteralOrIri>(
-      {lit("hallo"), lit("by"), lit("")}, makeAllocator());
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  auto stringVec = VectorWithMemoryLimit<IdOrLocalVocabEntry>(
+      {lve("hallo"), lve("by"), lve("")}, makeAllocator());
   auto intVec =
       VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
-  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("hallo")});
-  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("3")});
-  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("hallo")});
-  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("-12.0")});
-  testUndefHelper(intVec.clone(), IdOrLiteralOrIri{lit("someString")});
-  testUndefHelper(doubleVec.clone(), IdOrLiteralOrIri{lit("someString")});
+  testUndefHelper(int64_t{3}, IdOrLocalVocabEntry{lve("hallo")});
+  testUndefHelper(int64_t{3}, IdOrLocalVocabEntry{lve("3")});
+  testUndefHelper(-12.0, IdOrLocalVocabEntry{lve("hallo")});
+  testUndefHelper(-12.0, IdOrLocalVocabEntry{lve("-12.0")});
+  testUndefHelper(intVec.clone(), IdOrLocalVocabEntry{lve("someString")});
+  testUndefHelper(doubleVec.clone(), IdOrLocalVocabEntry{lve("someString")});
   testUndefHelper(int64_t{3}, stringVec.clone());
   testUndefHelper(intVec.clone(), stringVec.clone());
   testUndefHelper(doubleVec.clone(), stringVec.clone());
@@ -382,7 +387,7 @@ struct ExpressionEvaluator {
 // rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
 template <typename T, typename U>
 void testLessThanGreaterThanEqualMultipleValuesHelper(
-    T leftValue, U rightValue, source_location l = source_location::current()) {
+    T leftValue, U rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
 
@@ -460,8 +465,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 // or numeric vectors, and that at least one of them is a vector.
 template <typename T1, typename T2>
 void testLessThanGreaterThanEqualMultipleValues(
-    T1 leftValue, T2 rightValue,
-    source_location l = source_location::current()) {
+    T1 leftValue, T2 rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
 
@@ -483,7 +487,7 @@ void testLessThanGreaterThanEqualMultipleValues(
 // equal, greater) must be true.
 template <typename T, typename U>
 auto testNotComparableHelper(T leftValue, U rightValue,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{makeAllocator()};
@@ -536,7 +540,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
 // for the `testNotComparableHelper` function.
 template <typename T, typename U>
 auto testNotComparable(T leftValue, U rightValue,
-                       source_location l = source_location::current()) {
+                       source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotComparable was called here");
   /*
   testNotComparableHelper(makeCopy(leftValue), makeCopy(rightValue));
@@ -569,21 +573,25 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vec(
-      {lit("alpha"), lit("alpaka"), lit("bertram"), lit("sigma"), lit("zeta"),
-       lit("kaulquappe"), lit("caesar"), lit("caesar"), lit("caesar")},
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vec(
+      {lve("alpha"), lve("alpaka"), lve("bertram"), lve("sigma"), lve("zeta"),
+       lve("kaulquappe"), lve("caesar"), lve("caesar"), lve("caesar")},
       makeAllocator());
   testLessThanGreaterThanEqualMultipleValuesHelper(
-      IdOrLiteralOrIri{lit("caesar")}, vec.clone());
+      IdOrLocalVocabEntry{lve("caesar")}, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
   // for strings that are bytewise different but equal on the unicode level
   // (e.g.`ä` vs `a + dots`.
-  // VectorWithMemoryLimit<IdOrLiteralOrIri> vec2({"AlpHa", "älpaka", "Æ",
+  // VectorWithMemoryLimit<IdOrLocalVocabEntry> vec2({"AlpHa", "älpaka", "Æ",
   // "sigma", "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
-  // IdOrLiteralOrIri>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry,
+  // IdOrLocalVocabEntry>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
@@ -626,13 +634,17 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vecA{
-      {lit("alpha"), lit("beta"), lit("g"), lit("epsilon"), lit("fraud"),
-       lit("capitalism"), lit(""), lit("bo'sä30"), lit("Me")},
+  auto* qec = getQec();
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vecA{
+      {lve("alpha"), lve("beta"), lve("g"), lve("epsilon"), lve("fraud"),
+       lve("capitalism"), lve(""), lve("bo'sä30"), lve("Me")},
       makeAllocator()};
-  VectorWithMemoryLimit<IdOrLiteralOrIri> vecB{
-      {lit("alph"), lit("alpha"), lit("f"), lit("epsiloo"), lit("freud"),
-       lit("communism"), lit(""), lit("bo'sä30"), lit("Me")},
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> vecB{
+      {lve("alph"), lve("alpha"), lve("f"), lve("epsiloo"), lve("freud"),
+       lve("communism"), lve(""), lve("bo'sä30"), lve("Me")},
       makeAllocator()};
   testLessThanGreaterThanEqualMultipleValuesHelper(vecA.clone(), vecB.clone());
   // TODO<joka921> Add a test case for correct unicode collation as soon as that
@@ -662,14 +674,20 @@ void testInExpressionVector(T1 leftValue, T2 rightValue, Ctx& ctx,
   check();
 }
 
+// Helper function to expose a static `TestContext` instance.
+TestContext& testContext() {
+  static TestContext ctx;
+  return ctx;
+}
+
 // Assert that the expression `leftValue Comparator rightValue`, when evaluated
 // on the `TestContext` (see above), yields the `expected` result.
 
 template <Comparison Comp, typename T1, typename T2>
 void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
                               std::vector<Id> expected,
-                              source_location l = source_location::current()) {
-  static TestContext ctx;
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto& ctx = testContext();
   auto expression =
       makeExpression<Comp>(liftToValueId(leftValue), liftToValueId(rightValue));
   auto trace = generateLocationTrace(l, "test lambda was called here");
@@ -685,7 +703,7 @@ void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
 template <Comparison Comp, typename T1, typename T2>
 void testWithExplicitResult(T1 leftValue, T2 rightValue,
                             std::vector<bool> expectedAsBool,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   std::vector<Id> expected;
   ql::ranges::transform(expectedAsBool, std::back_inserter(expected),
@@ -696,6 +714,10 @@ void testWithExplicitResult(T1 leftValue, T2 rightValue,
 }
 
 TEST(RelationalExpression, VariableAndConstant) {
+  auto* qec = testContext().qec;
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
   // ?ints column is `1, 0, -1`
   testWithExplicitResult<LT>(int64_t{0}, Variable{"?ints"},
                              {true, false, false});
@@ -718,20 +740,22 @@ TEST(RelationalExpression, VariableAndConstant) {
 
   // ?vocab column is `"Beta", "alpha", "älpha"
   testWithExplicitResult<LE>(Variable{"?vocab"},
-                             IdOrLiteralOrIri{lit("\"älpha\"")},
+                             IdOrLocalVocabEntry{lve("\"älpha\"")},
                              {false, true, true});
   testWithExplicitResult<GT>(Variable{"?vocab"},
-                             IdOrLiteralOrIri{lit("\"alpha\"")},
+                             IdOrLocalVocabEntry{lve("\"alpha\"")},
                              {true, false, true});
-  testWithExplicitResult<LT>(IdOrLiteralOrIri{lit("\"atm\"")},
+  testWithExplicitResult<LT>(IdOrLocalVocabEntry{lve("\"atm\"")},
                              Variable{"?vocab"}, {true, false, false});
 
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>(IdOrLiteralOrIri{iriref("<xa>")},
+  testWithExplicitIdResult<GT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
+                                   "<xa>", qec->getLocalVocabContext())},
                                Variable{"?mixed"}, {U, U, B(true)});
-  testWithExplicitIdResult<LT>(IdOrLiteralOrIri{iriref("<u>")},
+  testWithExplicitIdResult<LT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
+                                   "<u>", qec->getLocalVocabContext())},
                                Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
@@ -789,7 +813,7 @@ TEST(RelationalExpression, VariableAndVariable) {
 template <Comparison Comp, typename T>
 void testSortedVariableAndConstant(
     Variable leftValue, T rightValue, ad_utility::SetOfIntervals expected,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
@@ -810,6 +834,10 @@ void testSortedVariableAndConstant(
 }
 
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
+  auto* qec = testContext().qec;
+  auto lve = [qec](std::string_view literal) {
+    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+  };
   // Sorted order (by bits of the valueIds):
   // ?ints column is `0, 1,  -1`
   // ?doubles column is `0.1 , 2.8`,-0.1
@@ -826,7 +854,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
   // ints and strings are always incompatible.
-  testSortedVariableAndConstant<NE>(ints, IdOrLiteralOrIri{lit("a string")},
+  testSortedVariableAndConstant<NE>(ints, IdOrLocalVocabEntry{lve("a string")},
                                     {});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
@@ -837,14 +865,14 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
   testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
 
-  testSortedVariableAndConstant<GT>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
-                                    {{{1, 3}}});
-  testSortedVariableAndConstant<GE>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
-                                    {{{0, 3}}});
-  testSortedVariableAndConstant<LE>(vocab, IdOrLiteralOrIri{lit("\"ball\"")},
+  testSortedVariableAndConstant<GT>(
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{1, 3}}});
+  testSortedVariableAndConstant<GE>(
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{0, 3}}});
+  testSortedVariableAndConstant<LE>(vocab, IdOrLocalVocabEntry{lve("\"ball\"")},
                                     {{{0, 2}}});
-  testSortedVariableAndConstant<NE>(vocab, IdOrLiteralOrIri{lit("\"älpha\"")},
-                                    {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<NE>(
+      vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}});
   testSortedVariableAndConstant<LE>(vocab, inf, {});
 
   // Note: vocab entries and numeric values are not compatible, so every
@@ -854,11 +882,12 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
   testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
-  testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
-                                    {{{2, 3}}});
+  testSortedVariableAndConstant<LE>(
+      mixed,
+      IdOrLocalVocabEntry{
+          LocalVocabEntry::fromIriref("<z>", qec->getLocalVocabContext())},
+      {{{2, 3}}});
 }
-
-TEST(RelationalExpression, InExpression) {}
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto makeInt = [](int i) {
@@ -919,8 +948,7 @@ TEST(RelationalExpression, FilterEstimates) {
   // Implementation for testing the size estimates of different relational
   // expressions.
   auto testImpl = [&](auto ti, size_t expectedSize,
-                      ad_utility::source_location l =
-                          source_location::current()) {
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     using T = typename decltype(ti)::type;
 
     auto tr = generateLocationTrace(l);
@@ -949,7 +977,181 @@ TEST(RelationalExpression, FilterEstimates) {
   testImpl(TI<NotEqualExpression>, 200'000);
 }
 
+// _____________________________________________________________________________
+TEST(RelationalExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  // Regular case
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(sle), std::move(le)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Commutative case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Not equality
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    NotEqualExpression nee{{std::move(sle), std::move(le)}};
+    EXPECT_EQ(nee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No String Literal
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(ve), std::move(le)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    EqualExpression ee{{std::move(sle), std::move(ve)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(InExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  std::vector<SparqlExpression::Ptr> children;
+  // Regular case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Empty case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    InExpression ie{std::move(le), {}};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // Multiple values
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                             Eq("en"))))));
+  }
+  // Duplicate values are deduplicated
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(
+        ie.getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("mul"))))));
+  }
+  // Some values are not literals
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    children.push_back(std::move(sle));
+    children.push_back(std::move(ve));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(ve), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
 // because the relational expressions do not work properly with the current
 // limited implementation of the local vocabularies. Add those tests, as soon as
 // the local vocabularies are implemented properly.
+
+// _____________________________________________________________________________
+TEST(InExpression, getEstimatesForFilterExpression) {
+  using namespace ::testing;
+  {
+    // Regression test for https://github.com/ad-freiburg/qlever/issues/2701
+    // it checks if no division by zero is done.
+    InExpression ie{std::make_unique<VariableExpression>(Variable{"?x"}), {}};
+    auto [sizeEstimate, costEstimate] =
+        ie.getEstimatesForFilterExpression(1337, std::nullopt);
+
+    EXPECT_EQ(sizeEstimate, 0);
+    EXPECT_EQ(costEstimate, 0);
+  }
+  {
+    // Regression test for https://github.com/ad-freiburg/qlever/issues/2539
+    // it checks if no division by zero is done.
+    std::vector<SparqlExpression::Ptr> children;
+    // 1001 is `reductionFactorEquals` + 1, used in `RelationalExpressions.cpp`.
+    for (size_t i = 0; i < 1001; i++) {
+      children.push_back(std::make_unique<IdExpression>(Id::makeFromInt(i)));
+    }
+    InExpression ie{std::make_unique<VariableExpression>(Variable{"?x"}),
+                    std::move(children)};
+    auto [sizeEstimate, costEstimate] =
+        ie.getEstimatesForFilterExpression(1337, std::nullopt);
+
+    EXPECT_EQ(sizeEstimate, 1337);
+    EXPECT_EQ(costEstimate, 2674);
+  }
+}

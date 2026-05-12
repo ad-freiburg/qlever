@@ -42,27 +42,15 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 }
 
 // ____________________________________________________________________________
-auto Index::getTextVocab() const -> const TextVocab& {
-  return pimpl_->getTextVocab();
-}
-
-// ____________________________________________________________________________
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
 }
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
-    const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesSnapshot);
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
     Id id, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getCardinality(id, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
@@ -155,6 +143,12 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
+
+// ____________________________________________________________________________
+bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
+
+// ____________________________________________________________________________
+bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {
@@ -262,46 +256,25 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-std::vector<float> Index::getMultiplicities(Permutation::Enum p) const {
-  return pimpl_->getMultiplicities(p);
+std::vector<float> Index::getMultiplicities(
+    const Permutation& permutation) const {
+  return pimpl_->getMultiplicities(permutation);
 }
 
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
-}
-
-// ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecification,
-    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
-}
-
-// ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
+    const TripleComponent& key, const Permutation& p,
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getMultiplicities(key, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
-                                     locatedTriplesSnapshot);
+                                     locatedTriplesState);
 }
 
 // ____________________________________________________________________________
@@ -317,4 +290,19 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 // ____________________________________________________________________________
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
+}
+// ____________________________________________________________________________
+GraphNameManager& Index::graphNameManager() {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const GraphNameManager& Index::graphNameManager() const {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const std::optional<std::filesystem::path>&
+Index::getPersistedGraphNameManager() const {
+  return pimpl_->getPersistedGraphNameManager();
 }

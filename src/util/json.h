@@ -24,13 +24,13 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <utility>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -53,7 +53,7 @@ CPP_template(typename Json)(requires OrderedOrUnorderedJson<Json>) Json
     fileToJson(std::string_view jsonFileName) {
   // Check, if the filename/-path ends with ".json". Checking, if it's a valid
   // file, is done by `ad_utility::makeIfstream`.
-  if (!jsonFileName.ends_with(".json")) {
+  if (!ql::ends_with(jsonFileName, ".json")) {
     throw std::runtime_error(absl::StrCat(
         "The given filename/-path '", jsonFileName,
         "' doesn't end with '.json'. Therefore, it can't be a json file."));
@@ -154,8 +154,7 @@ struct adl_serializer<std::monostate> {
       throw nlohmann::json::type_error::create(
           302,
           absl::StrCat("Custom type converter (see `",
-                       ad_utility::source_location::current().file_name(),
-                       "`) from json",
+                       AD_CURRENT_SOURCE_LOC().file_name(), "`) from json",
                        " to `std::monostate`: type must be null, but wasn't."),
           nullptr);
     }

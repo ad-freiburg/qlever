@@ -324,10 +324,27 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
+                     matchUnary(&makeEnvelopeLowerLeftExpression));
+  expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),
+                     matchUnary(&makeEnvelopeUpperRightExpression));
+  expectFunctionCall(
+      absl::StrCat(ql,
+                   "prefix-match>(?x, \"Prefix\""
+                   ")"),
+      matchUnary([](auto&& expression) {
+        return makePrefixMatchExpression(
+            AD_FWD(expression),
+            std::make_unique<StringLiteralExpression>(
+                TripleComponent::Literal::fromStringRepresentation(
+                    "\"Prefix\"")));
+      }));
   expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
+  expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
+                     matchUnary(&makeNumGeometriesExpression));
 
   using enum ad_utility::BoundingCoordinate;
   expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
@@ -380,6 +397,18 @@ TEST(SparqlParser, FunctionCall) {
                          variableExpressionMatcher(Variable{"?a"}),
                          variableExpressionMatcher(Variable{"?b"}),
                          variableExpressionMatcher(Variable{"?unit"})));
+
+  // Length functions
+  expectFunctionCall(absl::StrCat(geof, "metricLength>(?x)"),
+                     matchUnary(&makeMetricLengthExpression));
+  expectFunctionCall(
+      absl::StrCat(geof, "length>(?a, ?b)"),
+      matchNary(&makeLengthExpression, Variable{"?a"}, Variable{"?b"}));
+
+  // Geometry N
+  expectFunctionCall(
+      absl::StrCat(geof, "geometryN>(?a, ?b)"),
+      matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
 
   // Geometric relation functions
   expectFunctionCall(
@@ -447,15 +476,22 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
                      matchUnary(&makeConvertToStringExpression));
 
+  // Geometry area functions
+  expectFunctionCall(absl::StrCat(geof, "metricArea>(?x)"),
+                     matchUnary(&makeMetricAreaExpression));
+  expectFunctionCall(
+      absl::StrCat(geof, "area>(?a, ?b)"),
+      matchNary(&makeAreaExpression, Variable{"?a"}, Variable{"?b"}));
+
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
-  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
-      "centroid", "envelope", "geometryType", "minX", "minY", "maxX", "maxY"};
+      "centroid", "envelope", "geometryType",  "minX",         "minY",
+      "maxX",     "maxY",     "numGeometries", "metricLength", "metricArea",
+  };
   for (const auto& func : unaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
     expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b)"));
@@ -464,7 +500,9 @@ TEST(SparqlParser, FunctionCall) {
 
   const std::vector<std::string> binaryGeofFunctionNames = {
       "sfIntersects", "sfContains", "sfCovers",   "sfCrosses",
-      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin"};
+      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin",
+      "length",       "area",       "geometryN",  "metricDistance",
+  };
   for (const auto& func : binaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
     expectFunctionCallFails(absl::StrCat(geof, func, ">(?a)"));
@@ -486,7 +524,8 @@ TEST(SparqlParser, FunctionCall) {
 
   // Check that arbitrary nonexisting functions with a single argument silently
   // return an `IdExpression(UNDEF)` in the syntax test mode.
-  auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
   expectFunctionCall(
       absl::StrCat(prefixNexistepas, "nada>(?x)"),
       matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,

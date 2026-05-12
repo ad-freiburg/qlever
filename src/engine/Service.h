@@ -8,8 +8,7 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include <functional>
-
+#include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/ParsedQuery.h"
@@ -143,6 +142,9 @@ class Service : public Operation {
   [[noreturn]] void throwErrorWithContext(
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
+
+  // Throws if the IRI is forbidden by the IRI prefix whitelist.
+  void throwIfIriNotWhitelisted();
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.

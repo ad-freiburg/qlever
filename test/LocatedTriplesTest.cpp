@@ -13,9 +13,14 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -751,6 +756,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // Adding no triples does no changed the augmented metadata.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -758,9 +764,10 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // T1 is before block 0. The beginning of block 0 changes.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -768,15 +775,17 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T2}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
     // delete) add to the block borders. Borders don't change.
-    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = false;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T3}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -785,6 +794,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     auto handles =
         locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
             Span{T4}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
@@ -804,6 +814,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(metadata));
@@ -849,13 +860,14 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Delete the located triples {T1 ... T4}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
-    // set to `true`.
+    // set to `true` if triples from new graphs are added.
     expectedAugmentedMetadata[0] =
         CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
-    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
-    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
+    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = false;
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
@@ -870,6 +882,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Add the located triples {T1 ... T5}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] =
         CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
@@ -887,8 +900,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // The automatically added metadata for the last block also has the correct
     // block index and number of columns, so we have to properly initialize it.
     expectedAugmentedMetadata.back().blockIndex_ = 2;
-    expectedAugmentedMetadata.back().offsetsAndCompressedSize_.resize(4,
-                                                                      {0, 0});
+    expectedAugmentedMetadata.back().offsetsAndCompressedSize_ = std::nullopt;
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
     // set to `true`.
@@ -924,6 +936,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
         handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
@@ -931,6 +944,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1), metadata,
         keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
@@ -963,4 +977,127 @@ TEST_F(LocatedTriplesTest, debugPrints) {
                           "IdTriple(V:0, V:0, V:0, V:123948, ), IdTriple(V:1, "
                           "V:2, V:3, V:123948, ), ")));
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
+  static constexpr const char* testTurtle =
+      "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
+  auto config = ad_utility::testing::TestIndexConfig{testTurtle};
+  config.blocksizePermutations = 1_kB;
+  auto* qec = ad_utility::testing::getQec(config);
+
+  const auto& index = qec->getIndex().getImpl();
+  auto& perm = index.getPermutation(Permutation::PSO);
+
+  LocalVocab lv;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  using TC = TripleComponent;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto getId = [&lv, &index](TC&& tc) {
+    return std::move(tc).toValueId(index, lv);
+  };
+  auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
+  auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
+                                            TC&& o) -> IdTriple<0> {
+    return IdTriple<0>{{getId(std::move(s)), getId(std::move(p)),
+                        getId(std::move(o)), defaultGraph}};
+  };
+
+  // Triples that exist in the index.
+  auto tInIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<A>"));
+  auto tInIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<B>"));
+  // Triples that do NOT exist in the index.
+  auto tNotIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<b>"));
+  auto tNotIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<a>"));
+  auto tNotIdx3 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<f>"));
+  auto tNotIdx4 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<g>"));
+  auto tNotIdx5 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<h>"));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  {
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tInIdx2});
+    const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+
+    {
+      // Block has less than the threshold.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(3ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
+      EXPECT_THAT(result.insertionsToRemove_, testing::IsEmpty());
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.totalRemoved(), 0u);
+      EXPECT_EQ(result.stats_.totalKept(), 0u);
+    }
+
+    {
+      // Block has more than the threshold.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
+      EXPECT_THAT(result.insertionsToRemove_,
+                  testing::UnorderedElementsAre(tInIdx1, tInIdx2));
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.numInsertionsRemoved_, 2u);
+      EXPECT_EQ(result.stats_.numDeletionsRemoved_, 0u);
+      EXPECT_EQ(result.stats_.numInsertionsKept_, 0u);
+      EXPECT_EQ(result.stats_.numDeletionsKept_, 0u);
+    }
+  }
+
+  {
+    // Also has inserts and deletes past the last block with index triples.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+            2ul);
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
+    dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
+    const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+    auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
+    EXPECT_THAT(result.insertionsToRemove_,
+                testing::UnorderedElementsAre(tInIdx1));
+    EXPECT_THAT(result.deletionsToRemove_,
+                testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
+    EXPECT_EQ(result.stats_.numInsertionsRemoved_, 1u);
+    EXPECT_EQ(result.stats_.numDeletionsRemoved_, 2u);
+    EXPECT_EQ(result.stats_.numInsertionsKept_, 3u);
+    EXPECT_EQ(result.stats_.numDeletionsKept_, 1u);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, computeDiff) {
+  auto I = &Id::makeFromInt;
+  std::vector<LocatedTriple> locatedTriples;
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(1), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(2), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}}, false});
+
+  auto originalTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  locatedTriples.at(0).insertOrDelete_ = false;
+  locatedTriples.at(3).insertOrDelete_ = true;
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{2, IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}}, false});
+
+  auto newTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  auto result = newTriples.computeDiff(originalTriples);
+  EXPECT_THAT(result,
+              ::testing::ElementsAre(
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}),
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}})));
 }

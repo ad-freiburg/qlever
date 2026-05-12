@@ -9,6 +9,7 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -47,7 +48,7 @@ Result Minus::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
+  if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
     return std::move(res).value();
   }
 
@@ -88,6 +89,9 @@ size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> Minus::resultSortedOn() const {
+  if (rightIndexNestedLoopJoinIsPossible()) {
+    return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
+  }
   return _left->resultSortedOn();
 }
 
@@ -232,31 +236,74 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
-  auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
-                                                            _left, _right);
-  };
-  // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side. It currently doesn't support undef.
-  auto sort = std::dynamic_pointer_cast<Sort>(_right->getRootOperation());
-  if (!sort || _left->getSizeEstimate() > _right->getSizeEstimate() ||
-      !alwaysDefined()) {
+bool Minus::rightIndexNestedLoopJoinIsPossible() const {
+  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(
+      _left, _right, _matchedColumns);
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
+  auto optionalResults =
+      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(_left,
+                                                                   _right);
+  if (!optionalResults.has_value()) {
     return std::nullopt;
   }
 
-  auto leftRes = _left->getResult(false);
+  auto [leftRes, rightRes] = std::move(optionalResults).value();
   const IdTable& leftTable = leftRes->idTable();
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
-
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};
 
-  auto nonMatchingEntries = nestedLoopJoin.computeExistance();
+  auto nonMatchingEntries = nestedLoopJoin.computeLeftExistance();
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  // This algorithm only works well if the right side is smaller and we can
+  // avoid sorting the left side. It currently doesn't support undef.
+  if (!rightIndexNestedLoopJoinIsPossible()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+      std::dynamic_pointer_cast<Sort>(_left->getRootOperation()),
+      requestLaziness);
+  bool isLazy = !leftRes->isFullyMaterialized();
+  auto rightRes = _right->getResult(false);
+
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+  auto result = nestedLoopJoin.computeRightExistance(
+      [this](const IdTable& idTable, LocalVocab localVocab,
+             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
+                 matchingTracker) {
+        return Result::IdTableVocabPair{
+            copyMatchingRows(idTable, false, matchingTracker),
+            std::move(localVocab)};
+      });
+  return std::optional{
+      isLazy ? Result{std::move(result), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(result)),
+                      resultSortedOn()}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
+                                                        _right)) {
+    return std::nullopt;
+  }
+  if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return result;
+  }
+  return tryLeftIndexNestedLoopJoinIfSuitable();
 }
 
 // _____________________________________________________________________________
@@ -324,7 +371,7 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   const auto* vars = &variables;
   for (const auto& [jcl, _] : _matchedColumns) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }
@@ -343,7 +390,7 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   [[maybe_unused]] bool keepJoinColumns =
       ql::ranges::any_of(jcls, [&](const auto& jcl) {
         const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
-        return variables.contains(var);
+        return ad_utility::contains(variables, var);
       });
   return ad_utility::makeExecutionTree<Minus>(
       getExecutionContext(), std::move(left), std::move(right));

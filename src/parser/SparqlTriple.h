@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "parser/PropertyPath.h"
 #include "parser/TripleComponent.h"
@@ -29,7 +30,9 @@ class SparqlTripleBase {
         o_(std::move(o)),
         additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  bool operator==(const SparqlTripleBase& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleBase, s_, p_, o_,
+                                              additionalScanColumns_)
+
   TripleComponent s_;
   Predicate p_;
   TripleComponent o_;
@@ -59,7 +62,7 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleSimpleWithGraph, g_)
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.
@@ -129,6 +132,22 @@ class SparqlTriple
   bool predicateIs(const Variable& variable) const {
     auto ptr = std::get_if<Variable>(&p_);
     return (ptr != nullptr && *ptr == variable);
+  }
+
+  // Call a function for every variable contained in the triple.
+  CPP_template(typename Function)(
+      requires std::is_invocable_v<
+          Function, const Variable&>) void forEachVariable(Function function)
+      const {
+    if (s_.isVariable()) {
+      std::invoke(function, s_.getVariable());
+    }
+    if (auto predicate = getPredicateVariable()) {
+      std::invoke(function, predicate.value());
+    }
+    if (o_.isVariable()) {
+      std::invoke(function, o_.getVariable());
+    }
   }
 };
 

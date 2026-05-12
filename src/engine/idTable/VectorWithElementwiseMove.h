@@ -10,20 +10,21 @@
 #include "util/ExceptionHandling.h"
 
 namespace columnBasedIdTable::detail {
-// A class that inherits from a `vector<T>`. This class changes the move
-// operators of the underlying `vector` as follows: Instead of moving the vector
+// A class that inherits from a `Vector`. This class changes the move
+// operators of the underlying `Vector` as follows: Instead of moving the vector
 // as a whole, only the individual elements are moved. This is used for the
 // column-based `IdTables` where we move the individual columns, but still want
 // a table that was moved from to have the same number of columns as before, but
 // with the columns now being empty.
+// `Vector` must have an interface similar to `std::vector`, in particular it
+// needs member functions `clear()` and `insert()`.
 
 // Note: This class is an implementation detail of the column-based ID
 // tables. Its semantics are very particular, so we don't expect it to have a
 // use case outside the `IdTable` module.
-template <typename T>
-struct VectorWithElementwiseMove : public std::vector<T> {
-  using Base = std::vector<T>;
-  using Base::Base;
+template <typename T, typename Vector = std::vector<T>>
+struct VectorWithElementwiseMove : public Vector {
+  using Vector::Vector;
   // Defaulted copy operations, inherited from the base class.
   VectorWithElementwiseMove(const VectorWithElementwiseMove&) = default;
   VectorWithElementwiseMove& operator=(const VectorWithElementwiseMove&) =
@@ -50,8 +51,8 @@ struct VectorWithElementwiseMove : public std::vector<T> {
     ad_utility::terminateIfThrows(
         [&other, self = this] {
           AD_CORRECTNESS_CHECK(self->empty());
-          self->insert(self->end(), std::make_move_iterator(other.begin()),
-                       std::make_move_iterator(other.end()));
+          self->insert(self->end(), ql::make_move_iterator(other.begin()),
+                       ql::make_move_iterator(other.end()));
         },
         "Error happened during the move construction or move assignment of an "
         "IdTable");

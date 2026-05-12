@@ -8,9 +8,9 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <functional>
 #include <memory>
 
+#include "backports/functional.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 
@@ -173,7 +173,7 @@ class AllocatorWithLimit {
   }
   AllocatorWithLimit() = delete;
 
-  CPP_template(typename U)(requires(!std::same_as<U, T>))
+  CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
       AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_{other.getMemoryLeft()},
         clearOnAllocation_(other.clearOnAllocation()) {}

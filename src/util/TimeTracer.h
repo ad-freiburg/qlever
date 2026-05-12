@@ -70,7 +70,7 @@ class TimeTracer {
     if (activeTraces_.empty()) {
       throw std::runtime_error("The trace has ended.");
     }
-    activeTraces_.back().get().children_.emplace_back(name, timer_.msecs());
+    activeTraces_.back().get().children_.push_back({name, timer_.msecs()});
     activeTraces_.emplace_back(activeTraces_.back().get().children_.back());
   }
 
@@ -89,6 +89,7 @@ class TimeTracer {
     activeTraces_.pop_back();
   }
 
+  // Resets the tracer to its initial state and restarts the root trace.
   virtual void reset() {
     if (!activeTraces_.empty()) {
       throw std::runtime_error(
@@ -97,6 +98,7 @@ class TimeTracer {
 
     rootTrace_.begin_ = timer_.msecs();
     rootTrace_.end_ = std::nullopt;
+    rootTrace_.children_.clear();
     activeTraces_.emplace_back(rootTrace_);
   }
 

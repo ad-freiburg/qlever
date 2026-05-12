@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/GraphStoreProtocol.h"
 
 #include "parser/Tokenizer.h"
@@ -101,6 +102,22 @@ ParsedQuery GraphStoreProtocol::transformGet(
 }
 
 // ____________________________________________________________________________
+ParsedQuery GraphStoreProtocol::transformHead(
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
+  auto pq = transformGet(graph, encodedIriManager);
+  // HEAD does the same as GET except that the response has no body.
+  // Overwrite the body to be empty.
+  pq.responseMiddleware_ =
+      ResponseMiddleware([](ResponseMiddleware::ResponseT&& response) {
+        response.body() = []() -> cppcoro::generator<std::string> {
+          co_return;
+        }();
+        return response;
+      });
+  return pq;
+}
+
+// ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
                                                 const Index& index) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
@@ -113,6 +130,24 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
       return "DROP DEFAULT";
     }
   };
-  return ad_utility::getSingleElement(SparqlParser::parseUpdate(
+  auto update = ad_utility::getSingleElement(SparqlParser::parseUpdate(
       index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
+  // DELETE must return 404 if the graph being deleted does not exist (GSP 5.4).
+  // With implicit graph existence a graph existed iff triples were actually
+  // deleted.
+  update.responseMiddleware_ = ResponseMiddleware(
+      [](ResponseMiddleware::ResponseT response, const auto& result) {
+        AD_CORRECTNESS_CHECK(result.size() == 1);
+        const auto& updateMeta = result.at(0);
+        AD_CORRECTNESS_CHECK(updateMeta.inUpdate_.has_value());
+        if (updateMeta.inUpdate_->triplesDeleted_ == 0) {
+          response.result(boost::beast::http::status::not_found);
+        } else {
+          response.result(boost::beast::http::status::ok);
+        }
+        return response;
+      });
+  return update;
 }
+
+#endif

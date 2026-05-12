@@ -6,6 +6,8 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
@@ -23,14 +25,15 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
-  BATCH_SIZE_VOCABULARY_MERGE = 2;
+  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
                          // some tests (i.e. polygon testing in Spatial Joins)
                          // require a larger buffer size
+  // By default, don't add ql:has-word triples in test indices.
+  index.addHasWordTriples() = false;
   return index;
 }
 
@@ -68,19 +71,27 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
+  const auto& indexImpl = index.getImpl();
   const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
   auto iriOfHasPattern =
       TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
   auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
-                             &locatedTriplesSnapshot](
-                                const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern = index.scan(
-        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
-        Permutation::Enum::PSO, {}, cancellationDummy, locatedTriplesSnapshot);
+                             &locatedTriplesSnapshot,
+                             &indexImpl](size_t patternIdx, Id id) {
+    const auto& permutation =
+        indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
+    auto scanResultHasPattern =
+        permutation.scan(permutation.getScanSpecAndBlocks(
+                             ScanSpecificationAsTripleComponent{
+                                 iriOfHasPattern, id, std::nullopt}
+                                 .toScanSpecification(indexImpl),
+                             locatedTriplesSnapshot),
+                         {}, cancellationDummy, locatedTriplesSnapshot);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -94,12 +105,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   };
 
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
+      [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
-        auto cancellationDummy =
-            std::make_shared<ad_utility::CancellationHandle<>>();
-        auto scanResult = index.scan(
-            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
+        auto scanResult = permutation.scan(
+            permutation.getScanSpecAndBlocks(
+                ScanSpecification{col0Id, std::nullopt, std::nullopt},
+                locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy, locatedTriplesSnapshot);
@@ -107,33 +118,35 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
-          checkSingleElement(index, patternIdx, subjectId);
+          checkSingleElement(patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
           auto patternIdxObject = row[3].getInt();
-          checkSingleElement(index, patternIdxObject, objectId);
+          checkSingleElement(patternIdxObject, objectId);
         }
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
-    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(Permutation::Enum::PSO), 0, 1);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(Permutation::Enum::POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(Permutation::Enum::OPS), 1,
+        col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(Permutation::Enum::OSP), 0,
+        col0IdTag);
   };
 
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot, {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot, {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
@@ -148,6 +161,25 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // Remove previous index files. This is necessary because if we previously
+  // built the same index without patterns or all 6 permutations, we wouldn't
+  // overwrite the patterns or the missing permutations. This would lead to a
+  // false positive when we later check that the patterns or the missing
+  // permutations are not present, because they would actually be present from
+  // the previous index build.
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+    if (!entry.is_regular_file()) continue;
+
+    std::string name = entry.path().filename().string();
+
+    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+        ql::starts_with(name, indexBasename + ".index") ||
+        ql::starts_with(name, indexBasename + ".internal.index") ||
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+      ad_utility::deleteFile(entry.path());
+    }
+  }
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =
@@ -157,7 +189,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "\"zz\"@en . <zz> <label> <zz> .";
   }
 
-  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
+  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
     f << c.turtleInput.value();
@@ -185,23 +217,22 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
-    if (c.encodedIriManager.has_value()) {
-      // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(prefix.starts_with('<') && !prefix.ends_with('>'));
-        prefixes.push_back(prefix.substr(1));
-      }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      throw std::runtime_error("The text index is not available in C++17 mode");
+#else
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
@@ -250,6 +281,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
+#endif
     }
   }
   if (!c.usePatterns || !c.loadAllPermutations) {
@@ -316,10 +348,12 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
-    std::unique_ptr<QueryExecutionContext> qec_ =
+    std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
+    std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{}, namedCache_.get());
+            SortPerformanceEstimator{}, namedCache_.get(),
+            materializedViewsManager_.get());
   };
 
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
@@ -339,11 +373,10 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    }},
                    std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
                    std::make_unique<QueryResultCache>(),
-                   std::make_unique<NamedResultCache>()});
+                   std::make_unique<NamedResultCache>(),
+                   std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
-  return qec;
+  return contextMap.at(c).qec_.get();
 }
 
 // _____________________________________________________________________________
@@ -359,15 +392,14 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() -> TripleComponent {
-      if (el.starts_with('<') || el.starts_with('@')) {
+      if (ql::starts_with(el, '<') || ql::starts_with(el, '@')) {
         return TripleComponent::Iri::fromIriref(el);
       } else {
-        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        AD_CONTRACT_CHECK(ql::starts_with(el, '\"'));
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static const EncodedIriManager encodedIriManager;
-    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
+    auto id = literalOrIri.toValueId(index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

@@ -7,11 +7,12 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstdlib>
+#include <iomanip>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/IdTableUtils.h"
 #include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/Random.h"
@@ -48,7 +49,9 @@ auto SortPerformanceEstimator::measureSortingTime(
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
-  CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
+  ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
+    IdTableUtils::sort<numCols>(&randomTable, 0ull);
+  });
   return timer.value();
 }
 
@@ -119,8 +122,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumberOfElementsToSort) {
+#ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
+#endif
 
   AD_LOG_INFO << "Sorting random result tables to estimate the sorting "
                  "performance of this machine ..."
@@ -198,8 +203,8 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     size_t numRows, size_t numColumns,
     std::chrono::steady_clock::time_point deadline,
     std::string_view operationDescriptor) const {
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
+  auto sortEstimateCancellationFactor = getRuntimeParameter<
+      &RuntimeParameters::sortEstimateCancellationFactor_>();
   auto now = std::chrono::steady_clock::now();
   if (now > deadline || estimatedSortTime(numRows, numColumns) >
                             (deadline - now) * sortEstimateCancellationFactor) {

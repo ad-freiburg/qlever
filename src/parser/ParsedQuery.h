@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
@@ -26,6 +27,9 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/http/ResponseMiddleware.h"
+#endif
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -38,7 +42,7 @@ class SparqlPrefix {
 
   [[nodiscard]] std::string asString() const;
 
-  bool operator==(const SparqlPrefix&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlPrefix, _prefix, _uri)
 };
 
 // Forward declaration
@@ -88,6 +92,13 @@ class ParsedQuery {
 
   // The IRIs from the FROM and FROM NAMED clauses.
   DatasetClauses datasetClauses_;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // A function to modify the HTTP response for this operation before it is
+  // sent. It can be used to set up responses (status code, body, ...) that
+  // depend on the operation result.
+  std::optional<ResponseMiddleware> responseMiddleware_;
+#endif
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

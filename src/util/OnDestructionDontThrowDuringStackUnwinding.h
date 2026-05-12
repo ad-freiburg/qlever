@@ -4,6 +4,7 @@
 #ifndef QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
 #define QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
 
+#include "backports/keywords.h"
 #include "util/ExceptionHandling.h"
 
 namespace ad_utility {
@@ -72,8 +73,8 @@ class OnDestructionCreator {
 // return object in a container because all of its constructors are either
 // private or deleted. This is disabled deliberately as it might lead to program
 // termination (for `std::vector`) or to uncalled destructors.
-CPP_template(typename F)(requires std::invocable<F>)
-    [[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<
+CPP_template(typename F)(requires ql::concepts::invocable<F>)
+    QL_NODISCARD("") detail::OnDestructionDontThrowDuringStackUnwinding<
         F> makeOnDestructionDontThrowDuringStackUnwinding(F f) {
   static_assert(
       !std::is_nothrow_invocable_v<F>,

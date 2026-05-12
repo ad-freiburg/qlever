@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -82,8 +83,9 @@ class WordAndIndex {
 // order).
 class WordWriterBase {
  private:
+  ad_utility::ThrowInDestructorIfSafe throwIfSafe_;
   std::string readableName_;
-  bool finishWasCalled_ = false;
+  std::atomic_bool finishWasCalled_ = false;
 
  public:
   // Write the next word. The `isExternal` flag is ignored for all the
@@ -91,20 +93,24 @@ class WordWriterBase {
   // index that was assigned to the word.
   virtual uint64_t operator()(std::string_view word, bool isExternal) = 0;
 
-  // Destructor. If `finish` hasn't been called, the program is terminated.
-  // Derived classes have to make sure that their destructors call `finish` if
-  // necessary. Note: It is unfortunately not possible to call the virtual
-  // function `finish` directly from this base class destructor, as at that
-  // point the derived class is already destroyed.
-  virtual ~WordWriterBase() {
-    ad_utility::terminateIfThrows(
-        [this]() {
-          if (!finishWasCalled_) {
-            throw std::runtime_error{"no call to finish before destructor"};
-          }
-        },
-        " `finish` was not called before destroying a `WordWriter` that "
-        "inherits from `WordWriterBase`. This is a bug, please report it.");
+  // Destructor. If `finish` hasn't been called, an exception is thrown if it is
+  // safe to do so. Derived classes have to make sure that their destructors
+  // call `finish` if necessary. Note: It is unfortunately not possible to call
+  // the virtual function `finish` directly from this base class destructor, as
+  // at that point the derived class is already destroyed.
+  virtual ~WordWriterBase() noexcept(false) {
+    using namespace std::string_view_literals;
+    if (!finishWasCalled_) {
+      throwIfSafe_(
+          []() {
+            throw std::runtime_error{
+                "WordWriterBase::finish was not called before the destructor."};
+          },
+          "this can happen when `finish` was not called before destroying a"
+          " `WordWriter` that inherits from `WordWriterBase`. This is either a"
+          " bug, or it can happen when an exception was thrown in the"
+          " constructor of the subclass."sv);
+    }
   };
 
   // Calling this function will signal that the last word has been pushed.
@@ -112,7 +118,7 @@ class WordWriterBase {
   // files. After calling `finish`, no more calls to `operator()` are allowed.
   // The destructor also calls `finish` if it wasn't called manually.
   virtual void finish() final {
-    if (std::exchange(finishWasCalled_, true)) {
+    if (finishWasCalled_.exchange(true)) {
       return;
     }
     finishImpl();

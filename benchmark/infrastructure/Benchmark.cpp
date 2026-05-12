@@ -6,7 +6,6 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 
 #include <algorithm>
-#include <functional>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -15,6 +14,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "backports/functional.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"

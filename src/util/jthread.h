@@ -7,16 +7,10 @@
 #include <thread>
 #include <version>
 
-// While libc++ has no std::jthread (threads that automatically join on
-// destruction), we ship our own.
-#ifdef _LIBCPP_VERSION
+// For standard libraries that do not yet have `std::jthread`, we roll our own.
+#ifndef __cpp_lib_jthread
 namespace ad_utility {
 struct JThread : public std::thread {
-#ifdef __cpp_lib_jthread
-  static_assert(false,
-                "std::jthread is now supported by libc++, get rid of "
-                "ad_utility::JThread");
-#endif
   using Base = std::thread;
   using Base::Base;
   JThread(JThread&&) noexcept = default;
@@ -36,12 +30,7 @@ struct JThread : public std::thread {
 }  // namespace ad_utility
 
 #else
-// libstdc++ already supports jthread, simply use it.
-#ifndef __cpp_lib_jthread
-static_assert(false,
-              "std::jthread is not supported by the version of libstdc++ you "
-              "are using, please update or use QLever inside of Docker");
-#endif
+// Use `std::jthread` if supported.
 namespace ad_utility {
 using JThread = std::jthread;
 }

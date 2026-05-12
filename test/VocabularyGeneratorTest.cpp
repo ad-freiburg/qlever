@@ -12,6 +12,7 @@
 #include <string>
 
 #include "./util/IdTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -191,9 +192,9 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
                                         const auto& word,
                                         bool isExternal) -> uint64_t {
-      if (word.starts_with("\"") &&
-          word.ends_with(
-              "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
+      if (ql::starts_with(word, "\"") &&
+          ql::ends_with(
+              word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
         geoMergeResult.emplace_back(word, isExternal);
         return (geoMergeResult.size() - 1) | (1ull << 59);
       } else {
@@ -239,7 +240,7 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("e", S{38, d});
   input.emplace_back("xenon", S{0, d});
 
-  auto res = createInternalMapping(&input);
+  auto res = createInternalMapping(input);
   ASSERT_EQ(0u, input[0].second.id_);
   ASSERT_EQ(1u, input[1].second.id_);
   ASSERT_EQ(1u, input[2].second.id_);

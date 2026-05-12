@@ -6,6 +6,7 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <boost/optional.hpp>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -20,8 +21,24 @@
 
 namespace ad_utility {
 
+namespace algorithm::detail {
+// Concept implementations for the `contains` function below. Checks whether a
+// type has a member function `contains` or `find`respectively.
+template <typename T, typename U>
+CPP_requires(HasMemberContains,
+             requires(const T& t, const U& u)(t.contains(u)));
+template <typename T, typename U>
+CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
+}  // namespace algorithm::detail
+
 /**
  * Checks whether an element is contained in a container.
+ *  Works on the following types of containers:
+ *  1.  `std::string_[view]`, where you also can find substrings.
+ *  2. containers that either have a member function `contains` that returns a
+ *     bool, or alternatively a member function `find` that returns an iterator.
+ *  3. For all other containers, the generic `ql::ranges::find` algorithm is
+ * used.
  *
  * @param container Container& Elements to be searched
  * @param element T Element to search for
@@ -33,10 +50,39 @@ constexpr bool contains(Container&& container, const T& element) {
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberContains,
+                                        const Container&, T)) {
+    return container.contains(element);
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberFind,
+                                        const Container&, T)) {
+    return container.find(element) != container.end();
   } else {
     return ql::ranges::find(std::begin(container), std::end(container),
                             element) != std::end(container);
   }
+}
+
+/**
+ * Looks up `key` in a map-like container and returns an optional reference to
+ * the mapped value if found, or `boost::none` otherwise.
+ *
+ * Uses `boost::optional` rather than `std::optional` because the latter does
+ * not support reference types.
+ *
+ * Parameters:
+ * map: The map-like container to search in (must have a `find` member that
+ * returns an iterator to a key-value pair)
+ * key: The key to look up
+ * return: boost::optional<const mapped_type&>
+ */
+template <typename Map, typename Key>
+auto findOptional(const Map& map, const Key& key)
+    -> boost::optional<const typename Map::mapped_type&> {
+  auto it = map.find(key);
+  if (it != map.end()) {
+    return it->second;
+  }
+  return {};
 }
 
 /**
@@ -151,10 +197,12 @@ CPP_template(typename Range)(requires ql::ranges::forward_range<
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
-    requires ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
-        Function,
-        typename Array::value_type>) auto transformArray(Array&& input,
-                                                         Function function) {
+    requires ad_utility::isArray<std::decay_t<Array>> CPP_and
+        ql::concepts::invocable<
+            Function,
+            typename Array::value_type>) auto transformArray(Array&& input,
+                                                             Function
+                                                                 function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
@@ -166,11 +214,13 @@ CPP_template(typename Array, typename Function)(
 // but an iterator (first argument) and a value (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
-    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp,
+             typename Compare)(requires ql::concepts::forward_iterator<
+                               ForwardIterator>) constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 
@@ -192,11 +242,13 @@ CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
-    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp,
+             typename Compare)(requires ql::concepts::forward_iterator<
+                               ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 

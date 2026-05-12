@@ -108,7 +108,7 @@ template <typename It, typename IsMatchingDatatype, typename ApplyComparator>
 auto testGetRangesForId(It begin, It end, ValueId id,
                         IsMatchingDatatype isMatchingDatatype,
                         ApplyComparator applyComparator,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
   auto testImpl = [&](auto comparison) {

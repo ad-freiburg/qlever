@@ -5,6 +5,7 @@
 #ifndef QLEVER_DATES_AND_DURATION_H
 #define QLEVER_DATES_AND_DURATION_H
 
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Date.h"
 #include "util/Duration.h"
@@ -54,6 +55,11 @@ class DateYearOrDuration {
     bits_ = absl::bit_cast<uint64_t>(d) | (datetime << numPayloadDateBits);
   }
 
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+  DateYearOrDuration() = default;
+#endif
+
   // Construct a `DateYearOrDuration` given a `DayTimeDuration` object.
   explicit DateYearOrDuration(DayTimeDuration dayTimeDuration) {
     bits_ = absl::bit_cast<uint64_t>(dayTimeDuration) |
@@ -77,6 +83,12 @@ class DateYearOrDuration {
 
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadDateBits == datetime; }
+
+  // True iff a large year is stored.
+  bool isLongYear() const {
+    return (bits_ >> numPayloadDateBits == negativeYear) ||
+           (bits_ >> numPayloadDateBits == positiveYear);
+  }
 
   // True iff constructed with `DayTimeDuration`.
   bool isDayTimeDuration() const {
@@ -139,7 +151,7 @@ class DateYearOrDuration {
 
   // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
-  auto operator<=>(const DateYearOrDuration&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(DateYearOrDuration, bits_)
 
   // Bitwise hashing.
   template <typename H>
@@ -199,6 +211,16 @@ class DateYearOrDuration {
   // std::nullopt.
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Subtraction of two `DateYearOrDuration` objects.
+  // For undefined subtractions `std::nullopt` is returned.
+  [[nodiscard]] std::optional<DateYearOrDuration> operator-(
+      const DateYearOrDuration& rhs) const;
+#endif
 };
+#ifdef QLEVER_CPP_17
+static_assert(std::is_default_constructible_v<DateYearOrDuration>);
+#endif
 
 #endif  //  QLEVER_DATES_AND_DURATION_H

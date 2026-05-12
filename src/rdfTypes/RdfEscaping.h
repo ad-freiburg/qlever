@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/TypedIndex.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
@@ -49,8 +50,10 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
 
 // A strong typedef for a `std::string_view` that stores a normalized RDF
 // literal.
+constexpr inline ad_utility::IndexTag normalizedRDFStringViewTag =
+    "NormalizedRDFString";
 using NormalizedRDFStringView =
-    ad_utility::TypedIndex<std::string_view, "NormalizedRDFString">;
+    ad_utility::TypedIndex<std::string_view, normalizedRDFStringViewTag>;
 
 // A strong typedef for a `std::string` that stores a normalized RDF literal.
 class NormalizedRDFString {
@@ -72,8 +75,8 @@ class NormalizedRDFString {
   // free `normalizeRDFLiteral` function, so that function is the only way to
   // create a new `NormalizedRDFString`.
   explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {
-    AD_CORRECTNESS_CHECK(data_.size() >= 2 && data_.starts_with('"') &&
-                         data_.ends_with('"'));
+    AD_CORRECTNESS_CHECK(data_.size() >= 2 && ql::starts_with(data_, '"') &&
+                         ql::ends_with(data_, '"'));
   }
   friend NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 };

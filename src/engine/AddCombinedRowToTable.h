@@ -8,15 +8,18 @@
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 
+#include <absl/container/inlined_vector.h>
+
 #include <array>
 #include <cstdint>
 #include <vector>
 
 #include "backports/concepts.h"
-#include "engine/LocalVocab.h"
+#include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
@@ -257,6 +260,14 @@ class AddCombinedRowToIdTable {
 
   LocalVocab& localVocab() { return mergedVocab_; }
 
+  // Move both the result table and local vocab out as an IdTableVocabPair.
+  // This is a convenience method for the common pattern of moving both out.
+  auto toIdTableVocabPair() && {
+    flush();
+    return Result::IdTableVocabPair{std::move(resultTable_),
+                                    std::move(mergedVocab_)};
+  }
+
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
   AddCombinedRowToIdTable(const AddCombinedRowToIdTable&) = delete;
@@ -356,7 +367,9 @@ class AddCombinedRowToIdTable {
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
             Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
-              if constexpr (isColFromLeft) {
+              // Note: `if constexpr` doesn't work here for QCC 8.3 for some
+              // reason which has yet to be analyzed.
+              if QL_CONSTEXPR (isColFromLeft) {
                 return col[sourceIndex];
               } else {
                 (void)col;
@@ -400,9 +413,25 @@ class AddCombinedRowToIdTable {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
-      auto range = currentVocabs_ | ql::views::filter(toBool) |
-                   ql::views::transform(dereference);
-      mergedVocab_.mergeWith(ql::ranges::ref_view{range});
+      // Note: On QCC 8.3, the elegant lazy range pipeline gives us trouble, so
+      // we use an `absl::InlinedVector<reference_wrapper>` instead, which can
+      // be done here as we know that we have at most two local vocabs.
+      auto rangeOfNonNullVocabs = [&]() {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+        return currentVocabs_ | ql::views::filter(toBool) |
+               ql::views::transform(dereference);
+#else
+        absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
+            tmpVocabs;
+        for (const auto& el : currentVocabs_) {
+          if (el != nullptr) {
+            tmpVocabs.push_back(std::cref(*el));
+          }
+        }
+        return tmpVocabs;
+#endif
+      }();
+      mergedVocab_.mergeWith(ql::ranges::ref_view{rangeOfNonNullVocabs});
     }
   }
   const IdTableView<0>& inputLeft() const {

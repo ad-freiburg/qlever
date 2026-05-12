@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H
 #define QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/ParsedRequestBuilder.h"
 
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
@@ -61,4 +62,5 @@ class SparqlProtocol {
       RequestType& request);
 };
 
+#endif
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <algorithm>
 #include <string>
@@ -262,99 +262,27 @@ TEST(Iterator, IteratorRange) {
   EXPECT_EQ(*beg[3], 7);
 }
 
-//_____________________________________________________________________________
-TEST(Iterator, InputRangeTypeErasedWithDetails) {
-  using namespace ad_utility;
+// _____________________________________________________________________________
+TEST(Iterator, IteratorForAssigmentOperator) {
+  std::vector<int> resultVector;
 
-  // Define a simple details type for testing
-  struct TestDetails {
-    std::string name;
-    int count = 0;
-  };
+  ad_utility::IteratorForAssigmentOperator iterator{
+      [&resultVector](int value) { resultVector.push_back(value); }};
 
-  // Create a simple input range
-  std::vector<int> values{1, 2, 3, 4, 5};
-  TestDetails details{"test_range", 42};
+  *iterator = 3;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3));
+  *iterator = 62;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62));
 
-  // Test construction and basic functionality
-  InputRangeTypeErasedWithDetails<int, TestDetails> rangeWithDetails{values,
-                                                                     details};
+  // These should do nothing
+  ++iterator;
+  (void)iterator++;
 
-  // Test details access
-  EXPECT_EQ(rangeWithDetails.details().name, "test_range");
-  EXPECT_EQ(rangeWithDetails.details().count, 42);
+  *iterator = 1023;
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62, 1023));
 
-  // Test that the range functionality works
-  std::vector<int> result;
-  for (auto& value : rangeWithDetails) {
-    result.push_back(value);
-  }
-  EXPECT_EQ(result, values);
-
-  // Test modifying details
-  rangeWithDetails.details().count = 100;
-  EXPECT_EQ(rangeWithDetails.details().count, 100);
-
-  // Test with a custom InputRangeFromGet implementation
-  struct CountingRange : InputRangeFromGet<int> {
-    int current_ = 0;
-    int max_;
-    explicit CountingRange(int max) : max_(max) {}
-    std::optional<int> get() override {
-      if (current_ >= max_) return std::nullopt;
-      return current_++;
-    }
-  };
-
-  TestDetails countingDetails{"counting", 999};
-  InputRangeTypeErasedWithDetails<int, TestDetails> countingRangeWithDetails{
-      CountingRange{3}, countingDetails};
-
-  std::vector<int> countingResult;
-  for (auto& value : countingRangeWithDetails) {
-    countingResult.push_back(value);
-  }
-  EXPECT_EQ(countingResult, (std::vector<int>{0, 1, 2}));
-  EXPECT_EQ(countingRangeWithDetails.details().name, "counting");
-  EXPECT_EQ(countingRangeWithDetails.details().count, 999);
-
-  // Test deduction guide
-  auto deducedRange =
-      InputRangeTypeErasedWithDetails{values, TestDetails{"deduced", 123}};
-  static_assert(
-      std::is_same_v<decltype(deducedRange),
-                     InputRangeTypeErasedWithDetails<int, TestDetails>>);
-  EXPECT_EQ(deducedRange.details().name, "deduced");
-  EXPECT_EQ(deducedRange.details().count, 123);
-
-  // Test external details (pointer-based) scenario
-  TestDetails externalDetails{"external", 456};
-  DISABLE_FREE_NONHEAP_WARNINGS
-  InputRangeTypeErasedWithDetails<int, TestDetails> rangeWithExternalDetails{
-      values, &externalDetails};
-  GCC_REENABLE_WARNINGS
-
-  // Test that external details are accessible (const access)
-  const auto& constRangeRef = rangeWithExternalDetails;
-  EXPECT_EQ(constRangeRef.details().name, "external");
-  EXPECT_EQ(constRangeRef.details().count, 456);
-
-  // Test that modifying the external details affects the range
-  externalDetails.count = 789;
-  EXPECT_EQ(constRangeRef.details().count, 789);
-
-  // Test that mutable access throws for external details
-  EXPECT_THROW(
-      {
-        auto& mutableDetails = rangeWithExternalDetails.details();
-        mutableDetails.count = 999;  // This should throw
-      },
-      ad_utility::Exception);
-
-  // Test range functionality with external details
-  std::vector<int> externalResult;
-  for (auto& value : rangeWithExternalDetails) {
-    externalResult.push_back(value);
-  }
-  EXPECT_EQ(externalResult, values);
+  // Typical usage pattern:
+  std::vector<int> otherValues{1337, 42};
+  ql::ranges::copy(otherValues, iterator);
+  EXPECT_THAT(resultVector, ::testing::ElementsAre(3, 62, 1023, 1337, 42));
 }

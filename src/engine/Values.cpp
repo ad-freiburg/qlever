@@ -116,7 +116,9 @@ Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
+  ad_utility::callFixedSizeVi(resWidth, [&, self = this](auto width) {
+    return self->writeValues<width>(&idTable, &localVocab);
+  });
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
@@ -132,8 +134,7 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to
       // unconditionally copy.
-      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab,
-                                            getIndex().encodedIriManager());
+      Id id = TripleComponent{tc}.toValueId(getIndex(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];

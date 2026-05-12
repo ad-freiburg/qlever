@@ -8,8 +8,9 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
+#include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
-#include "parser/LiteralOrIri.h"
+#include "index/ExportIds.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Literal.h"
@@ -18,6 +19,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -66,7 +68,8 @@ std::string runQueryStreamableResult(
 // as JSON. `mediaType` must be `sparqlJSON` or `qleverJSON`.
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType,
-                            bool useTextIndex = false) {
+                            bool useTextIndex = false,
+                            std::optional<size_t> exportLimit = std::nullopt) {
   ad_utility::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
   auto qec = ad_utility::testing::getQec(std::move(config));
@@ -77,6 +80,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(query);
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -138,7 +142,9 @@ struct TestCaseConstructQuery {
 // Run a single test case for a SELECT query.
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -180,7 +186,9 @@ void runSelectQueryTestCase(
 // Run a single test case for a CONSTRUCT query.
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -211,7 +219,7 @@ void runConstructQueryTestCase(
 // Run a single test case for an ASK query.
 void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
   using enum ad_utility::MediaType;
   // TODO<joka921> match the exception
@@ -310,12 +318,10 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
-        generator) {
+    ad_utility::InputRangeTypeErased<TableConstRefWithVocab> generator) {
   std::vector<IdTable> result;
-  for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
-       generator) {
-    result.push_back(pair.idTable_.clone());
+  for (const TableConstRefWithVocab& pair : generator) {
+    result.push_back(pair.idTable().clone());
   }
   return result;
 }
@@ -327,10 +333,10 @@ auto matchesIdTables(const Tables&... tables) {
 }
 
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
+    ad_utility::InputRangeTypeErased<TableWithRange> generator) {
   std::vector<IdTable> result;
   for (const auto& [pair, range] : generator) {
-    const auto& idTable = pair.idTable_;
+    const auto& idTable = pair.idTable();
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
     result.back().insertAtEnd(idTable, *range.begin(), *(range.end() - 1) + 1);
   }
@@ -542,6 +548,8 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 ."
+      " <s> <p> 100.0 . <s> <p> 960000.06 ."
+      " <s> <p> 123456.00000001 . <s> <p> 1e-10 ."
       " <s> <p> 4.012934858173560e-12 ."
       " <s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> ."
       " <s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> ."
@@ -557,10 +565,22 @@ TEST(ExportQueryExecutionTrees, Floats) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144.0</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.012934858174e-12</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">1e-10</literal></binding>
   </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">100.0</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">123456.0</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">960000.06</literal></binding>
   </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">INF</literal></binding>
@@ -569,28 +589,40 @@ TEST(ExportQueryExecutionTrees, Floats) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">NaN</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseFloat{
-      kg, query, 6,
+      kg, query, 10,
       // TSV
       "?o\n"
       "-INF\n"
       "-42019234865780982022144.0\n"
-      "4.01293e-12\n"
+      "4.012934858174e-12\n"
+      "1e-10\n"
       "42.2\n"
+      "100.0\n"
+      "123456.0\n"
+      "960000.06\n"
       "INF\n"
       "NaN\n",
       // CSV
       "o\n"
       "-INF\n"
       "-42019234865780982022144.0\n"
-      "4.01293e-12\n"
+      "4.012934858174e-12\n"
+      "1e-10\n"
       "42.2\n"
+      "100.0\n"
+      "123456.0\n"
+      "960000.06\n"
       "INF\n"
       "NaN\n",
       makeExpectedQLeverJSON(
           {"\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
            "\"-42019234865780982022144.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"4.012934858174e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"1e-10\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"100.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"123456.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"960000.06\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
            "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>"s}),
       makeExpectedSparqlJSON(
@@ -599,9 +631,17 @@ TEST(ExportQueryExecutionTrees, Floats) {
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "-42019234865780982022144.0"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "4.01293e-12"),
+                           "literal", "4.012934858174e-12"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "1e-10"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "42.2"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "100.0"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "123456.0"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "960000.06"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
                            "INF"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
@@ -610,26 +650,38 @@ TEST(ExportQueryExecutionTrees, Floats) {
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 6, 6,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 10, 10,
       // TSV
       "<s>\t<p>\t\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
       "<s>\t<p>\t-42019234865780982022144.0\n"
-      "<s>\t<p>\t4.01293e-12\n"
+      "<s>\t<p>\t4.012934858174e-12\n"
+      "<s>\t<p>\t1e-10\n"
       "<s>\t<p>\t42.2\n"
+      "<s>\t<p>\t100.0\n"
+      "<s>\t<p>\t123456.0\n"
+      "<s>\t<p>\t960000.06\n"
       "<s>\t<p>\t\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
       "<s>\t<p>\t\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>\n",
       // CSV
       "<s>,<p>,\"\"\"-INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
       "<s>,<p>,-42019234865780982022144.0\n"
-      "<s>,<p>,4.01293e-12\n"
+      "<s>,<p>,4.012934858174e-12\n"
+      "<s>,<p>,1e-10\n"
       "<s>,<p>,42.2\n"
+      "<s>,<p>,100.0\n"
+      "<s>,<p>,123456.0\n"
+      "<s>,<p>,960000.06\n"
       "<s>,<p>,\"\"\"INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
       "<s>,<p>,\"\"\"NaN\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n",
       // Turtle
       "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> -42019234865780982022144.0 .\n"
-      "<s> <p> 4.01293e-12 .\n"
+      "<s> <p> 4.012934858174e-12 .\n"
+      "<s> <p> 1e-10 .\n"
       "<s> <p> 42.2 .\n"
+      "<s> <p> 100.0 .\n"
+      "<s> <p> 123456.0 .\n"
+      "<s> <p> 960000.06 .\n"
       "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
@@ -638,8 +690,12 @@ TEST(ExportQueryExecutionTrees, Floats) {
             "<s>"s, "<p>"s,
             "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144.0"s});
-        j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "4.012934858174e-12"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "1e-10"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "100.0"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "123456.0"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "960000.06"s});
         j.push_back(
             std::vector{"<s>"s, "<p>"s,
                         "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
@@ -983,6 +1039,7 @@ testIriKg</uri></binding>
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
   std::string kg =
       "<s> <p>"
@@ -1121,7 +1178,7 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("o");
-        j["results"]["bindings"].push_back(nullptr);
+        j["results"]["bindings"].push_back(nlohmann::json::object());
         return j;
       }(),
       expectedXml};
@@ -1348,8 +1405,6 @@ TEST(ExportQueryExecutionTrees, MultipleVariables) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, LimitOffset) {
   std::string kg = "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>";
-  std::string objectQuery =
-      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
   std::string expectedXml = makeXMLHeader({"s"}) +
                             R"(
   <result>
@@ -1358,38 +1413,46 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
   <result>
     <binding name="s"><uri>g</uri></binding>
   </result>)" + xmlTrailer;
-  TestCaseSelectQuery testCaseLimitOffset{
-      kg, objectQuery, 2,
-      // TSV
-      "?s\n"
-      "<d>\n"
-      "<g>\n",
-      // CSV
-      "s\n"
-      "d\n"
-      "g\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{
-            "<d>"s,
-        });
-        j.push_back(std::vector{
-            "<g>"s,
-        });
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("s");
-        auto& bindings = j["results"]["bindings"];
-        bindings.emplace_back();
-        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
-        bindings.emplace_back();
-        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
-        return j;
-      }(),
-      expectedXml};
-  runSelectQueryTestCase(testCaseLimitOffset);
+  // The `OrderBy` operation doesn't support the limit natively.
+  std::string_view objectQuery0 =
+      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
+  // The `IndexScan` operation does support the limit natively.
+  std::string_view objectQuery1 =
+      "SELECT ?s WHERE { ?s ?p ?o } INTERNAL SORT BY ?s LIMIT 2 OFFSET 1";
+  for (auto objectQuery : {objectQuery0, objectQuery1}) {
+    TestCaseSelectQuery testCaseLimitOffset{
+        kg, std::string{objectQuery}, 2,
+        // TSV
+        "?s\n"
+        "<d>\n"
+        "<g>\n",
+        // CSV
+        "s\n"
+        "d\n"
+        "g\n",
+        []() {
+          nlohmann::json j;
+          j.push_back(std::vector{
+              "<d>"s,
+          });
+          j.push_back(std::vector{
+              "<g>"s,
+          });
+          return j;
+        }(),
+        []() {
+          nlohmann::json j;
+          j["head"]["vars"].push_back("s");
+          auto& bindings = j["results"]["bindings"];
+          bindings.emplace_back();
+          bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
+          bindings.emplace_back();
+          bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
+          return j;
+        }(),
+        expectedXml};
+    runSelectQueryTestCase(testCaseLimitOffset);
+  }
 }
 
 // ____________________________________________________________________________
@@ -1451,21 +1514,24 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
   ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].is_object());
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),
+      ql::exportIds::idToStringAndType(qec->getIndex(), Id::max(),
+                                       LocalVocab{}),
+      ::testing::ContainsRegex("should be unreachable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ql::exportIds::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
                                                    LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-          qec->getIndex(), Id::max(), LocalVocab{}),
-      ::testing::ContainsRegex("should be unreachable"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
+      ql::exportIds::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }
 
+// _____________________________________________________________________________
 // Test the correct exporting of ASK queries.
 TEST(ExportQueryExecutionTrees, AskQuery) {
   auto askResultTrue = [](bool lazy) {
@@ -1767,7 +1833,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   std::this_thread::sleep_for(1ms);
 
   auto jsonStream = ExportQueryExecutionTrees::computeResultAsQLeverJSON(
-      pq, qet, timer, std::move(cancellationHandle));
+      pq, qet, pq._limitOffset, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
   for (std::string_view chunk : jsonStream) {
@@ -1833,216 +1899,21 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
     return res;
   };
 
-  cppcoro::generator<std::string> res;
+  std::optional<ad_utility::InputRangeTypeErased<std::string>> res;
   using namespace ::testing;
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(true))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("proper exception")));
 
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(false))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
-  std::string kg =
-      "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
-      "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
-      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
-  auto qec = ad_utility::testing::getQec(kg);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  using enum Datatype;
-
-  // Helper function that takes an ID and a vector of test cases and checks
-  // if the ID is correctly converted. A more detailed explanation of the test
-  // logic is below with the test cases.
-  auto checkIdToLiteral =
-      [&](Id id,
-          const std::vector<std::tuple<bool, std::optional<std::string>>>&
-              cases) {
-        for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
-          auto result = ExportQueryExecutionTrees::idToLiteral(
-              qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
-          if (expected) {
-            EXPECT_THAT(result,
-                        ::testing::Optional(::testing::ResultOf(
-                            [](const auto& literalOrIri) {
-                              return literalOrIri.toStringRepresentation();
-                            },
-                            ::testing::StrEq(*expected))));
-          } else {
-            EXPECT_EQ(result, std::nullopt);
-          }
-        }
-      };
-
-  // Test cases: Each tuple describes one test case.
-  // The first element is the ID of the element to test.
-  // The second element is a list of 2 configurations:
-  // 1. for literals all datatypes are removed, IRIs
-  // are converted to literals
-  // 2. only literals with no datatype or`xsd:string` are returned.
-  // In the last case the datatype is removed.
-  std::vector<
-      std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
-      testCases = {
-          // Case: Literal without datatype
-          {getId("\"something\""),
-           {{false, "\"something\""}, {true, "\"something\""}}},
-
-          // Case: Literal with datatype `xsd:string`
-          {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-           {{false, "\"some\""}, {true, "\"some\""}}},
-
-          // Case: Literal with unknown datatype
-          {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
-           {{false, "\"dadudeldu\""}, {true, std::nullopt}}},
-
-          // Case: IRI
-          {getId("<s>"), {{false, "\"s\""}, {true, std::nullopt}}},
-
-          // Case: datatype `Int`
-          {ad_utility::testing::IntId(1),
-           {{false, "\"1\""}, {true, std::nullopt}}},
-
-          // Case: Undefined ID
-          {ad_utility::testing::UndefId(),
-           {{false, std::nullopt}, {true, std::nullopt}}}};
-
-  for (const auto& [id, cases] : testCases) {
-    checkIdToLiteral(id, cases);
-  }
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
-  std::string kg =
-      "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
-      "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
-      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> . <s> <p> "
-      "<http://example.com/> .";
-  auto qec = ad_utility::testing::getQec(kg);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
-
-  std::vector<std::pair<ValueId, std::optional<LiteralOrIri>>> expected{
-      {getId("\"something\""),
-       LiteralOrIri{Literal::fromStringRepresentation("\"something\"")}},
-      {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-       LiteralOrIri{Literal::fromStringRepresentation(
-           "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>")}},
-      {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
-       LiteralOrIri{Literal::fromStringRepresentation(
-           "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")}},
-      {getId("<http://example.com/>"),
-       LiteralOrIri{Iri::fromIriref("<http://example.com/>")}},
-      {ValueId::makeFromBool(true),
-       LiteralOrIri{Literal::fromStringRepresentation(
-           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")}},
-      {ValueId::makeUndefined(), std::nullopt}};
-  for (const auto& [valueId, expRes] : expected) {
-    ASSERT_EQ(ExportQueryExecutionTrees::idToLiteralOrIri(
-                  qec->getIndex(), valueId, LocalVocab{}),
-              expRes);
-  }
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
-
-  auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
-                                   std::optional<std::string> expectedRes) {
-    auto res = ExportQueryExecutionTrees::getLiteralOrNullopt(input);
-    ASSERT_EQ(res.has_value(), expectedRes.has_value());
-    if (res.has_value()) {
-      ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
-    }
-  };
-
-  auto lit = LiteralOrIri{Literal::fromStringRepresentation("\"test\"")};
-  litOrNulloptTestHelper(lit, "\"test\"");
-
-  auto litWithType = LiteralOrIri{Literal::fromStringRepresentation(
-      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")};
-  litOrNulloptTestHelper(
-      litWithType, "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>");
-
-  litOrNulloptTestHelper(std::nullopt, std::nullopt);
-
-  auto iri = LiteralOrIri{Iri::fromIriref("<https://example.com/>")};
-  litOrNulloptTestHelper(iri, std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
-  using Iri = ad_utility::triple_component::Iri;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-
-  auto toLiteralOrIri = [](std::string_view content, auto descriptor) {
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(content), descriptor)};
-  };
-
-  auto verify = [](const LiteralOrIri& input, bool expected) {
-    EXPECT_EQ(
-        ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(input),
-        expected);
-  };
-
-  verify(toLiteralOrIri("Hallo", std::nullopt), true);
-  verify(toLiteralOrIri(
-             "Hallo",
-             Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>")),
-         true);
-  verify(
-      toLiteralOrIri(
-          "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
-      false);
-
-  EXPECT_THROW(
-      verify(LiteralOrIri{Iri::fromIriref("<http://www.example.com/someIri>")},
-             false),
-      ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
-  std::string input = "<s>";
-  std::string expected = "\"s\"";
-  EXPECT_EQ(ExportQueryExecutionTrees::replaceAnglesByQuotes(input), expected);
-  input = "s>";
-  EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
-               ad_utility::Exception);
-  input = "<s";
-  EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
-               ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
-  using ad_utility::triple_component::Iri;
-  std::string_view input = "_:test";
-  EXPECT_THAT(ExportQueryExecutionTrees::blankNodeIriToString(
-                  Iri::fromStringRepresentation(absl::StrCat(
-                      QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
-              ::testing::Optional(::testing::Eq(input)));
-  EXPECT_EQ(ExportQueryExecutionTrees::blankNodeIriToString(
-                Iri::fromStringRepresentation("<some_iri>")),
-            std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -2083,8 +1954,8 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   ad_utility::testing::TestIndexConfig config{kg};
-  config.encodedIriManager = EncodedIriManager{
-      std::vector<std::string>{"http://example.org/", "http://test.com/id/"}};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"};
   auto qec = ad_utility::testing::getQec(std::move(config));
 
   // Parse query with the same EncodedIriManager
@@ -2131,54 +2002,37 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
-  // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
-  // IRIs
+// Test that a `sparql-results+json` export includes a `meta` field if and
+// only if the respective runtime parameter is enabled.
+TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
+  std::string kg = "<x> <y> <z>";
+  std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
 
-  // Create an EncodedIriManager with test prefixes
-  std::vector<std::string> prefixes = {"http://example.org/",
-                                       "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
+  // Case 1: Runtime parameter enabled (default).
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_TRUE(result.contains("meta"));
+    ASSERT_TRUE(result["meta"].contains("query-time-ms"));
+    ASSERT_TRUE(result["meta"].contains("result-size-total"));
+    ASSERT_TRUE(result["meta"]["query-time-ms"].is_number());
+    ASSERT_TRUE(result["meta"]["result-size-total"].is_number());
+    EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
+    EXPECT_EQ(result["meta"]["result-size-total"].get<int64_t>(), 1);
+  }
 
-  // Create a test index config with the encoded IRI manager
-  using namespace ad_utility::testing;
-  TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
-  auto qec = getQec(std::move(config));
-
-  // Test driver lambda to reduce code duplication
-  LocalVocab emptyLocalVocab;
-  auto testEncodedIri = [&](const std::string& iri) {
-    // Encode the IRI
-    auto encodedIdOpt = encodedIriManager.encode(iri);
-    ASSERT_TRUE(encodedIdOpt.has_value()) << "Failed to encode IRI: " << iri;
-
-    Id encodedId = *encodedIdOpt;
-    EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
-
-    // Test getLiteralOrIriFromVocabIndex with the encoded ID
-    auto result = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), encodedId, emptyLocalVocab);
-
-    // The result should be the original IRI
-    EXPECT_TRUE(result.isIri());
-    EXPECT_EQ(result.toStringRepresentation(), iri);
-  };
-
-  // Test multiple encoded IRIs
-  testEncodedIri("<http://example.org/123>");
-  testEncodedIri("<http://test.com/456>");
-
-  // Test that non-encodable IRIs fall back to VocabIndex handling
-  // (This test assumes the test index has some vocabulary entries)
-  if (!qec->getIndex().getVocab().size()) {
-    VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
-    Id vocabId = Id::makeFromVocabIndex(vocabIndex);
-
-    auto vocabResult = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), vocabId, emptyLocalVocab);
-
-    // Should successfully return some IRI or literal from vocabulary
-    EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
+  // Case 2: Runtime parameter disabled.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_FALSE(result.contains("meta"));
   }
 }

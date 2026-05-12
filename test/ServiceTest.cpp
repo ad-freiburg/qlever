@@ -9,6 +9,7 @@
 #include <exception>
 #include <regex>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
@@ -35,8 +36,6 @@ class ServiceTest : public ::testing::Test {
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  ad_utility::AllocatorWithLimit<Id> testAllocator =
-      ad_utility::testing::makeAllocator();
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
   // is used by default by a `Service` operation (see the constructor in
@@ -61,7 +60,7 @@ class ServiceTest : public ::testing::Test {
          std::string contentType = "application/sparql-results+json",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> SendRequestType {
+             AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     // Check that the request parameters are as expected.
     //
     // NOTE: Method, Content-Type and Accept are hard-coded in
@@ -134,7 +133,7 @@ TEST_F(ServiceTest, basicMethods) {
   // Test the basic methods.
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
-  ASSERT_TRUE(serviceOp.getCacheKey().starts_with("SERVICE "))
+  ASSERT_TRUE(ql::starts_with(serviceOp.getCacheKey(), "SERVICE "))
       << serviceOp.getCacheKey();
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
@@ -184,7 +183,7 @@ TEST_F(ServiceTest, computeResult) {
             std::string contentType = "application/sparql-results+json",
             bool silent = false,
             ad_utility::source_location loc =
-                ad_utility::source_location::current()) -> Result {
+                AD_CURRENT_SOURCE_LOC()) -> Result {
       Service s{
           testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
           getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
@@ -195,8 +194,8 @@ TEST_F(ServiceTest, computeResult) {
     // Compute the Result lazily for the given Service and check that the
     // resulting IdTable equals the expected IdTable-vector.
     auto checkLazyResult =
-        [](Service& service,
-           const std::vector<std::vector<std::string>>& expIdTableVector) {
+        [this](Service& service,
+               const std::vector<std::vector<std::string>>& expIdTableVector) {
           auto result = service.computeResultOnlyForTesting(true);
 
           // compute resulting idTable
@@ -208,12 +207,12 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
-          auto get =
-              [&localVocabs](
-                  const std::string& s) -> std::optional<LocalVocabIndex> {
+          auto get = [this, &localVocabs](
+                         std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index = localVocab.getIndexOrNullopt(
-                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              auto index =
+                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
+                      s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -247,8 +246,7 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result, std::string_view errorMsg,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            ad_utility::source_location loc =
-                ad_utility::source_location::current()) {
+            ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
           auto g = generateLocationTrace(loc);
           AD_EXPECT_THROW_WITH_MESSAGE(
               runComputeResult(result, status, contentType, false),
@@ -257,7 +255,9 @@ TEST_F(ServiceTest, computeResult) {
 
           // In the syntax test mode, all services (so also the failing ones)
           // return the neutral result.
-          auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+          auto cleanup =
+              setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(
+                  true);
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, false));
         };
 
@@ -265,7 +265,7 @@ TEST_F(ServiceTest, computeResult) {
     // status-code isn't ok
     expectThrowOrSilence(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
-        "SERVICE responded with HTTP status code: 400, Bad Request.",
+        "SERVICE responded with HTTP status code: 400, Bad Request",
         boost::beast::http::status::bad_request,
         "application/sparql-results+json");
     // contentType doesn't match
@@ -273,7 +273,7 @@ TEST_F(ServiceTest, computeResult) {
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
         "QLever requires the endpoint of a SERVICE to send "
         "the result as 'application/sparql-results+json' but "
-        "the endpoint sent 'wrong/type'.",
+        "the endpoint sent 'wrong/type'",
         boost::beast::http::status::ok, "wrong/type");
 
     // or Result has invalid structure
@@ -300,12 +300,12 @@ TEST_F(ServiceTest, computeResult) {
     expectThrowOrSilence(
         "{\"head\": {},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
     // wrong variables type (array of strings expected)
     expectThrowOrSilence(
         "{\"head\": {\"vars\": [\"x\", \"y\", 3]},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
 
     // Internal parser errors.
     expectThrowOrSilence(
@@ -380,9 +380,10 @@ TEST_F(ServiceTest, computeResult) {
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
-    auto get = [&localVocab](const std::string& s) {
+    const auto& localVocabContext = testQec->getLocalVocabContext();
+    auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          ad_utility::triple_component::LiteralOrIri::iriref(s));
+          LocalVocabEntry::fromIriref(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -563,7 +564,9 @@ TEST_F(ServiceTest, getCacheKey) {
 // _____________________________________________________________________________
 TEST_F(ServiceTest, getCacheKeyWithCaching) {
   using namespace ::testing;
-  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheServiceResults_>(
+          true);
   {
     parsedQuery::Service parsedServiceClause{
         {Variable{"?x"}, Variable{"?y"}},
@@ -718,9 +721,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry(
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "a\"b\"c"));
+  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 
@@ -733,7 +734,9 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
-  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheServiceResults_>(
+          true);
   auto service = std::make_shared<Service>(
       testQec,
       parsedQuery::Service{
@@ -811,7 +814,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
    public:
     MockValues(QueryExecutionContext* qec,
                parsedQuery::SparqlValues parsedValues)
-        : Values(qec, parsedValues) {}
+        : Operation{qec}, Values(qec, parsedValues) {}
 
     Result computeResult([[maybe_unused]] bool requestLaziness) override {
       Result res = Values::computeResult(false);
@@ -892,8 +895,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Compute (large) sibling -> sibling result is computed
   const auto maxValueRowsDefault =
-      RuntimeParameters().get<"service-max-value-rows">();
-  RuntimeParameters().set<"service-max-value-rows">(0);
+      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
   Service::precomputeSiblingResult(sibling, service, true, false);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -902,7 +905,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
+      maxValueRowsDefault);
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
@@ -919,7 +923,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
-  RuntimeParameters().set<"service-max-value-rows">(0);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
   Service::precomputeSiblingResult(service, sibling, false, true);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -928,7 +932,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                    ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
+      maxValueRowsDefault);
 
   // consume the sibling result-generator
   for ([[maybe_unused]] auto& _ :
@@ -958,4 +963,123 @@ TEST_F(ServiceTest, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, serviceAllowedIriPrefixes) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  parsedQuery::Service parsedServiceClauseSilent{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      true};
+
+  std::string_view expectedUrl = "http://localhost:80/api";
+  std::string_view expectedSparqlQuery =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  auto makeService = [&](const parsedQuery::Service& clause) {
+    return Service{
+        testQec, clause,
+        getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
+  };
+
+  // With an empty whitelist (default), all URLs should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a matching prefix, the IRI should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a non-matching prefix, the IRI should be rejected.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+
+  // With SILENT keyword, the rejected URL should be silenced.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClauseSilent);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, matching any should allow.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, none matching should reject.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://other.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+}
+
+// Test that a `Service` operation correctly passes the `maxRedirects` parameter
+// to the HTTP client. The actual redirect handling is tested in `HttpTest.cpp`.
+TEST_F(ServiceTest, redirectsIntegration) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://example.com/api>"),
+      "",
+      "{ }",
+      false};
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  // Test with default setting for `maxRedirects`, which is 1.
+  {
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(1)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
+
+  // Test with custom setting for `maxRedirects`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(5)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
 }

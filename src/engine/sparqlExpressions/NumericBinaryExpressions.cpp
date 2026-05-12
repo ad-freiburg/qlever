@@ -8,9 +8,8 @@
 namespace sparqlExpression {
 namespace detail {
 // Multiplication.
-inline auto multiply = makeNumericExpression<std::multiplies<>>();
-NARY_EXPRESSION(MultiplyExpression, 2,
-                FV<decltype(multiply), NumericValueGetter>);
+using Multiply = MakeNumericExpression<std::multiplies<>>;
+NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -22,57 +21,103 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // this behavior. The old behavior can be reinstated by a RuntimeParameter.
 // Note: The result of a division in SPARQL is always a decimal number, so there
 // is no integer division.
-[[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
-  return static_cast<double>(x) / static_cast<double>(y);
+struct DivideImpl {
+  template <typename T1, typename T2>
+  auto operator()(T1 x, T2 y) const {
+    return static_cast<double>(x) / static_cast<double>(y);
+  }
 };
 
-inline auto divide1 = makeNumericExpression<decltype(divideImpl), true>();
+using Divide1 = MakeNumericExpression<DivideImpl, true>;
 NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<decltype(divide1), NumericValueGetter>);
+                FV<Divide1, NumericValueGetter>);
 
-inline auto divide2 = makeNumericExpression<decltype(divideImpl), false>();
+using Divide2 = MakeNumericExpression<DivideImpl, false>;
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<decltype(divide2), NumericValueGetter>);
+                FV<Divide2, NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = makeNumericExpression<std::plus<>>();
-NARY_EXPRESSION(AddExpression, 2, FV<decltype(add), NumericValueGetter>);
+using Add = MakeNumericExpression<std::plus<>>;
+NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-inline auto subtract = makeNumericExpression<std::minus<>>();
+// _____________________________________________________________________________
+// Subtract.
+struct SubtractImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(SubtractImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs - rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs - rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs - static_cast<double>(rhs));
+  }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator-` implementation in `DateYearOrDuration`.
+    auto difference = lhs - rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use subtractionn between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
 NARY_EXPRESSION(SubtractExpression, 2,
-                FV<decltype(subtract), NumericValueGetter>);
+                FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
-inline auto powImpl = [](double base, double exp) {
-  return std::pow(base, exp);
+struct PowImpl {
+  double operator()(double base, double exp) const {
+    return std::pow(base, exp);
+  }
 };
-inline auto pow = makeNumericExpression<decltype(powImpl)>();
-NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
+using Pow = MakeNumericExpression<PowImpl>;
+NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________
-inline auto orLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True || b == True) {
-    return Id::makeFromBool(true);
+struct OrLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True || b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False && b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False && b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 // _____________________________________________________________________________
-inline auto andLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True && b == True) {
-    return Id::makeFromBool(true);
+struct AndLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True && b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False || b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False || b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 namespace constructPrefilterExpr {
@@ -329,15 +374,53 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override {
+      const LocalVocabContext& context, bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
     auto leftChild =
-        children[0].get()->getPrefilterExpressionForMetadata(isNegated);
+        children[0]->getPrefilterExpressionForMetadata(context, isNegated);
     auto rightChild =
-        children[1].get()->getPrefilterExpressionForMetadata(isNegated);
+        children[1]->getPrefilterExpressionForMetadata(context, isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
+  }
+
+  std::optional<SparqlExpression::LangFilterData> getLanguageFilterExpression()
+      const override {
+    if constexpr (!std::is_same_v<BinaryPrefilterExpr,
+                                  prefilterExpressions::OrExpression>) {
+      return std::nullopt;
+    }
+    // Concatenate filters for the case of
+    // `LANG(?abc) = "en" || LANG(?abc) = "mul"` and so on.
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+    auto leftFilter = children[0]->getLanguageFilterExpression();
+    auto rightFilter = children[1]->getLanguageFilterExpression();
+    if (leftFilter.has_value() && rightFilter.has_value() &&
+        leftFilter->variable_ == rightFilter->variable_) {
+      leftFilter->languages_.merge(rightFilter->languages_);
+      return leftFilter;
+    }
+    return std::nullopt;
+  }
+
+  // _____________________________________________________________________________
+  bool isResultAlwaysDefined(const VariableToColumnMap& map) const override {
+    auto isAlwaysDefined = [&map](const auto& child) {
+      return child->isResultAlwaysDefined(map);
+    };
+    if constexpr (std::is_same_v<BinaryPrefilterExpr,
+                                 prefilterExpressions::OrExpression>) {
+      // For an OR expression, it is sufficient that one child is always
+      // defined.
+      return ql::ranges::any_of(this->children(), isAlwaysDefined);
+    } else {
+      static_assert(std::is_same_v<BinaryPrefilterExpr,
+                                   prefilterExpressions::AndExpression>);
+      // For an AND expression, both children must be always defined.
+      return ql::ranges::all_of(this->children(), isAlwaysDefined);
+    }
   }
 };
 
@@ -346,12 +429,12 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 //______________________________________________________________________________
 using AndExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::AndExpression,
-    Operation<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<AndLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Intersection>>>;
 
 using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::OrExpression,
-    Operation<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<OrLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Union>>>;
 
 }  // namespace detail
@@ -364,7 +447,7 @@ SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2) {
-  if (RuntimeParameters().get<"division-by-zero-is-undef">()) {
+  if (getRuntimeParameter<&RuntimeParameters::divisionByZeroIsUndef_>()) {
     return std::make_unique<DivideExpressionByZeroIsUndef>(std::move(child1),
                                                            std::move(child2));
   } else {

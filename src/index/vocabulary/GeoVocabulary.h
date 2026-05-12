@@ -13,6 +13,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
+#include "util/Serializer/Serializer.h"
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
@@ -105,6 +106,7 @@ class GeoVocabulary {
         underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
     size_t numInvalidGeometries_ = 0;
+    size_t numInvalidPolygonArea_ = 0;
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word
@@ -131,6 +133,14 @@ class GeoVocabulary {
 
   // ___________________________________________________________________________
   void close();
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(GeoVocabulary) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for GeoVocabulary.");
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H

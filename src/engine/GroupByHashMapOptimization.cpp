@@ -6,6 +6,7 @@
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId AvgAggregationData::calculateResult(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   if (error_) {
     return ValueId::makeUndefined();
@@ -20,6 +21,7 @@
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId CountAggregationData::calculateResult(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   return ValueId::makeFromInt(count_);
 }
@@ -27,6 +29,7 @@
 // _____________________________________________________________________________
 template <valueIdComparators::Comparison Comp>
 [[nodiscard]] ValueId ExtremumAggregationData<Comp>::calculateResult(
+    [[maybe_unused]] const LocalVocabContext& context,
     LocalVocab* localVocab) const {
   return sparqlExpression::detail::idOrLiteralOrIriToId(currentValue_,
                                                         localVocab);
@@ -37,6 +40,7 @@ template struct ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId SumAggregationData::calculateResult(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] const LocalVocab* localVocab) const {
   if (error_) {
     return ValueId::makeUndefined();
@@ -52,13 +56,11 @@ void GroupConcatAggregationData::addValueImpl(
     const std::optional<ad_utility::triple_component::Literal>& val) {
   if (first_) {
     first_ = false;
-    sparqlExpression::detail::pushLanguageTag(langTag_, val);
   } else {
     currentValue_.append(separator_);
   }
   if (val.has_value()) {
     currentValue_.append(asStringViewUnsafe(val.value().getContent()));
-    sparqlExpression::detail::mergeLanguageTags(langTag_, val.value());
   } else {
     undefined_ = true;
   }
@@ -66,14 +68,14 @@ void GroupConcatAggregationData::addValueImpl(
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId GroupConcatAggregationData::calculateResult(
-    LocalVocab* localVocab) const {
+    const LocalVocabContext& context, LocalVocab* localVocab) const {
   if (undefined_) {
     return ValueId::makeUndefined();
   }
   using namespace ad_utility::triple_component;
   auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-      sparqlExpression::detail::stringWithOptionalLangTagToLiteral(
-          currentValue_, langTag_));
+      LocalVocabEntry::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(currentValue_), context));
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
 }
 
@@ -89,11 +91,11 @@ void GroupConcatAggregationData::reset() {
   undefined_ = false;
   first_ = true;
   currentValue_.clear();
-  langTag_.reset();
 }
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId SampleAggregationData::calculateResult(
+    [[maybe_unused]] const LocalVocabContext& context,
     LocalVocab* localVocab) const {
   if (!value_.has_value()) {
     return Id::makeUndefined();

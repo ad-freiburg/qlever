@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
@@ -65,7 +70,8 @@ enum class SpatialJoinAlgorithm {
   BASELINE,
   S2_GEOMETRY,
   BOUNDING_BOX,
-  LIBSPATIALJOIN
+  LIBSPATIALJOIN,
+  S2_POINT_POLYLINE
 };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
@@ -91,7 +97,12 @@ struct SpatialJoinConfiguration {
   // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
+  // Join type for `libspatialjoin` algorithm.
   std::optional<SpatialJoinType> joinType_ = std::nullopt;
+
+  // Cache name for precomputed right child with s2 index (only for
+  // s2-point-polyline algorithm)
+  std::optional<std::string> rightCacheName_ = std::nullopt;
 };
 
 // The spatial join operation without a limit on the maximum number of results

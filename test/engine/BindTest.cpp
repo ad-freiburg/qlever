@@ -10,6 +10,7 @@
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
@@ -28,7 +29,7 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
 
 void expectBindYieldsIdTable(
     QueryExecutionContext* qec, Bind& bind, const IdTable& expected,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
 
   {
@@ -161,15 +162,67 @@ TEST(Bind, limitIsPropagated) {
       std::nullopt, true);
   Bind bind{
       qec,
-      std::move(valuesTree),
+      valuesTree,
       {SparqlExpressionPimpl{
            std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
        Variable{"?b"}}};
 
   bind.applyLimitOffset({1, 1});
+  EXPECT_EQ(bind.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+            LimitOffsetClause(1, 1));
+  // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(
+      valuesTree->getRootOperation()->getLimitOffset().isUnconstrained());
 
   auto result = bind.computeResultOnlyForTesting();
   const auto& idTable = result.idTable();
 
   EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
 }
+
+// _____________________________________________________________________________
+class BindUndefStatusTest : public testing::TestWithParam<bool> {};
+
+TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?y"};
+
+  bool isDefined = GetParam();
+
+  // Create IdTable with either a defined or undefined value.
+  IdTable inputTable = isDefined
+                           ? makeIdTableFromVector({{42}}, &Id::makeFromInt)
+                           : makeIdTableFromVector({{Id::makeUndefined()}});
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), Vars{inputVar});
+
+  // Create BIND(?x AS ?y).
+  auto varExpr = std::make_unique<VariableExpression>(inputVar);
+  SparqlExpressionPimpl pimpl{std::move(varExpr), inputVar.name()};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status.
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto expectedStatus = isDefined ? AlwaysDefined : PossiblyUndefined;
+
+  // Check the input variable ?x.
+  ASSERT_TRUE(varColMap.contains(inputVar));
+  auto& inputColInfo = varColMap.at(inputVar);
+  EXPECT_EQ(inputColInfo.mightContainUndef_, expectedStatus);
+
+  // Check the target variable ?y.
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& targetColInfo = varColMap.at(targetVar);
+  EXPECT_EQ(targetColInfo.mightContainUndef_, expectedStatus);
+}
+
+INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
+                         testing::Values(true, false),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "DefinedVariable"
+                                             : "UndefinedVariable";
+                         });

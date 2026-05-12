@@ -4,12 +4,15 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
 
@@ -25,6 +28,8 @@ Id V(int64_t index) {
   AD_CONTRACT_CHECK(index >= 0);
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 }
+
+auto I = &Id::makeFromInt;
 
 // Retrieve the corresponding `BlockMetadataRanges` value for the
 // given`CompressedBlockMetadata` vector
@@ -92,7 +97,7 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
 void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
   VectorTable exp;
@@ -166,27 +171,17 @@ compressedRelationTestWriteCompressedRelations(
   };
 
   // First create the on-disk permutation.
-  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
-                                  blocksize};
+  auto writer = std::make_unique<CompressedRelationWriter>(
+      numColumns, ad_utility::File{filename, "w"}, blocksize);
   std::vector<CompressedRelationMetadata> metaData;
   CompressedRelationWriter::WriterAndCallback wc1{
-      writer, [&](ql::span<const CompressedRelationMetadata> metadata) {
+      std::move(writer),
+      [&](ql::span<const CompressedRelationMetadata> metadata) {
         metaData.insert(metaData.end(), metadata.begin(), metadata.end());
       }};
 
-  CompressedRelationWriter twinWriter{
-      numColumns, ad_utility::File{filename + ".twinPermutation", "w"},
-      blocksize};
-  std::vector<CompressedRelationMetadata> twinMetaData;
-  CompressedRelationWriter::WriterAndCallback wc2{
-      twinWriter, [&](ql::span<const CompressedRelationMetadata> metadata) {
-        twinMetaData.insert(twinMetaData.end(), metadata.begin(),
-                            metadata.end());
-      }};
-
-  auto res = CompressedRelationWriter::createPermutationPair(
-      filename + "sorter-basename", wc1, wc2,
-      ad_utility::InputRangeTypeErased{generator(5)},
+  auto res = CompressedRelationWriter::createPermutation(
+      std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
@@ -495,9 +490,9 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
                                    const LocatedTriplesPerBlock& =
                                        emptyLocatedTriples,
-                                   Loc loc = Loc::current()) {
+                                   Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
-    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple(
+    auto firstAndLastTriple = readerPtr->getFirstAndLastTripleIgnoringGraph(
         {spec, blockMetadata}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
@@ -549,12 +544,12 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   // Test infrastructure.
   using Loc = ad_utility::source_location;
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
-                                   Loc loc = Loc::current()) {
+                                   Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     auto blockMetadata =
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
-    auto firstAndLastTriple =
-        readerPtr->getFirstAndLastTriple({spec, blockMetadata}, locatedTriples);
+    auto firstAndLastTriple = readerPtr->getFirstAndLastTripleIgnoringGraph(
+        {spec, blockMetadata}, locatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
@@ -727,7 +722,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   const std::vector<Id>& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto [result, numHandledBlocks] =
         CompressedRelationReader::getBlocksForJoin(joinColumn,
@@ -830,7 +825,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
                       expectedBlocks,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto result = CompressedRelationReader::getBlocksForJoin(
         *metadataAndBlocks, *metadataAndBlocksB);
@@ -901,8 +896,8 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   CompressedBlockMetadata metadata{
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
-  ScanSpecification::Graphs graphs = std::nullopt;
-  Filter f{graphs, 43, false};
+  using GF = ScanSpecification::GraphFilter;
+  Filter f{GF::All(), 43, false};
   EXPECT_FALSE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
 
@@ -914,10 +909,10 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   // Keep the graph column (the last column), hence there are no duplicates,
   // but keep only the entries from graphs `1` and `2`.
   table = makeIdTableFromVector({{3, 1}, {3, 2}, {5, 3}});
-  graphs.emplace();
-  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
-  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
-  f = Filter{graphs, 1, false};
+  ad_utility::HashSet<Id> graphs;
+  graphs.insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
+  graphs.insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
+  f = Filter{GF::Whitelist(std::move(graphs)), 1, false};
   EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
@@ -937,9 +932,11 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
-  auto filter = CompressedRelationReader::FilterDuplicatesAndGraphs{
-      std::nullopt, 0, false};
-  auto& graphs = filter.desiredGraphs_;
+  using GF = ScanSpecification::GraphFilter;
+  auto filter =
+      CompressedRelationReader::FilterDuplicatesAndGraphs{GF::All(), 0, false};
+  auto& graphFilter = filter.graphFilter_;
+  ad_utility::HashSet<Id> graphs;
   // No information about the contained blocks, and no graph filter specified,
   // so we cannot skip.
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
@@ -952,14 +949,15 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 
   // The graph info says that the block only contains the graph `1`, and we in
   // fact want the graphs `1` and `3`, so it can't be skipped.
-  graphs.emplace();
-  graphs->insert(V(1));
-  graphs->insert(V(3));
+  graphs.insert(V(1));
+  graphs.insert(V(3));
+  graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
   // be skipped.
-  graphs->erase(V(1));
+  graphs.insert(V(3));
+  graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_TRUE(filter.canBlockBeSkipped(metadata));
 
   // The block metadata contains no information on the contained graphs, but we
@@ -974,10 +972,11 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
   deltaTriplesManager.modify<void>([](DeltaTriples& dt) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
-                              IdTriple{{V(0), V(4), V(5), V(3)}}});
+    dt.insertTriples(handle, {IdTriple{{I(0), I(1), I(2), I(3)}},
+                              IdTriple{{I(0), I(4), I(5), I(3)}}});
   });
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   auto& impl = index.getImpl();
   auto expectResultSizes = [&impl, &locatedTriplesSnapshot](
@@ -985,13 +984,13 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
                                const ScanSpecification& scanSpec, size_t lower,
                                size_t upper, size_t exact,
                                ad_utility::source_location sourceLocation =
-                                   ad_utility::source_location::current()) {
+                                   AD_CURRENT_SOURCE_LOC()) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
     auto augmentedBlocks =
         perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot);
-    auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+    auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation<false>(
         perm.permutation());
     auto [actual_lower, actual_upper] = reader.getSizeEstimateForScan(
         ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
@@ -1006,13 +1005,190 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     expectResultSizes(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2,
                       2);
   }
-  expectResultSizes(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2,
+  expectResultSizes(Permutation::SPO, {I(0), std::nullopt, std::nullopt}, 0, 2,
                     2);
   // Not all triples of the block are requested. The size estimate is truncated
   // by a factor which is a RuntimeParameter.
-  expectResultSizes(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1,
+  expectResultSizes(Permutation::PSO, {I(1), std::nullopt, std::nullopt}, 0, 1,
                     1);
-  expectResultSizes(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
+  expectResultSizes(Permutation::PSO, {I(1), I(5), std::nullopt}, 0, 1, 0);
+}
+
+namespace {
+using FLT =
+    CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple;
+// Helper matcher for `FirstAndLastTriple`.
+::testing::Matcher<const FLT&> FirstAndLastTripleEq(
+    const CompressedBlockMetadata::PermutedTriple& expectedFirst,
+    const CompressedBlockMetadata::PermutedTriple& expectedLast) {
+  using ::testing::Eq;
+  return ::testing::AllOf(AD_FIELD(FLT, firstTriple_, Eq(expectedFirst)),
+                          AD_FIELD(FLT, lastTriple_, Eq(expectedLast)));
+}
+
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
+  ad_utility::testing::TestIndexConfig testIndexConfig;
+  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  testIndexConfig.turtleInput =
+      "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
+      "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."
+      "<a> <b> <c> <g1> . <a> <b> <f> <g2> . <a> <b> <j> <g3> ."
+      "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
+  auto index = ad_utility::testing::makeTestIndex(
+      "getFirstAndLastTripleIgnoringGraph", std::move(testIndexConfig));
+  auto currentSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto permutationEnum = Permutation::Enum::SPO;
+  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+  const auto& locatedTriplesPerBlock =
+      currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
+
+  auto getId = [&index](std::string_view iri) {
+    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
+        .toValueId(index)
+        .value();
+  };
+  auto a = getId("<a>");
+  auto b = getId("<b>");
+  auto c = getId("<c>");
+  auto i = getId("<i>");
+  auto k = getId("<k>");
+  auto g1 = getId("<g1>");
+  auto g2 = getId("<g2>");
+  auto g3 = getId("<g3>");
+
+  auto getTriples = [&permutation, &currentSnapshot, permutationEnum, &index,
+                     &locatedTriplesPerBlock](std::optional<Id> col0,
+                                              std::optional<Id> col1,
+                                              std::optional<Id> graphId) {
+    ScanSpecification scanSpecification{
+        std::move(col0),
+        std::move(col1),
+        std::nullopt,
+        {},
+        graphId.has_value() ? ScanSpecification::GraphFilter::Whitelist(
+                                  {std::move(graphId).value()})
+                            : ScanSpecification::GraphFilter::All()};
+    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
+        std::move(scanSpecification),
+        permutation.getAugmentedMetadataForPermutation(*currentSnapshot)};
+    const auto& reader =
+        index.getImpl().getPermutation(permutationEnum).reader();
+    return reader.getFirstAndLastTripleIgnoringGraph(metadataAndBlocks,
+                                                     locatedTriplesPerBlock);
+  };
+  using PT = CompressedBlockMetadata::PermutedTriple;
+  using ::testing::Optional;
+
+  // The test result should not be affected by the graph. It should be
+  // independent of that.
+  std::array<std::optional<Id>, 4> allGraphs{std::nullopt, g1, g2, g3};
+  for (auto graphId : allGraphs) {
+    EXPECT_THAT(
+        getTriples(std::nullopt, std::nullopt, graphId),
+        Optional(FirstAndLastTripleEq(PT{a, a, a, g1}, PT{a, b, k, g3})));
+    EXPECT_THAT(
+        getTriples(a, std::nullopt, graphId),
+        Optional(FirstAndLastTripleEq(PT{a, a, a, g1}, PT{a, b, k, g3})));
+    EXPECT_THAT(
+        getTriples(a, a, graphId),
+        Optional(FirstAndLastTripleEq(PT{a, a, a, g1}, PT{a, a, i, g3})));
+    EXPECT_THAT(
+        getTriples(a, b, graphId),
+        Optional(FirstAndLastTripleEq(PT{a, b, c, g1}, PT{a, b, k, g3})));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  ad_utility::testing::TestIndexConfig testIndexConfig;
+  testIndexConfig.usePatterns = true;
+  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  testIndexConfig.turtleInput =
+      "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
+      "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."
+      "<a> <b> <c> <g1> . <a> <b> <f> <g2> . <a> <b> <j> <g3> ."
+      "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
+  auto index = ad_utility::testing::makeTestIndex(
+      "ensureDummyBlockWith6ColumnsDoesntCauseIssues",
+      std::move(testIndexConfig));
+  index.deltaTriplesManager().modify<void>(
+      [cancellationHandle, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry = LocalVocabEntry::fromIriref("<zzz>", index);
+        Id id = Id::makeFromLocalVocabIndex(&entry);
+        // Insert a single triple at the end.
+        deltaTriples.insertTriples(cancellationHandle,
+                                   {IdTriple{{id, id, id, id}}});
+      });
+  auto sharedLocatedTriplesSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  for (bool usePatternPermutation : {false, true}) {
+    auto permutationEnum =
+        usePatternPermutation ? Permutation::Enum::PSO : Permutation::Enum::SPO;
+    const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+
+    ScanSpecification scanSpecification{std::nullopt, std::nullopt,
+                                        std::nullopt};
+    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
+        std::move(scanSpecification),
+        permutation.getAugmentedMetadataForPermutation(
+            *sharedLocatedTriplesSnapshot)};
+
+    std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    if (usePatternPermutation) {
+      additionalColumns.push_back(ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN);
+      additionalColumns.push_back(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN);
+    }
+
+    while (!additionalColumns.empty()) {
+      auto blocks =
+          index.getImpl()
+              .getPermutation(permutationEnum)
+              .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
+                        cancellationHandle, *sharedLocatedTriplesSnapshot);
+      for (const IdTable& block : blocks) {
+        EXPECT_EQ(block.numColumns(), 3 + additionalColumns.size());
+      }
+      additionalColumns.pop_back();
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
+  // Regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2632
+  auto* qec = ad_utility::testing::getQec();
+  auto& index = qec->getIndex();
+  auto sharedLocatedTriplesSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto permutationEnum = Permutation::Enum::PSO;
+  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+
+  ScanSpecification scanSpecification{std::nullopt, std::nullopt, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
+      std::move(scanSpecification),
+      permutation.getAugmentedMetadataForPermutation(
+          *sharedLocatedTriplesSnapshot)};
+
+  std::vector<ColumnIndex> additionalColumns{
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto blocks =
+      index.getImpl()
+          .getPermutation(permutationEnum)
+          .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
+                    cancellationHandle, *sharedLocatedTriplesSnapshot);
+  for (const IdTable& block : blocks) {
+    EXPECT_EQ(block.numColumns(), 4);
+  }
 }
 
 // Test the correct setting of the metadata for the contained graphs.
@@ -1076,10 +1252,15 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {9, 5, 1}}});
   using namespace ::testing;
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
+    using GF = ScanSpecification::GraphFilter;
     auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
     ad_utility::HashSet<Id> graphs{V(0)};
-    ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
+    ScanSpecification spec{V(42),
+                           std::nullopt,
+                           std::nullopt,
+                           {},
+                           GF::Whitelist(std::move(graphs))};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     auto res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
@@ -1089,7 +1270,11 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     graphs.clear();
     graphs.insert(V(1));
-    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    spec = ScanSpecification{V(42),
+                             std::nullopt,
+                             std::nullopt,
+                             {},
+                             GF::Whitelist(std::move(graphs))};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
@@ -1098,15 +1283,18 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // Edge case, all graphs are filtered out
     graphs.clear();
-    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    spec = ScanSpecification{V(42),
+                             std::nullopt,
+                             std::nullopt,
+                             {},
+                             GF::Whitelist(std::move(graphs))};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector({}));
 
     // std::nullopt matches all graphs.
-    spec =
-        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, GF::All()};
     std::array additionalColumns{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
@@ -1123,14 +1311,70 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
-    spec =
-        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, GF::All()};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
         << "Failed with blocksize " << blocksize.getBytes();
+
+    // std::nullopt matches all graphs, but the default graph ('0' in this test)
+    // should be filtered out.
+    spec = ScanSpecification{
+        V(42), std::nullopt, std::nullopt, {}, GF::Blacklist(V(0))};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
+        << "Failed with blocksize " << blocksize.getBytes();
+  }
+}
+
+namespace ad_utility {
+std::pair<size_t, size_t> getThreadCountAndTaskSize(
+    const TaskQueue<false>& taskQueue) {
+  return {taskQueue.threads_.size(), taskQueue.queueMaxSize_};
+}
+}  // namespace ad_utility
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
+  auto threads = std::thread::hardware_concurrency();
+  if (threads == 1) {
+    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
+  }
+  {
+    // Check if is is limited to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1337);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if is is expanded to actual threads.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
+  }
+  {
+    // Check if minimum of 4 tasks is honored.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    CompressedRelationWriter writer{
+        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
 }
 
@@ -1149,8 +1393,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {7, 0, 0}}});
   auto [blocks, metadata, reader] =
       writeAndOpenRelations(inputs, "removePrefix", 16_B);
-  ScanSpecification spec{
-      std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
+  ScanSpecification spec{std::nullopt, std::nullopt, std::nullopt};
 
   auto getSize = [](auto range) {
     size_t counter = 0;

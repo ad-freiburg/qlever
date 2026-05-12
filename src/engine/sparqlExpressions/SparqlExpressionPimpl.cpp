@@ -1,9 +1,11 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "./SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+#include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -38,8 +40,8 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
 std::vector<Variable> SparqlExpressionPimpl::getUnaggregatedVariables(
     const ad_utility::HashSet<Variable>& groupedVariables) const {
   auto vars = _pimpl->getUnaggregatedVariables();
-  std::erase_if(
-      vars, [&](const auto& var) { return groupedVariables.contains(var); });
+  ql::erase_if(vars,
+               [&](const auto& var) { return groupedVariables.contains(var); });
   return vars;
 }
 
@@ -58,6 +60,12 @@ std::optional<::Variable> SparqlExpressionPimpl::getVariableOrNullopt() const {
 std::string SparqlExpressionPimpl::getCacheKey(
     const VariableToColumnMap& variableToColumnMap) const {
   return _pimpl->getCacheKey(variableToColumnMap);
+}
+
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isResultAlwaysDefined(
+    const VariableToColumnMap& variableToColumnMap) const {
+  return _pimpl->isResultAlwaysDefined(variableToColumnMap);
 }
 
 // ____________________________________________________________________________
@@ -94,13 +102,9 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 
 //_____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
-SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
-  return _pimpl->getPrefilterExpressionForMetadata();
-}
-
-// _____________________________________________________________________________
-bool SparqlExpressionPimpl::containsLangExpression() const {
-  return _pimpl->containsLangExpression();
+SparqlExpressionPimpl::getPrefilterExpressionForMetadata(
+    const LocalVocabContext& context) const {
+  return _pimpl->getPrefilterExpressionForMetadata(context);
 }
 
 // _____________________________________________________________________________

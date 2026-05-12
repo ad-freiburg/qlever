@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <concepts>
 #include <ctre.hpp>
 #include <random>
 #include <ranges>
@@ -31,7 +30,7 @@ random number generator, using the given seed.
 */
 CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
     T randomNumberGeneratorFactory,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 
@@ -112,8 +111,7 @@ CPP_template(typename RangeNumberType, typename GeneratorFactory)(
                                             const std::vector<NumericalRange<
                                                 RangeNumberType>>& ranges,
                                             ad_utility::source_location l =
-                                                ad_utility::source_location::
-                                                    current()) {
+                                                AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeedWithRange")};
 
@@ -135,13 +133,16 @@ of the range.
 
 @param ranges The ranges, for which should be tested for.
 */
-template <typename Generator, typename RangeNumberType>
-requires std::constructible_from<Generator, RangeNumberType, RangeNumberType> &&
-         std::invocable<Generator> &&
-         ad_utility::isSimilar<std::invoke_result_t<Generator>, RangeNumberType>
-void testRange(
-    const std::vector<NumericalRange<RangeNumberType>>& ranges,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+CPP_template(typename Generator, typename RangeNumberType)(
+    requires std::constructible_from<Generator, RangeNumberType,
+                                     RangeNumberType>&&
+        ql::concepts::invocable<Generator>&& ad_utility::isSimilar<
+            std::invoke_result_t<Generator>,
+            RangeNumberType>) void testRange(const std::
+                                                 vector<NumericalRange<
+                                                     RangeNumberType>>& ranges,
+                                             ad_utility::source_location l =
+                                                 AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testRange")};
 

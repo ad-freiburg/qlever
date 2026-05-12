@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "index/LocalVocabEntry.h"
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
@@ -23,8 +24,9 @@ TEST(NamedResultCache, basicWorkflow) {
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref("<bliBlaBlubb>"));
+  auto* qec = ad_utility::testing::getQec();
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      "<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -37,13 +39,14 @@ TEST(NamedResultCache, basicWorkflow) {
         get, UnorderedElementsAreArray(localVocab.getAllWordsForTesting()));
   };
 
-  auto qec = ad_utility::testing::getQec();
   auto getCacheValue = [&varColMap, &localVocab](const auto& table) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
-        localVocab.clone()};
+        localVocab.clone(),
+        "cache key",
+        std::nullopt};
   };
   // store something in the cache and check that it's there
   {
@@ -52,7 +55,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -65,7 +69,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -86,7 +91,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -115,7 +121,7 @@ TEST(NamedResultCache, E2E) {
   std::string pinnedQuery =
       "SELECT * { {?s <p> <o> } UNION {VALUES ?s { <notInVocab> }}} INTERNAL "
       "SORT BY ?s";
-  qec->pinResultWithName() = "dummyQuery";
+  qec->pinResultWithName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
   [[maybe_unused]] auto pinnedResult = qet.getResult();
 
@@ -128,10 +134,9 @@ TEST(NamedResultCache, E2E) {
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
-  auto litOrIri =
-      ad_utility::triple_component::LiteralOrIri::iriref("<notInVocab>");
   auto notInVocab = Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(litOrIri));
+      dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTable(), matchesIdTable(expected));

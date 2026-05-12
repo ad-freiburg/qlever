@@ -7,7 +7,8 @@
 
 #include <string>
 
-#include "parser/data/ConstructQueryExportContext.h"
+#include "backports/three_way_comparison.h"
+#include "util/Exception.h"
 
 class BlankNode {
   bool _generated;
@@ -18,21 +19,16 @@ class BlankNode {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] bool isGenerated() const { return _generated; }
+  bool isGenerated() const { return _generated; }
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& label() const { return _label; }
+  const std::string& label() const { return _label; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryExportContext& context,
-      [[maybe_unused]] PositionInTriple positionInTriple) const;
+  std::string toSparql() const;
 
-  // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const;
-
-  bool operator==(const BlankNode& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BlankNode, _generated, _label)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

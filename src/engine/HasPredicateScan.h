@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "../global/Pattern.h"
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/Pattern.h"
+#include "parser/ParsedQuery.h"
 
 class HasPredicateScan : public Operation {
  public:
@@ -100,7 +100,7 @@ class HasPredicateScan : public Operation {
   void computeFreeS(IdTable* resultTable, Id objectId, HasPattern& hasPattern,
                     const CompactVectorOfStrings<Id>& patterns);
 
-  void computeFreeO(IdTable* resultTable, Id subjectAsId,
+  void computeFreeO(IdTable* resultTable, TripleComponent subject,
                     const CompactVectorOfStrings<Id>& patterns) const;
 
   template <typename HasPattern>
@@ -118,6 +118,13 @@ class HasPredicateScan : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
+
+ public:
+  // Create an `IndexScan` for the internal `ql:has-pattern` predicate, using
+  // the internal `PSO` permutation. The parameters `subject` and `object` are
+  // the placeholders for the `IndexScan` triple.
+  static std::shared_ptr<QueryExecutionTree> makePatternScan(
+      QueryExecutionContext* qec, TripleComponent subject, Variable object);
 };
 
 #endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

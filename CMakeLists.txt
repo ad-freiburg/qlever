@@ -4,12 +4,37 @@ if (POLICY CMP0167)
 endif ()
 project(QLever C CXX)
 
+if (APPLE)
+    # Dynamically detect Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
+    )
+    if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
+        message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
+        link_directories(${HOMEBREW_PREFIX}/lib)
+        include_directories(${HOMEBREW_PREFIX}/include)
+    else()
+        message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
+    endif()
+endif ()
+
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Allow the explicit overriding of the C++ standard version, e.g. when the reduced feature set for C++17 is used.
+if (NOT DEFINED CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN)
+  set(CMAKE_CXX_STANDARD 20)
+else()
+    set(CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN})
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # will not take effect without FORCE
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
@@ -29,13 +54,26 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
 
+option(CHEAPER_COMPILATION "Use type erasure in several places, this reduces the compile time, but decreasese the performance. Can be used for local development" OFF)
+if (CHEAPER_COMPILATION)
+    add_compile_definitions(_QLEVER_TYPE_ERASED_EXPRESSIONS)
+    # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
+    # even with debug builds.
+    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 
 option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
 if (REDUCED_FEATURE_SET_FOR_CPP17)
-    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17 QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
+option(EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17 "Use the C++17 backports inside `SparqlExpressionGenerators.h`. They are currently less efficient than the C++20 implementations. This option is implicitly activated by the `REDUCED_FEATURE_SET_FOR_CPP17` option, but can be activated separately to run the unit tests for the backports of the `ExpressionGenerators`" OFF)
+if (EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
 endif()
 
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
@@ -46,7 +84,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-fcoroutines)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -57,7 +95,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(RANGE_V3_REQUIRED_BY_COMPILER ON)
     endif ()
 else ()
-    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 ## Build targets for address sanitizer
@@ -75,9 +113,20 @@ set(CMAKE_CXX_FLAGS_ASAN
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         add_compile_options(-fcolor-diagnostics)
     endif ()
+endif ()
+
+# Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
+# of `std::ranges` and the `std::enable_if_t` based expansion of the concept
+# macros from `range-v3`.
+option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)" OFF)
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} OR (CMAKE_CXX_STANDARD LESS 20))
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+else ()
+    add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 endif ()
 
 ###############################################################################
@@ -92,6 +141,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -101,8 +151,9 @@ FetchContent_Declare(
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
         nlohmann-json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        EXCLUDE_FROM_ALL
 )
 
 ###############################
@@ -115,6 +166,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -127,10 +179,9 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
+        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        EXCLUDE_FROM_ALL
 )
-
-add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
 # libspatialjoin
@@ -138,7 +189,8 @@ add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+        GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -195,7 +247,13 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+  # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
+  # which is only available in Boost versions >= 1.81
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+else()
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+endif()
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -212,9 +270,9 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -231,14 +289,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
-# Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
-# of `std::ranges` and the `std::enable_if_t` based expansion of the concept
-# macros from `range-v3`.
-set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
-    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
-    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
-endif ()
 
 set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
 if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
@@ -260,9 +310,7 @@ if (${ALLOW_SHUTDOWN})
     message(STATUS "Adding -DALLOW_SHUTDOWN")
 endif ()
 
-
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -274,6 +322,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -286,6 +335,7 @@ FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -297,6 +347,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -345,6 +396,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -358,6 +410,7 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -418,7 +471,6 @@ set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
-
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
     set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
 else ()
@@ -431,8 +483,8 @@ add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
-if (LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
-    message(WARNING "Log level is not printing logs with level WARN, which is necessary when QUERY_CANCELLATION_MODE=ENABLED for it to work properly")
+if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
 ##################################################
@@ -462,13 +514,17 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
 
-add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
-if (USE_PRECOMPILED_HEADERS)
-target_precompile_headers(ServerMain REUSE_FROM engine)
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    add_executable(qlever-index src/index/IndexBuilderMain.cpp)
+    qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
+    add_executable(qlever-server src/ServerMain.cpp)
+    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+    if (USE_PRECOMPILED_HEADERS)
+        target_precompile_headers(qlever-server REUSE_FROM engine)
+    endif()
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
@@ -479,3 +535,95 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    install(TARGETS
+        qlever-index
+        qlever-server
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+###############################################################
+# CPack packaging
+###############################################################
+
+# Get version from git describe for CPack
+include(GitVersion.cmake)
+
+set(CPACK_PACKAGE_NAME "qlever-bin")
+
+# Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
+# If git describe output begins with v + semver:
+if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
+
+    # CMAKE_MATCH_1 is "major.minor.patch"
+    set(TAG_VERSION "${CMAKE_MATCH_1}")
+
+    # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
+    if (CMAKE_MATCH_2)
+        string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}+${COMMITS_AHEAD}")
+    else()
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+    endif()
+
+else()
+    # Fallback for non-tagged builds: Use commit hash
+    if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+        set(HASH "${CMAKE_MATCH_1}")
+    else()
+        set(HASH "${PROJECT_VERSION}")
+    endif()
+    set(CPACK_PACKAGE_VERSION "0.0.0+${HASH}")
+endif()
+
+# Debian package revision number (e.g., the "1" in "0.5.42-1~plucky~25.04").
+# Override with: cmake -DPACKAGE_REVISION=2
+set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
+
+# Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
+# Auto-detected from /etc/os-release for Ubuntu and Debian.
+# For derived distros, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
+set(DEFAULT_VERSION_SUFFIX "")
+if (EXISTS "/etc/os-release")
+    file(STRINGS "/etc/os-release" OS_RELEASE_CONTENTS)
+
+    set(_OS_ID "")
+    set(_OS_VERSION_ID "")
+    set(_OS_VERSION_CODENAME "")
+
+    foreach(line ${OS_RELEASE_CONTENTS})
+        if (line MATCHES "^ID=\"?([^\"]*)\"?$")
+            set(_OS_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_ID=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_CODENAME=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_CODENAME "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+
+    if (_OS_VERSION_CODENAME AND _OS_VERSION_ID)
+        if (_OS_ID STREQUAL "ubuntu")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~${_OS_VERSION_ID}")
+        elseif (_OS_ID STREQUAL "debian")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~deb${_OS_VERSION_ID}")
+        endif()
+    endif()
+endif()
+
+set(VERSION_SUFFIX "${DEFAULT_VERSION_SUFFIX}" CACHE STRING "Distribution-specific version suffix")
+
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}-${PACKAGE_REVISION}${VERSION_SUFFIX}")
+
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
+
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+set(CPACK_VERBATIM_VARIABLES YES)
+
+include(CPack)

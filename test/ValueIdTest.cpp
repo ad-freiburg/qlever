@@ -1,6 +1,7 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/hash/hash_testing.h>
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "global/ValueId.h"
 #include "index/EncodedIriManager.h"
 #include "index/LocalVocabEntry.h"
@@ -19,11 +21,7 @@
 #include "util/Serializer/Serializer.h"
 
 struct ValueIdTest : public ::testing::Test {
-  ValueIdTest() {
-    // We need to initialize a (static). index, otherwise we can't compare
-    // VocabIndex to LocalVocabIndex entries
-    ad_utility::testing::getQec();
-  }
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
 
 TEST_F(ValueIdTest, makeFromDouble) {
@@ -213,7 +211,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
   // the NaNs from the `double`s.
-  std::erase_if(doubles, [](double d) { return std::isnan(d); });
+  ql::erase_if(doubles, [](double d) { return std::isnan(d); });
   std::sort(doubles.begin(), doubles.end());
 
   // When sorting ValueIds that hold doubles, the NaN values form a contiguous
@@ -317,15 +315,16 @@ TEST_F(ValueIdTest, Hashing) {
   {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
-    const Index& index = getQec()->getIndex();
+    const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1(iri);
-    LocalVocabEntry lve2(iri);
-    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""));
-    LocalVocabEntry lve4(Iri::fromIriref("<x>"));
+    LocalVocabEntry lve1(iri, index);
+    LocalVocabEntry lve2(iri, index);
+    LocalVocabEntry lve3 =
+        LocalVocabEntry::fromStringRepresentation("\"foo\"", index);
+    LocalVocabEntry lve4 = LocalVocabEntry::fromIriref("<x>", index);
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -364,9 +363,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
-  auto str = LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "SomeValue")};
+  auto str = LocalVocabEntry::literalWithoutQuotes(
+      "SomeValue", qec_->getLocalVocabContext());
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
@@ -396,14 +394,14 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // Create an EncodedIriManager with some test prefixes
   std::vector<std::string> prefixes = {"http://example.org/",
                                        "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
 
   // Create a test index config with the encoded IRI manager and call getQec
   // to set up the global index state
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
-  getQec(config);
+  config.encodedPrefixesWithoutAngleBrackets = prefixes;
+  qec_ = getQec(config);
+  const auto& encodedIriManager = qec_->getIndex().encodedIriManager();
 
   // Test case 1: IRI that can be encoded
   std::string encodableIri = "<http://example.org/123>";
@@ -416,7 +414,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a LocalVocabEntry with the same IRI
   auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri};
+  LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
   // The encoded ID should compare equal to the LocalVocabEntry ID
@@ -431,7 +429,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   auto encodedId2 = *encodedIdOpt2;
   auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2};
+  LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 
   EXPECT_EQ(encodedId2, localVocabId2)
@@ -456,4 +454,14 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
     EXPECT_GT(encodedId, localVocabId2) << inconsistentOrderingMessage;
     EXPECT_LT(localVocabId2, encodedId) << inconsistentOrderingMessage;
   }
+}
+
+// Note: the `isTrivial` functionality is also tested using `static_assert`s
+// across the codebase, hence we don't test it exhaustively here, but only
+// please the coverage tool.
+TEST(ValueId, isTrivial) {
+  EXPECT_TRUE(Id::makeUndefined().isTrivial());
+  EXPECT_FALSE(
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
+  EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
 }

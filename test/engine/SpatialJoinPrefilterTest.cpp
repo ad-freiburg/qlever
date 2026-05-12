@@ -1,10 +1,16 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 
 // _____________________________________________________________________________
 namespace {
@@ -13,7 +19,7 @@ using namespace SpatialJoinPrefilterTestHelpers;
 using enum SpatialJoinType;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
-// `GeoVocabulary` which holds various literals carefully selected literals. It
+// `GeoVocabulary` which holds various carefully selected literals. It
 // then performs a spatial join and examines the result as well as the
 // prefiltering during the geometry parsing.
 
@@ -185,8 +191,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   auto vIdGkAllee = getValId(nMap, "gk-allee");
 
   {
-    auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(2'500);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -211,8 +217,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   EXPECT_LT(bbSize, 10'000);
 
   {
-    auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(10'000);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.
@@ -279,50 +285,74 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterRegularImplementation) {
 // Test for other utility functions related to geometry prefiltering
 
 // _____________________________________________________________________________
-TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
+enum class PrefilterTestMode { GEO_VOCAB, PRECOMPUTED };
+class SpatialJoinPrefilterGeoByBoundingBoxTest
+    : public ::testing::TestWithParam<PrefilterTestMode> {
+ protected:
+  // Get the bounding box, if precomputation is the current test mode.
+  std::optional<ad_utility::BoundingBox> getPrecomputedBoundingBox(
+      std::string_view wkt) {
+    if (GetParam() != PrefilterTestMode::PRECOMPUTED) {
+      return std::nullopt;
+    }
+    return ad_utility::GeometryInfo::getBoundingBox(wkt);
+  };
+};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinPrefilterGeoByBoundingBoxTest, Test) {
   auto kg = buildLibSJTestDataset(true, false, false, true);
-  auto qec = buildQec(kg, true);
+  auto qec = buildQec(kg, GetParam() == PrefilterTestMode::GEO_VOCAB);
   const auto& index = qec->getIndex();
 
   auto [vMap, nMap] = resolveValIdTable(qec, 8);
 
   auto idxUni = getValId(nMap, "uni").getVocabIndex();
+  auto bbUni = getPrecomputedBoundingBox(areaUniFreiburg);
   auto idxLondon = getValId(nMap, "london").getVocabIndex();
+  auto bbLondon = getPrecomputedBoundingBox(areaLondonEye);
   auto idxNewYork = getValId(nMap, "lib").getVocabIndex();
+  auto bbNewYork = getPrecomputedBoundingBox(areaStatueOfLiberty);
   auto idxInvalid = getValId(nMap, "invalid").getVocabIndex();
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxUni));
+      boundingBoxGermany, index, idxUni, bbUni));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxLondon));
+      boundingBoxGermany, index, idxLondon, bbLondon));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxNewYork));
+      boundingBoxGermany, index, idxNewYork, bbNewYork));
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxUni));
+      boundingBoxUniAndLondon, index, idxUni, bbUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxLondon));
+      boundingBoxUniAndLondon, index, idxLondon, bbLondon));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxNewYork));
+      boundingBoxUniAndLondon, index, idxNewYork, bbNewYork));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxOtherPlaces, index, idxUni));
+      boundingBoxOtherPlaces, index, idxUni, bbUni));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxInvalid));
+      boundingBoxUniAndLondon, index, idxInvalid, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxInvalid));
+      boundingBoxGermany, index, idxInvalid, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxOtherPlaces, index, idxInvalid));
+      boundingBoxOtherPlaces, index, idxInvalid, std::nullopt));
 
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(std::nullopt,
-                                                                index, idxUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxLondon));
+      std::nullopt, index, idxUni, bbUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxNewYork));
+      std::nullopt, index, idxLondon, bbLondon));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxInvalid));
+      std::nullopt, index, idxNewYork, bbNewYork));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxInvalid, std::nullopt));
 }
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(SpatialJoinPrefilterGeoByBoundingBoxTest,
+                         SpatialJoinPrefilterGeoByBoundingBoxTest,
+                         ::testing::Values(PrefilterTestMode::GEO_VOCAB,
+                                           PrefilterTestMode::PRECOMPUTED));
 
 }  // namespace

@@ -32,7 +32,7 @@ Filter::Filter(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  if (RuntimeParameters().get<"enable-prefilter-on-index-scans">()) {
+  if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
 }
@@ -53,9 +53,10 @@ std::string Filter::getDescriptor() const {
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
-      _expression.getPrefilterExpressionForMetadata();
-  auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
-      std::move(prefilterPairs));
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
+  auto optNewSubTree =
+      _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          std::move(prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }

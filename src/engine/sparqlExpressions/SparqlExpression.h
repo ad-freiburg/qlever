@@ -65,6 +65,14 @@ class SparqlExpression {
   virtual std::string getCacheKey(
       const VariableToColumnMap& varColMap) const = 0;
 
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  virtual bool isResultAlwaysDefined(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const {
+    return false;
+  }
+
   // Get a short, human-readable identifier for this expression.
   virtual const std::string& descriptor() const final;
   virtual std::string& descriptor() final;
@@ -79,13 +87,6 @@ class SparqlExpression {
   // expression is a single variable, return the name of this variable.
   // Otherwise, return std::nullopt.
   virtual std::optional<::Variable> getVariableOrNullopt() const;
-
-  // For the following three functions (`containsLangExpression`,
-  // `getLanguageFilterExpression`, and `getEstimatesForFilterExpression`, see
-  // the documentation of the functions of the same names in
-  // `SparqlExpressionPimpl.h`. Each of them has a default implementation that
-  // is correct for most of the expressions.
-  virtual bool containsLangExpression() const;
 
   // Helper to identify if this is represents a `YEAR` expression.
   virtual bool isYearExpression() const;
@@ -118,7 +119,8 @@ class SparqlExpression {
   // <`PrefilterExpression`, `Variable`> pairs (see `getMergeFunction` in
   // NumericBinaryExpression.cpp).
   virtual std::vector<PrefilterExprVariablePair>
-  getPrefilterExpressionForMetadata(bool isNegated = false) const;
+  getPrefilterExpressionForMetadata(const LocalVocabContext& context,
+                                    bool isNegated = false) const;
 
   // Returns true iff this expression is a simple constant. Default
   // implementation returns `false`.

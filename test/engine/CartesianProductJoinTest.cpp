@@ -1,6 +1,12 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -60,7 +66,7 @@ CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
 void testCartesianProductImpl(VectorTable expected,
                               std::vector<VectorTable> inputs,
                               bool useLimitInSuboperations = false,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   {
     auto join = makeJoin(inputs, useLimitInSuboperations);
@@ -87,7 +93,7 @@ void testCartesianProductImpl(VectorTable expected,
 // result. Perform the test for children that directly support the LIMIT
 // operation as well for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   testCartesianProductImpl(expected, inputs, true);
   testCartesianProductImpl(expected, inputs, false);
@@ -375,7 +381,7 @@ class CartesianProductJoinLazyTest
       CartesianProductJoin& join, size_t expectedSize,
       const std::vector<size_t>& occurenceCounts,
       const std::vector<size_t>& valueCount,
-      source_location loc = source_location::current()) {
+      source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     join.getExecutionContext()->getQueryTreeCache().clearAll();
     Result result = join.computeResultOnlyForTesting(true);
@@ -646,6 +652,64 @@ INSTANTIATE_TEST_SUITE_P(
       }
       return std::move(stream).str();
     });
+
+// Test that `CartesianProductJoin::createLazyConsumer` keeps the materialized
+// child results alive even after the cache evicts them.
+//
+// NOTE: This is part of https://github.com/ad-freiburg/qlever/pull/2684, which
+// fixes the regression from https://github.com/ad-freiburg/qlever/issues/2307,
+// where `createLazyConsumer` stored `reference_wrapper<const IdTable>` without
+// capturing the owning `shared_ptr<const Result>`, leading to use-after-free
+// when the cache evicted the child results under concurrent load.
+TEST(CartesianProductJoin, createLazyConsumerKeepsChildResultsAlive) {
+  auto* qec = ad_utility::testing::getQec();
+  using Vars = std::vector<std::optional<Variable>>;
+
+  // Clear the cache to avoid interference from other tests.
+  qec->getQueryTreeCache().clearAll();
+
+  // Create two inputs for a `CartesianProductJoin`, a materialized input with
+  // small size estimate, and a lazy input with larger size estimate.
+  //
+  // NOTE: The `CartesianProductJoin` sorts its children by size estimate,
+  // and consumes only the child with the largest size estimate lazily.
+  CartesianProductJoin::Children children;
+  IdTable materializedInput = makeIdTableFromVector({{1}, {2}, {3}});
+  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, materializedInput.clone(), Vars{Variable{"?a"}}));
+  std::dynamic_pointer_cast<ValuesForTesting>(
+      children.back()->getRootOperation())
+      ->sizeEstimate() = 1;
+  std::vector<IdTable> lazyInput;
+  lazyInput.push_back(makeIdTableFromVector({{10}, {11}}));
+  lazyInput.push_back(makeIdTableFromVector({{12}, {13}}));
+  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(lazyInput), Vars{Variable{"?b"}}));
+  std::dynamic_pointer_cast<ValuesForTesting>(
+      children.back()->getRootOperation())
+      ->sizeEstimate() = 100;
+
+  // Pre-populate the cache with the materialized input and keep a `weak_ptr`
+  // to track its lifetime.
+  auto childResult = children[0]->getRootOperation()->getResult(
+      false, ComputationMode::FULLY_MATERIALIZED);
+  std::weak_ptr<const Result> weakChildResult = childResult;
+  childResult.reset();
+
+  // Now perform the Cartesian product join and get the lazy result.
+  // Internally, `calculateSubResults` finds the materialized input in the
+  // cache, and `createLazyConsumer` stores a `reference_wrapper` to the
+  // `IdTable` of the materialized input.
+  CartesianProductJoin join{qec, std::move(children)};
+  auto result = join.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  // Clear the cache and check that the materialized input has been
+  // kept alive by the lazy consumer. In an earlier version of the code, any
+  // reference to it would have been dangling at this point.
+  qec->getQueryTreeCache().clearAll();
+  ASSERT_FALSE(weakChildResult.expired());
+}
 
 // _____________________________________________________________________________
 TEST(CartesianProductJoin, clone) {

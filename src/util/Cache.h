@@ -8,7 +8,6 @@
 #define QLEVER_SRC_UTIL_CACHE_H
 
 #include <cassert>
-#include <concepts>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -377,6 +376,12 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
     }
     return true;
   }
+
+  // Get all the keys of entries that are currently stored (but not pinned) in
+  // the cache.
+  // NOTE: This function returns a lazy view, so the behavior is undefined if
+  // the cache is modified while using the result.
+  auto getAllNonpinnedKeys() const { return _accessMap | ql::views::keys; }
 
  private:
   // Removes the entry with the smallest score from the cache.

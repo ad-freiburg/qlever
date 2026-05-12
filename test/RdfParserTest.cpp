@@ -261,7 +261,7 @@ TEST(RdfParserTest, rdfLiteral) {
 
   auto testLiteral = [](const std::string& literal, const auto& predicate,
                         ad_utility::source_location loc =
-                            ad_utility::source_location::current()) {
+                            AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
 
     EXPECT_THAT((checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(literal))
@@ -331,9 +331,11 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
 
 TEST(RdfParserTest, blankNode) {
   auto runCommonTests = [](const auto& checker) {
-    checker(" _:blank1", "_:u_blank1", 9);
-    checker(" _:blank1 someRemainder", "_:u_blank1", 9);
-    auto p = checker("  _:blank2 someOtherStuff", "_:u_blank2", 10);
+    // Labeled blank nodes include the blankNodePrefix (4) to ensure uniqueness
+    // across different input files.
+    checker(" _:blank1", "_:u_4_blank1", 9);
+    checker(" _:blank1 someRemainder", "_:u_4_blank1", 9);
+    auto p = checker("  _:blank2 someOtherStuff", "_:u_4_blank2", 10);
     ASSERT_EQ(p.numBlankNodes_, 0u);
     // anonymous blank node
     p = checker(" [    \n\t  ]", "_:g_4_0", 11u);
@@ -347,6 +349,22 @@ TEST(RdfParserTest, blankNode) {
   runCommonTests(checkCtre);
   runCommonTests(checkRe2Subject);
   runCommonTests(checkCtreSubject);
+}
+
+// Test that blank nodes with the same label from different parser instances
+// (simulating different input files) are mapped to different blank nodes.
+TEST(RdfParserTest, blankNodesUniqueAcrossFiles) {
+  auto checkRe2Prefix3 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 3>;
+  auto checkRe2Prefix7 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 7>;
+
+  // Same label "_:x" but different parser prefixes should yield different
+  // blank node identifiers.
+  checkRe2Prefix3(" _:x", "_:u_3_x", 4);
+  checkRe2Prefix7(" _:x", "_:u_7_x", 4);
+
+  // Anonymous blank nodes should also be unique across parsers.
+  checkRe2Prefix3(" []", "_:g_3_0", 3);
+  checkRe2Prefix7(" []", "_:g_7_0", 3);
 }
 
 TEST(RdfParserTest, blankNodePropertyList) {
@@ -424,6 +442,7 @@ TEST(RdfParserTest, sparqlBase) {
 
 TEST(RdfParserTest, object) {
   auto runCommonTests = [](auto p) {
+    p.setBlankNodePrefixOnlyForTesting(99);
     auto sub = iri("<sub>");
     auto pred = iri("<pred>");
     p.activeSubject_ = sub;
@@ -443,12 +462,14 @@ TEST(RdfParserTest, object) {
     exp = TurtleTriple{sub, pred, lit(literal)};
     ASSERT_EQ(p.triples_.back(), exp);
 
+    // Blank node labels include the parser prefix (99) for cross-file
+    // uniqueness.
     string blank = "_:someblank";
     p.setInputStream(blank);
     ASSERT_TRUE(p.object());
-    ASSERT_EQ(p.lastParseResult_, "_:u_someblank");
+    ASSERT_EQ(p.lastParseResult_, "_:u_99_someblank");
 
-    exp = TurtleTriple{sub, pred, "_:u_someblank"};
+    exp = TurtleTriple{sub, pred, "_:u_99_someblank"};
     ASSERT_EQ(p.triples_.back(), exp);
   };
   runCommonTests(re2Parser());
@@ -808,6 +829,7 @@ TEST(RdfParserTest, collection) {
 
 // Test the parsing of an IRI reference.
 TEST(RdfParserTest, iriref) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   // Run test for given parser.
   auto runTestsForParser = [](auto parser) {
     std::string iriref_1 = "<fine>";
@@ -869,7 +891,9 @@ std::vector<TurtleTriple> parseFromFile(
                     encodedIriManager(),
                     bufferSize};
     } else {
-      return Parser{filename, encodedIriManager(), bufferSize};
+      return Parser{
+          std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
+          encodedIriManager()};
     }
   }();
 
@@ -1045,7 +1069,7 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
         ::testing::AllOf(
             ::testing::HasSubstr("end of a statement was not found"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
-            ::testing::HasSubstr("use `--parse-parallel false`")));
+            ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
   };
   // Input, where the first triple fits into a 40_B buffer, but the second
@@ -1071,7 +1095,7 @@ TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::HasSubstr("'--parse-parallel false'"));
+        ::testing::HasSubstr("'--parallel-parsing false'"));
     ad_utility::deleteFile(filename);
   };
   // Redefinition
@@ -1179,7 +1203,7 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::AllOf(::testing::HasSubstr("`--parse-parallel false`"),
+        ::testing::AllOf(::testing::HasSubstr("`--parallel-parsing false`"),
                          ::testing::HasSubstr("multiline string literal")));
     ad_utility::deleteFile(filename);
   };
@@ -1214,7 +1238,9 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
                         encodedIriManager(),
                         40_B};
         } else {
-          return Parser{filename, encodedIriManager(), 40_B, 10ms};
+          return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
+                        encodedIriManager(),
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
         }
       }();
       timer.cont();
@@ -1237,6 +1263,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, nQuadParser) {
   auto runTestsForParser = [](auto parser) {
+    parser.setBlankNodePrefixOnlyForTesting(42);
     parser.setInputStream(
         "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
         ".");
@@ -1247,10 +1274,12 @@ TEST(RdfParserTest, nQuadParser) {
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
     auto internalGraphId =
         qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
-    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank",
+    // Blank node labels include the parser prefix (42) for cross-file
+    // uniqueness.
+    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_42_blank",
                           internalGraphId);
     expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"),
-                          "_:u_blank2");
+                          "_:u_42_blank2");
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {
@@ -1397,6 +1426,65 @@ TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
       "\n"
       "<http://vocab.getty.edu/aat/300312355> rdfs:label \"test\".");
 }
+// Test that blank node labels are consistent across batches when parsing in
+// parallel (issue #2656). The same user-specified blank node label should get
+// the same internal ID even when it appears in different batches.
+TEST(RdfParserTest, blankNodeLabelsConsistentInParallelParsing) {
+  std::string filename{"blankNodeLabelsConsistentInParallelParsing.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize) {
+    using Parser = typename decltype(t)::type;
+    // Create input where the same blank node label appears multiple times,
+    // with enough content to ensure batching happens with small buffer size.
+    std::string input = R"(PREFIX ex: <http://example.org/>
+ex:a ex:b _:blank .
+ex:filler1 ex:filler2 ex:filler3 .
+ex:filler4 ex:filler5 ex:filler6 .
+_:blank ex:b ex:c .
+)";
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result =
+        parseFromFile<Parser>(filename, useBatchInterface, bufferSize);
+
+    // Find the blank node ID used for _:blank by looking at the first triple
+    // where it appears as the object.
+    std::optional<TripleComponent> blankNodeId;
+    for (const auto& triple : result) {
+      if (triple.subject_ == iri("<http://example.org/a>") &&
+          triple.predicate_ == iri("<http://example.org/b>")) {
+        blankNodeId = triple.object_;
+        break;
+      }
+    }
+    ASSERT_TRUE(blankNodeId.has_value());
+
+    // Verify that the same blank node ID is used as the subject in the second
+    // occurrence of _:blank.
+    bool foundAsSubject = false;
+    for (const auto& triple : result) {
+      if (triple.predicate_ == iri("<http://example.org/b>") &&
+          triple.object_ == iri("<http://example.org/c>")) {
+        EXPECT_EQ(triple.subject_, blankNodeId.value())
+            << "Blank node label _:blank should have consistent ID across "
+               "batches, but got different IDs: "
+            << blankNodeId.value().toRdfLiteral() << " vs "
+            << triple.subject_.toRdfLiteral();
+        foundAsSubject = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(foundAsSubject)
+        << "Second occurrence of _:blank should be found as subject";
+
+    ad_utility::deleteFile(filename);
+  };
+
+  // Test with small buffer size to force batching
+  forAllParallelParsers(testWithParser, 70_B);
+}
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, EncodedIriManagerUsage) {
@@ -1537,4 +1625,41 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 
   testPrefixedNameEncoding(re2ParserWithEncoding);
   testPrefixedNameEncoding(ctreParserWithEncoding);
+}
+
+TEST(RdfParserTest, parseTriplesObject) {
+  using Parser = RdfStringParser<TurtleParser<TokenizerCtre>>;
+  using namespace testing;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Literal =
+      ad_utility::triple_component::Literal::fromStringRepresentation;
+  auto isTC = [](auto e) -> Matcher<const TripleComponent> {
+    return Eq(TripleComponent(e));
+  };
+  auto expectParse =
+      [](std::string_view input, const Matcher<const TripleComponent>& expected,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto t = generateLocationTrace(loc);
+        EXPECT_THAT(Parser::parseTripleObject(input), expected);
+      };
+  expectParse("1337", isTC(1337));
+  expectParse("42.1", isTC(42.1));
+  expectParse("1e3", isTC(1000.0));
+  expectParse("true", isTC(true));
+  expectParse("<http://example.com/abc>",
+              isTC(Iri("<http://example.com/abc>")));
+  // Unregistered prefix
+  EXPECT_ANY_THROW(Parser::parseTripleObject("a:b"));
+  expectParse(R"("foo")", isTC(Literal(R"("foo")")));
+  expectParse(R"('bar')", isTC(Literal(R"("bar")")));
+  expectParse(R"("""bar"""@en)", isTC(Literal(R"("bar"@en)")));
+  expectParse(R"('''bar'''^^<foo>)", isTC(Literal(R"("bar"^^<foo>)")));
+  expectParse("()",
+              isTC(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")));
+  // Not a single object
+  EXPECT_ANY_THROW(Parser::parseTripleObject("( <a> )"));
+  expectParse("[ ]", AD_PROPERTY(TripleComponent, isString, IsTrue()));
+  expectParse("_:bar", AD_PROPERTY(TripleComponent, isString, IsTrue()));
+  // Not a single object
+  EXPECT_ANY_THROW(Parser::parseTripleObject("[ a <bar> ]"));
 }

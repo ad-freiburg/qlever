@@ -20,6 +20,7 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
@@ -159,7 +160,7 @@ int main(int argc, char** argv) {
   po::notify(vm);
 
   // If write was chosen, then the given file must be a json file.
-  if (vm.count("write") && !writeFileName.ends_with(".json")) {
+  if (vm.count("write") && !ql::ends_with(writeFileName, ".json")) {
     std::cerr << "The file defined via `--write` must be a `.json` file.\n";
     printUsageAndExit();
   }

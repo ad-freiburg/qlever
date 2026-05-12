@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
@@ -359,7 +360,7 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
                     bool removeEmptyRanges = true) {
   if (removeEmptyRanges) {
     // Eliminate empty ranges
-    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+    ql::erase_if(input, [](const auto& p) { return p.first == p.second; });
   }
   std::sort(input.begin(), input.end());
   if (input.empty()) {
@@ -531,7 +532,7 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
                                       const auto& bValue) -> ComparisonResult {
     using A = std::decay_t<decltype(aValue)>;
     using B = std::decay_t<decltype(bValue)>;
-    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+    if constexpr (ranges::invocable<Comparator, A, B>) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
       static_assert((!std::is_same_v<A, B>) ||

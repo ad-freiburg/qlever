@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 #define QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <gtest/gtest_prod.h>
 
 #include "engine/HttpError.h"
@@ -13,6 +14,7 @@
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 
 // Transform SPARQL Graph Store Protocol requests to their equivalent
@@ -135,10 +137,15 @@ class GraphStoreProtocol {
   }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
-  // which is an SPARQL Query.
+  // which is a SPARQL Query.
   static ParsedQuery transformGet(const GraphOrDefault& graph,
                                   const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
+
+  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent
+  // `ParsedQuery`. The response is the same as for GET but without the body.
+  static ParsedQuery transformHead(const GraphOrDefault& graph,
+                                   const EncodedIriManager* encodedIriManager);
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.
@@ -147,10 +154,6 @@ class GraphStoreProtocol {
       vector<ParsedQuery> transformPut(const RequestT& rawRequest,
                                        const GraphOrDefault& graph,
                                        const Index& index) {
-    // TODO: The response codes are not conform to the specs. "If new RDF graph
-    //  content is created", then the status must be `201 Created`. "If
-    //  existing graph content is modified", then the status must be `200 OK`
-    //  or `204 No Content`.
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -177,6 +180,24 @@ class GraphStoreProtocol {
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;
+    // Interpretation of the very vague GSP 5.3:
+    // - 201 Created if a new graph is created
+    // - 200 Ok or 204 No Content if an existing graph is modified
+    // When the drop (first operation) deletes triples then the graph has
+    // existed before in our model of implicit graph existence.
+    drop.responseMiddleware_ = ResponseMiddleware(
+        [](ResponseMiddleware::ResponseT response,
+           const std::vector<UpdateMetadata>& updateMetadata) {
+          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
+          const auto& dropMeta = updateMetadata.at(0);
+          AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
+          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0) {
+            response.result(boost::beast::http::status::ok);
+          } else {
+            response.result(boost::beast::http::status::created);
+          }
+          return response;
+        });
     insertData._clause = parsedQuery::UpdateClause{std::move(up)};
     insertData._originalString = stringRepresentation;
     return {std::move(drop), std::move(insertData)};
@@ -216,7 +237,7 @@ class GraphStoreProtocol {
       // DATA` of the payload.
       return {transformTsop(rawRequest, operation.graph_, index)};
     } else if (method == "HEAD") {
-      throwNotYetImplementedHTTPMethod("HEAD");
+      return {transformHead(operation.graph_, &index.encodedIriManager())};
     } else if (method == "PATCH") {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {
@@ -226,5 +247,6 @@ class GraphStoreProtocol {
     }
   }
 };
+#endif
 
 #endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

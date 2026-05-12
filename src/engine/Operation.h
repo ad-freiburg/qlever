@@ -21,9 +21,14 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class ExternalValues;
+namespace parsedQuery {
+struct Bind;
+}
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
@@ -43,8 +48,9 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+
+  // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
+  // and reset in `createRuntimeInfoFromEstimates()`.
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
@@ -98,10 +104,7 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
-
-  // Typical Constructor.
+  // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
@@ -144,21 +147,17 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
-    return _executionContext->locatedTriplesSnapshot();
+  virtual const LocatedTriplesState& locatedTriplesState() const {
+    return _executionContext->locatedTriplesState();
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
-  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
-  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
-  // is not changed.
-  // Note: The default implementation always returns `nullopt` while this
-  // function is currently only overridden for `IndexScan`. In the future also
-  // other operations could pass on the `PrefilterExpressions` to the
-  // `IndexScan` in their subtree.
+  // `prefilters` as possible. If none of them applies, return `std::nullopt`,
+  // signaling that the `QueryExecutionTree` will not be changed. This is the
+  // default implementation.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
     return std::nullopt;
   };
@@ -202,6 +201,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
+  const SharedCancellationHandle& getCancellationHandle() const {
+    return cancellationHandle_;
+  }
+
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
@@ -225,6 +228,10 @@ class Operation {
     return false;
   }
 
+  // Check whether all variables given are covered by this `Operation` and are
+  // always defined.
+  bool coversVariables(const std::vector<const Variable*>& variables) const;
+
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
@@ -241,8 +248,9 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
-  void signalQueryUpdate() const;
+  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
+  // the given `sendPriority` (`Always` or `IfDue`).
+  void signalQueryUpdate(RuntimeInformation::SendPriority sendPriority) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -294,10 +302,14 @@ class Operation {
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
     // If `supportsLimitOffset()` returns `false`, this function has to be
     // no-op.
   }
+
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
 
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
@@ -344,6 +356,19 @@ class Operation {
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
 
+  // Recursively collect all `ExternalValues` operations in this
+  // operation tree. This allows the following pattern:
+  // 1. Parse and plan a query that contains an `ExternalValues`
+  //    clause.
+  // 2. Modify the contents of the `ExternalValues` after obtaining
+  //    them from the planned `QueryExecutionTree` via this function.
+  // 3. Execute the query.
+  // 4. Repeat steps 2 and 3 with different values. This does not require
+  //    running the parser and query planner again (which is the point of the
+  //    whole `ExternalValues` feature). For a complete E2E example,
+  //    see QleverTest.cpp.
+  virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
+
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.
   virtual bool isSortedBy(
@@ -366,6 +391,17 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
+  // Try to create a version of this operation with an additional column from a
+  // `BIND` pushed down into the tree. The default is to disallow push down. All
+  // operations where a `BIND` push down is semantically possible should
+  // override this method. Pushing a `BIND` down to a materialized view might
+  // produce a cheaper query plan for example. This function is tested in the
+  // `BindRewrite` test case in `MaterializedViewsTest`.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind&) const {
+    return std::nullopt;
+  };
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
@@ -385,8 +421,7 @@ class Operation {
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      ad_utility::source_location location =
-          ad_utility::source_location::current()) const {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }
@@ -405,6 +440,24 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Internal default implementation for `makeTreeWithBindColumn`. This
+  // implementation makes the assumption that a `BIND` can be pushed into this
+  // `Operation` iff any of its children accepts the `BIND` push down. This is
+  // the correct behavior for various operations like `Join`, which make use of
+  // this function for their `makeTreeWithBindColumn` override. Returns the
+  // index of the replaced child and its new `QueryExecutionTree`.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
+  // be instantiated in the code for operations that use it.
+  CPP_template(typename MakeCloneWithNewChildren)(
+      requires ad_utility::InvocableWithExactReturnType<
+          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+          std::vector<std::shared_ptr<QueryExecutionTree>>>)
+      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          const parsedQuery::Bind& bind,
+          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -462,18 +515,14 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<std::shared_ptr<RuntimeInformation>> children,
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+      std::vector<std::shared_ptr<RuntimeInformation>> children);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Return true if all values that the `variable` will be bound to by this
   // expression are guaranteed to be contained in the underlying knowledge
@@ -499,6 +548,10 @@ class Operation {
   // of the result).
   virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
 
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
@@ -519,6 +572,7 @@ class Operation {
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
   FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
   FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
   FRIEND_TEST(Operation,

@@ -10,9 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
-#include <functional>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -22,6 +20,8 @@
 #include "./util/GTestHelpers.h"
 #include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
@@ -1076,7 +1076,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       mFirstLetter.addOption("dValue", "", &firstInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt) {
-        return opt.getIdentifier().starts_with('d');
+        return ql::starts_with(opt.getIdentifier(), 'd');
       },
       "Every option name must start with the letter d.", "", correctLetter);
   ASSERT_NO_THROW(
@@ -1084,8 +1084,8 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
   decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
-        return opt1.getIdentifier().starts_with('d') &&
-               opt2.getIdentifier().starts_with('d');
+        return ql::starts_with(opt1.getIdentifier(), 'd') &&
+               ql::starts_with(opt2.getIdentifier(), 'd');
       },
       "Every option name must start with the letter d.", "", correctLetter,
       wrongLetter);
@@ -1232,11 +1232,14 @@ to `addValidatorToConfigManager`.
 */
 struct TestGeneratedValidatorsOfConfigManager {
   template <typename... Ts>
-  void operator()(size_t variantStart, size_t variantEnd, ConfigManager& m,
-                  const nlohmann::json& defaultValues,
-                  const std::same_as<
-                      nlohmann::json::json_pointer> auto&... configOptionPaths)
-      requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
+  auto operator()(
+      size_t variantStart, size_t variantEnd, ConfigManager& m,
+      const nlohmann::json& defaultValues,
+      const QL_CONCEPT_OR_NOTHING(
+          ql::concepts::same_as<
+              nlohmann::json::json_pointer>) auto&... configOptionPaths)
+      -> CPP_ret(void)(requires(sizeof...(Ts) ==
+                                sizeof...(configOptionPaths))) {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
     for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;
@@ -1632,9 +1635,8 @@ well as adding, of a new validator function.
 @param l For better error messages, when the tests fail.
 */
 template <typename F>
-void doValidatorTest(
-    F addValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+void doValidatorTest(F addValidatorFunction,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorTest")};
 
@@ -1883,7 +1885,7 @@ ConstConfigOptionProxy... validatorArguments)`.
 template <typename F>
 void doValidatorExceptionTest(
     F addAlwaysValidValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
 
@@ -1923,7 +1925,7 @@ validatorExceptionMessage, ConfigManager& m, ConstConfigOptionProxy...)`.
 template <typename F>
 void doAddOptionValidatorTest(
     F addNonExceptionValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doAddOptionValidatorTest")};
 
@@ -2097,7 +2099,7 @@ ConstConfigOptionProxy... validatorArguments)`.
 template <typename F>
 void doAddOptionValidatorExceptionTest(
     F addAlwaysValidValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
 
@@ -2371,7 +2373,7 @@ TEST(ConfigManagerTest, ValidatorsSorting) {
   auto checkOrder = [](const ConfigManager& manager,
                        const ConfigOptionsAndValidatorsOrder& order,
                        ad_utility::source_location l =
-                           ad_utility::source_location::current()) {
+                           AD_CURRENT_SOURCE_LOC()) {
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "checkOrder")};
 
@@ -2442,7 +2444,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
     ConstConfigOptionProxy<bool> proxy(opt);
 
     // Dummy translator function needed for validator manager constructor.
-    auto translator{std::identity{}};
+    auto translator{ql::identity{}};
 
     // Dummy validator function needed for validator manager constructor.
     auto validator = [](const auto&) { return true; };
@@ -2518,8 +2520,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   auto testPairVector =
       [](const ConfigManager::ConfigurationDocValidatorAssignment& assignment,
          const auto& pairVector,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "testPairVector")};
         ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
@@ -2568,7 +2569,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   ConstConfigOptionProxy<bool> notIncludedOptProxy(notIncludedOpt);
   ConfigManager notIncludedConfigManager{};
   ConfigOptionValidatorManager notIncludedValidator(
-      [](const auto&) { return true; }, "", "", std::identity{},
+      [](const auto&) { return true; }, "", "", ql::identity{},
       notIncludedOptProxy);
   ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedOpt).empty());
   ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedConfigManager).empty());
@@ -2685,15 +2686,14 @@ struct AddOptionsAndValidatorToConfigManager {
 // A simple hard coded comparison test.
 TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
   // For comparing strings.
-  auto assertStringEqual = [](const std::string_view a,
-                              const std::string_view b,
-                              ad_utility::source_location l =
-                                  ad_utility::source_location::current()) {
-    // For generating better messages, when failing a test.
-    auto trace{generateLocationTrace(l, "assertStringEqual")};
+  auto assertStringEqual =
+      [](const std::string_view a, const std::string_view b,
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        // For generating better messages, when failing a test.
+        auto trace{generateLocationTrace(l, "assertStringEqual")};
 
-    ASSERT_STREQ(a.data(), b.data());
-  };
+        ASSERT_STREQ(a.data(), b.data());
+      };
 
   // Empty config manager.
   assertStringEqual(emptyConfigManagerExpectedString,

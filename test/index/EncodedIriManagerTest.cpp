@@ -126,4 +126,137 @@ TEST(EncodedIriManager, emptyPrefixes) {
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 }
 
+// _____________________________________________________________________________
+TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
+  EncodedIriManager em{{"blabb", "blubb"}};
+  auto id = em.encode("<blubb42>");
+  ASSERT_TRUE(id.has_value());
+  auto [prefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value());
+  EXPECT_EQ(prefixIdx, 1);
+  std::string result;
+  EncodedIriManager::decodeDecimalFrom64Bit(result, payload);
+  EXPECT_EQ(result, "42");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(Id::makeUndefined()),
+      ::testing::HasSubstr("must be `EncodedVal`"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, toStringWithGivenPrefix) {
+  auto str = EncodedIriManager::toStringWithGivenPrefix(
+      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
+  EXPECT_EQ(str, "<blibb_7643>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
+  EncodedIriManager em{{"blabb", "blubb"}};
+  auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+      1, EncodedIriManager::encodeDecimalToNBit("7643"));
+  EXPECT_EQ(em.toString(id), "<blubb7643>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
+  auto testNumber = [](uint64_t number, ad_utility::source_location l =
+                                            AD_CURRENT_SOURCE_LOC()) {
+    using m = EncodedIriManager;
+    auto trace = generateLocationTrace(l);
+    EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
+                          m::encodeDecimalToNBit(std::to_string(number))));
+  };
+  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
+  testNumber(0);
+  testNumber(MAX);
+  auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
+  for (auto _ = 0; _ < 20; ++_) {
+    testNumber(intGenerator());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, getIndexOfPrefix) {
+  {
+    auto manager = EncodedIriManager();
+    // No custom prefixes so only need to test the hardcoded ones.
+    for (const auto& [i, fixedPrefix] :
+         ranges::views::enumerate(AlwaysOnPrefixes::value)) {
+      EXPECT_THAT(manager.getIndexOfPrefix(fixedPrefix),
+                  testing::Optional(testing::Eq(i)));
+    }
+    EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
+                testing::Eq(std::nullopt));
+  }
+  {
+    std::vector<std::string> customPrefixes = {"http://qlever.dev"};
+    auto manager = EncodedIriManager(customPrefixes);
+    // Create a list of all prefixes, including the hardcoded ones, for testing
+    // the function.
+    auto allPrefixes = customPrefixes;
+    for (auto prefix : AlwaysOnPrefixes::value) {
+      allPrefixes.emplace_back(prefix);
+    }
+    ql::ranges::sort(allPrefixes);
+    for (const auto& [i, prefix] : ranges::views::enumerate(allPrefixes)) {
+      EXPECT_THAT(manager.getIndexOfPrefix(prefix),
+                  testing::Optional(testing::Eq(i)));
+    }
+    EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
+                testing::Eq(std::nullopt));
+  }
+}
+
+// _____________________________________________________________________________
+struct TestHardcodedPrefixes {
+  static constexpr std::array<std::string_view, 1> value = {
+      "http://example.org/always/"};
+};
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, HardcodedPrefixes) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  // Default constructor includes hardcoded prefix.
+  Manager em;
+  auto id = em.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em.toString(id.value()), "<http://example.org/always/42>");
+
+  // Constructor with additional prefixes also includes hardcoded.
+  Manager em2{{"http://other.org/"}};
+  auto id2 = em2.encode("<http://example.org/always/99>");
+  ASSERT_TRUE(id2.has_value());
+  auto id3 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id3.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  // Adding a hardcoded prefix a second time in the constructor is an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Manager({std::string{TestHardcodedPrefixes::value.at(0)}}),
+      testing::HasSubstr(
+          "!ad_utility::contains(prefixesWithoutAngleBrackets, prefix)"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, HardcodedPrefixesJson) {
+  using Manager =
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
+
+  Manager em{{"http://other.org/"}};
+  nlohmann::json j = em;
+  Manager em2 = j.get<Manager>();
+  auto id = em2.encode("<http://example.org/always/42>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");
+  auto id2 = em2.encode("<http://other.org/1>");
+  ASSERT_TRUE(id2.has_value());
+}
+
 }  // namespace

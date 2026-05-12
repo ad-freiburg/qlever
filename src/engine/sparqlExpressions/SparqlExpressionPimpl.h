@@ -80,6 +80,13 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
+
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  [[nodiscard]] bool isResultAlwaysDefined(
+      const VariableToColumnMap& variableToColumnMap) const;
+
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();
@@ -93,16 +100,14 @@ class SparqlExpressionPimpl {
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
 
-  // If `this` is an expression of the form `LANG(?variable) = "language"`,
-  // return the variable and the language. Else return `std::nullopt`.
+  // Struct to store a variable and a set of allowed language tags for it.
   struct LangFilterData {
     Variable variable_;
-    std::string language_;
+    ad_utility::HashSet<std::string> languages_;
   };
+  // If `this` is an expression of the form `LANG(?variable) = "language"`,
+  // return the variable and the language. Else return `std::nullopt`.
   std::optional<LangFilterData> getLanguageFilterExpression() const;
-
-  // Return true iff the `LANG()` function is used inside this expression.
-  bool containsLangExpression() const;
 
   // Return the size and cost estimate for this expression if it is used as the
   // expression of a `FILTER` clause given that the input has `inputSize` many
@@ -119,8 +124,8 @@ class SparqlExpressionPimpl {
 
   // For a concise description of this method and its functionality, refer to
   // the corresponding declaration in SparqlExpression.h.
-  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata()
-      const;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      const LocalVocabContext& context) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

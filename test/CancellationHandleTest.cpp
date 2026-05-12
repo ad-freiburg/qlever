@@ -23,7 +23,7 @@ using ::testing::HasSubstr;
 
 using namespace std::chrono_literals;
 
-ad_utility::source_location location = ad_utility::source_location::current();
+ad_utility::source_location location = AD_CURRENT_SOURCE_LOC();
 const int expectedLocationLine = __LINE__ - 1;
 const auto expectedLocation =
     absl::StrCat("CancellationHandleTest.cpp:", expectedLocationLine);
@@ -294,8 +294,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -324,8 +323,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -410,8 +408,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 

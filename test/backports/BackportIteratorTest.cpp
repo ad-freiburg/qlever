@@ -46,7 +46,7 @@ TYPED_TEST_SUITE(MoveSentinelTest, ContainerTypes);
 // _____________________________________________________________________________
 TYPED_TEST(MoveSentinelTest, doesInFactMove) {
   auto& cont = this->container_;
-  auto beg = std::make_move_iterator(cont.begin());
+  auto beg = ql::make_move_iterator(cont.begin());
   auto end = ql::move_sentinel{cont.end()};
 
   [[maybe_unused]] R target{false};
@@ -64,7 +64,8 @@ TYPED_TEST(MoveSentinelTest, basicFunctions) {
     auto& empty = this->emptyContainer_;
     EXPECT_EQ(empty.begin(), empty.end());
     auto emptySent = ql::move_sentinel{empty.end()};
-    EXPECT_EQ(std::make_move_iterator(empty.begin()), emptySent);
+    EXPECT_EQ(ql::make_move_iterator(empty.begin()), emptySent);
+    EXPECT_EQ(emptySent, ql::make_move_iterator(empty.begin()));
     EXPECT_EQ(emptySent.base(), empty.end());
     EXPECT_EQ(emptySent.base(), empty.begin());
   }
@@ -74,9 +75,11 @@ TYPED_TEST(MoveSentinelTest, basicFunctions) {
     auto& cont = this->container_;
     auto sent = ql::move_sentinel{cont.end()};
     EXPECT_NE(cont.begin(), cont.end());
-    EXPECT_NE(std::make_move_iterator(cont.begin()), sent);
+    EXPECT_NE(ql::make_move_iterator(cont.begin()), sent);
+    EXPECT_NE(sent, ql::make_move_iterator(cont.begin()));
     EXPECT_EQ(sent.base(), cont.end());
     EXPECT_NE(sent.base(), cont.begin());
   }
 }
+
 }  // namespace

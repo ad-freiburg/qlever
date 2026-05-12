@@ -14,7 +14,9 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "CompilationInfo.h"
 #include "index/Index.h"
+#include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 
@@ -50,20 +52,24 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
-                     Permutation::Enum permutation, const VectorTable& expected,
-                     Permutation::ColumnIndices additionalColumns = {},
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
-        auto t = generateLocationTrace(l);
-        IdTable result =
-            index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
-        ASSERT_EQ(result, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, const TripleComponent& c1,
+             Permutation::Enum permutation, const VectorTable& expected,
+             Permutation::ColumnIndices additionalColumns = {},
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
+    IdTable result = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
+    ASSERT_EQ(result, makeIdTableFromVector(expected));
+  };
 };
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
@@ -71,20 +77,49 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
-                     const VectorTable& expected,
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
-        auto t = generateLocationTrace(l);
-        IdTable wol =
-            index.scan({c0, std::nullopt, std::nullopt}, permutation,
-                       Permutation::ColumnIndicesRef{},
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(wol, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, Permutation::Enum permutation,
+             const VectorTable& expected,
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
+    IdTable wol = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+  };
 };
+
+// Create a temporary directory inside the Google Test temporary directory
+// with the given `name`. The directory and all its contents are deleted when
+// the returned `absl::Cleanup` is destroyed.
+auto makeTemporaryDirectory(std::string_view name) {
+  std::string directory = ::testing::TempDir();
+  if (!ql::ends_with(directory, "/")) {
+    directory.push_back('/');
+  }
+  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
+  directory += name;
+  // Create directory.
+  std::filesystem::create_directory(directory);
+
+  // Remove all files in directory when done.
+  absl::Cleanup cleanup{[directory]() {
+    std::error_code ec;
+    std::filesystem::remove_all(directory, ec);
+    if (ec) {
+      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
+                    << ": " << ec.message();
+    }
+  }};
+  return std::make_pair(std::move(directory), std::move(cleanup));
+}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -110,9 +145,9 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+      const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -201,9 +236,9 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& qec = *getQec(kb);
       const IndexImpl& index = qec.getIndex().getImpl();
-      const auto& deltaTriples = qec.locatedTriplesSnapshot();
+      const auto& deltaTriples = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id zero = getId("<0>");
       Id one = getId("<1>");
       Id two = getId("<2>");
@@ -258,9 +293,9 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const auto& qec = *getQec(kb);
   const IndexImpl& index = qec.getIndex().getImpl();
-  const auto& deltaTriples = qec.locatedTriplesSnapshot();
+  const auto& deltaTriples = qec.locatedTriplesState();
 
-  auto getId = makeGetId(getQec(kb)->getIndex());
+  auto getId = makeGetId(qec.getIndex());
   Id b = getId("<b>");
   Id b2 = getId("<b2>");
   Id a = getId("<a>");
@@ -300,19 +335,18 @@ TEST(IndexTest, indexIdAndGitHash) {
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;
-    std::string kb =
-        "<a>  <b>  <c>  . \n"
-        "<a>  <b>  <c2> . \n"
-        "<a>  <b2> <c>  . \n"
-        "<a2> <b2> <c2> .   ";
-    auto& index = makeQecWithOrWithoutCompression(kb, useCompression)
-                      ->getIndex()
-                      .getImpl();
     {
+      std::string kb =
+          "<a>  <b>  <c>  . \n"
+          "<a>  <b>  <c2> . \n"
+          "<a>  <b2> <c>  . \n"
+          "<a2> <b2> <c2> .   ";
+      auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
+      auto& index = qec.getIndex().getImpl();
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
-      const auto& qec = *getQec(kb);
       auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id c = getId("<c>");
@@ -334,21 +368,21 @@ TEST(IndexTest, scanTest) {
       testOne(iri("<b2>"), iri("<c2>"), POS, {{a2}});
       testOne(iri("<notExisting>"), iri("<a>"), PSO, {});
     }
-    kb = "<a> <is-a> <1> . \n"
-         "<a> <is-a> <2> . \n"
-         "<a> <is-a> <0> . \n"
-         "<b> <is-a> <3> . \n"
-         "<b> <is-a> <0> . \n"
-         "<c> <is-a> <1> . \n"
-         "<c> <is-a> <2> . \n";
 
     {
-      TestIndexConfig config{kb};
-      config.usePrefixCompression = useCompression;
-      const auto& qec = *getQec(std::move(config));
+      std::string kb =
+          "<a> <is-a> <1> . \n"
+          "<a> <is-a> <2> . \n"
+          "<a> <is-a> <0> . \n"
+          "<b> <is-a> <3> . \n"
+          "<b> <is-a> <0> . \n"
+          "<c> <is-a> <1> . \n"
+          "<c> <is-a> <2> . \n";
+      const auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
       const IndexImpl& index = qec.getIndex().getImpl();
 
-      auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -418,19 +452,18 @@ auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
                                 ::testing::Eq(isExternal))));
 };
 
-TEST(IndexTest, TripleToInternalRepresentation) {
+TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_TRUE(result.langtag_.empty());
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), true));
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
@@ -439,23 +472,21 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(result.langtag_, "fr");
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
   }
 }
 
@@ -465,7 +496,9 @@ TEST(IndexTest, NumDistinctEntities) {
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const auto& qec = *getQec(turtleInput);
+  TestIndexConfig config{turtleInput};
+  config.addHasWordTriples = true;
+  const auto& qec = *getQec(config);
   const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
@@ -479,10 +512,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
-  // predicate for each combination of predicate+language that is actually used
-  // (e.g. `@en@label`).
-  EXPECT_EQ(numPredicates.internal, 3);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // and one added predicate for each combination of predicate+language that is
+  // actually used (e.g. `@en@label`).
+  EXPECT_EQ(numPredicates.internal, 4);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -493,19 +526,22 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
-  // Two added triples for each triple that has an object with a language tag
-  // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal, 5);
+  // Two added triples for each triple that has an object with a language tag,
+  // one triple per subject for the pattern, and one ql:has-word triple per
+  // word in the literals (5 literals with 1 word each = 5 word triples).
+  EXPECT_EQ(numTriples.internal, 10);
 
-  auto multiplicities = index.getMultiplicities(Permutation::SPO);
+  auto multiplicities =
+      index.getMultiplicities(index.getPermutation(Permutation::SPO));
   // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct
   // objects.
   EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
-                                           qec.locatedTriplesSnapshot());
+  multiplicities = index.getMultiplicities(
+      iri("<x>"), index.getPermutation(Permutation::SPO),
+      qec.locatedTriplesState());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
@@ -552,6 +588,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -651,4 +688,240 @@ TEST(IndexTest, getBlankNodeManager) {
       "_:c <a> <b> .";
   const Index& index3 = getQec(kb)->getIndex();
   EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, recomputeStatistics) {
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"A\" . "
+      "<y> <label> \"Beta\". <z> <label> \"zz\"@en";
+  auto index = makeTestIndex("recomputeStatistics", std::move(turtleInput));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto& indexImpl = index.getImpl();
+  // No-op, should return the same stats.
+  auto result = indexImpl.recomputeStatistics(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  EXPECT_EQ(result, indexImpl.configurationJson_);
+
+  // Now, modify the index by adding triples.
+  Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
+                                            &indexImpl](
+                                               DeltaTriples& deltaTriples) {
+    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
+    LocalVocabEntry literal =
+        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
+    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
+    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    // Create duplicate in different graph.
+    Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
+    Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
+    Id alpha = Id::makeFromVocabIndex(VocabIndex::make(1));
+    deltaTriples.insertTriples(
+        cancellationHandle, {IdTriple{{x, label, alpha, x}},
+                             IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
+  });
+
+  for (bool loadAllPermutations : {true, false}) {
+    using NNAI = Index::NumNormalAndInternal;
+
+    // Simulate scenario where not all permutations are loaded.
+    if (!loadAllPermutations) {
+      // Overwrite with unloaded permutation.
+      indexImpl.SPOForTesting() = Permutation{
+          Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
+      // Zero out original values.
+      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+    }
+
+    auto newStats = indexImpl.recomputeStatistics(
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+    EXPECT_NE(newStats, indexImpl.configurationJson_);
+    EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
+    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    if (loadAllPermutations) {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+    } else {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, countDistinct) {
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{1}, {2}}));
+  tables.push_back(makeIdTableFromVector({{2}, {2}}));
+
+  size_t counter = 0;
+  std::optional<Id> lastId;
+  for (const IdTable& table : tables) {
+    IndexImpl::countDistinct(lastId, counter, table);
+  }
+  EXPECT_EQ(counter, 2);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, createPermutation) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [directory, cleanup] = makeTemporaryDirectory("createPermutation");
+  auto onDiskBase = directory + "/index";
+  index.setOnDiskBase(onDiskBase);
+  std::vector<IdTableStatic<0>> tables;
+  tables.push_back(
+      makeIdTableFromVector({{1, 1, 1, 0}, {1, 2, 1, 0}, {2, 3, 1, 0}}));
+  tables.push_back(
+      makeIdTableFromVector({{2, 4, 1, 0}, {2, 5, 1, 0}, {3, 6, 1, 0}}));
+
+  Permutation permutation{Permutation::PSO,
+                          ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [uniquePredicates, meta] = index.createPermutationWithoutMetadata(
+      4,
+      ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+          tables.at(0).clone(), tables.at(1).clone()}},
+      permutation, false);
+  index.finalizePermutation(meta, permutation, false);
+
+  EXPECT_EQ(uniquePredicates, 3);
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  auto [uniqueInternalPredicates, internalMeta] =
+      index.createPermutationWithoutMetadata(
+          4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
+          true);
+  index.finalizePermutation(internalMeta, permutation, true);
+
+  EXPECT_EQ(uniqueInternalPredicates, 3);
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+
+  permutation.loadFromDisk(onDiskBase, true);
+  index.deltaTriplesManager().modify<void>(
+      [&permutation](DeltaTriples& deltaTriples) {
+        permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
+      });
+
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  for (bool internal : {false, true}) {
+    const auto& actualPermutation =
+        internal ? permutation.internalPermutation() : permutation;
+    auto scan = actualPermutation.lazyScan(
+        actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
+        std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
+        *state);
+    auto begin = scan.begin();
+    ASSERT_NE(begin, scan.end());
+    EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},
+                                             {1, 2, 1, 0},
+                                             {2, 3, 1, 0},
+                                             {2, 4, 1, 0},
+                                             {2, 5, 1, 0},
+                                             {3, 6, 1, 0}}));
+    ++begin;
+    EXPECT_EQ(begin, scan.end());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, writePatternsToFile) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [directory, cleanup] = makeTemporaryDirectory("writePatternsToFile");
+  auto onDiskBase = directory + "/index";
+  index.setOnDiskBase(onDiskBase);
+  index.avgNumDistinctSubjectsPerPredicate_ = 1337.5;
+  index.avgNumDistinctPredicatesPerSubject_ = 3.14;
+  index.numDistinctSubjectPredicatePairs_ = 42;
+
+  std::vector<std::vector<Id>> data;
+  data.push_back({Id::makeFromInt(1), Id::makeFromInt(2)});
+  data.push_back({Id::makeFromInt(3), Id::makeFromInt(4)});
+
+  index.getPatterns() = CompactVectorOfStrings{data};
+  index.writePatternsToFile();
+
+  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+
+  double avgNumDistinctSubjectsPerPredicate;
+  double avgNumDistinctPredicatesPerSubject;
+  uint64_t numDistinctSubjectPredicatePairs;
+  CompactVectorOfStrings<Id> result;
+
+  PatternCreator::readPatternsFromFile(
+      onDiskBase + ".index.patterns", avgNumDistinctSubjectsPerPredicate,
+      avgNumDistinctPredicatesPerSubject, numDistinctSubjectPredicatePairs,
+      result);
+
+  EXPECT_EQ(index.avgNumDistinctSubjectsPerPredicate_,
+            avgNumDistinctSubjectsPerPredicate);
+  EXPECT_EQ(index.avgNumDistinctPredicatesPerSubject_,
+            avgNumDistinctPredicatesPerSubject);
+  EXPECT_EQ(index.numDistinctSubjectPredicatePairs_,
+            numDistinctSubjectPredicatePairs);
+  EXPECT_TRUE(ql::ranges::equal(CompactVectorOfStrings{data}, result,
+                                ql::ranges::equal));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, loadConfigFromOldIndex) {
+  auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
+  auto onDiskBase = directory + "/index";
+  IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
+  other.blocksizePermutationPerColumn() = 1337_B;
+  nlohmann::json stats;
+
+  Index::NumNormalAndInternal numTriples{42, 1337};
+  Index::NumNormalAndInternal numPredicates{9999, 1010};
+  Index::NumNormalAndInternal numSubjects{8888, 2020};
+  Index::NumNormalAndInternal numObjects{7777, 3030};
+
+  stats["num-triples"] = numTriples;
+  stats["num-predicates"] = numPredicates;
+  stats["num-subjects"] = numSubjects;
+  stats["num-objects"] = numObjects;
+  stats["i-just-invented-this"] = "🤠";
+
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.loadConfigFromOldIndex(onDiskBase, other, stats);
+  EXPECT_EQ(index.getOnDiskBase(), onDiskBase);
+  EXPECT_EQ(index.getKbName(), other.getKbName());
+  EXPECT_EQ(index.numTriples(), numTriples);
+  EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
+  EXPECT_EQ(index.numSubjects_, numSubjects);
+  EXPECT_EQ(index.numObjects_, numObjects);
+  EXPECT_EQ(index.blocksizePermutationPerColumn(),
+            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.configurationJson_, stats);
+
+  // The version written to disk will also have these fields.
+  stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
+  stats["index-format-version"] = qlever::indexFormatVersion;
+
+  std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
+  std::ifstream in{jsonFile};
+  nlohmann::json jsonFromFile;
+  in >> jsonFromFile;
+  EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, graphNameManagerIntegration) {
+  TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "2> . <a> <b> <c> <http://example.org/1> .")};
+  c.indexType = qlever::Filetype::NQuad;
+  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto qec = getQec(c);
+  const auto graphManager = qec->getIndex().graphNameManager();
+  EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
+  EXPECT_THAT(graphManager.prefixWithoutBraces_,
+              testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }

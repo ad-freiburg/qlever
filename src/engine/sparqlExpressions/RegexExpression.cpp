@@ -8,9 +8,10 @@
 
 #include <re2/re2.h>
 
-#include "NaryExpressionImpl.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -66,21 +67,22 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
 }
 
 // _____________________________________________________________________________
-[[maybe_unused]] auto regexImpl = [](const std::optional<std::string>& input,
-                                     const std::shared_ptr<RE2>& pattern) {
-  if (!input.has_value() || !pattern) {
-    return Id::makeUndefined();
+struct RegexImpl {
+  Id operator()(const std::optional<std::string>& input,
+                const std::shared_ptr<RE2>& pattern) const {
+    if (!input.has_value() || !pattern) {
+      return Id::makeUndefined();
+    }
+    // Check for invalid regexes.
+    if (!pattern->ok()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
   }
-  // Check for invalid regexes.
-  if (!pattern->ok()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
 };
 
 using RegexExpression =
-    string_expressions::StringExpressionImpl<2, decltype(regexImpl),
-                                             RegexValueGetter>;
+    string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
 }  // namespace sparqlExpression::detail
 
@@ -89,7 +91,7 @@ namespace sparqlExpression {
 // _____________________________________________________________________________
 std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     std::string regex) {
-  if (!regex.starts_with('^')) {
+  if (!ql::starts_with(regex, '^')) {
     return std::nullopt;
   }
   // Check if we can use the more efficient prefix filter instead
@@ -169,6 +171,10 @@ ql::span<SparqlExpression::Ptr> PrefixRegexExpression::childrenImpl() {
 ExpressionResult PrefixRegexExpression::evaluate(
     EvaluationContext* context) const {
   // This function must only be called if we have a simple prefix regex.
+  auto optColumn = context->getColumnIndexForVariable(variable_);
+  if (!optColumn.has_value()) {
+    return Id::makeUndefined();
+  }
 
   // If the expression is enclosed in `STR()`, we have two ranges: for the
   // prefix with and without leading "<".
@@ -207,13 +213,10 @@ ExpressionResult PrefixRegexExpression::evaluate(
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  if (context->isResultSortedBy(variable_)) {
+  const auto& column = optColumn.value();
+  if (context->isResultSortedBy(variable_) &&
+      (beg == end || !(*beg)[column].isUndefined())) {
     std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
-    auto optColumn = context->getColumnIndexForVariable(variable_);
-    AD_CORRECTNESS_CHECK(optColumn.has_value(),
-                         "We have previously asserted that the input is sorted "
-                         "by the variable, so we expect it to exist");
-    const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
       auto lower = std::lower_bound(
@@ -234,9 +237,9 @@ ExpressionResult PrefixRegexExpression::evaluate(
       }
       checkCancellation(context);
     }
-    return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
-                       ad_utility::SetOfIntervals{},
-                       ad_utility::SetOfIntervals::Union{});
+    return ::ranges::accumulate(resultSetOfIntervals,
+                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals::Union{});
   }
 
   // If the input is not sorted by the variable, we have to check each row
@@ -245,11 +248,15 @@ ExpressionResult PrefixRegexExpression::evaluate(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable_, resultSize, context)) {
-    result.push_back(Id::makeFromBool(
-        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
-          return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
-                 valueIdComparators::compareByBits(id, lowerUpper.second);
-        })));
+    if (id.isUndefined()) {
+      result.push_back(Id::makeUndefined());
+    } else {
+      result.push_back(Id::makeFromBool(
+          ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+            return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                   valueIdComparators::compareByBits(id, lowerUpper.second);
+          })));
+    }
     checkCancellation(context);
   }
   return result;
@@ -281,6 +288,7 @@ void PrefixRegexExpression::checkCancellation(
 // _____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
 PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   // It is currently not possible to prefilter PREFIX expressions involving
   // STR(?var), since we not only have to match "Bob", but also "Bob"@en,
@@ -347,6 +355,31 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
   }
   return std::make_unique<detail::RegexExpression>(std::move(string),
                                                    std::move(regex));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makePrefixMatchExpression(
+    SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix) {
+  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
+      string->isStrExpression() ? string->children()[0].get() : string.get());
+  if (!variableExpression) {
+    throw std::runtime_error{
+        "ql:prefix-match does only support STR(?var) or ?var as the first "
+        "argument"};
+  }
+  auto stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&*prefix);
+  if (!stringLiteralExpression) {
+    throw std::runtime_error{
+        "ql:prefix-match does only support static string literals as the "
+        "second argument"};
+  }
+  const auto& stringLiteral = stringLiteralExpression->value();
+  detail::ensureIsSimpleLiteral(stringLiteral);
+  return std::make_unique<PrefixRegexExpression>(
+      std::move(string),
+      std::string{asStringViewUnsafe(stringLiteral.getContent())},
+      variableExpression->value());
 }
 
 }  // namespace sparqlExpression

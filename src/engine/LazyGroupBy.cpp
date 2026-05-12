@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "LazyGroupBy.h"
+#include "engine/LazyGroupBy.h"
 
 using groupBy::detail::VectorOfAggregationData;
 
@@ -20,8 +20,8 @@ LazyGroupBy::LazyGroupBy(
         [&aggregateInfo](auto& arg) {
           using T = std::decay_t<decltype(arg)>;
           static_assert(VectorOfAggregationData<T>);
-          if constexpr (std::same_as<typename T::value_type,
-                                     GroupConcatAggregationData>) {
+          if constexpr (ql::concepts::same_as<typename T::value_type,
+                                              GroupConcatAggregationData>) {
             arg.emplace_back(aggregateInfo.aggregateType_.separator_.value());
           } else {
             arg.emplace_back();
@@ -61,7 +61,9 @@ void LazyGroupBy::commitRow(
 
   for (auto& alias : aggregateAliases_) {
     GroupByImpl::evaluateAlias(alias, &resultTable, evaluationContext,
-                               aggregationData_, &localVocab_, allocator_);
+                               aggregationData_,
+                               evaluationContext._qec.getLocalVocabContext(),
+                               &localVocab_, allocator_);
   }
   resetAggregationData();
 }

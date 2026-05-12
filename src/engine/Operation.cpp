@@ -1,6 +1,11 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
+// Copyright 2020-2026 The QLever Authors, in particular:
+//
+// 2020 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Operation.h"
 
@@ -8,8 +13,12 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/SpatialJoinCachedIndex.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -75,8 +84,8 @@ std::vector<std::string> Operation::collectWarnings() const {
       continue;
     }
     auto recursive = child->collectWarnings();
-    res.insert(res.end(), std::make_move_iterator(recursive.begin()),
-               std::make_move_iterator(recursive.end()));
+    res.insert(res.end(), ql::make_move_iterator(recursive.begin()),
+               ql::make_move_iterator(recursive.end()));
   }
 
   return res;
@@ -84,7 +93,7 @@ std::vector<std::string> Operation::collectWarnings() const {
 
 // _____________________________________________________________________________
 void Operation::addWarningOrThrow(std::string warning) const {
-  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));
@@ -139,8 +148,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                                  ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
-  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-  signalQueryUpdate();
+  runtimeInfo().status_ =
+      RuntimeInformation::Status::fullyMaterializedInProgress;
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
@@ -178,14 +188,14 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         });
   } else {
     auto& rti = runtimeInfo();
-    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.status_ = RuntimeInformation::lazilyMaterializedInProgress;
     rti.totalTime_ = timer.msecs();
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{},
-         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
-                                   std::chrono::microseconds duration) mutable {
+        [this, vocabStats = LocalVocabTracking{}, ker = knownEmptyResult()](
+            const Result::IdTableVocabPair& pair,
+            std::chrono::microseconds duration) mutable {
           const IdTable& idTable = pair.idTable_;
           AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
                                "Operation returned non-empty result, but "
@@ -204,17 +214,22 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                              ", Ø = ", vocabStats.avgSize(),
                              ", max = ", vocabStats.maxSize_));
           }
-          timeSizeUpdate += duration;
-          if (timeSizeUpdate > 50ms) {
-            timeSizeUpdate = 0us;
-            signalQueryUpdate();
-          }
+          signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          if (failed) {
-            runtimeInfo().status_ = RuntimeInformation::failed;
-          }
-          signalQueryUpdate();
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
+            switch (state) {
+              case FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case CANCELLED:
+                return RuntimeInformation::cancelled;
+              default:
+                AD_CORRECTNESS_CHECK(state == FAILED);
+                return RuntimeInformation::failed;
+            }
+          }();
+          signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
@@ -249,7 +264,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto result = runComputation(timer, computationMode);
   auto maxSize =
       isRoot ? cache.getMaxSizeSingleEntry()
-             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+             : std::min(getRuntimeParameter<
+                            &RuntimeParameters::cacheMaxSizeLazyResult_>(),
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
@@ -268,7 +284,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {
           auto copy = *runtimeInfo;
-          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
+          copy.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
           cache.tryInsertIfNotPresent(
               false, cacheKey,
               std::make_shared<CacheValue>(std::move(aggregatedResult),
@@ -302,11 +318,11 @@ std::shared_ptr<const Result> Operation::getResult(
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
-    signalQueryUpdate();
+    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
-      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
+      getCacheKey(), _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -337,6 +353,14 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      if (computationMode == ComputationMode::ONLY_IF_CACHED) {
+        return nullptr;
+      }
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -378,21 +402,9 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
-    // Pin result to the named result cache if so requested.
+    // Pin result to the named result cache if requested.
     if (pinResultWithName) {
-      const auto& name = _executionContext->pinResultWithName().value();
-      const auto& actualResult = result._resultPointer->resultTable();
-      AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
-      // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
-      // it would require a mojor refactoring of the `Result` class.
-      auto valueForNamedResultCache = NamedResultCache::Value{
-          std::make_shared<const IdTable>(actualResult.idTable().clone()),
-          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone()};
-      _executionContext->namedResultCache().store(
-          name, std::move(valueForNamedResultCache));
-
-      runtimeInfo().addDetail("pinned-with-name", name);
+      storeToNamedResultCache(result._resultPointer->resultTable());
     }
 
     return result._resultPointer->resultTablePtr();
@@ -433,11 +445,50 @@ std::shared_ptr<const Result> Operation::getResult(
 }
 
 // ______________________________________________________________________
-
 std::chrono::milliseconds Operation::remainingTime() const {
   auto interval = deadline_ - std::chrono::steady_clock::now();
   return std::max(
       0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
+}
+
+// _____________________________________________________________________________
+void Operation::storeToNamedResultCache(const Result& result) {
+  // The query result is to be pinned in the named query cache.
+  const auto& [name, geoIndexVar] =
+      _executionContext->pinResultWithName().value();
+  AD_CORRECTNESS_CHECK(result.isFullyMaterialized());
+
+  // If a geo index is to be cached, get the respective column using the
+  // given variable and compute the index.
+  auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
+    if (!geoIndexVar.has_value()) {
+      return std::nullopt;
+    }
+    auto colIndex = getExternallyVisibleVariableColumns()
+                        .at(geoIndexVar.value())
+                        .columnIndex_;
+    return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
+                                  result.idTable(),
+                                  _executionContext->getIndex()};
+  };
+
+  // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
+  // it would require a major refactoring of the `Result` class.
+  auto valueForNamedResultCache = NamedResultCache::Value{
+      std::make_shared<const IdTable>(result.idTable().clone()),
+      getExternallyVisibleVariableColumns(),
+      result.sortedBy(),
+      result.localVocab().clone(),
+      getCacheKey(),
+      geoIndex()};
+  _executionContext->namedResultCache().store(
+      name, std::move(valueForNamedResultCache));
+
+  runtimeInfo().addDetail("pinned-with-name", name);
+  if (geoIndexVar.has_value()) {
+    runtimeInfo().addDetail("pinned-geo-index-on-var",
+                            geoIndexVar.value().name());
+  }
 }
 
 // _______________________________________________________________________
@@ -448,7 +499,8 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
-  _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
+  _runtimeInfo->status_ =
+      RuntimeInformation::Status::fullyMaterializedCompleted;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
@@ -475,10 +527,10 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
-// ____________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
@@ -491,9 +543,8 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
-    std::vector<std::shared_ptr<RuntimeInformation>> children,
-    RuntimeInformation::Status status) {
-  _runtimeInfo->status_ = status;
+    std::vector<std::shared_ptr<RuntimeInformation>> children) {
+  _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
@@ -501,18 +552,15 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
                          ql::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
+  _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _____________________________________________________________________________
-void Operation::updateRuntimeInformationWhenOptimizedOut(
-    RuntimeInformation::Status status) {
-  auto setStatus = [&status](RuntimeInformation& rti,
-                             const auto& self) -> void {
-    rti.status_ = status;
+void Operation::updateRuntimeInformationWhenOptimizedOut() {
+  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
+    rti.status_ = RuntimeInformation::Status::optimizedOut;
     rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
       self(*child, self);
@@ -520,7 +568,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   };
   setStatus(*_runtimeInfo, setStatus);
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _______________________________________________________________________
@@ -533,7 +581,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // __________________________________________________________________
@@ -579,7 +627,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), locatedTriplesSnapshot().index_});
+      {getCacheKey(), locatedTriplesState().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -663,14 +711,21 @@ const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
 
 // _____________________________________________________________________________
 
-void Operation::signalQueryUpdate() const {
+void Operation::signalQueryUpdate(
+    RuntimeInformation::SendPriority sendPriority) const {
   if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
-    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo, sendPriority);
   }
 }
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
@@ -732,6 +787,18 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
+void Operation::getExternalValues(
+    std::vector<ExternalValues*>& externalValues) {
+  // Recursively process all children. This is the correct behavior for all
+  // classes except `ExternalValues` itself, which overrides this
+  // method.
+  for (auto* child : getChildren()) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    child->getRootOperation()->getExternalValues(externalValues);
+  }
+}
+
+// _____________________________________________________________________________
 bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
@@ -757,6 +824,17 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::coversVariables(
+    const std::vector<const Variable*>& variables) const {
+  const auto& varToCol = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
+    return varToCol.contains(*v) &&
+           varToCol.at(*v).mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  });
 }
 
 // _____________________________________________________________________________

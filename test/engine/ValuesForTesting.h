@@ -1,6 +1,7 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
@@ -16,7 +17,7 @@
 // operation.
 class ValuesForTesting : public Operation {
  private:
-  std::vector<IdTable> tables_;
+  std::vector<Result::IdTableVocabPair> tables_;
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
   // Those can be manually overwritten for testing using the respective getters.
@@ -26,6 +27,13 @@ class ValuesForTesting : public Operation {
   ad_utility::MemorySize* cacheSizeStorage_ = nullptr;
 
  public:
+  auto tables() {
+    return tables_ | ql::views::transform(&Result::IdTableVocabPair::idTable_);
+  }
+  auto tables() const {
+    return tables_ | ql::views::transform(&Result::IdTableVocabPair::idTable_);
+  }
+
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
@@ -43,18 +51,24 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{table.numRows()},
         costEstimate_{table.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
-        localVocab_{std::move(localVocab)},
         multiplicity_{multiplicity},
         forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
-    tables_.push_back(std::move(table));
+    tables_.emplace_back(std::move(table), std::move(localVocab));
+  }
+
+  static std::vector<Result::IdTableVocabPair> liftToPairs(
+      std::vector<IdTable> tables, LocalVocab voc) {
+    return ::ranges::to_vector(
+        tables | ql::views::transform([&voc](auto& table) {
+          return Result::IdTableVocabPair{std::move(table), voc.clone()};
+        }));
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
-                            std::vector<IdTable> tables,
+                            std::vector<Result::IdTableVocabPair> tables,
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{})
+                            std::vector<ColumnIndex> sortedColumns = {})
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -63,19 +77,29 @@ class ValuesForTesting : public Operation {
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
         resultSortedColumns_{std::move(sortedColumns)},
-        localVocab_{std::move(localVocab)},
         multiplicity_{std::nullopt} {
-    AD_CONTRACT_CHECK(ql::ranges::all_of(tables_, [this](const IdTable& table) {
-      return variables_.size() == table.numColumns();
-    }));
+    AD_CONTRACT_CHECK(
+        ql::ranges::all_of(this->tables(), [this](const IdTable& table) {
+          return variables_.size() == table.numColumns();
+        }));
     size_t totalRows = 0;
-    for (const IdTable& idTable : tables_) {
+    for (const IdTable& idTable : this->tables()) {
       totalRows += idTable.numRows();
     }
     sizeEstimate_ = totalRows;
     costEstimate_ = totalRows;
   }
 
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<IdTable> tables,
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{})
+      : ValuesForTesting{ctx,
+                         liftToPairs(std::move(tables), std::move(localVocab)),
+                         std::move(variables), unlikelyToFitInCache,
+                         std::move(sortedColumns)} {}
   ValuesForTesting(ValuesForTesting&&) = default;
   ValuesForTesting& operator=(ValuesForTesting&&) = default;
 
@@ -88,37 +112,26 @@ class ValuesForTesting : public Operation {
     if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
-      std::vector<IdTable> clones;
-      clones.reserve(tables_.size());
-      for (const IdTable& idTable : tables_) {
-        clones.push_back(idTable.clone());
-      }
-      auto generator = [](auto idTables,
-                          LocalVocab localVocab) -> Result::Generator {
-        for (IdTable& idTable : idTables) {
-          co_yield {std::move(idTable), localVocab.clone()};
-        }
-      }(std::move(clones), localVocab_.clone());
-      return {std::move(generator), resultSortedOn()};
+      auto lazyRange =
+          tables_ | ql::views::transform([](const auto& tableAndVocab) {
+            return Result::IdTableVocabPair{tableAndVocab.idTable_.clone(),
+                                            tableAndVocab.localVocab_.clone()};
+          });
+      return {Result::LazyResult{lazyRange}, resultSortedOn()};
     }
-    std::optional<IdTable> optionalTable;
-    if (tables_.size() > 1) {
-      IdTable aggregateTable{tables_.at(0).numColumns(),
-                             tables_.at(0).getAllocator()};
-      for (const IdTable& idTable : tables_) {
-        aggregateTable.insertAtEnd(idTable);
-      }
-      optionalTable = std::move(aggregateTable);
+    LocalVocab aggregateLocalVocab;
+    IdTable table{tables()[0].numColumns(), tables()[0].getAllocator()};
+    for (const auto& [idTable, localVocab] : tables_) {
+      table.insertAtEnd(idTable);
+      aggregateLocalVocab.mergeWith(localVocab);
     }
-    auto table = optionalTable.has_value() ? std::move(optionalTable).value()
-                                           : tables_.at(0).clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimitOffset().upperBound(table.size()),
                   table.end());
       table.erase(table.begin(),
                   table.begin() + getLimitOffset().actualOffset(table.size()));
     }
-    return {std::move(table), resultSortedOn(), localVocab_.clone()};
+    return {std::move(table), resultSortedOn(), std::move(aggregateLocalVocab)};
   }
   bool unlikelyToFitInCache(ad_utility::MemorySize cacheSize) const override {
     if (cacheSizeStorage_ != nullptr) {
@@ -139,15 +152,15 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   std::string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
-    auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
-    auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
+    auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
+    auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
+    auto numCols = tables_.empty() ? 0 : tables()[0].numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
     if (totalNumRows > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {
-      for (const IdTable& idTable : tables_) {
+      for (const IdTable& idTable : tables()) {
         for (size_t i = 0; i < idTable.numColumns(); ++i) {
           for (Id entry : idTable.getColumn(i)) {
             str << entry << ' ';
@@ -167,7 +180,7 @@ class ValuesForTesting : public Operation {
   size_t getResultWidth() const override {
     // Assume a width of 1 if we have no tables and no other information to base
     // it on because 0 would otherwise cause stuff to break.
-    return tables_.empty() ? 1 : tables_.at(0).numColumns();
+    return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
   std::vector<ColumnIndex> resultSortedOn() const override {
@@ -192,7 +205,7 @@ class ValuesForTesting : public Operation {
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
-        tables_, [](const IdTable& table) { return table.empty(); });
+        tables(), [](const IdTable& table) { return table.empty(); });
   }
 
  private:
@@ -203,7 +216,7 @@ class ValuesForTesting : public Operation {
         continue;
       }
       bool containsUndef =
-          ql::ranges::any_of(tables_, [&i](const IdTable& table) {
+          ql::ranges::any_of(tables(), [&i](const IdTable& table) {
             return ql::ranges::any_of(table.getColumn(i),
                                       [](Id id) { return id.isUndefined(); });
           });
@@ -223,11 +236,10 @@ class ValuesForTesting : public Operation {
         costEstimate_{other.costEstimate_},
         unlikelyToFitInCache_{other.unlikelyToFitInCache_},
         resultSortedColumns_{other.resultSortedColumns_},
-        localVocab_{other.localVocab_.clone()},
         multiplicity_{other.multiplicity_},
         forceFullyMaterialized_{other.forceFullyMaterialized_} {
-    for (const auto& idTable : other.tables_) {
-      tables_.push_back(idTable.clone());
+    for (const auto& [idTable, localVocab] : other.tables_) {
+      tables_.emplace_back(idTable.clone(), localVocab.clone());
     }
   }
 
@@ -238,7 +250,6 @@ class ValuesForTesting : public Operation {
   }
 
   std::vector<ColumnIndex> resultSortedColumns_;
-  LocalVocab localVocab_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };

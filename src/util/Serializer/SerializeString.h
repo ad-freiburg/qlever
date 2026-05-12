@@ -7,7 +7,7 @@
 
 #include <string_view>
 
-#include "./SerializeVector.h"
+#include "util/Serializer/SerializeVector.h"
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(

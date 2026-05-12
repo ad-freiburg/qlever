@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_split.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
@@ -270,7 +271,8 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
           "The config variable was: ", var.name()));
     }
     if (conf.isWordSearch_.value()) {
-      if (conf.matchVar_.has_value() && !conf.word_.value().ends_with("*")) {
+      if (conf.matchVar_.has_value() &&
+          !ql::ends_with(conf.word_.value(), "*")) {
         throw TextSearchException(
             absl::StrCat("The text search config shouldn't define a variable "
                          "for the prefix match column if the word isn't a "

@@ -23,7 +23,7 @@ TEST(ParsedRequestBuilderTest, Constructor) {
   auto expect = [](const auto& request, const std::string& path,
                    const ParamValueMap& params,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(
@@ -46,7 +46,7 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
   auto expect = [](const auto& request,
                    const std::optional<std::string>& expected,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.accessToken_, testing::Eq(std::nullopt));
@@ -75,7 +75,7 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
   auto expect = [](const auto& request, auto ti,
                    const std::vector<DatasetClause>& expected,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     using T = typename decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
@@ -106,7 +106,7 @@ TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
   auto expect = [](const auto& request, auto ti, std::string_view paramName,
                    const Operation& expected,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     using T = typename decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
@@ -173,7 +173,7 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto expect = [](const auto& request, const GraphOrDefault& graph,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
@@ -211,7 +211,7 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
   };
   auto expect = [](const auto& request, const GraphOrDefault& graph,
                    const ad_utility::source_location l =
-                       ad_utility::source_location::current()) {
+                       AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,

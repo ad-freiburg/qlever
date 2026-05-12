@@ -4,6 +4,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+#include "backports/iterator.h"
+
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
@@ -36,8 +38,8 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
   std::vector<Variable> result;
   for (const auto& child : children()) {
     auto childResult = child->getUnaggregatedVariables();
-    result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                  std::make_move_iterator(childResult.end()));
+    result.insert(result.end(), ql::make_move_iterator(childResult.begin()),
+                  ql::make_move_iterator(childResult.end()));
   }
   return result;
 }
@@ -83,13 +85,6 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpression::containsLangExpression() const {
-  return ql::ranges::any_of(children(), [](const SparqlExpression::Ptr& child) {
-    return child->containsLangExpression();
-  });
-}
-
-// _____________________________________________________________________________
 bool SparqlExpression::isYearExpression() const { return false; }
 
 // _____________________________________________________________________________
@@ -120,6 +115,7 @@ Estimates SparqlExpression::getEstimatesForFilterExpression(
 // `getPrefilterExpressionForMetadata` method declared there.
 std::vector<PrefilterExprVariablePair>
 SparqlExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   return {};
 };
@@ -139,8 +135,8 @@ ql::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
 // _____________________________________________________________________________
 std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
   auto span = children();
-  return {std::make_move_iterator(span.begin()),
-          std::make_move_iterator(span.end())};
+  return {ql::make_move_iterator(span.begin()),
+          ql::make_move_iterator(span.end())};
 }
 
 // _____________________________________________________________________________
