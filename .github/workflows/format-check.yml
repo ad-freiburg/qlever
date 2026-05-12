@@ -14,7 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies
-        run: sudo apt install -y clang-format-18
+        run: |
+          # The version in the default Ubuntu repositories is too old (and has some breaking changes),
+          # so we install from the official LLVM repository.
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          sudo apt install -y clang-format-18
 
       - name: Run the format checker
         run: ${{github.workspace}}/misc/format-check.sh
