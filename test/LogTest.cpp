@@ -15,29 +15,11 @@
 #include "./util/GTestHelpers.h"
 #include "util/Log.h"
 
-// Fixture that saves and restores the runtime log level and global logging
-// stream around each test so tests don't interfere with each other.
-class LogTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    savedLevel_ = ad_utility::detail::runtimeLogLevel.load();
-    ad_utility::setGlobalLoggingStream(&stream_);
-  }
-  void TearDown() override {
-    ad_utility::detail::runtimeLogLevel.store(savedLevel_);
-    ad_utility::setGlobalLoggingStream(&std::cout);
-  }
-  std::stringstream stream_;
-
- private:
-  LogLevel::Enum savedLevel_{};
-};
+// _____________________________________________________________________________
+TEST(LogTest, TypeName) { EXPECT_EQ(LogLevel::typeName(), "log level"); }
 
 // _____________________________________________________________________________
-TEST_F(LogTest, TypeName) { EXPECT_EQ(LogLevel::typeName(), "log level"); }
-
-// _____________________________________________________________________________
-TEST_F(LogTest, StringConversions) {
+TEST(LogTest, StringConversions) {
   EXPECT_EQ(LogLevel::fromString("FATAL"), LogLevel{LogLevel::Enum::FATAL});
   EXPECT_EQ(LogLevel::fromString("ERROR"), LogLevel{LogLevel::Enum::ERROR});
   EXPECT_EQ(LogLevel::fromString("WARN"), LogLevel{LogLevel::Enum::WARN});
@@ -54,16 +36,19 @@ TEST_F(LogTest, StringConversions) {
 }
 
 // _____________________________________________________________________________
-TEST_F(LogTest, SetRuntimeLogLevel) {
-  ad_utility::setRuntimeLogLevel(LogLevel::Enum::FATAL);
+TEST(LogTest, SetRuntimeLogLevel) {
+  // Setting to INFO requires LOGLEVEL >= INFO at compile time; skip otherwise.
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  auto cleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
   EXPECT_EQ(ad_utility::detail::runtimeLogLevel.load(), LogLevel::Enum::FATAL);
 
+  // Setting to INFO must succeed (SKIP_IF_LOGLEVEL_IS_LOWER(INFO) guards this).
   ad_utility::setRuntimeLogLevel(LogLevel::Enum::INFO);
   EXPECT_EQ(ad_utility::detail::runtimeLogLevel.load(), LogLevel::Enum::INFO);
 }
 
 // _____________________________________________________________________________
-TEST_F(LogTest, ExceptionOnTooVerboseLevel) {
+TEST(LogTest, ExceptionOnTooVerboseLevel) {
   // If the compile-time LOGLEVEL is already TRACE, every runtime level is
   // valid — there is nothing to throw, so we skip.
   if constexpr (LOGLEVEL >= LogLevel::Enum::TRACE) {
@@ -78,16 +63,19 @@ TEST_F(LogTest, ExceptionOnTooVerboseLevel) {
 }
 
 // _____________________________________________________________________________
-TEST_F(LogTest, StreamFiltering) {
-  // FATAL (0) always passes compile-time guards. ERROR (1) is suppressed when
-  // runtime level is FATAL.
-  ad_utility::setRuntimeLogLevel(LogLevel::Enum::FATAL);
+TEST(LogTest, StreamFiltering) {
+  // FATAL (0) always passes compile-time guards. ERROR (1) is suppressed at
+  // runtime when the level is set to FATAL.
+  auto levelCleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+  std::stringstream ss;
+  ad_utility::setGlobalLoggingStream(&ss);
+  auto streamCleanup =
+      absl::MakeCleanup([] { ad_utility::setGlobalLoggingStream(&std::cout); });
 
   AD_LOG_FATAL << "hello-fatal";
-  EXPECT_THAT(stream_.str(), ::testing::HasSubstr("hello-fatal"));
+  EXPECT_THAT(ss.str(), ::testing::HasSubstr("hello-fatal"));
 
-  stream_.str({});
+  ss.str({});
   AD_LOG_ERROR << "hello-error";
-  EXPECT_THAT(stream_.str(),
-              ::testing::Not(::testing::HasSubstr("hello-error")));
+  EXPECT_THAT(ss.str(), ::testing::Not(::testing::HasSubstr("hello-error")));
 }

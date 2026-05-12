@@ -6,6 +6,7 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -105,6 +106,20 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                                              .load(std::memory_order_relaxed)} \
                         .toString();                                           \
   }
+
+// _____________________________________________________________________________
+// Set the runtime log level to `level` and return an `absl::Cleanup` that
+// restores the previous level when it goes out of scope. Use this in tests
+// that temporarily need a specific log level to avoid leaving the global
+// atomic modified after the test finishes.
+inline auto setLoglevelForTesting(LogLevel level) {
+  auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
+      level.value(), std::memory_order_relaxed);
+  return absl::MakeCleanup([previous] {
+    ::ad_utility::detail::runtimeLogLevel.store(previous,
+                                                std::memory_order_relaxed);
+  });
+}
 
 // _____________________________________________________________________________
 
