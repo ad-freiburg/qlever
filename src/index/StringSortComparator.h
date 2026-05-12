@@ -642,6 +642,18 @@ class TripleComponentComparator {
     return cmp;
   }
 
+  // Total comparison, using the "is external" flags as a tiebreaker.
+  bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
+                                     std::string_view b,
+                                     bool bIsExternal) const {
+    int cmp = compare(a, b, Level::TOTAL);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    // `isExternal == true` comes before false
+    return aIsExternal && !bIsExternal;
+  }
+
   /**
    * @brief Split a literal or iri into its components and convert the inner
    * value according to the held locale

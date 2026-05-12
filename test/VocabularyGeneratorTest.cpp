@@ -203,8 +203,15 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
       }
     };
 
-    res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, 1_GB);
+    TripleComponentComparator comparator;
+    res = mergeVocabulary(
+        _basePath, 2,
+        [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
+                      bool bIsExternal) {
+          return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
+                                                          bIsExternal);
+        },
+        internalVocabularyAction, 1_GB);
   }
 
   EXPECT_THAT(mergeResult,

@@ -49,7 +49,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+    return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
+                      t2.isExternal_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {

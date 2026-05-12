@@ -619,9 +619,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
-                                                          std::string_view b) {
-      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](
+                        std::string_view a, bool aIsExternal,
+                        std::string_view b, bool bIsExternal) {
+      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -1551,13 +1552,8 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       sortVocabVector(
           &vec,
           [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
-            int cmp = c(a.first, b.first, decltype(vocab_)::SortLevel::TOTAL);
-            if (cmp != 0) {
-              return cmp;
-            }
-            // `isExternal == true` comes before false
-            return static_cast<int>(b.second.isExternal()) -
-                   static_cast<int>(a.second.isExternal());
+            return c.isLessInTotalWithExternalFlag(
+                a.first, a.second.isExternal(), b.first, b.second.isExternal());
           },
           true);
     }
