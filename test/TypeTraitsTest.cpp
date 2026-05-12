@@ -380,8 +380,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
               if constexpr ((!ql::concepts::same_as<FirstParameterType,
                                                     bool&> ||
                              !ql::concepts::same_as<SecondParameterType,
-                                                    bool&>)&&!ql::concepts::
-                                same_as<ReturnType, bool>) {
+                                                    bool&>) &&
+                            !ql::concepts::same_as<ReturnType, bool>) {
                 static_assert(
                     !bothInvocableWithExactReturnType.template
                      operator()<DoubleParameter, ReturnType, FirstParameterType,

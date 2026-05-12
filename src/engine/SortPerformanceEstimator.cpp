@@ -62,9 +62,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
-auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
-                                                 size_t numCols) const noexcept
-    -> Timer::Duration {
+auto SortPerformanceEstimator::estimatedSortTime(
+    size_t numRows, size_t numCols) const noexcept -> Timer::Duration {
   if (!_estimatesWereCalculated) {
     AD_LOG_WARN
         << "The estimates of the SortPerformanceEstimator were never set "

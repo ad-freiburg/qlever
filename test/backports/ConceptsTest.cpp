@@ -33,7 +33,7 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
 
   // Member function with `auto` return type that has no other template
   // arguments but poses additional constraints on `T`.
-  CPP_auto_member auto CPP_fun(h)()(requires Something<T>) {}
+  CPP_auto_member auto CPP_fun(h) ()(requires Something<T>) {}
 };
 
 // A variadic function template.  NOTE: you currently have to use plain `&&`,
