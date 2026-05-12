@@ -451,20 +451,11 @@ TEST(IndexTest, emptyTextIndex) {
     config.turtleInput = std::move(input);
     config.createTextIndex = true;
     auto* qec = ad_utility::testing::getQec(std::move(config));
-    const auto& index = qec->getIndex().getImpl();
-    // Test that scanning an empty text index works, and yields a single result.
-    const auto& actualPermutation = index.getPermutation(Permutation::PSO);
-    auto locatedTriplesSnapshot = qec->locatedTriplesState();
-    IdTable result = actualPermutation.scan(
-        actualPermutation.getScanSpecAndBlocks(
-            ScanSpecificationAsTripleComponent{iri("<a:>"), iri("<a:>"),
-                                               std::nullopt}
-                .toScanSpecification(index),
-            locatedTriplesSnapshot),
-        Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
-    EXPECT_EQ(result.size(), 1);
+    // Building an empty text index must succeed, and scanning it for any word
+    // must yield no postings.
+    IdTable result =
+        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    EXPECT_EQ(result.size(), 0);
   }
 }
 
