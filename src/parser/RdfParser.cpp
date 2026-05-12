@@ -1044,7 +1044,6 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
             AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             if (ex.has_value()) {
               throw ex.value();
-
             } else {
               this->raise(
                   "Too many bytes parsed without finishing a turtle "
