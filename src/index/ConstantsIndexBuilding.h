@@ -43,8 +43,11 @@ inline std::atomic<size_t>& BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() {
 // Exception. (Only works safely if no Turtle statement is longer than this
 // size. I think currently 1 GB should be enough for this, this is 10MB per
 // triple average over 100 triples.
-constexpr inline ad_utility::MemorySize RDF_PARSER_MAX_TOTAL_BUFFER_SIZE =
-    ad_utility::MemorySize::gigabytes(1);
+// Not const so it can be lowered in unit tests to increase coverage.
+inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
+  static ad_utility::MemorySize value = ad_utility::MemorySize::gigabytes(1);
+  return value;
+}
 
 // If a single relation has more than this number of triples, it will be
 // buffered into an MmapVector during the creation of the relations;
