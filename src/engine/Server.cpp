@@ -1626,10 +1626,10 @@ Server::ServerMetrics Server::initializeMetrics() {
       meter->CreateInt64ObservableGauge("qlever.memory_query_available",
                                         "Available memory for query processing",
                                         "By"),
-      std::move(metrics.memoryQueryTotal_),
+      std::move(metrics_.memoryQueryTotal_),
       meter->CreateInt64ObservableGauge("qlever.memory_cache_used",
                                         "Memory used for caching", "By"),
-      std::move(metrics.memoryCacheLimit_)
+      std::move(metrics_.memoryCacheLimit_)
 
   };
   // Record initial values
