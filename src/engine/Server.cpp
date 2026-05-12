@@ -297,7 +297,7 @@ auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
-    bool accessTokenOk) {
+    bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
@@ -311,8 +311,9 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
                                              {});
   AD_LOG_INFO
-      << "Processing the following " << operationName << ":"
-      << (pinResult ? " [pin result]" : "")
+      << "Processing the following " << operationName
+      << (clientIp.empty() ? std::string{} : absl::StrCat(" from ", clientIp))
+      << ":" << (pinResult ? " [pin result]" : "")
       << (pinSubtrees ? " [pin subresults]" : "")
       << (pinResultWithName
               ? absl::StrCat(
@@ -661,10 +662,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString);
 
+    std::string_view clientIp = request.base()["X-Real-IP"];
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString,
                          std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk);
+                         timeLimit.value(), accessTokenOk, clientIp);
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
