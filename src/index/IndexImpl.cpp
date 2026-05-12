@@ -1551,7 +1551,13 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       sortVocabVector(
           &vec,
           [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
-            return c(a.first, b.first, decltype(vocab_)::SortLevel::TOTAL);
+            int cmp = c(a.first, b.first, decltype(vocab_)::SortLevel::TOTAL);
+            if (cmp != 0) {
+              return cmp;
+            }
+            // `isExternal == true` comes before false
+            return static_cast<int>(b.second.isExternal()) -
+                   static_cast<int>(a.second.isExternal());
           },
           true);
     }
