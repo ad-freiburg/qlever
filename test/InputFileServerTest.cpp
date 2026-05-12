@@ -11,6 +11,7 @@
 #include <chrono>
 #include <thread>
 
+#include "index/InputFileServer.h"
 #include "libqlever/Qlever.h"
 #include "util/http/beast.h"
 #include "util/jthread.h"
@@ -97,6 +98,42 @@ bool waitForServer(unsigned short port, int maxAttempts = 200) {
 // Send the `Finish-Index-Building: true` signal to localhost:`port`.
 PostResponse sendFinish(unsigned short port) {
   return syncPost(port, "", "text/plain", {{"Finish-Index-Building", "true"}});
+}
+
+// POST `body` to localhost:`port` without a Content-Type header. Used to test
+// that absent Content-Type is rejected.
+PostResponse syncPostNoContentType(unsigned short port, std::string_view body) {
+  net::io_context ioc;
+  beast::tcp_stream stream{ioc};
+  tcp::resolver resolver{ioc};
+  auto const results = resolver.resolve("localhost", std::to_string(port));
+  stream.connect(results);
+
+  http::request<http::string_body> req{http::verb::post, "/", 11};
+  req.set(http::field::host, "localhost");
+  req.body() = std::string{body};
+  req.prepare_payload();
+
+  http::write(stream, req);
+
+  beast::flat_buffer buffer;
+  http::response<http::string_body> res;
+  http::read(stream, buffer, res);
+
+  beast::error_code ec;
+  stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+
+  return {res.result(), res.body()};
+}
+
+// Fire a single `Can-Upload` probe to localhost:`port` and return the HTTP
+// status. Returns std::nullopt if the connection fails.
+std::optional<http::status> canUploadStatus(unsigned short port) {
+  try {
+    return syncPost(port, "", "text/plain", {{"Can-Upload", "1"}}).status;
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 }  // namespace
@@ -269,4 +306,85 @@ TEST(InputFileServer, GraphHeaderAndQuery) {
       "SELECT ?s WHERE { GRAPH <https://example.org/g> { ?s <p> ?o } }",
       ad_utility::MediaType::tsv);
   EXPECT_EQ(res, "?s\n<s1>\n");
+}
+
+// ____________________________________________________________________________
+// A Content-Type that is not one of the supported values must return 415.
+TEST(InputFileServer, InvalidContentType) {
+  auto port = findFreePort();
+  InputFileServer server{port, 0};
+  auto range = server.run();
+
+  ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+
+  auto r = syncPost(port, "<a> <b> <c>.", "application/json");
+  EXPECT_EQ(r.status, http::status::unsupported_media_type);
+
+  EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  for ([[maybe_unused]] auto& _ : range) {
+  }
+}
+
+// ____________________________________________________________________________
+// A file upload without a Content-Type header must return 415.
+TEST(InputFileServer, MissingContentType) {
+  auto port = findFreePort();
+  InputFileServer server{port, 0};
+  auto range = server.run();
+
+  ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+
+  auto r = syncPostNoContentType(port, "<a> <b> <c>.");
+  EXPECT_EQ(r.status, http::status::unsupported_media_type);
+
+  EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  for ([[maybe_unused]] auto& _ : range) {
+  }
+}
+
+// ____________________________________________________________________________
+// A `Finish-Index-Building` request with a non-empty body must return 400.
+TEST(InputFileServer, FinishWithNonEmptyBody) {
+  auto port = findFreePort();
+  InputFileServer server{port, 0};
+  auto range = server.run();
+
+  ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+
+  // Bad finish — non-empty body.
+  auto bad = syncPost(port, "some-body", "text/plain",
+                      {{"Finish-Index-Building", "true"}});
+  EXPECT_EQ(bad.status, http::status::bad_request);
+
+  // Proper finish.
+  EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  for ([[maybe_unused]] auto& _ : range) {
+  }
+}
+
+// ____________________________________________________________________________
+// A server with zero queue size always returns 429 for Can-Upload and upload
+// requests.
+TEST(InputFileServer, ZeroQueueSize) {
+  auto port = findFreePort();
+  InputFileServer server{port, 0};
+  auto range = server.run();
+
+  ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+
+  // Can-Upload returns 429 because the queue is never ready.
+  EXPECT_EQ(canUploadStatus(port), http::status::too_many_requests);
+
+  // File uploads return 429.
+  auto r = syncPost(port, "<a> <b> <c>.", "text/turtle");
+  EXPECT_EQ(r.status, http::status::too_many_requests);
+
+  // Finish the server before draining (queue.finish() makes pop() return
+  // nullopt immediately, so the range is empty without blocking).
+  EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  size_t count = 0;
+  for ([[maybe_unused]] auto& _ : range) {
+    ++count;
+  }
+  EXPECT_EQ(count, 0);
 }

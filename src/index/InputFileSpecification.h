@@ -83,7 +83,6 @@ struct InputFileSpecification {
     return factory(blocksize, description);
   }
 };
-
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H

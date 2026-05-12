@@ -121,15 +121,7 @@ class StringParallelBuffer : public ParallelBuffer {
   explicit StringParallelBuffer(std::string content, size_t blocksize)
       : ParallelBuffer{blocksize}, content_{std::move(content)} {}
 
-  std::optional<BufferType> getNextBlock() override {
-    if (offset_ >= content_.size()) return std::nullopt;
-    size_t chunkSize = std::min(blocksize_, content_.size() - offset_);
-    BufferType buf;
-    buf.resize(chunkSize);
-    std::ranges::copy_n(content_.data() + offset_, chunkSize, buf.data());
-    offset_ += chunkSize;
-    return buf;
-  }
+  std::optional<BufferType> getNextBlock() override;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARALLELBUFFER_H

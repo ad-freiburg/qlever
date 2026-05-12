@@ -6,7 +6,9 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "InputFileServer.h"
+#include "index/InputFileServer.h"
+
+#include <absl/strings/str_cat.h>
 
 #include "parser/ParallelBuffer.h"
 #include "util/http/HttpUtils.h"
@@ -14,11 +16,22 @@
 using namespace ad_utility::httpUtils;
 
 // _____________________________________________________________________________
+InputFileServer::Response InputFileServer::createStringResponse(
+    std::string body, http::status status, const Request& request) {
+  return createHttpResponseFromString(std::move(body), status,
+                                      ad_utility::MediaType::textPlain,
+                                      request.keep_alive(), request.version());
+}
+
+// _____________________________________________________________________________
 qlever::Filetype InputFileServer::filetypeFromContentType(
     const Request& request) {
   auto it = request.find(http::field::content_type);
   if (it == request.end()) {
-    return qlever::Filetype::Turtle;
+    throw std::runtime_error(
+        "A Content-Type header is required for file uploads. "
+        "Supported values: text/turtle, application/n-triples, "
+        "application/n-quads.");
   }
   std::string_view ct = it->value();
   // Strip parameters (e.g., "; charset=utf-8").
@@ -29,44 +42,59 @@ qlever::Filetype InputFileServer::filetypeFromContentType(
   while (!ct.empty() && ct.back() == ' ') {
     ct.remove_suffix(1);
   }
+  if (ct == "text/turtle" || ct == "application/n-triples") {
+    return qlever::Filetype::Turtle;
+  }
   if (ct == "application/n-quads") {
     return qlever::Filetype::NQuad;
   }
-  // Both text/turtle and application/n-triples are handled by the Turtle
-  // parser.
-  return qlever::Filetype::Turtle;
+  throw std::runtime_error(
+      absl::StrCat("Unsupported Content-Type: \"", ct,
+                   "\". Supported values: text/turtle, application/n-triples, "
+                   "application/n-quads."));
 }
 
 // _____________________________________________________________________________
 InputFileServer::Response InputFileServer::handleCanUploadQuery(
-    const Request& request) {
+    const Request& request) const {
   auto status =
       queue_.canPush() ? http::status::ok : http::status::too_many_requests;
-  return createHttpResponseFromString("Responding to Can-Upload query", status,
-                                      ad_utility::MediaType::textPlain,
-                                      request.keep_alive(), request.version());
+  return createStringResponse("Responding to Can-Upload query", status,
+                              request);
 }
 
 // _____________________________________________________________________________
 InputFileServer::Response InputFileServer::handleFinishSignal(
     const Request& request) {
-  AD_LOG_INFO << "Acquired the finishing signal" << std::endl;
+  if (!request.body().empty()) {
+    return createStringResponse(
+        "Finish-Index-Building must be sent with an empty body.",
+        http::status::bad_request, request);
+  }
   queue_.finish();
-  return createHttpResponseFromString("received signal for finishing",
-                                      http::status::ok,
-                                      ad_utility::MediaType::textPlain,
-                                      request.keep_alive(), request.version());
+  return createStringResponse("received signal for finishing", http::status::ok,
+                              request);
 }
 
 // _____________________________________________________________________________
 InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
+  qlever::Filetype filetype;
+  try {
+    filetype = filetypeFromContentType(request);
+  } catch (const std::runtime_error& e) {
+    return createStringResponse(e.what(), http::status::unsupported_media_type,
+                                request);
+  }
+
   std::optional<std::string> graph = [&request]() {
     auto it = request.find("graph");
     return it == request.end() ? std::nullopt
                                : std::optional{std::string{it->value()}};
   }();
 
-  qlever::Filetype filetype = filetypeFromContentType(request);
+  ++numReceivedFiles_;
+  std::string description =
+      absl::StrCat("<http-upload-", numReceivedFiles_, ">");
 
   auto bodyPtr = std::make_shared<std::string>(std::move(request.body()));
   auto factory = [bodyPtr](size_t blocksize, std::string_view) {
@@ -75,28 +103,24 @@ InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
   };
   qlever::InputFileSpecification spec{
       qlever::InputFileSpecification::BufferFactoryAndDescription{
-          std::move(factory), "<http-request-body>"},
+          std::move(factory), std::move(description)},
       filetype, std::move(graph)};
 
   auto pushStatus = queue_.pushIfNotFull(std::move(spec));
   switch (pushStatus) {
     using enum decltype(queue_)::Status;
     case Pushed:
-      return createHttpResponseFromString(
-          "successfully registered a file for parsing", http::status::ok,
-          ad_utility::MediaType::textPlain, request.keep_alive(),
-          request.version());
+      return createStringResponse("successfully registered a file for parsing",
+                                  http::status::ok, request);
     case Full:
-      return createHttpResponseFromString(
+      return createStringResponse(
           "input file queue is currently full, please send the file later",
-          http::status::too_many_requests, ad_utility::MediaType::textPlain,
-          request.keep_alive(), request.version());
+          http::status::too_many_requests, request);
     case Finished:
-      return createHttpResponseFromString(
+      return createStringResponse(
           "tried to send a file after the signal for finishing was already "
           "sent",
-          http::status::forbidden, ad_utility::MediaType::textPlain,
-          request.keep_alive(), request.version());
+          http::status::forbidden, request);
   }
   AD_FAIL();
 }
@@ -114,33 +138,27 @@ InputFileServer::Response InputFileServer::computeResponse(Request request) {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<qlever::InputFileSpecification>
-InputFileServer::getFilesRange() {
-  auto cleanup = absl::Cleanup{[]() {
-    AD_LOG_INFO << "InputFileServer::getFiles was finished..." << std::endl;
-  }};
-  while (auto opt = queue_.pop()) {
-    co_yield opt.value();
-  }
-}
-
-// _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>
 InputFileServer::run() {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  throw std::runtime_error(
+      "InputFileServer::run() requires coroutine support (C++20).");
+#else
   serverThread_ = ad_utility::JThread([this]() {
-    auto handler = [this](auto request, auto&& send) {
-      return processRequest(std::move(request), AD_FWD(send));
-    };
-    auto cleanup = absl::Cleanup{
-        []() { AD_LOG_INFO << "Stopped running the HTTP Server"; }};
-    HttpServer<decltype(handler), decltype(websocketHandlerDummy)> server{
-        port_, "0.0.0.0", 1, handler, websocketSupplier};
+    HttpServer<HttpHandler, WebsocketHandlerDummy> server{
+        port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{}};
     shutDown_ = [&server]() { server.shutDown(); };
     server.run();
   });
   isRunning_ = true;
-  return ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-      getFilesRange()};
+  auto filesGenerator =
+      [this]() -> cppcoro::generator<qlever::InputFileSpecification> {
+    while (auto opt = queue_.pop()) {
+      co_yield opt.value();
+    }
+  };
+  return ad_utility::InputRangeTypeErased{filesGenerator()};
+#endif
 }
 
 // _____________________________________________________________________________

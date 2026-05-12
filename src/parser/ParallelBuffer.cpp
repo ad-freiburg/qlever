@@ -47,6 +47,17 @@ std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   return ret;
 }
 
+// _____________________________________________________________________________
+std::optional<ParallelBuffer::BufferType> StringParallelBuffer::getNextBlock() {
+  if (offset_ >= content_.size()) return std::nullopt;
+  size_t chunkSize = std::min(blocksize_, content_.size() - offset_);
+  BufferType buf;
+  buf.resize(chunkSize);
+  std::ranges::copy_n(content_.data() + offset_, chunkSize, buf.data());
+  offset_ += chunkSize;
+  return buf;
+}
+
 // ____________________________________________________________________________
 std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
     const BufferType& vec, const re2::RE2& regex) {

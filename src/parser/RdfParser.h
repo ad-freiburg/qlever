@@ -24,7 +24,6 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/EncodedIriManager.h"
 #include "index/InputFileSpecification.h"
-// TODO<joka921> Only extract the typedefs.
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"

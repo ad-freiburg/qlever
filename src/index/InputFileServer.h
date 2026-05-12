@@ -9,8 +9,6 @@
 #ifndef QLEVER_INDEX_INPUTFILESERVER_H
 #define QLEVER_INDEX_INPUTFILESERVER_H
 
-#include <absl/cleanup/cleanup.h>
-
 #include "index/InputFileSpecification.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -23,27 +21,36 @@ class InputFileServer {
   using Response = http::response<http::string_body>;
 
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
-      queue_{20};
+      queue_;
   ad_utility::JThread serverThread_;
   unsigned short port_;
+  size_t numReceivedFiles_ = 0;
   bool isRunning_ = false;
   std::function<void(void)> shutDown_;
 
-  static constexpr auto websocketHandlerDummy =
-      [](auto&&...) -> net::awaitable<void> {
-    throw std::runtime_error("Websockets not implemented");
-    co_return;
+  struct HttpHandler {
+    InputFileServer* server_;
+    net::awaitable<void> operator()(Request request, auto&& send) const {
+      return server_->processRequest(std::move(request), AD_FWD(send));
+    }
   };
-  static constexpr auto websocketSupplier = [](net::io_context&) {
-    return websocketHandlerDummy;
+  struct WebsocketHandlerDummy {
+    net::awaitable<void> operator()(auto&&...) const {
+      throw std::runtime_error("Websockets not implemented");
+      co_return;
+    }
+  };
+  struct WebsocketSupplier {
+    WebsocketHandlerDummy operator()(net::io_context&) const { return {}; }
   };
 
-  // Parse the Content-Type header to determine the RDF filetype. Defaults to
-  // Turtle if the header is absent or contains an unrecognized value.
+  // Parse the Content-Type header to determine the RDF filetype. Throws
+  // std::runtime_error if the header is absent or not one of the explicitly
+  // supported values.
   static qlever::Filetype filetypeFromContentType(const Request& request);
 
   // Respond to a `Can-Upload` probe with 200 OK or 429 Too Many Requests.
-  Response handleCanUploadQuery(const Request& request);
+  Response handleCanUploadQuery(const Request& request) const;
 
   // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
   Response handleFinishSignal(const Request& request);
@@ -54,6 +61,11 @@ class InputFileServer {
   // Dispatch the incoming request to the appropriate handler.
   Response computeResponse(Request request);
 
+  // Create a plain-text HTTP response from `body` and `status`, reusing the
+  // keep-alive and version settings from `request`.
+  static Response createStringResponse(std::string body, http::status status,
+                                       const Request& request);
+
   net::awaitable<void> processRequest(Request request, auto&& send) {
     try {
       co_await send(computeResponse(std::move(request)));
@@ -63,11 +75,15 @@ class InputFileServer {
     }
   }
 
-  // Yield each InputFileSpecification from the queue as a coroutine.
-  cppcoro::generator<qlever::InputFileSpecification> getFilesRange();
-
  public:
-  explicit InputFileServer(unsigned short port) : port_{port} {}
+  explicit InputFileServer(unsigned short port, size_t maxQueueSize = 20)
+      : queue_{maxQueueSize}, port_{port} {
+    if (maxQueueSize == 0) {
+      AD_LOG_WARN << "InputFileServer created with a zero queue size; the "
+                     "server will never accept file uploads."
+                  << std::endl;
+    }
+  }
 
   // Start the HTTP server and return a range that yields the uploaded file
   // specifications as they arrive. The range is exhausted when
