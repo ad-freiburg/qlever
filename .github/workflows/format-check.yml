@@ -14,8 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies
-        run:  sudo apt install -y clang-format-18
+        run: sudo apt install -y clang-format-18
 
       - name: Run the format checker
         run: ${{github.workspace}}/misc/format-check.sh
-
