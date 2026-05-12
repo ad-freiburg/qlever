@@ -813,9 +813,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  const auto& vocabulary = getIndex().getVocab();
-  std::optional<Id> col0Id =
-      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }
@@ -1274,7 +1272,7 @@ void GroupByImpl::extractValues(
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
-    for (sparqlExpression::IdOrLiteralOrIri val : generator) {
+    for (sparqlExpression::IdOrLocalVocabEntry val : generator) {
       *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
           std::move(val), *localVocab);
       ++targetIterator;
@@ -1298,7 +1296,8 @@ GroupByImpl::getHashMapAggregationResults(
     IdTable* resultTable,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator) {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(allocator);
   aggregateResults.resize(endIndex - beginIndex);
 
@@ -1322,10 +1321,11 @@ GroupByImpl::getHashMapAggregationResults(
       vectorIdx = aggregationData.getIndex(mapKey);
     }
 
-    auto visitor = [&aggregateResults, vectorIdx, rowIdx, beginIndex,
+    auto visitor = [&context, &aggregateResults, vectorIdx, rowIdx, beginIndex,
                     localVocab](auto& aggregateDataVariant) {
       aggregateResults[rowIdx - beginIndex] =
-          aggregateDataVariant.at(vectorIdx).calculateResult(localVocab);
+          aggregateDataVariant.at(vectorIdx).calculateResult(context,
+                                                             localVocab);
     };
 
     std::visit(visitor, aggregateDataVariant);
@@ -1367,7 +1367,8 @@ GroupByImpl::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    IdTable* resultTable, LocalVocab* localVocab, const Allocator& allocator) {
+    IdTable* resultTable, const LocalVocabContext& context,
+    LocalVocab* localVocab, const Allocator& allocator) {
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren;
   originalChildren.reserve(info.size());
@@ -1375,7 +1376,7 @@ GroupByImpl::substituteAllAggregates(
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
         resultTable, aggregationData, aggregate.aggregateDataIndex_, beginIndex,
-        endIndex, localVocab, allocator);
+        endIndex, context, localVocab, allocator);
 
     // Substitute the resulting vector as a literal
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
@@ -1482,8 +1483,8 @@ void GroupByImpl::substituteAndEvaluate(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator,
-    std::vector<HashMapAggregateInformation>& info,
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator, std::vector<HashMapAggregateInformation>& info,
     const std::vector<HashMapGroupedVariableInformation>& substitutions) {
   // Store which SPARQL expressions of grouped variables have been substituted.
   std::vector<std::pair<
@@ -1509,7 +1510,7 @@ void GroupByImpl::substituteAndEvaluate(
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren = substituteAllAggregates(
           info, evaluationContext._beginIndex, evaluationContext._endIndex,
-          aggregationData, result, localVocab, allocator);
+          aggregationData, result, context, localVocab, allocator);
 
   // Evaluate top-level alias expression.
   sparqlExpression::ExpressionResult expressionResult =
@@ -1552,7 +1553,8 @@ void GroupByImpl::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator) {
   auto& info = alias.aggregateInfo_;
 
   // Either:
@@ -1596,8 +1598,8 @@ void GroupByImpl::evaluateAlias(
     // Get aggregate results
     auto aggregateResults = getHashMapAggregationResults(
         result, aggregationData, aggregate.aggregateDataIndex_,
-        evaluationContext._beginIndex, evaluationContext._endIndex, localVocab,
-        allocator);
+        evaluationContext._beginIndex, evaluationContext._endIndex, context,
+        localVocab, allocator);
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
@@ -1609,9 +1611,9 @@ void GroupByImpl::evaluateAlias(
         sparqlExpression::copyExpressionResult(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
-    substituteAndEvaluate<NUM_GROUP_COLUMNS>(alias, result, evaluationContext,
-                                             aggregationData, localVocab,
-                                             allocator, info, substitutions);
+    substituteAndEvaluate<NUM_GROUP_COLUMNS>(
+        alias, result, evaluationContext, aggregationData, context, localVocab,
+        allocator, info, substitutions);
   }
 }
 
@@ -1673,7 +1675,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, &result, evaluationContext, aggregationData,
-                    localVocab, allocator());
+                    getLocalVocabContext(), localVocab, allocator());
     }
   }
   runtimeInfo().addDetail("timeEvaluationAndResults",

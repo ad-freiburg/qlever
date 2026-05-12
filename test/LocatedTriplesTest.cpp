@@ -995,9 +995,8 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
-  auto getId = [&lv, &qec](TC&& tc) {
-    EncodedIriManager mgr;
-    return std::move(tc).toValueId(qec->getIndex().getVocab(), lv, mgr);
+  auto getId = [&lv, &index](TC&& tc) {
+    return std::move(tc).toValueId(index, lv);
   };
   auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
   auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
@@ -1068,4 +1067,37 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     EXPECT_EQ(result.stats_.numInsertionsKept_, 3u);
     EXPECT_EQ(result.stats_.numDeletionsKept_, 1u);
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, computeDiff) {
+  auto I = &Id::makeFromInt;
+  std::vector<LocatedTriple> locatedTriples;
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{0, IdTriple<0>{std::array{I(1), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(2), I(0), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}}, false});
+
+  auto originalTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  locatedTriples.at(0).insertOrDelete_ = false;
+  locatedTriples.at(3).insertOrDelete_ = true;
+  locatedTriples.push_back(
+      LocatedTriple{1, IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}, true});
+  locatedTriples.push_back(
+      LocatedTriple{2, IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}}, false});
+
+  auto newTriples = makeLocatedTriplesPerBlock(locatedTriples);
+  auto result = newTriples.computeDiff(originalTriples);
+  EXPECT_THAT(result,
+              ::testing::ElementsAre(
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(3), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(3), I(1), I(0), I(0)}}),
+                  ::testing::ElementsAre(
+                      IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}},
+                      IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}})));
 }

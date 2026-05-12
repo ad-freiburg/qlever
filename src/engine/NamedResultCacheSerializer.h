@@ -44,7 +44,7 @@ CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::ReadSerializer<
         Serializer>) void NamedResultCache::
     readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       ad_utility::BlankNodeManager& blankNodeManager) {
+                       const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -61,7 +61,7 @@ CPP_template_def(typename Serializer)(
     // Deserialize the value.
     Value value;
     value.allocatorForSerialization_ = allocator;
-    value.blankNodeManagerForSerialization_ = blankNodeManager;
+    value.contextForSerialization_ = &context;
     serializer >> value;
 
     // Use the store method to maintain consistency.
@@ -131,9 +131,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
-    AD_CORRECTNESS_CHECK(arg.blankNodeManagerForSerialization_.has_value());
+    AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
     auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
-        serializer, &arg.blankNodeManagerForSerialization_.value());
+        serializer, *arg.contextForSerialization_);
 
     // Deserialize the IdTable with ID mapping applied.
     size_t numRows, numColumns;

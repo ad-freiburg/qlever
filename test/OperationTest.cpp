@@ -434,7 +434,8 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+      ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+      qec->getLocalVocabContext()});
   ValuesForTesting valuesForTesting{
       qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{}, std::move(localVocab)};
@@ -872,7 +873,7 @@ TEST(OperationTest, disableCachingForOperation) {
 TEST(OperationTest, disableCachingGlobally) {
   auto qecPtr = getQec();
   auto qecCopy = *qecPtr;
-  qecCopy.disableCaching_ = true;
+  qecCopy.setDisableCachingOnlyForTesting(true);
   auto* qec = &qecCopy;
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
@@ -891,4 +892,8 @@ TEST(OperationTest, disableCachingGlobally) {
   valuesForTesting.getResult(true);
   // Still not stored in the cache, because caching was disabled.
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+
+  // ONLY_IF_CACHED returns nullptr when caching is disabled.
+  EXPECT_EQ(valuesForTesting.getResult(false, ComputationMode::ONLY_IF_CACHED),
+            nullptr);
 }
