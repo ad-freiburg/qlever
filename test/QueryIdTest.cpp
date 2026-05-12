@@ -9,8 +9,10 @@
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
-using ::testing::ContainerEq;
+using ::testing::Field;
 using ::testing::IsEmpty;
+using ::testing::Pair;
+using ::testing::UnorderedElementsAre;
 
 TEST(QueryId, checkIdEqualityRelation) {
   auto queryIdOne = QueryId::idFromString("some-id");
@@ -46,6 +48,20 @@ TEST(QueryId, checkEmptyAfterMove) {
 TEST(QueryId, veriyToJsonWorks) {
   nlohmann::json json = QueryId::idFromString("test-id");
   EXPECT_EQ(json.get<std::string_view>(), "test-id");
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, verifyActiveQueryInfoToJsonWorks) {
+  using ActiveQueryInfo = QueryRegistry::ActiveQueryInfo;
+  auto startedAt = std::chrono::system_clock::time_point{} +
+                   std::chrono::milliseconds{1700000000123};
+  ActiveQueryInfo info{"my-query", startedAt};
+
+  nlohmann::json json = info;
+
+  EXPECT_EQ(json.at("query").get<std::string_view>(), "my-query");
+  EXPECT_EQ(json.at("started-at").get<int64_t>(), 1700000000123);
 }
 
 // _____________________________________________________________________________
@@ -143,7 +159,7 @@ TEST(QueryRegistry, verifyCancellationHandleIsNullptrIfNotPresent) {
 // _____________________________________________________________________________
 
 TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
-  using MapType = ad_utility::HashMap<QueryId, std::string>;
+  using ActiveQueryInfo = QueryRegistry::ActiveQueryInfo;
   QueryRegistry registry{};
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
@@ -152,18 +168,25 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
     auto queryId1 = registry.uniqueId("my-query");
 
     EXPECT_THAT(registry.getActiveQueries(),
-                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
+                UnorderedElementsAre(
+                    Pair(queryId1.toQueryId(),
+                         Field(&ActiveQueryInfo::query_, "my-query"))));
 
     {
       auto queryId2 = registry.uniqueId("other-query");
 
       EXPECT_THAT(registry.getActiveQueries(),
-                  ContainerEq(MapType{{queryId1.toQueryId(), "my-query"},
-                                      {queryId2.toQueryId(), "other-query"}}));
+                  UnorderedElementsAre(
+                      Pair(queryId1.toQueryId(),
+                           Field(&ActiveQueryInfo::query_, "my-query")),
+                      Pair(queryId2.toQueryId(),
+                           Field(&ActiveQueryInfo::query_, "other-query"))));
     }
 
     EXPECT_THAT(registry.getActiveQueries(),
-                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
+                UnorderedElementsAre(
+                    Pair(queryId1.toQueryId(),
+                         Field(&ActiveQueryInfo::query_, "my-query"))));
   }
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());

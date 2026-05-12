@@ -96,10 +96,11 @@ using ItemAlloc = ql::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
 
 // The type of the hash map.
-using ItemMap = ad_utility::HashMap<
-    std::string_view, LocalVocabIndexAndSplitVal,
-    absl::container_internal::hash_default_hash<std::string_view>,
-    absl::container_internal::hash_default_eq<std::string_view>, ItemAlloc>;
+using ItemMap =
+    ad_utility::HashMap<std::string_view, LocalVocabIndexAndSplitVal,
+                        absl::DefaultHashContainerHash<std::string_view>,
+                        absl::DefaultHashContainerEq<std::string_view>,
+                        ItemAlloc>;
 
 // A vector that stores the same values as the hash map.
 using ItemVec =
@@ -236,8 +237,8 @@ struct ProcessedTriple {
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
  *
- * return a tuple of <NumThreads> lambda functions, each lambda does the
- * following
+ * return a tuple of lambda functions, one per map in `itemArray`, each lambda
+ * does the following
  *
  * given an index idx, returns a lambda that
  * - Takes a triple and a language tag
@@ -260,15 +261,14 @@ struct ProcessedTriple {
  * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t NumThreads, typename IndexPtr>
+template <typename IndexPtr>
 auto getIdMapLambdas(
-    std::array<std::optional<ItemMapManager>, NumThreads>* itemMapsPtr,
+    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS>& itemMaps,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
     IndexPtr* index, ItemAlloc alloc,
     std::atomic<size_t>* numHasWordTriples = nullptr) {
   // Create one `ItemMapManager` per thread, each with its own ID range.
-  auto& itemMaps = *itemMapsPtr;
-  for (size_t j = 0; j < NumThreads; ++j) {
+  for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
     itemMaps[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
 
     // This `reserve` is for a guaranteed upper bound that stays the same during
@@ -277,14 +277,8 @@ auto getIdMapLambdas(
     // the allocation and deallocation of these hash maps (that are newly
     // created for each batch) much cheaper (see `CachingMemoryResource.h` and
     // `IndexImpl.cpp`).
-    itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
-
-    // In each map, assign the first ID to `ql:langtag`.
-    //
-    // NOTE: This is not necessary for functionality, but certain unit tests
-    // currently fail without it. Will be removed in #2839.
-    itemMaps[j]->getId(TripleComponent{
-        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
+    itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples /
+                                   NUM_PARALLEL_ITEM_MAPS);
   }
   using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
   using IdTriples = absl::InlinedVector<IdTriple, 3>;
@@ -385,9 +379,8 @@ auto getIdMapLambdas(
   };
 
   // Return one of the above lambdas for each thread.
-  auto itemMapLambdaTuple =
-      ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
-  return itemMapLambdaTuple;
+  return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
+      itemMapLamdaCreator);
 }
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
