@@ -27,7 +27,7 @@ ExpressionResult DeviationExpression::evaluate(
   // Helper to replace child expression results with their squared deviation
   auto devImpl = [context, numValVisitor](
                      bool& undef,
-                     VectorWithMemoryLimit<IdOrLiteralOrIri>& exprResult,
+                     VectorWithMemoryLimit<IdOrLocalVocabEntry>& exprResult,
                      auto generator) {
     double sum = 0.0;
     // Intermediate storage of the results returned from the child
@@ -53,7 +53,7 @@ ExpressionResult DeviationExpression::evaluate(
     // Calculate squared deviation and save for result
     double avg = sum / static_cast<double>(context->size());
     for (size_t i = 0; i < childResults.size(); i++) {
-      exprResult.at(i) = IdOrLiteralOrIri{
+      exprResult.at(i) = IdOrLocalVocabEntry{
           ValueId::makeFromDouble(std::pow(childResults.at(i) - avg, 2))};
     }
   };
@@ -63,7 +63,7 @@ ExpressionResult DeviationExpression::evaluate(
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<decltype(el)>) {
     // Prepare space for result
-    VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> exprResult{context->_allocator};
     exprResult.resize(context->size());
     bool undef = false;
 
@@ -72,7 +72,7 @@ ExpressionResult DeviationExpression::evaluate(
     devImpl(undef, exprResult, std::move(generator));
 
     if (undef) {
-      return IdOrLiteralOrIri{Id::makeUndefined()};
+      return IdOrLocalVocabEntry{Id::makeUndefined()};
     }
     return exprResult;
   };

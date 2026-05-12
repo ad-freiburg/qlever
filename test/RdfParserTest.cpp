@@ -889,7 +889,9 @@ std::vector<TurtleTriple> parseFromFile(
                     encodedIriManager(),
                     bufferSize};
     } else {
-      return Parser{filename, encodedIriManager(), bufferSize};
+      return Parser{
+          std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
+          encodedIriManager()};
     }
   }();
 
@@ -1234,7 +1236,9 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
                         encodedIriManager(),
                         40_B};
         } else {
-          return Parser{filename, encodedIriManager(), 40_B, 10ms};
+          return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
+                        encodedIriManager(),
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
         }
       }();
       timer.cont();

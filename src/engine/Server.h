@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -81,9 +82,37 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
+  // As the `QueryExecutionTree` stores a raw pointer to the
+  // `QueryExecutionContext`, We additionally store the context as a
+  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
+  // server code.
   struct PlannedQuery {
+   private:
+    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
+    // is destroyed after it. The `QueryExecutionTree` holds operations with
+    // raw `_executionContext` pointers to the QEC, and their lazy result
+    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
+    // last `shared_ptr` and is destroyed first, the QEC is freed while the
+    // operations still reference it.
+    std::shared_ptr<const QueryExecutionContext> qec_;
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
+
+   public:
+    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+                 const QueryExecutionContext& qec)
+        : qec_{qec.shared_from_this()},
+          parsedQuery_{std::move(pq)},
+          queryExecutionTree_{std::move(qet)} {
+      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+    }
+
+    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+    ParsedQuery& parsedQuery() { return parsedQuery_; }
+    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
+    const QueryExecutionTree& queryExecutionTree() const {
+      return queryExecutionTree_;
+    }
   };
 
  private:
@@ -225,7 +254,7 @@ class Server {
   //  Prepare the execution of an operation
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
-                        ad_utility::websocket::MessageSender& messageSender,
+                        ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;

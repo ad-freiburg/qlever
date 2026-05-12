@@ -104,9 +104,6 @@ class alignas(16) BasicLiteralOrIri {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteralOrIri, data_)
 
-  ql::strong_ordering compareThreeWay(const BasicLiteralOrIri& rhs) const;
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(BasicLiteralOrIri)
-
   // Return true if object contains an Iri object.
   bool isIri() const;
 
