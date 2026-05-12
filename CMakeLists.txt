@@ -434,6 +434,7 @@ FetchContent_Declare(
         GIT_TAG v1.26.0
         GIT_SHALLOW TRUE
         EXCLUDE_FROM_ALL
+        SYSTEM
 )
 FetchContent_MakeAvailable(opentelemetry-cpp)
 
