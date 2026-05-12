@@ -95,7 +95,7 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  // Tracks which IdTable column indices have already been added to
+  // Tracks which `IdTable` column indices have already been added to
   // `result.uniqueVariableColumns_` to avoid duplicates.
   ad_utility::HashSet<size_t> seenColumns;
 
