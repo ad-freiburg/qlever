@@ -164,5 +164,4 @@ SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child) {
   return std::make_unique<SecondsExpression>(std::move(child));
 }
-
 }  // namespace sparqlExpression
