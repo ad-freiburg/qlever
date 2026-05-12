@@ -606,38 +606,30 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
   evalAndEqualityCheck(
       eqSprql(yearSprqlExpr(ltSprql(var, IntId(2025))), IntId(2025)));
 
-  auto assertThrowsError = [qec](std::unique_ptr<SparqlExpression> expr,
-                                 const std::string& runtimeErrorMessage) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        expr->getPrefilterExpressionForMetadata(qec->getLocalVocabContext()),
-        ::testing::Eq(runtimeErrorMessage));
-  };
-  // Test SparqlExpressions for which we expect that the reference value-type
-  // error is thrown.
-  assertThrowsError(
-      eqSprql(yearSprqlExpr(var), I("<iri>")),
-      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
-      "value for filtering date values over expression YEAR. Please provide an "
-      "integer value as reference year.");
-  assertThrowsError(
-      gtSprql(yearSprqlExpr(var), I("<iri>")),
-      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
-      "value for filtering date values over expression YEAR. Please provide an "
-      "integer value as reference year.");
-  assertThrowsError(
-      neqSprql(yearSprqlExpr(var), L("\"lit value\"")),
-      "Provided Literal or Iri with value: \"lit value\". This is an invalid "
-      "reference "
-      "value for filtering date values over expression YEAR. Please provide an "
-      "integer value as reference year.");
-  assertThrowsError(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)),
-                    "Reference value for filtering date values over expression "
-                    "YEAR is of invalid datatype: Bool.\nPlease provide an "
-                    "integer value as reference year.");
-  assertThrowsError(neqSprql(yearSprqlExpr(var), Id::makeUndefined()),
-                    "Reference value for filtering date values over expression "
-                    "YEAR is of invalid datatype: Undefined.\nPlease provide "
-                    "an integer value as reference year.");
+  // For invalid reference value types (Literals, Iris) or invalid ValueId
+  // datatypes (Bool, Undefined), no match is possible: expect an empty
+  // IsInExpression.
+  evalAndEqualityCheck(eqSprql(yearSprqlExpr(var), I("<iri>")),
+                       pr(inExpr({}), var));
+  evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), I("<iri>")),
+                       pr(inExpr({}), var));
+  evalAndEqualityCheck(neqSprql(yearSprqlExpr(var), L("\"lit value\"")),
+                       pr(inExpr({}), var));
+  evalAndEqualityCheck(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)),
+                       pr(inExpr({}), var));
+  evalAndEqualityCheck(neqSprql(yearSprqlExpr(var), Id::makeUndefined()),
+                       pr(inExpr({}), var));
+  // For Double reference values, the year is rounded to the nearest integer.
+  evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), DoubleId(2000.7)),
+                       pr(ge(getDateId(2002)), var));
+  evalAndEqualityCheck(
+      eqSprql(yearSprqlExpr(var), DoubleId(1999.5)),
+      pr(andExpr(lt(getDateId(2001)), ge(getDateId(2000))), var));
+  evalAndEqualityCheck(leSprql(yearSprqlExpr(var), DoubleId(-10.3)),
+                       pr(lt(getDateId(-9)), var));
+  evalAndEqualityCheck(
+      neqSprql(yearSprqlExpr(var), DoubleId(2030.4)),
+      pr(orExpr(lt(getDateId(2030)), ge(getDateId(2031))), var));
 }
 
 // Test that the conditions required for a correct merge of child
