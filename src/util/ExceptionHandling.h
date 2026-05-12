@@ -157,13 +157,13 @@ class ThrowInDestructorIfSafe {
 // is with `boost::asio` (see example).
 //
 // The collector itself satisfies the `void(std::exception_ptr)` completion
-// handler signature, and `wrap()` which can be used to wrap arbitrary
-// callables.
+// handler signature, so you can use `std::ref(collector)` instead of
+// `net::detached`, and `wrap()` which can be used to wrap arbitrary callables.
 //
 // Example:
 //   ad_utility::ExceptionCollector collector;
 //   net::post(pool, collector.wrap([&] { mayThrow(); }));
-//   net::co_spawn(pool, coro(), std::ref(collector));
+//   net::co_spawn(pool, createCoroutineThatMightThrow(), std::ref(collector));
 //   pool.join();
 //   collector.rethrow();
 class ExceptionCollector {
@@ -231,7 +231,7 @@ class ExceptionCollector {
 
   // Rethrow the first captured exception, if any. After this call the exception
   // is consumed and this object is ready to collect new exceptions.
-  void rethrow() {
+  void rethrowIfException() {
     std::lock_guard lock{mutex_};
     if (firstException_) {
       std::rethrow_exception(std::exchange(firstException_, nullptr));

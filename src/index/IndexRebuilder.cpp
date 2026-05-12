@@ -436,7 +436,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   }
 
   threadPool.join();
-  exceptionCollector.rethrow();
+  exceptionCollector.rethrowIfException();
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
