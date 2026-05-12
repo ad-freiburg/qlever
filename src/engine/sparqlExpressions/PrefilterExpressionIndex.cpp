@@ -970,47 +970,23 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
   }
-  // Helper to safely retrieve `ValueId/Id` values from the provided
-  // `IdOrLocalVocabEntry referenceValue` if contained. Given no
-  // `ValueId` is contained, a explanatory message per
-  // `std::runtime_error` is thrown.
-  const auto retrieveValueIdOrThrowErr =
-      [](const IdOrLocalVocabEntry& referenceValue) {
-        return std::visit(
-            [](const auto& value) -> ValueId {
-              using T = std::decay_t<decltype(value)>;
-              if constexpr (ad_utility::isSimilar<T, ValueId>) {
-                return value;
-              } else {
-                static_assert(ad_utility::isSimilar<T, LocalVocabEntry>);
-                throw std::runtime_error(absl::StrCat(
-                    "Provided Literal or Iri with value: ",
-                    value.asLiteralOrIri().toStringRepresentation(),
-                    ". This is an invalid reference value for filtering date "
-                    "values over expression YEAR. Please provide an integer "
-                    "value as reference year."));
-              }
-            },
-            referenceValue);
-      };
-  // Handle year extraction and return a date-value adjusted
-  // `PrefilterExpression` if possible. Given an unsuitable reference
-  // value was provided, throw a std::runtime_error with an
-  // explanatory message.
-  const auto retrieveYearIntOrThrowErr =
-      [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
-        const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
-        if (valueId.getDatatype() == Int) {
-          return valueId.getInt();
-        }
-        throw std::runtime_error(absl::StrCat(
-            "Reference value for filtering date values over "
-            "expression YEAR is of invalid datatype: ",
-            toString(valueId.getDatatype()),
-            ".\nPlease provide an integer value as reference year."));
-      };
-  return makePrefilterExpressionYearImpl(
-      comparison, retrieveYearIntOrThrowErr(referenceValue));
+  if (!std::holds_alternative<ValueId>(referenceValue)) {
+    return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
+  }
+  ValueId valueId = std::get<ValueId>(referenceValue);
+  int year;
+  switch (valueId.getDatatype()) {
+    case Int:
+      year = valueId.getInt();
+      break;
+    case Double:
+      year = static_cast<int>(std::round(valueId.getDouble()));
+      break;
+    default:
+      return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
+  }
+
+  return makePrefilterExpressionYearImpl(comparison, year);
 }
 
 //______________________________________________________________________________
