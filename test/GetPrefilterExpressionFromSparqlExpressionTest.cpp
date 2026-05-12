@@ -606,9 +606,8 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
   evalAndEqualityCheck(
       eqSprql(yearSprqlExpr(ltSprql(var, IntId(2025))), IntId(2025)));
 
-  // For invalid reference value types (Literals, Iris) or invalid ValueId
-  // datatypes (Bool, Undefined), no match is possible: expect an empty
-  // IsInExpression.
+  // For non-numeric values, return an empty prefilter range (achieved using an
+  // empty `IsInExpression`).
   evalAndEqualityCheck(eqSprql(yearSprqlExpr(var), I("<iri>")),
                        pr(inExpr({}), var));
   evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), I("<iri>")),
