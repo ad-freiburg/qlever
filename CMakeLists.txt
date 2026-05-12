@@ -436,12 +436,11 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
         SYSTEM
 )
-FetchContent_MakeAvailable(opentelemetry-cpp)
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin opentelemetry-cpp)
 # spatialjoin's CMakeLists.txt uses list(REMOVE_ITEM) with a relative path to
 # exclude SpatialJoinMain.cpp from spatialjoin-dev, but GLOB_RECURSE produces
 # absolute paths, so the removal silently no-ops. Fix it here so tests that
