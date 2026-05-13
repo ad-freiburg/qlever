@@ -278,9 +278,8 @@ size_t Index::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-void Index::createFromFileVector(
-    const std::vector<InputFileSpecification>& files) {
-  return pimpl_->createFromFileVector(files);
+void Index::createFromFiles(const std::vector<InputFileSpecification>& files) {
+  return pimpl_->createFromFiles(files);
 }
 
 // ____________________________________________________________________________

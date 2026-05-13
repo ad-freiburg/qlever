@@ -240,9 +240,9 @@ class IndexImpl {
   // on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFileVector(std::vector<Index::InputFileSpecification> files);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
-  void createFromFileRange(
+  void createFromFiles(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been

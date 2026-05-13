@@ -722,7 +722,8 @@ class RdfMultifileParser : public RdfParserBase {
   explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {};
 
-  // Construct the parser from a type-erased input range of file specifications.
+  // Construct the parser from a type-erased input range of file specifications
+  // and eagerly start parsing them on background threads.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,

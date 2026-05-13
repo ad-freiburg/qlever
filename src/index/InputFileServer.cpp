@@ -10,6 +10,10 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <chrono>
+#include <memory>
+#include <thread>
+
 #include "parser/ParallelBuffer.h"
 #include "util/http/HttpUtils.h"
 
@@ -26,12 +30,14 @@ InputFileServer::Response InputFileServer::createStringResponse(
 // _____________________________________________________________________________
 qlever::Filetype InputFileServer::filetypeFromContentType(
     const Request& request) {
+  static constexpr std::string_view kSupportedValues =
+      "Supported values: text/turtle, application/n-triples, "
+      "application/n-quads.";
   auto it = request.find(http::field::content_type);
   if (it == request.end()) {
     throw std::runtime_error(
-        "A Content-Type header is required for file uploads. "
-        "Supported values: text/turtle, application/n-triples, "
-        "application/n-quads.");
+        absl::StrCat("A Content-Type header is required for file uploads. ",
+                     kSupportedValues));
   }
   std::string_view ct = it->value();
   // Strip parameters (e.g., "; charset=utf-8").
@@ -48,10 +54,8 @@ qlever::Filetype InputFileServer::filetypeFromContentType(
   if (ct == "application/n-quads") {
     return qlever::Filetype::NQuad;
   }
-  throw std::runtime_error(
-      absl::StrCat("Unsupported Content-Type: \"", ct,
-                   "\". Supported values: text/turtle, application/n-triples, "
-                   "application/n-quads."));
+  throw std::runtime_error(absl::StrCat("Unsupported Content-Type: \"", ct,
+                                        "\". ", kSupportedValues));
 }
 
 // _____________________________________________________________________________
@@ -144,20 +148,28 @@ InputFileServer::run() {
   throw std::runtime_error(
       "InputFileServer::run() requires coroutine support (C++20).");
 #else
-  serverThread_ = ad_utility::JThread([this]() {
-    HttpServer<HttpHandler, WebsocketHandlerDummy> server{
-        port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{}};
-    shutDown_ = [&server]() { server.shutDown(); };
-    server.run();
-  });
+  auto server =
+      std::make_shared<HttpServer<HttpHandler, WebsocketHandlerDummy> >(
+          port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{});
+  shutDown_ = [server]() { server->shutDown(); };
+  serverThread_ = ad_utility::JThread{[server]() { server->run(); }};
+  auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds{500};
+  while (!server->serverIsReady()) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+      throw std::runtime_error(
+          "InputFileServer did not become ready within 500 ms.");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
   isRunning_ = true;
   auto filesGenerator =
-      [this]() -> cppcoro::generator<qlever::InputFileSpecification> {
-    while (auto opt = queue_.pop()) {
+      [](auto& queue) -> cppcoro::generator<qlever::InputFileSpecification> {
+    while (auto opt = queue.pop()) {
       co_yield opt.value();
     }
   };
-  return ad_utility::InputRangeTypeErased{filesGenerator()};
+  return ad_utility::InputRangeTypeErased{filesGenerator(queue_)};
 #endif
 }
 

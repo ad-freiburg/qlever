@@ -375,16 +375,14 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFileVector(
+void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files) {
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFileRange(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
-          std::move(files)));
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFileRange(
+void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{

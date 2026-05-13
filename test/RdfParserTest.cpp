@@ -888,9 +888,9 @@ std::vector<TurtleTriple> parseFromFile(
   auto parser = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{
-          ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+          ad_utility::InputRangeTypeErased{
               std::vector<qlever::InputFileSpecification>{
-                  {filename, qlever::Filetype::Turtle, std::nullopt}}),
+                  {filename, qlever::Filetype::Turtle, std::nullopt}}},
           encodedIriManager(), bufferSize};
     } else {
       return Parser{
@@ -1237,9 +1237,9 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
           return Parser{
-              ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
+              ad_utility::InputRangeTypeErased{
                   std::vector<qlever::InputFileSpecification>{
-                      {filename, qlever::Filetype::Turtle, std::nullopt}}),
+                      {filename, qlever::Filetype::Turtle, std::nullopt}}},
               encodedIriManager(), 40_B};
         } else {
           return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
@@ -1361,8 +1361,7 @@ TEST(RdfParserTest, multifileParser) {
                        useParallelParser);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
-    Parser p{ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>(
-                 std::move(specs)),
+    Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
              encodedIriManager()};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {

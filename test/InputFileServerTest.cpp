@@ -11,6 +11,7 @@
 #include <chrono>
 #include <thread>
 
+#include "backports/algorithm.h"
 #include "index/InputFileServer.h"
 #include "libqlever/Qlever.h"
 #include "util/http/beast.h"
@@ -25,6 +26,7 @@ namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = net::ip::tcp;
+using ExtraHeaders = std::vector<std::pair<std::string, std::string>>;
 
 // Return a free TCP port by binding to port 0 (which lets the OS pick a free
 // port). There is a small race window between this function returning and the
@@ -44,12 +46,13 @@ struct PostResponse {
   std::string body;
 };
 
-// Synchronously POST `body` with the given `contentType` to
-// localhost:`port`. Any additional string-keyed headers can be passed via
-// `extraHeaders`. Returns the HTTP status and the response body.
+// Synchronously POST `body` to localhost:`port`. When `contentType` is
+// non-null, the Content-Type header is set; otherwise it is omitted. Any
+// additional string-keyed headers can be passed via `extraHeaders`.
 PostResponse syncPost(
-    unsigned short port, std::string_view body, std::string_view contentType,
-    std::vector<std::pair<std::string, std::string>> extraHeaders = {}) {
+    unsigned short port, std::string_view body,
+    std::optional<std::string_view> contentType = std::nullopt,
+    ExtraHeaders extraHeaders = {}) {
   net::io_context ioc;
   beast::tcp_stream stream{ioc};
   tcp::resolver resolver{ioc};
@@ -58,7 +61,9 @@ PostResponse syncPost(
 
   http::request<http::string_body> req{http::verb::post, "/", 11};
   req.set(http::field::host, "localhost");
-  req.set(http::field::content_type, contentType);
+  if (contentType.has_value()) {
+    req.set(http::field::content_type, *contentType);
+  }
   req.body() = std::string{body};
   for (auto& [name, value] : extraHeaders) {
     req.set(name, value);
@@ -97,33 +102,7 @@ bool waitForServer(unsigned short port, int maxAttempts = 200) {
 
 // Send the `Finish-Index-Building: true` signal to localhost:`port`.
 PostResponse sendFinish(unsigned short port) {
-  return syncPost(port, "", "text/plain", {{"Finish-Index-Building", "true"}});
-}
-
-// POST `body` to localhost:`port` without a Content-Type header. Used to test
-// that absent Content-Type is rejected.
-PostResponse syncPostNoContentType(unsigned short port, std::string_view body) {
-  net::io_context ioc;
-  beast::tcp_stream stream{ioc};
-  tcp::resolver resolver{ioc};
-  auto const results = resolver.resolve("localhost", std::to_string(port));
-  stream.connect(results);
-
-  http::request<http::string_body> req{http::verb::post, "/", 11};
-  req.set(http::field::host, "localhost");
-  req.body() = std::string{body};
-  req.prepare_payload();
-
-  http::write(stream, req);
-
-  beast::flat_buffer buffer;
-  http::response<http::string_body> res;
-  http::read(stream, buffer, res);
-
-  beast::error_code ec;
-  stream.socket().shutdown(tcp::socket::shutdown_both, ec);
-
-  return {res.result(), res.body()};
+  return syncPost(port, "", std::nullopt, {{"Finish-Index-Building", "true"}});
 }
 
 // Fire a single `Can-Upload` probe to localhost:`port` and return the HTTP
@@ -136,22 +115,55 @@ std::optional<http::status> canUploadStatus(unsigned short port) {
   }
 }
 
+// Call `syncPost` and assert that the response status matches `expected`.
+void expectStatus(unsigned short port, std::string_view body,
+                  http::status expected,
+                  std::optional<std::string_view> contentType = std::nullopt,
+                  ExtraHeaders extraHeaders = {}) {
+  EXPECT_EQ(syncPost(port, body, contentType, std::move(extraHeaders)).status,
+            expected);
+}
+
+// Owns an `InputFileServer` (zero-capacity queue) and the range returned by
+// `run()`. Constructed via guaranteed copy elision so the server is never
+// moved after its address is captured by the range.
+struct TestServer {
+  InputFileServer server;
+  ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> range;
+  explicit TestServer(unsigned short port)
+      : server{port, 0}, range{server.run()} {}
+};
+
+// Parameters for the upload-and-query parametrized test.
+struct UploadTestParams {
+  std::string baseName;
+  std::string body;
+  std::string contentType;
+  ExtraHeaders extraHeaders;
+  std::string query;
+  std::string expectedResult;
+};
+
+class UploadAndQueryTest : public TestWithParam<UploadTestParams> {};
+
 }  // namespace
 
 // ____________________________________________________________________________
-// Build an index from turtle data uploaded in two separate requests and verify
-// that all triples are queryable.
-TEST(InputFileServer, TurtleUploadAndQuery) {
+// Upload RDF data in a variety of formats and verify that the triples are
+// queryable after the index is built.
+TEST_P(UploadAndQueryTest, Run) {
+  auto [baseName, body, contentType, extraHeaders, query, expected] =
+      GetParam();
   auto port = findFreePort();
   IndexBuilderConfig config;
   config.inputServerPort_ = port;
-  config.baseName_ = "InputFileServerTestTurtle";
+  config.baseName_ = baseName;
 
   std::exception_ptr buildEx;
   {
-    // Build the index in a background thread; JThread auto-joins on
-    // destruction at the end of this block, ensuring the build completes
-    // before we run queries.
+    // The JThread destructor blocks when this scope ends (after sendFinish()
+    // has been called), so the index build is guaranteed to complete before
+    // we run queries below.
     ad_utility::JThread buildThread{[&]() {
       try {
         Qlever::buildIndex(config);
@@ -161,15 +173,7 @@ TEST(InputFileServer, TurtleUploadAndQuery) {
     }};
 
     ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
-
-    // Upload turtle data in two separate requests.
-    auto r1 = syncPost(port, "<s1> <p> <o1>.", "text/turtle");
-    EXPECT_EQ(r1.status, http::status::ok);
-
-    auto r2 = syncPost(port, "<s2> <p> <o2>.", "text/turtle");
-    EXPECT_EQ(r2.status, http::status::ok);
-
-    // Signal that all data has been sent.
+    expectStatus(port, body, http::status::ok, contentType, extraHeaders);
     EXPECT_EQ(sendFinish(port).status, http::status::ok);
   }  // buildThread joins here — index is fully built
 
@@ -179,149 +183,53 @@ TEST(InputFileServer, TurtleUploadAndQuery) {
 
   EngineConfig ec{config};
   Qlever engine{ec};
-
-  auto res = engine.query("SELECT ?s WHERE { ?s <p> ?o } ORDER BY ?s",
-                          ad_utility::MediaType::tsv);
-  EXPECT_EQ(res, "?s\n<s1>\n<s2>\n");
+  EXPECT_EQ(engine.query(query, ad_utility::MediaType::tsv), expected);
 }
 
-// ____________________________________________________________________________
-// Upload N-Quads with explicit graphs (Content-Type: application/n-quads) and
-// verify that the triples can be queried within the correct named graph.
-TEST(InputFileServer, NQuadsUploadAndQuery) {
-  auto port = findFreePort();
-  IndexBuilderConfig config;
-  config.inputServerPort_ = port;
-  config.baseName_ = "InputFileServerTestNQuads";
-
-  std::exception_ptr buildEx;
-  {
-    ad_utility::JThread buildThread{[&]() {
-      try {
-        Qlever::buildIndex(config);
-      } catch (...) {
-        buildEx = std::current_exception();
-      }
-    }};
-
-    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
-
-    auto r = syncPost(port,
-                      "<s1> <p> <o1> <g1> .\n"
-                      "<s2> <p> <o2> <g1> .\n",
-                      "application/n-quads");
-    EXPECT_EQ(r.status, http::status::ok);
-
-    EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  }
-
-  if (buildEx) {
-    std::rethrow_exception(buildEx);
-  }
-
-  EngineConfig ec{config};
-  Qlever engine{ec};
-
-  auto res =
-      engine.query("SELECT ?s WHERE { GRAPH <g1> { ?s <p> ?o } } ORDER BY ?s",
-                   ad_utility::MediaType::tsv);
-  EXPECT_EQ(res, "?s\n<s1>\n<s2>\n");
-}
-
-// ____________________________________________________________________________
-// Upload N-Triples (Content-Type: application/n-triples) and verify the result.
-TEST(InputFileServer, NTriplesUploadAndQuery) {
-  auto port = findFreePort();
-  IndexBuilderConfig config;
-  config.inputServerPort_ = port;
-  config.baseName_ = "InputFileServerTestNTriples";
-
-  std::exception_ptr buildEx;
-  {
-    ad_utility::JThread buildThread{[&]() {
-      try {
-        Qlever::buildIndex(config);
-      } catch (...) {
-        buildEx = std::current_exception();
-      }
-    }};
-
-    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
-
-    // N-Triples format — same as Turtle for our parser.
-    auto r = syncPost(port, "<a> <b> <c> .\n", "application/n-triples");
-    EXPECT_EQ(r.status, http::status::ok);
-
-    EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  }
-
-  if (buildEx) {
-    std::rethrow_exception(buildEx);
-  }
-
-  EngineConfig ec{config};
-  Qlever engine{ec};
-
-  auto res = engine.query("SELECT ?o WHERE { <a> <b> ?o }",
-                          ad_utility::MediaType::tsv);
-  EXPECT_EQ(res, "?o\n<c>\n");
-}
-
-// ____________________________________________________________________________
-// Upload turtle into a specific named graph via the `graph` header.
-TEST(InputFileServer, GraphHeaderAndQuery) {
-  auto port = findFreePort();
-  IndexBuilderConfig config;
-  config.inputServerPort_ = port;
-  config.baseName_ = "InputFileServerTestGraphHeader";
-
-  std::exception_ptr buildEx;
-  {
-    ad_utility::JThread buildThread{[&]() {
-      try {
-        Qlever::buildIndex(config);
-      } catch (...) {
-        buildEx = std::current_exception();
-      }
-    }};
-
-    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
-
-    // The `graph` header assigns all triples to the named graph.
-    auto r = syncPost(port, "<s1> <p> <o1>.", "text/turtle",
-                      {{"graph", "https://example.org/g"}});
-    EXPECT_EQ(r.status, http::status::ok);
-
-    EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  }
-
-  if (buildEx) {
-    std::rethrow_exception(buildEx);
-  }
-
-  EngineConfig ec{config};
-  Qlever engine{ec};
-
-  auto res = engine.query(
-      "SELECT ?s WHERE { GRAPH <https://example.org/g> { ?s <p> ?o } }",
-      ad_utility::MediaType::tsv);
-  EXPECT_EQ(res, "?s\n<s1>\n");
-}
+INSTANTIATE_TEST_SUITE_P(
+    UploadFormats, UploadAndQueryTest,
+    Values(
+        UploadTestParams{"InputFileServerTestTurtle",
+                         "<s1> <p> <o1>. <s2> <p> <o2>.",
+                         "text/turtle",
+                         {},
+                         "SELECT ?s WHERE { ?s <p> ?o } ORDER BY ?s",
+                         "?s\n<s1>\n<s2>\n"},
+        UploadTestParams{
+            "InputFileServerTestNQuads",
+            "<s1> <p> <o1> <g1> .\n<s2> <p> <o2> <g1> .\n",
+            "application/n-quads",
+            {},
+            "SELECT ?s WHERE { GRAPH <g1> { ?s <p> ?o } } ORDER BY ?s",
+            "?s\n<s1>\n<s2>\n"},
+        UploadTestParams{"InputFileServerTestNTriples",
+                         "<a> <b> <c> .\n",
+                         "application/n-triples",
+                         {},
+                         "SELECT ?o WHERE { <a> <b> ?o }",
+                         "?o\n<c>\n"},
+        UploadTestParams{
+            "InputFileServerTestGraphHeader",
+            "<s1> <p> <o1>.",
+            "text/turtle",
+            {{"graph", "https://example.org/g"}},
+            "SELECT ?s WHERE { GRAPH <https://example.org/g> { ?s <p> ?o } }",
+            "?s\n<s1>\n"}),
+    [](const auto& info) { return info.param.baseName; });
 
 // ____________________________________________________________________________
 // A Content-Type that is not one of the supported values must return 415.
 TEST(InputFileServer, InvalidContentType) {
   auto port = findFreePort();
-  InputFileServer server{port, 0};
-  auto range = server.run();
+  TestServer ts{port};
 
   ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
 
-  auto r = syncPost(port, "<a> <b> <c>.", "application/json");
-  EXPECT_EQ(r.status, http::status::unsupported_media_type);
+  expectStatus(port, "<a> <b> <c>.", http::status::unsupported_media_type,
+               "application/json");
 
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  for ([[maybe_unused]] auto& _ : range) {
+  for ([[maybe_unused]] auto& _ : ts.range) {
   }
 }
 
@@ -329,16 +237,14 @@ TEST(InputFileServer, InvalidContentType) {
 // A file upload without a Content-Type header must return 415.
 TEST(InputFileServer, MissingContentType) {
   auto port = findFreePort();
-  InputFileServer server{port, 0};
-  auto range = server.run();
+  TestServer ts{port};
 
   ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
 
-  auto r = syncPostNoContentType(port, "<a> <b> <c>.");
-  EXPECT_EQ(r.status, http::status::unsupported_media_type);
+  expectStatus(port, "<a> <b> <c>.", http::status::unsupported_media_type);
 
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  for ([[maybe_unused]] auto& _ : range) {
+  for ([[maybe_unused]] auto& _ : ts.range) {
   }
 }
 
@@ -346,19 +252,17 @@ TEST(InputFileServer, MissingContentType) {
 // A `Finish-Index-Building` request with a non-empty body must return 400.
 TEST(InputFileServer, FinishWithNonEmptyBody) {
   auto port = findFreePort();
-  InputFileServer server{port, 0};
-  auto range = server.run();
+  TestServer ts{port};
 
   ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
 
   // Bad finish — non-empty body.
-  auto bad = syncPost(port, "some-body", "text/plain",
-                      {{"Finish-Index-Building", "true"}});
-  EXPECT_EQ(bad.status, http::status::bad_request);
+  expectStatus(port, "some-body", http::status::bad_request, "text/plain",
+               {{"Finish-Index-Building", "true"}});
 
   // Proper finish.
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  for ([[maybe_unused]] auto& _ : range) {
+  for ([[maybe_unused]] auto& _ : ts.range) {
   }
 }
 
@@ -367,8 +271,7 @@ TEST(InputFileServer, FinishWithNonEmptyBody) {
 // requests.
 TEST(InputFileServer, ZeroQueueSize) {
   auto port = findFreePort();
-  InputFileServer server{port, 0};
-  auto range = server.run();
+  TestServer ts{port};
 
   ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
 
@@ -376,15 +279,11 @@ TEST(InputFileServer, ZeroQueueSize) {
   EXPECT_EQ(canUploadStatus(port), http::status::too_many_requests);
 
   // File uploads return 429.
-  auto r = syncPost(port, "<a> <b> <c>.", "text/turtle");
-  EXPECT_EQ(r.status, http::status::too_many_requests);
+  expectStatus(port, "<a> <b> <c>.", http::status::too_many_requests,
+               "text/turtle");
 
   // Finish the server before draining (queue.finish() makes pop() return
   // nullopt immediately, so the range is empty without blocking).
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  size_t count = 0;
-  for ([[maybe_unused]] auto& _ : range) {
-    ++count;
-  }
-  EXPECT_EQ(count, 0);
+  EXPECT_EQ(ql::ranges::distance(ts.range), 0);
 }

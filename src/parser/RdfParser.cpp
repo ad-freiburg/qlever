@@ -1368,6 +1368,7 @@ RdfMultifileParser::RdfMultifileParser(
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
+  // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {
       bool active = parsingQueue_.push(
@@ -1378,6 +1379,10 @@ RdfMultifileParser::RdfMultifileParser(
         break;
       }
     }
+    // Every input has been fed into the `parsingQueue_`. After the call to
+    // `finish()` returns, the parsing has completed and all the results have
+    // been pushed into the `finishedBatchQueue_`, which we then also finish to
+    // inform the consuming code, that there will be no more parse results.
     parsingQueue_.finish();
     finishedBatchQueue_.finish();
   };

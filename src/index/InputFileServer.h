@@ -70,8 +70,13 @@ class InputFileServer {
     try {
       co_await send(computeResponse(std::move(request)));
     } catch (const std::exception& e) {
-      AD_LOG_INFO << "InputFileServer::processRequest received an exception: "
-                  << e.what() << std::endl;
+      AD_LOG_FATAL << "InputFileServer::processRequest: " << e.what()
+                   << std::endl;
+      std::terminate();
+    } catch (...) {
+      AD_LOG_FATAL << "InputFileServer::processRequest: unknown exception."
+                   << std::endl;
+      std::terminate();
     }
   }
 
