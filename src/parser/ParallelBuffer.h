@@ -13,11 +13,13 @@
 #include <re2/re2.h>
 
 #include <future>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "util/File.h"
+#include "util/ThreadSafeQueue.h"
 #include "util/UninitializedAllocator.h"
 
 /**
@@ -120,6 +122,24 @@ class StringParallelBuffer : public ParallelBuffer {
  public:
   explicit StringParallelBuffer(std::string content, size_t blocksize)
       : ParallelBuffer{blocksize}, content_{std::move(content)} {}
+
+  std::optional<BufferType> getNextBlock() override;
+};
+
+// A ParallelBuffer that streams its data from an HTTP request body delivered
+// asynchronously by the HTTP session thread via a thread-safe queue. The
+// HTTP session pushes chunks to the queue; getNextBlock() pops them (blocking
+// until a chunk is available). The queue's finish() or pushException() signals
+// EOF or an error to the parser thread.
+class HttpBodyParallelBuffer : public ParallelBuffer {
+  using ChunkQueue =
+      ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
+  std::shared_ptr<ChunkQueue> queue_;
+
+ public:
+  explicit HttpBodyParallelBuffer(std::shared_ptr<ChunkQueue> queue,
+                                  size_t blocksize)
+      : ParallelBuffer{blocksize}, queue_{std::move(queue)} {}
 
   std::optional<BufferType> getNextBlock() override;
 };

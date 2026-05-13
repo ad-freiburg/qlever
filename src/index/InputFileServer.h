@@ -17,8 +17,11 @@
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
-  using Request = http::request<http::string_body>;
+  // In lazy mode the body is streamed separately; the handler receives
+  // a header-only request and a shared chunk queue.
+  using Request = http::request<http::empty_body>;
   using Response = http::response<http::string_body>;
+  using SharedChunkQueue = SharedLazyChunkQueue;
 
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
       queue_;
@@ -30,8 +33,11 @@ class InputFileServer {
 
   struct HttpHandler {
     InputFileServer* server_;
-    net::awaitable<void> operator()(Request request, auto&& send) const {
-      return server_->processRequest(std::move(request), AD_FWD(send));
+    net::awaitable<void> operator()(Request request,
+                                    SharedChunkQueue chunkQueue,
+                                    auto&& send) const {
+      return server_->processRequest(std::move(request), std::move(chunkQueue),
+                                     AD_FWD(send));
     }
   };
   struct WebsocketHandlerDummy {
@@ -55,20 +61,23 @@ class InputFileServer {
   // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
   Response handleFinishSignal(const Request& request);
 
-  // Parse the request body as RDF data and enqueue it for index building.
-  Response handleFileUpload(Request request);
+  // Create an InputFileSpecification from the request headers and chunk queue,
+  // and enqueue it for index building.
+  Response handleFileUpload(Request request, SharedChunkQueue chunkQueue);
 
   // Dispatch the incoming request to the appropriate handler.
-  Response computeResponse(Request request);
+  Response computeResponse(Request request, SharedChunkQueue chunkQueue);
 
   // Create a plain-text HTTP response from `body` and `status`, reusing the
   // keep-alive and version settings from `request`.
   static Response createStringResponse(std::string body, http::status status,
                                        const Request& request);
 
-  net::awaitable<void> processRequest(Request request, auto&& send) {
+  net::awaitable<void> processRequest(Request request,
+                                      SharedChunkQueue chunkQueue,
+                                      auto&& send) {
     try {
-      co_await send(computeResponse(std::move(request)));
+      co_await send(computeResponse(std::move(request), std::move(chunkQueue)));
     } catch (const std::exception& e) {
       AD_LOG_FATAL << "InputFileServer::processRequest: " << e.what()
                    << std::endl;

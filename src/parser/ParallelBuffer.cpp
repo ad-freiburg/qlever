@@ -58,6 +58,17 @@ std::optional<ParallelBuffer::BufferType> StringParallelBuffer::getNextBlock() {
   return buf;
 }
 
+// _____________________________________________________________________________
+std::optional<ParallelBuffer::BufferType>
+HttpBodyParallelBuffer::getNextBlock() {
+  auto opt = queue_->pop();
+  if (!opt.has_value()) return std::nullopt;
+  BufferType buf;
+  buf.resize(opt->size());
+  std::ranges::copy(*opt, buf.data());
+  return buf;
+}
+
 // ____________________________________________________________________________
 std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
     const BufferType& vec, const re2::RE2& regex) {

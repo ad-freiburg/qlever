@@ -70,7 +70,10 @@ InputFileServer::Response InputFileServer::handleCanUploadQuery(
 // _____________________________________________________________________________
 InputFileServer::Response InputFileServer::handleFinishSignal(
     const Request& request) {
-  if (!request.body().empty()) {
+  // In lazy mode the body is read after the response is sent, so we validate
+  // via the Content-Length header instead of inspecting the body directly.
+  auto it = request.find(http::field::content_length);
+  if (it != request.end() && it->value() != "0") {
     return createStringResponse(
         "Finish-Index-Building must be sent with an empty body.",
         http::status::bad_request, request);
@@ -81,7 +84,8 @@ InputFileServer::Response InputFileServer::handleFinishSignal(
 }
 
 // _____________________________________________________________________________
-InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
+InputFileServer::Response InputFileServer::handleFileUpload(
+    Request request, SharedChunkQueue chunkQueue) {
   qlever::Filetype filetype;
   try {
     filetype = filetypeFromContentType(request);
@@ -100,15 +104,21 @@ InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
   std::string description =
       absl::StrCat("<http-upload-", numReceivedFiles_, ">");
 
-  auto bodyPtr = std::make_shared<std::string>(std::move(request.body()));
-  auto factory = [bodyPtr](size_t blocksize, std::string_view) {
-    return std::make_unique<StringParallelBuffer>(std::move(*bodyPtr),
-                                                  blocksize);
+  auto factory = [q = std::move(chunkQueue)](size_t blocksize,
+                                             std::string_view) {
+    return std::make_unique<HttpBodyParallelBuffer>(q, blocksize);
   };
   qlever::InputFileSpecification spec{
       qlever::InputFileSpecification::BufferFactoryAndDescription{
           std::move(factory), std::move(description)},
       filetype, std::move(graph)};
+
+  // Honour an explicit request to enable or disable parallel parsing.
+  auto pit = request.find("Parse-In-Parallel");
+  if (pit != request.end()) {
+    spec.parseInParallel_ = (pit->value() == "true" || pit->value() == "1");
+    spec.parseInParallelSetExplicitly_ = true;
+  }
 
   auto pushStatus = queue_.pushIfNotFull(std::move(spec));
   switch (pushStatus) {
@@ -130,7 +140,8 @@ InputFileServer::Response InputFileServer::handleFileUpload(Request request) {
 }
 
 // _____________________________________________________________________________
-InputFileServer::Response InputFileServer::computeResponse(Request request) {
+InputFileServer::Response InputFileServer::computeResponse(
+    Request request, SharedChunkQueue chunkQueue) {
   if (request.find("Can-Upload") != request.end()) {
     return handleCanUploadQuery(request);
   }
@@ -138,7 +149,7 @@ InputFileServer::Response InputFileServer::computeResponse(Request request) {
   if (it != request.end() && it->value() == "true") {
     return handleFinishSignal(request);
   }
-  return handleFileUpload(std::move(request));
+  return handleFileUpload(std::move(request), std::move(chunkQueue));
 }
 
 // _____________________________________________________________________________
@@ -148,9 +159,9 @@ InputFileServer::run() {
   throw std::runtime_error(
       "InputFileServer::run() requires coroutine support (C++20).");
 #else
-  auto server =
-      std::make_shared<HttpServer<HttpHandler, WebsocketHandlerDummy> >(
-          port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{});
+  auto server = std::make_shared<
+      HttpServer<BodyReadMode::Lazy, HttpHandler, WebsocketHandlerDummy> >(
+      port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{});
   shutDown_ = [server]() { server->shutDown(); };
   serverThread_ = ad_utility::JThread{[server]() { server->run(); }};
   auto deadline =

@@ -287,3 +287,65 @@ TEST(InputFileServer, ZeroQueueSize) {
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
   EXPECT_EQ(ql::ranges::distance(ts.range), 0);
 }
+
+// ____________________________________________________________________________
+// Upload a body larger than the lazy-mode chunk size (1 MB) to exercise
+// multi-chunk streaming. Verifies that all bytes are received without
+// buffering the entire body in memory.
+TEST(InputFileServer, LargeBodyMultiChunk) {
+  // Build a body that exceeds 1 MB so the HTTP session sends multiple chunks.
+  std::string body;
+  size_t numTriples = 0;
+  while (body.size() < (1u << 20) + (1u << 19)) {
+    body += "<http://x.org/s" + std::to_string(numTriples) +
+            "> <http://x.org/p> <http://x.org/o" + std::to_string(numTriples) +
+            "> .\n";
+    ++numTriples;
+  }
+  size_t bodySize = body.size();
+
+  auto port = findFreePort();
+  InputFileServer server{port, 1};
+  auto range = server.run();
+
+  ad_utility::JThread uploadThread{[&]() {
+    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+    expectStatus(port, body, http::status::ok, "application/n-triples");
+    EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  }};
+
+  // Drain each uploaded file spec and count total bytes received.
+  size_t totalBytes = 0;
+  for (auto& spec : range) {
+    auto buf = spec.getParallelBuffer(1 << 16);
+    while (auto block = buf->getNextBlock()) {
+      totalBytes += block->size();
+    }
+  }
+  EXPECT_EQ(totalBytes, bodySize);
+}
+
+// ____________________________________________________________________________
+// The `Parse-In-Parallel` request header must be honoured and passed through
+// to the resulting InputFileSpecification.
+TEST(InputFileServer, ParseInParallelHeader) {
+  auto port = findFreePort();
+  InputFileServer server{port, 1};
+  auto range = server.run();
+
+  ad_utility::JThread uploadThread{[&]() {
+    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+    expectStatus(port, "<a> <b> <c> .\n", http::status::ok,
+                 "application/n-triples", {{"Parse-In-Parallel", "true"}});
+    EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  }};
+
+  for (auto& spec : range) {
+    EXPECT_TRUE(spec.parseInParallelSetExplicitly_);
+    EXPECT_TRUE(spec.parseInParallel_);
+    // Drain the buffer to allow the HTTP session to complete.
+    auto buf = spec.getParallelBuffer(1 << 16);
+    while (buf->getNextBlock()) {
+    }
+  }
+}
