@@ -2,12 +2,16 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
-#include <sstream>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <string_view>
+#include <vector>
 
-#include "util/Log.h"
+#include "./util/FileTestHelpers.h"
+#include "util/QueryEventLog.h"
 #include "util/http/websocket/QueryId.h"
 
 using ad_utility::websocket::OwningQueryId;
@@ -200,90 +204,101 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
 // _____________________________________________________________________________
 
 namespace {
-// Extracts every JSON payload from log lines that carry the " METRIC: " tag.
-// Each METRIC line in the captured log has the shape:
-//   "<timestamp> - METRIC: <json>\n"
-// so we split on newlines, find the tag, and parse the trailing JSON.
-std::vector<nlohmann::json> extractMetricLines(const std::string& log) {
+namespace fs = std::filesystem;
+using ad_utility::QueryEventLog;
+using ad_utility::testing::readLines;
+
+std::vector<nlohmann::json> parseAll(const std::vector<std::string>& lines) {
   std::vector<nlohmann::json> out;
-  static constexpr std::string_view kTag = " METRIC: ";
-  size_t pos = 0;
-  while (pos < log.size()) {
-    size_t newline = log.find('\n', pos);
-    auto line = log.substr(pos, newline - pos);
-    auto tagAt = line.find(kTag);
-    if (tagAt != std::string::npos) {
-      out.push_back(nlohmann::json::parse(line.substr(tagAt + kTag.size())));
-    }
-    if (newline == std::string::npos) break;
-    pos = newline + 1;
+  out.reserve(lines.size());
+  for (const auto& line : lines) {
+    out.push_back(nlohmann::json::parse(line));
   }
   return out;
+}
+
+// Acceptance invariant: every JSONL line begins with the literal
+// `{"ts_ms":` so the TUI can byte-slice the timestamp without a JSON
+// parse.
+void expectAllStartWithTsMs(const std::vector<std::string>& lines) {
+  static constexpr std::string_view kPrefix = "{\"ts_ms\":";
+  for (const auto& line : lines) {
+    EXPECT_EQ(line.rfind(kPrefix, 0), 0u) << "bad line: " << line;
+  }
 }
 }  // namespace
 
 // _____________________________________________________________________________
 
-TEST(QueryRegistry, registrationEmitsStartMetricLine) {
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+TEST(QueryRegistry, registrationEmitsStartEventLine) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  int64_t expectedStartedAt = 0;
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      // Registry holds `&log` and must die before `log`.
+      QueryRegistry registry{&log};
+      auto owned = registry.uniqueIdFromString("01123581321345589144",
+                                               "SELECT * WHERE {}");
+      ASSERT_TRUE(owned.has_value());
+      auto active = registry.getActiveQueries();
+      auto activeIt = active.find(owned->toQueryId());
+      ASSERT_NE(activeIt, active.end());
+      expectedStartedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              activeIt->second.startedAt_.time_since_epoch())
+                              .count();
+    }  // OwningQueryId + registry destroyed → end event also pushed.
+  }    // log destroyed → queue drained, file closed.
 
-  QueryRegistry registry{};
-  auto owned =
-      registry.uniqueIdFromString("01123581321345589144", "SELECT * WHERE {}");
-  ASSERT_TRUE(owned.has_value());
-
-  // The `started-at` we logged should match what `getActiveQueries()` reports
-  // for this query, so the live and historic views the TUI consumes agree.
-  auto active = registry.getActiveQueries();
-  auto activeIt = active.find(owned->toQueryId());
-  ASSERT_NE(activeIt, active.end());
-  auto expectedStartedAt =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          activeIt->second.startedAt_.time_since_epoch())
-          .count();
-
-  auto metrics = extractMetricLines(logStream.str());
-  // Only the start line should have been emitted at this point.
-  ASSERT_EQ(metrics.size(), 1u);
-  const auto& start = metrics.front();
+  auto lines = readLines(path);
+  expectAllStartWithTsMs(lines);
+  auto events = parseAll(lines);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
   EXPECT_EQ(start.at("event").get<std::string>(), "start");
-  EXPECT_EQ(start.at("query-id").get<std::string>(), "01123581321345589144");
-  EXPECT_EQ(start.at("started-at").get<int64_t>(), expectedStartedAt);
+  EXPECT_EQ(start.at("qid").get<std::string>(), "01123581321345589144");
+  EXPECT_EQ(start.at("ts_ms").get<int64_t>(), expectedStartedAt);
+  EXPECT_EQ(start.at("client_ip").get<std::string>(), "");
   EXPECT_EQ(start.at("query").get<std::string>(), "SELECT * WHERE {}");
 }
 
 // _____________________________________________________________________________
 
-TEST(QueryRegistry, destructionEmitsEndMetricLine) {
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-
-  QueryRegistry registry{};
+TEST(QueryRegistry, destructionEmitsEndEventLine) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   int64_t startedAtMs = 0;
   {
-    auto owned = registry.uniqueIdFromString("01123581321345589144",
-                                             "SELECT * WHERE {}");
-    ASSERT_TRUE(owned.has_value());
-    auto active = registry.getActiveQueries();
-    startedAtMs =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            active.at(owned->toQueryId()).startedAt_.time_since_epoch())
-            .count();
-    // `owned` goes out of scope at the closing brace, triggering the
-    // unregister lambda which should emit the end metric line.
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      {
+        auto owned = registry.uniqueIdFromString("01123581321345589144",
+                                                 "SELECT * WHERE {}");
+        ASSERT_TRUE(owned.has_value());
+        startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          registry.getActiveQueries()
+                              .at(owned->toQueryId())
+                              .startedAt_.time_since_epoch())
+                          .count();
+        // `owned` goes out of scope here, firing the unregister lambda
+        // which pushes the end event before the registry erases the entry.
+      }
+    }
   }
 
-  auto metrics = extractMetricLines(logStream.str());
-  ASSERT_EQ(metrics.size(), 2u);
-  const auto& end = metrics.back();
+  auto lines = readLines(path);
+  expectAllStartWithTsMs(lines);
+  auto events = parseAll(lines);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& end = events.back();
   EXPECT_EQ(end.at("event").get<std::string>(), "end");
-  EXPECT_EQ(end.at("query-id").get<std::string>(), "01123581321345589144");
-  EXPECT_GE(end.at("ended-at").get<int64_t>(), startedAtMs);
+  EXPECT_EQ(end.at("qid").get<std::string>(), "01123581321345589144");
+  EXPECT_GE(end.at("ts_ms").get<int64_t>(), startedAtMs);
+  // `setStatus` was never called, so the end event must carry the
+  // sentinel `"unknown"` rather than be missing the field.
+  EXPECT_EQ(end.at("status").get<std::string>(), "unknown");
 }
 
 // _____________________________________________________________________________
@@ -322,24 +337,53 @@ TEST(QueryRegistry, statusSurvivesMove) {
 
 // _____________________________________________________________________________
 
-TEST(QueryRegistry, duplicateIdDoesNotEmitStartMetricLine) {
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+TEST(QueryRegistry, duplicateIdDoesNotEmitStartEventLine) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      auto first =
+          registry.uniqueIdFromString("01123581321345589144", "first-query");
+      ASSERT_TRUE(first.has_value());
+      auto second =
+          registry.uniqueIdFromString("01123581321345589144", "second-query");
+      EXPECT_FALSE(second.has_value());
+      // `first` goes out of scope at the end of this block, producing
+      // one end event. Total events on disk: 1 start + 1 end = 2. If the
+      // failed registration had leaked a start, we'd see 3.
+    }
+  }
 
-  QueryRegistry registry{};
-  auto first =
-      registry.uniqueIdFromString("01123581321345589144", "first-query");
-  ASSERT_TRUE(first.has_value());
-  auto second =
-      registry.uniqueIdFromString("01123581321345589144", "second-query");
-  EXPECT_FALSE(second.has_value());
+  auto lines = readLines(path);
+  expectAllStartWithTsMs(lines);
+  auto events = parseAll(lines);
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events[0].at("event").get<std::string>(), "start");
+  EXPECT_EQ(events[0].at("query").get<std::string>(), "first-query");
+  EXPECT_EQ(events[1].at("event").get<std::string>(), "end");
+}
 
-  auto metrics = extractMetricLines(logStream.str());
-  // Exactly one start line — for the successful first registration. The
-  // failed second registration must not emit anything.
-  ASSERT_EQ(metrics.size(), 1u);
-  EXPECT_EQ(metrics.front().at("event").get<std::string>(), "start");
-  EXPECT_EQ(metrics.front().at("query").get<std::string>(), "first-query");
+// _____________________________________________________________________________
+
+// Status set on `OwningQueryId` must reach the end event through the
+// shared-pointer indirection captured by the unregister lambda.
+TEST(QueryRegistry, endEventCarriesStatusSetByCaller) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      auto owned = registry.uniqueIdFromString("qid-with-status", "q");
+      ASSERT_TRUE(owned.has_value());
+      owned->setStatus(QueryStatus::Cancelled);
+    }
+  }
+
+  auto events = parseAll(readLines(path));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
+  EXPECT_EQ(events.back().at("status").get<std::string>(), "cancelled");
 }

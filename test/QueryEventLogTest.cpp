@@ -9,81 +9,43 @@
 #include <filesystem>
 #include <fstream>
 #include <set>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "./util/FileTestHelpers.h"
 #include "util/QueryEventLog.h"
 
 namespace {
 namespace fs = std::filesystem;
 using ad_utility::QueryEventLog;
-
-// RAII helper that creates a unique temporary directory and removes it on
-// destruction. Mirrors the pattern used in `FilesystemHelpersTest.cpp`.
-class TempDir {
- public:
-  TempDir() {
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    path_ = fs::temp_directory_path() / absl::StrCat("QueryEventLogTest_",
-                                                     info->test_suite_name(),
-                                                     "_", info->name());
-    fs::remove_all(path_);
-    fs::create_directory(path_);
-  }
-  ~TempDir() {
-    std::error_code ec;
-    fs::remove_all(path_, ec);
-  }
-  TempDir(const TempDir&) = delete;
-  TempDir& operator=(const TempDir&) = delete;
-
-  fs::path file(const std::string& name) const { return path_ / name; }
-
- private:
-  fs::path path_;
-};
-
-// Read all lines from `path`. Used after a `QueryEventLog` has been destroyed,
-// so the writer thread has fully drained and the file is closed.
-std::vector<std::string> readLines(const fs::path& path) {
-  std::ifstream in{path};
-  std::vector<std::string> lines;
-  std::string line;
-  while (std::getline(in, line)) {
-    lines.push_back(std::move(line));
-  }
-  return lines;
-}
-
+using ad_utility::testing::readLines;
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
-  TempDir dir;
-  // Local instance (not the singleton) so the test is self-contained and
-  // does not leak state into other tests.
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  // Local instance (not the singleton) so the test is self-contained.
   QueryEventLog log;
   // No `setOutputFile` call. `push` must silently drop the line and not
   // create any file.
   log.push("this should be discarded\n");
-  EXPECT_FALSE(fs::exists(dir.file("never_written")));
+  EXPECT_FALSE(fs::exists(path));
 }
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, DoubleConfigureThrows) {
-  TempDir dir;
+  auto [first, cleanupFirst] = ad_utility::testing::filenameForTesting();
+  auto [second, cleanupSecond] = ad_utility::testing::filenameForTesting();
   QueryEventLog log;
-  log.setOutputFile(dir.file("first.log"));
-  EXPECT_ANY_THROW(log.setOutputFile(dir.file("second.log")));
+  log.setOutputFile(first);
+  EXPECT_ANY_THROW(log.setOutputFile(second));
 }
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
-  TempDir dir;
-  auto path = dir.file("single.log");
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {
     QueryEventLog log;
     log.setOutputFile(path);
@@ -100,8 +62,7 @@ TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, ConcurrentProducersProduceWellFormedLines) {
-  TempDir dir;
-  auto path = dir.file("concurrent.log");
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   constexpr size_t kThreads = 8;
   constexpr size_t kLinesPerThread = 1000;
 
