@@ -117,6 +117,13 @@ class OwningQueryId {
   // Current value of the terminal-status field. Returns
   // `QueryStatus::Unknown` until `setStatus` is invoked.
   [[nodiscard]] QueryStatus status() const noexcept { return status_->load(); }
+
+  // Shared handle to the underlying atomic. Lets a caller that no longer
+  // owns this object publish the terminal status.
+  [[nodiscard]] std::shared_ptr<std::atomic<QueryStatus>> sharedStatus()
+      const noexcept {
+    return status_;
+  }
 };
 
 // Ensure promised copy semantics

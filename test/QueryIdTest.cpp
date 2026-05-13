@@ -387,3 +387,69 @@ TEST(QueryRegistry, endEventCarriesStatusSetByCaller) {
   EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
   EXPECT_EQ(events.back().at("status").get<std::string>(), "cancelled");
 }
+
+// _____________________________________________________________________________
+
+namespace {
+/// Drive one start/end cycle through a local `QueryEventLog` while
+/// applying `setStatus` to the `OwningQueryId`, then return the value of
+/// the `status` field on the resulting `end` event line.
+std::string runOneCycleAndReadEndStatus(QueryStatus status) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      auto owned = registry.uniqueIdFromString("qid", "q");
+      EXPECT_TRUE(owned.has_value());
+      owned->setStatus(status);
+    }
+  }
+  auto events = parseAll(readLines(path));
+  EXPECT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
+  return events.back().at("status").get<std::string>();
+}
+}  // namespace
+
+TEST(QueryRegistry, endEventStatusOk) {
+  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Ok), "ok");
+}
+
+TEST(QueryRegistry, endEventStatusFailed) {
+  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Failed), "failed");
+}
+
+TEST(QueryRegistry, endEventStatusTimeout) {
+  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Timeout), "timeout");
+}
+
+// _____________________________________________________________________________
+
+/// `sharedStatus()` returns a handle that writes through to the same
+/// atomic the unregister lambda will read. Simulates a third party (e.g.
+/// `Server::processOperation`'s catch block) publishing the status after
+/// the `OwningQueryId` has been moved out of its original scope.
+TEST(QueryRegistry, sharedStatusHandlePropagatesToEndEvent) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      auto owned = registry.uniqueIdFromString("qid-shared", "q");
+      ASSERT_TRUE(owned.has_value());
+      auto handle = owned->sharedStatus();
+      // Move the `OwningQueryId` into a different scope; the handle
+      // must still address the same atomic.
+      OwningQueryId movedAway = std::move(owned.value());
+      handle->store(QueryStatus::Failed);
+      // `movedAway` destroyed here → end event reads through `handle`.
+    }
+  }
+
+  auto events = parseAll(readLines(path));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.back().at("status").get<std::string>(), "failed");
+}

@@ -200,7 +200,9 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
-          const std::optional<PlannedQuery>& plannedQuery);
+          const std::optional<PlannedQuery>& plannedQuery,
+          std::shared_ptr<std::atomic<ad_utility::websocket::QueryStatus>>
+              queryStatus);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the

@@ -92,6 +92,8 @@ constexpr auto printNothing = []() constexpr { return ""; };
 /// An exception signalling an cancellation
 class CancellationException : public std::exception {
   std::string message_;
+  // Defaults to `MANUAL` because the string-message ctor carries no reason.
+  CancellationState state_{CancellationState::MANUAL};
 
  public:
   explicit CancellationException(std::string message)
@@ -99,11 +101,15 @@ class CancellationException : public std::exception {
   explicit CancellationException(CancellationState reason)
       : message_{reason == CancellationState::TIMEOUT
                      ? "Operation timed out."
-                     : "Operation was manually cancelled."} {
+                     : "Operation was manually cancelled."},
+        state_{reason} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
 
   const char* what() const noexcept override { return message_.c_str(); }
+
+  // Cancellation reason (`TIMEOUT`, `MANUAL`, or `CHECK_WINDOW_MISSED`).
+  CancellationState state() const noexcept { return state_; }
 
   /// Set optional operation information, if not already set.
   void setOperation(std::string_view operation) {
