@@ -189,10 +189,10 @@ void Server::run(const std::string& indexBaseName, bool useText,
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
-      metrics_.httpErrors->Add(1, {{"type", "http"}});
+      metrics_.httpErrors_->Add(1, {{"type", "http"}});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
-      metrics_.httpErrors->Add(1, {{"type", "internal"}});
+      metrics_.httpErrors_->Add(1, {{"type", "internal"}});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -960,7 +960,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
-    metrics_.sparqlErrors->Add(1, {{"type", "system_error"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "system_error"}});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -977,7 +977,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
-    metrics_.sparqlErrors->Add(1, {{"type", "send_streamable_response"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "send_streamable_response"}});
   }
 }
 
@@ -1385,28 +1385,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors->Add(1, {{"type", "protocol"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "protocol"}});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
-    metrics_.sparqlErrors->Add(1, {{"type", "syntax"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "syntax"}});
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors->Add(1, {{"type", "in_use"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "in_use"}});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors->Add(1, {{"type", "timeout"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "timeout"}});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
     // TODO: this includes missing/wrong access token which should actually be a
     // 403
-    metrics_.sparqlErrors->Add(1, {{"type", "internal"}});
+    metrics_.sparqlErrors_->Add(1, {{"type", "internal"}});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
@@ -1621,7 +1621,7 @@ Server::ServerMetrics Server::initializeMetrics() {
           "qlever.sparql_operation.errors",
           "Errors during the execution of SPARQL operations"),
       meter->CreateUInt64Counter(
-          "qlever.http.error_types",
+          "qlever.http.errors",
           "Errors during the execution of non SPARQL operations"),
       meter->CreateInt64ObservableGauge("qlever.memory_query_available",
                                         "Available memory for query processing",
@@ -1651,10 +1651,10 @@ Server::ServerMetrics Server::initializeMetrics() {
       metrics.finishedSparqlOperations_.get(), "operation",
       {"query", "update"});
   ad_utility::metrics::initializeCounter(
-      metrics.sparqlErrors.get(), "type",
+      metrics.sparqlErrors_.get(), "type",
       {"system_error", "internal", "syntax", "timeout",
        "send_streamable_response", "protocol", "in_use"});
-  ad_utility::metrics::initializeCounter(metrics.httpErrors.get(), "type",
+  ad_utility::metrics::initializeCounter(metrics.httpErrors_.get(), "type",
                                          {"internal", "http"});
   // Set up the callback for asynchronous metrics.
   metrics.deltaTriplesMetric_->AddCallback(

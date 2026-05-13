@@ -13,7 +13,6 @@
 #include <memory>
 #include <string>
 
-#include "opentelemetry/exporters/ostream/metric_exporter.h"
 #include "opentelemetry/exporters/prometheus/collector.h"
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"

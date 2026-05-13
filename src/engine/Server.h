@@ -174,8 +174,8 @@ class Server {
     std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
         deltaTriplesMetric_;
     // Error metrics
-    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> sparqlErrors;
-    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors;
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> sparqlErrors_;
+    std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors_;
     // Memory metrics
     std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
         memoryQueryFree_;

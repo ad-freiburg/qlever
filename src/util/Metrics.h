@@ -28,8 +28,8 @@ class MetricsReader {
 // Initialize the global OTEL MeterProvider. When `enabled` is false this
 // function is a no-op and the provider remains the built-in no-op provider,
 // so all subsequent Add/Record calls are safe but silently discarded.
-// When `enabled` is true, periodic OStream snapshots are written to stdout
-// and a MetricsReader is returned that exposes metrics in Prometheus format.
+// When `enabled` is true, a MetricsReader is returned that exposes metrics in
+// Prometheus format via the /metrics endpoint.
 // Must be called once at startup before Server::run().
 std::shared_ptr<MetricsReader> initialize(bool enabled);
 
