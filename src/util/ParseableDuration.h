@@ -11,7 +11,6 @@
 
 #include <boost/lexical_cast.hpp>
 #include <chrono>
-#include <ctre-unicode.hpp>
 #include <iostream>
 
 #include "backports/keywords.h"
@@ -20,13 +19,23 @@
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
+#ifndef QLEVER_CHEAPER_COMPILATION
+#include <ctre-unicode.hpp>
+#endif
+
+#ifdef QLEVER_CHEAPER_COMPILATION
+#include <re2/re2.h>
+#endif
+
 namespace ad_utility {
 
+#ifndef QLEVER_CHEAPER_COMPILATION
 namespace detail {
 // CTRE regex pattern for C++17 compatibility
 constexpr ctll::fixed_string durationPatternRegex =
     R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)";
 }  // namespace detail
+#endif
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
@@ -90,6 +99,22 @@ class ParseableDuration {
     using namespace std::chrono;
     using ad_utility::use_type_identity::ti;
 
+#ifdef QLEVER_CHEAPER_COMPILATION
+    // Use RE2 (runtime regex) to avoid instantiating the expensive CTRE
+    // compile-time automaton in every translation unit that includes this
+    // header.
+    static const re2::RE2 re{R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)"};
+    std::string amountStr, unit;
+    const bool matched = RE2::FullMatch(
+        re2::StringPiece(arg.data(), arg.size()), re, &amountStr, &unit);
+    if (matched) {
+      auto toDuration = [&amountStr](auto t) {
+        using OriginalDuration = typename decltype(t)::type;
+        using Rep = typename OriginalDuration::rep;
+        return duration_cast<DurationType>(
+            OriginalDuration{boost::lexical_cast<Rep>(amountStr)});
+      };
+#else
     if (auto m = ctre::match<detail::durationPatternRegex>(arg)) {
       auto unit = m.template get<2>().to_view();
 
@@ -99,7 +124,7 @@ class ParseableDuration {
                           .template to_number<typename OriginalDuration::rep>();
         return duration_cast<DurationType>(OriginalDuration{amount});
       };
-
+#endif
       if (unit == "ns") {
         return toDuration(ti<nanoseconds>);
       } else if (unit == "us") {
@@ -111,7 +136,7 @@ class ParseableDuration {
       } else if (unit == "min") {
         return toDuration(ti<minutes>);
       } else {
-        // Verify unit was checked exhaustively
+        // Verify unit was checked exhaustively.
         AD_CORRECTNESS_CHECK(unit == "h");
         return toDuration(ti<hours>);
       }

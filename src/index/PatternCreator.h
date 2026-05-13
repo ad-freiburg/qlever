@@ -13,6 +13,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "index/CompressedExternalIdTableSorterExternTemplates.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/BufferedVector.h"

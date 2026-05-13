@@ -19,6 +19,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
 #include "global/SpecialIds.h"
+#include "index/CompressedExternalIdTableSorterExternTemplates.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"

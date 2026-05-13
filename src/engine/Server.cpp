@@ -1255,11 +1255,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
-                results.push_back(createResponseMetadataForUpdate(
+                // Explicit json{} cast required: nlohmann/json.hpp is in the
+                // PCH, so clang's -fpch-instantiate-templates pre-bakes the
+                // ordered_json→json implicit conversion. This makes push_back
+                // ambiguous (multiple viable overloads). The cast selects the
+                // push_back(json&&) overload unambiguously. To avoid this at
+                // new call sites: either cast the value or declare the
+                // container as ordered_json so no cross-type conversion is
+                // needed.
+                results.push_back(json{createResponseMetadataForUpdate(
                     index_,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree(),
-                    updateMetadata, tracer));
+                    updateMetadata, tracer)});
                 metadatas.push_back(std::move(updateMetadata));
 
                 AD_LOG_INFO << "Done processing update, total time was "

@@ -1,5 +1,6 @@
 add_library(sparqlExpressions
         SparqlExpressionValueGetters.cpp
+        SparqlExpressionGenerators.cpp
         SetOfIntervals.cpp
         SparqlExpressionPimpl.cpp
         SampleExpression.cpp

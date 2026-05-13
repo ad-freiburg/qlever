@@ -310,13 +310,10 @@ inline auto makeStringResultGetter(LocalVocab* localVocab) {
 // Return the `Id` if the passed `value` contains one, alternatively add the
 // literal or iri in the `value` to the `localVocab` and return the newly
 // created `Id` instead.
-inline Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
-                               LocalVocab* localVocab) {
-  return std::visit(
-      ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
-                                       makeStringResultGetter(localVocab)},
-      value);
-}
+// Implementation lives in SparqlExpressionGenerators.cpp to avoid
+// re-instantiating the std::visit vtable in every including TU.
+Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
+                        LocalVocab* localVocab);
 
 }  // namespace sparqlExpression::detail
 

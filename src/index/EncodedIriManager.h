@@ -12,14 +12,18 @@
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
-#include "util/CtreHelpers.h"
 #include "util/Log.h"
 #include "util/json.h"
 
+#ifndef QLEVER_CHEAPER_COMPILATION
+#include "util/CtreHelpers.h"
 namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string digitsCaptureGroup = "digits";
 }  // namespace detail
+#else
+#include <re2/re2.h>
+#endif
 
 // This class allows the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
@@ -171,6 +175,17 @@ class EncodedIriManagerImpl {
     // Check that after the prefix, the string contains only digits and the
     // trailing '>'.
     repr.remove_prefix(it->size());
+#ifdef QLEVER_CHEAPER_COMPILATION
+    // Use RE2 instead of CTRE to avoid instantiating the compile-time automaton
+    // in every translation unit that includes this header.
+    static const re2::RE2 re{"([0-9]+)>"};
+    std::string numStringStorage;
+    if (!RE2::FullMatch(re2::StringPiece(repr.data(), repr.size()), re,
+                        &numStringStorage)) {
+      return std::nullopt;
+    }
+    std::string_view numString{numStringStorage};
+#else
     static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
     auto match = ctre::match<regex>(repr);
     if (!match) {
@@ -178,8 +193,9 @@ class EncodedIriManagerImpl {
     }
 
     // Extract the substring with the digits, and check that it is not too long.
-    const auto& numString =
+    const auto numString =
         match.template get<detail::digitsCaptureGroup>().to_view();
+#endif
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }

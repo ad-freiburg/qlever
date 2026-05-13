@@ -277,7 +277,13 @@ constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
 // more columns, but also increases compile times because more templates
 // have to be instantiated. It might also be necessary to increase some internal
 // compiler limits for the evaluation of constexpr functions and templates.
+// Under QLEVER_CHEAPER_COMPILATION the value is lowered to reduce the number
+// of template instantiations and thereby speed up debug builds.
+#ifdef QLEVER_CHEAPER_COMPILATION
+constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 2;
+#else
 constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
+#endif
 
 // Interval in which an enabled watchdog would check if
 // `CancellationHandle::throwIfCancelled` is called regularly.
