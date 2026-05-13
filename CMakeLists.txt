@@ -50,6 +50,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Disable nlohmann implicit conversions (e.g. json → std::string) globally so
+# all TUs, including those compiled via PCH, see the same flag value.
+add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
@@ -509,10 +513,9 @@ set(PRECOMPILED_HEADER_FILES_EXTERNAL
     <absl/container/flat_hash_map.h>
     <absl/container/flat_hash_set.h>
     <range/v3/all.hpp>
-    # Use NlohmannJson.h (not <nlohmann/json.hpp> directly) so that
-    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set before nlohmann processes it.
-    # The bare <nlohmann/json.hpp> would bake in implicit-conversions=1.
-    src/util/NlohmannJson.h
+    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
+    # nlohmann header already sees the correct flag value.
+    <nlohmann/json.hpp>
 )
 
 # PRECOMPILED_HEADER_FILES_HEAVY: extends EXTERNAL with boost networking and

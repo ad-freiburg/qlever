@@ -307,14 +307,19 @@ inline auto makeStringResultGetter(LocalVocab* localVocab) {
   };
 }
 
-// Return the `Id` if the passed `value` contains one, alternatively add the
-// literal or iri in the `value` to the `localVocab` and return the newly
-// created `Id` instead.
-// Implementation lives in SparqlExpressionGenerators.cpp to avoid
-// re-instantiating the std::visit vtable in every including TU.
+}  // namespace sparqlExpression::detail
+
+// When QLEVER_CHEAPER_COMPILATION is set the inline definition of
+// `idOrLiteralOrIriToId` lives in a separate .cpp (to avoid instantiating the
+// std::visit vtable in every TU). Otherwise include it inline here so the
+// compiler can inline the call at each use site.
+#ifdef QLEVER_CHEAPER_COMPILATION
+namespace sparqlExpression::detail {
 Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
                         LocalVocab* localVocab);
-
 }  // namespace sparqlExpression::detail
+#else
+#include "engine/sparqlExpressions/SparqlExpressionGeneratorsImpl.h"
+#endif
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H

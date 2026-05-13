@@ -14,12 +14,10 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #define EOF std::char_traits<char>::eof()
 #endif
 
-// Disallow implicit conversions from nlohmann::json to other types,
-// most notably to std::string. The actual define + include is in
-// NlohmannJson.h so that PCH builds also see the correct flag value.
 #include <absl/strings/str_cat.h>
 
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -30,7 +28,6 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/NlohmannJson.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 

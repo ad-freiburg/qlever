@@ -99,32 +99,39 @@ class ParseableDuration {
     using namespace std::chrono;
     using ad_utility::use_type_identity::ti;
 
+    // Both branches produce `matched`, `amount`, and `unit` as plain values so
+    // the duration-conversion code below does not need to be duplicated.
+    bool matched;
+    std::string_view amount;
+    std::string_view unit;
+
 #ifdef QLEVER_CHEAPER_COMPILATION
     // Use RE2 (runtime regex) to avoid instantiating the expensive CTRE
-    // compile-time automaton in every translation unit that includes this
-    // header.
+    // compile-time automaton in every TU that includes this header.
     static const re2::RE2 re{R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)"};
-    std::string amountStr, unit;
-    const bool matched = RE2::FullMatch(
-        re2::StringPiece(arg.data(), arg.size()), re, &amountStr, &unit);
+    re2::StringPiece amountPiece, unitPiece;
+    matched = RE2::FullMatch(re2::StringPiece(arg.data(), arg.size()), re,
+                             &amountPiece, &unitPiece);
     if (matched) {
-      auto toDuration = [&amountStr](auto t) {
+      amount = std::string_view{amountPiece.data(), amountPiece.size()};
+      unit = std::string_view{unitPiece.data(), unitPiece.size()};
+    }
+#else
+    auto m = ctre::match<detail::durationPatternRegex>(arg);
+    matched = static_cast<bool>(m);
+    if (matched) {
+      amount = m.template get<1>().to_view();
+      unit = m.template get<2>().to_view();
+    }
+#endif
+
+    if (matched) {
+      auto toDuration = [&amount](auto t) {
         using OriginalDuration = typename decltype(t)::type;
         using Rep = typename OriginalDuration::rep;
         return duration_cast<DurationType>(
-            OriginalDuration{boost::lexical_cast<Rep>(amountStr)});
+            OriginalDuration{boost::lexical_cast<Rep>(amount)});
       };
-#else
-    if (auto m = ctre::match<detail::durationPatternRegex>(arg)) {
-      auto unit = m.template get<2>().to_view();
-
-      auto toDuration = [&m](auto t) {
-        using OriginalDuration = typename decltype(t)::type;
-        auto amount = m.template get<1>()
-                          .template to_number<typename OriginalDuration::rep>();
-        return duration_cast<DurationType>(OriginalDuration{amount});
-      };
-#endif
       if (unit == "ns") {
         return toDuration(ti<nanoseconds>);
       } else if (unit == "us") {

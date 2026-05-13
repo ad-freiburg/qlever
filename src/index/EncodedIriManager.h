@@ -18,12 +18,37 @@
 #ifndef QLEVER_CHEAPER_COMPILATION
 #include "util/CtreHelpers.h"
 namespace detail {
-// CTRE named capture group identifiers for C++17 compatibility
+// CTRE named capture group identifiers for C++17 compatibility.
 constexpr ctll::fixed_string digitsCaptureGroup = "digits";
 }  // namespace detail
 #else
 #include <re2/re2.h>
 #endif
+
+namespace detail {
+// Match `repr` against the pattern `([0-9]+)>` and return the digit
+// substring as a `string_view` into `repr` on success, or `std::nullopt` if
+// the pattern does not match. Encapsulates the CTRE / RE2 selection.
+inline std::optional<std::string_view> matchDigitsPrefix(
+    std::string_view repr) {
+#ifdef QLEVER_CHEAPER_COMPILATION
+  static const re2::RE2 re{"([0-9]+)>"};
+  re2::StringPiece digits;
+  if (!RE2::FullMatch(re2::StringPiece(repr.data(), repr.size()), re,
+                      &digits)) {
+    return std::nullopt;
+  }
+  return std::string_view{digits.data(), digits.size()};
+#else
+  static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
+  auto match = ctre::match<regex>(repr);
+  if (!match) {
+    return std::nullopt;
+  }
+  return match.template get<digitsCaptureGroup>().to_view();
+#endif
+}
+}  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
@@ -175,27 +200,11 @@ class EncodedIriManagerImpl {
     // Check that after the prefix, the string contains only digits and the
     // trailing '>'.
     repr.remove_prefix(it->size());
-#ifdef QLEVER_CHEAPER_COMPILATION
-    // Use RE2 instead of CTRE to avoid instantiating the compile-time automaton
-    // in every translation unit that includes this header.
-    static const re2::RE2 re{"([0-9]+)>"};
-    std::string numStringStorage;
-    if (!RE2::FullMatch(re2::StringPiece(repr.data(), repr.size()), re,
-                        &numStringStorage)) {
+    auto numStringOpt = detail::matchDigitsPrefix(repr);
+    if (!numStringOpt.has_value()) {
       return std::nullopt;
     }
-    std::string_view numString{numStringStorage};
-#else
-    static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
-    auto match = ctre::match<regex>(repr);
-    if (!match) {
-      return std::nullopt;
-    }
-
-    // Extract the substring with the digits, and check that it is not too long.
-    const auto numString =
-        match.template get<detail::digitsCaptureGroup>().to_view();
-#endif
+    std::string_view numString = numStringOpt.value();
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }

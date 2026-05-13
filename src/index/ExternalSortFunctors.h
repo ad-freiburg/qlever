@@ -18,6 +18,11 @@
 
 #include "global/Id.h"
 
+#ifdef QLEVER_CHEAPER_COMPILATION
+#include "engine/idTable/CompressedExternalIdTable.h"
+#include "index/ConstantsIndexBuilding.h"
+#endif
+
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
@@ -97,5 +102,31 @@ struct SortByColumns {
     return false;
   }
 };
+
+#ifdef QLEVER_CHEAPER_COMPILATION
+// Extern-template declarations for the CompressedExternalIdTableSorter
+// specialisations used during index building. Without these declarations every
+// TU that includes IndexImpl.h or PatternCreator.h would instantiate all member
+// functions of each specialisation (~100 s cumulative per ftime-trace). The
+// corresponding explicit instantiation definitions live in
+// CompressedExternalIdTableSorterInstantiations.cpp.
+namespace ad_utility {
+
+extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
+                                                      3>;
+extern template class CompressedExternalIdTableSorter<
+    SortByOSP, NumColumnsIndexBuilding + 1>;
+extern template class CompressedExternalIdTableSorter<SortBySPO,
+                                                      NumColumnsIndexBuilding>;
+extern template class CompressedExternalIdTableSorter<SortByOSP,
+                                                      NumColumnsIndexBuilding>;
+extern template class CompressedExternalIdTableSorter<SortByPSO,
+                                                      NumColumnsIndexBuilding>;
+extern template class CompressedExternalIdTableSorter<
+    SortByPSO, NumColumnsIndexBuilding + 2>;
+extern template class CompressedExternalIdTableSorter<SortText, 5>;
+
+}  // namespace ad_utility
+#endif  // QLEVER_CHEAPER_COMPILATION
 
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
