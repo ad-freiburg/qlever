@@ -13,6 +13,7 @@
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
+using ad_utility::websocket::QueryStatus;
 using ::testing::Field;
 using ::testing::IsEmpty;
 using ::testing::Pair;
@@ -283,6 +284,40 @@ TEST(QueryRegistry, destructionEmitsEndMetricLine) {
   EXPECT_EQ(end.at("event").get<std::string>(), "end");
   EXPECT_EQ(end.at("query-id").get<std::string>(), "01123581321345589144");
   EXPECT_GE(end.at("ended-at").get<int64_t>(), startedAtMs);
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, statusDefaultsToUnknown) {
+  QueryRegistry registry{};
+  auto owned = registry.uniqueId("my-query");
+  EXPECT_EQ(owned.status(), QueryStatus::Unknown);
+}
+
+// _____________________________________________________________________________
+
+TEST(QueryRegistry, setStatusIsObservable) {
+  QueryRegistry registry{};
+  auto owned = registry.uniqueId("my-query");
+  ASSERT_EQ(owned.status(), QueryStatus::Unknown);
+
+  owned.setStatus(QueryStatus::Ok);
+  EXPECT_EQ(owned.status(), QueryStatus::Ok);
+
+  owned.setStatus(QueryStatus::Failed);
+  EXPECT_EQ(owned.status(), QueryStatus::Failed);
+}
+
+// _____________________________________________________________________________
+
+// The status field must survive a move construction of `OwningQueryId`.
+TEST(QueryRegistry, statusSurvivesMove) {
+  QueryRegistry registry{};
+  auto owned = registry.uniqueId("my-query");
+  owned.setStatus(QueryStatus::Cancelled);
+
+  OwningQueryId moved = std::move(owned);
+  EXPECT_EQ(moved.status(), QueryStatus::Cancelled);
 }
 
 // _____________________________________________________________________________

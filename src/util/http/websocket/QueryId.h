@@ -13,6 +13,7 @@
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
+#include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
@@ -56,12 +57,23 @@ class QueryId {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryId, id_)
 };
 
+// Terminal status of a query, as observed at the moment its
+// `OwningQueryId` is destroyed. `Unknown` is the default and indicates
+// that no caller invoked `OwningQueryId::setStatus` before destruction;
+// see `OwningQueryId::status_` for the rationale.
+enum class QueryStatus { Unknown, Ok, Failed, Cancelled, Timeout };
+
 // This class is similar to QueryId, but it's instances are all unique within
 // the registry it was created with. (It can not be created without a registry)
 // Therefore it is not copyable and removes itself from said registry
 // on destruction.
 class OwningQueryId {
   unique_cleanup::UniqueCleanup<QueryId> id_;
+  // Terminal status of this query. Written by call sites (success path
+  // and catch blocks) via `setStatus`, read by the unregister lambda
+  // when it builds the end event. Atomic because the writer and the
+  // destructor read may execute on different threads;
+  ad_utility::CopyableAtomic<QueryStatus> status_{QueryStatus::Unknown};
 
   friend class QueryRegistry;
 
@@ -72,6 +84,16 @@ class OwningQueryId {
 
  public:
   [[nodiscard]] const QueryId& toQueryId() const& noexcept { return *id_; }
+
+  // Record the terminal status of this query. Intended to be called
+  // once on the success path or in a catch block before this object is
+  // destroyed; the unregister lambda reads the final value
+  // during `~OwningQueryId`. Safe to call from any thread.
+  void setStatus(QueryStatus s) noexcept { status_.store(s); }
+
+  // Current value of the terminal-status field. Returns
+  // `QueryStatus::Unknown` until `setStatus` is invoked.
+  [[nodiscard]] QueryStatus status() const noexcept { return status_.load(); }
 };
 
 // Ensure promised copy semantics
@@ -128,8 +150,8 @@ class QueryRegistry {
   std::optional<OwningQueryId> uniqueIdFromString(std::string id,
                                                   std::string_view query) {
     auto queryId = QueryId::idFromString(std::move(id));
-    /// Capture the entry's `startedAt_` while the lock is held so the value
-    /// logged here matches what `getActiveQueries()` reports for this query.
+    // Capture the entry's `startedAt_` while the lock is held so the value
+    // logged here matches what `getActiveQueries()` reports for this query.
     std::chrono::system_clock::time_point startedAt;
     {
       auto lockedMap = registry_->wlock();
@@ -157,7 +179,7 @@ class QueryRegistry {
           AD_CORRECTNESS_CHECK(!qid.empty());
           // Registry might be destroyed already, do nothing in this case.
           if (auto registry = weakRegistry.lock()) {
-            /// Wall-clock instant at which the query exited the registry.
+            // Wall-clock instant at which the query exited the registry.
             auto endedAtMs =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch())
