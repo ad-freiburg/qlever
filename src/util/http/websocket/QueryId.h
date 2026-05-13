@@ -106,11 +106,15 @@ class QueryRegistry {
     SharedCancellationHandle cancellationHandle_ =
         std::make_shared<CancellationHandle<>>();
     std::string query_;
+    // Client IP captured from the `X-Real-IP` request header at registration
+    // time. Empty string if the header was absent.
+    std::string clientIp_;
     // Wall-clock instant at which this entry was registered.
     std::chrono::system_clock::time_point startedAt_ =
         std::chrono::system_clock::now();
-    explicit CancellationHandleWithQuery(std::string_view query)
-        : query_{query} {}
+    CancellationHandleWithQuery(std::string_view query,
+                                std::string_view clientIp)
+        : query_{query}, clientIp_{clientIp} {}
   };
   using SynchronizedType = ad_utility::Synchronized<
       ad_utility::HashMap<QueryId, CancellationHandleWithQuery>>;
@@ -147,15 +151,15 @@ class QueryRegistry {
   // \return A std::optional<OwningQueryId> object wrapping the passed string
   //         if it was not present in the registry before. An empty
   //         std::optional if the id already existed before.
-  std::optional<OwningQueryId> uniqueIdFromString(std::string id,
-                                                  std::string_view query) {
+  std::optional<OwningQueryId> uniqueIdFromString(
+      std::string id, std::string_view query, std::string_view clientIp = {}) {
     auto queryId = QueryId::idFromString(std::move(id));
     // Capture the entry's `startedAt_` while the lock is held so the value
     // logged here matches what `getActiveQueries()` reports for this query.
     std::chrono::system_clock::time_point startedAt;
     {
       auto lockedMap = registry_->wlock();
-      auto [it, success] = lockedMap->try_emplace(queryId, query);
+      auto [it, success] = lockedMap->try_emplace(queryId, query, clientIp);
       if (!success) {
         return std::nullopt;
       }
@@ -196,12 +200,14 @@ class QueryRegistry {
 
   // Generates a unique pseudo-random OwningQueryId object for this registry
   // and associates it with the given query.
-  OwningQueryId uniqueId(std::string_view query) {
+  OwningQueryId uniqueId(std::string_view query,
+                         std::string_view clientIp = {}) {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
     std::optional<OwningQueryId> result;
     do {
-      result = uniqueIdFromString(std::to_string(distrib(generator)), query);
+      result = uniqueIdFromString(std::to_string(distrib(generator)), query,
+                                  clientIp);
     } while (!result.has_value());
     return std::move(result.value());
   }
