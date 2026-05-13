@@ -608,16 +608,22 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
 
   // For non-numeric values, return an empty prefilter range (achieved using an
   // empty `IsInExpression`).
-  evalAndEqualityCheck(eqSprql(yearSprqlExpr(var), I("<iri>")),
-                       pr(inExpr({}), var));
-  evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), I("<iri>")),
-                       pr(inExpr({}), var));
-  evalAndEqualityCheck(neqSprql(yearSprqlExpr(var), L("\"lit value\"")),
-                       pr(inExpr({}), var));
-  evalAndEqualityCheck(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)),
-                       pr(inExpr({}), var));
-  evalAndEqualityCheck(neqSprql(yearSprqlExpr(var), Id::makeUndefined()),
-                       pr(inExpr({}), var));
+  std::array<absl::FunctionRef<std::unique_ptr<SparqlExpression>(VariantArgs,
+                                                                 VariantArgs)>,
+             6>
+      expressionTypes{eqSprql, neqSprql, gtSprql, geSprql, ltSprql, leSprql};
+  for (const auto& makeExpression : expressionTypes) {
+    evalAndEqualityCheck(makeExpression(yearSprqlExpr(var), I("<iri>")),
+                         pr(inExpr({}), var));
+    evalAndEqualityCheck(makeExpression(yearSprqlExpr(var), L("\"lit value\"")),
+                         pr(inExpr({}), var));
+    evalAndEqualityCheck(
+        makeExpression(yearSprqlExpr(var), Id::makeFromBool(false)),
+        pr(inExpr({}), var));
+    evalAndEqualityCheck(
+        makeExpression(yearSprqlExpr(var), Id::makeUndefined()),
+        pr(inExpr({}), var));
+  }
   // For Double reference values, the year is rounded to the nearest integer.
   evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), DoubleId(2000.7)),
                        pr(ge(getDateId(2001)), var));
