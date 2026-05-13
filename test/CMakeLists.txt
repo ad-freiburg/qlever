@@ -220,6 +220,8 @@ endif ()
 
 addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
 
+addLinkAndDiscoverTest(ParallelBufferTest parser)
+
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
 addLinkAndDiscoverTest(IdTableTest util)
@@ -520,3 +522,6 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
+
+addLinkAndDiscoverTestSerial(InputFileServerTest qlever)
+

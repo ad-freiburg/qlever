@@ -30,7 +30,7 @@ template <typename T>
 class ThreadSafeQueue {
   std::exception_ptr pushedException_;
   std::queue<T> queue_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::condition_variable pushNotification_;
   std::condition_variable popNotification_;
   bool finish_ = false;
@@ -58,10 +58,30 @@ class ThreadSafeQueue {
     if (finish_) {
       return false;
     }
-    queue_.push(std::move(value));
-    lock.unlock();
-    pushNotification_.notify_one();
+    doPushUnderLock(std::move(value), lock);
     return true;
+  }
+
+  // Try to push `value` without blocking. If the queue is at maximum capacity
+  // at the time of the call, return `Full` immediately without waiting for
+  // space to become available. Return `Finished` if `finish()` was already
+  // called, and `Pushed` if the element was successfully added.
+  enum struct Status { Full, Finished, Pushed };
+  Status pushIfNotFull(T value) {
+    std::unique_lock lock{mutex_};
+    if (finish_) {
+      return Status::Finished;
+    }
+    if (queue_.size() >= maxSize_) {
+      return Status::Full;
+    }
+    doPushUnderLock(std::move(value), lock);
+    return Status::Pushed;
+  }
+
+  bool canPush() const {
+    std::lock_guard lock{mutex_};
+    return finish_ || queue_.size() < maxSize_;
   }
 
   // The semantics of pushing an exception are as follows: All subsequent
@@ -133,6 +153,15 @@ class ThreadSafeQueue {
     lock.unlock();
     popNotification_.notify_one();
     return value;
+  }
+
+ private:
+  // Requires the `mutex_` to be locked via `lock`. Pushes `value` to the
+  // queue, releases the lock, and notifies one waiting consumer.
+  void doPushUnderLock(T value, std::unique_lock<std::mutex>& lock) {
+    queue_.push(std::move(value));
+    lock.unlock();
+    pushNotification_.notify_one();
   }
 };
 
