@@ -58,9 +58,9 @@ struct TripleComponentWithIndex {
 // A `TripleComponent` together with the information, whether it should be part
 // of the external vocabulary.
 struct PossiblyExternalizedTripleComponent {
-  PossiblyExternalizedTripleComponent(TripleComponent iriOrLiteral,
+  PossiblyExternalizedTripleComponent(TripleComponent tripleComponent,
                                       bool isExternal = false)
-      : tripleComponent_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
+      : tripleComponent_{std::move(tripleComponent)}, isExternal_{isExternal} {}
   PossiblyExternalizedTripleComponent() = default;
   TripleComponent tripleComponent_;
   bool isExternal_ = false;
@@ -83,7 +83,14 @@ class PartialVocabIndexWithExternalFlag {
 
  public:
   PartialVocabIndexWithExternalFlag(uint64_t id, bool isExternal)
-      : encodedId_{(uint64_t(isExternal) << 63) | id} {}
+      : encodedId_{(uint64_t(isExternal) << 63) | id} {
+    // The top four bits of any partial-vocab id must be zero: in the final
+    // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
+    // This guard catches future regressions that funnel a tagged value or an
+    // underflowed counter through here, which would otherwise silently
+    // collide with the `isExternal` bit and corrupt the vocabulary mapping.
+    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << ValueId::numDataBits));
+  }
 
   PartialVocabIndexWithExternalFlag() = default;
 
@@ -94,10 +101,9 @@ class PartialVocabIndexWithExternalFlag {
 
 // During the first phase of the index building, we use hash maps from entries
 // in the partial vocabulary to their `PartialVocabIndexWithExternalFlag` (see
-// above). The hash map only stores pointers (`string_view` as the key, and the
-// `PartialVocabIndexWithExternalFlag` is a non-owning pointer type), so that we
-// can deallocate all strings from a single batch of triples at once as soon as
-// we have finished processing them.
+// above). The hash map only stores `string_view`s as keys, so that we can
+// deallocate all strings from a single batch of triples at once as soon as we
+// have finished processing them.
 
 // Allocator type for the hash map.
 using ItemAlloc = ql::pmr::polymorphic_allocator<

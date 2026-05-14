@@ -642,7 +642,11 @@ class TripleComponentComparator {
     return cmp;
   }
 
-  // Total comparison, using the "is external" flags as a tiebreaker.
+  // Total comparison, using the "is external" flags as a tiebreaker. The
+  // direction of the tiebreaker (external before non-external) is arbitrary:
+  // downstream the merge ORs the flag across all duplicates of the same word
+  // (see `VocabularyMergerImpl.h`), so the order of duplicates does not affect
+  // the final result, only the deterministic shape of the sort.
   bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
                                      std::string_view b,
                                      bool bIsExternal) const {
@@ -650,7 +654,6 @@ class TripleComponentComparator {
     if (cmp != 0) {
       return cmp < 0;
     }
-    // `isExternal == true` comes before false
     return aIsExternal && !bIsExternal;
   }
 

@@ -1379,7 +1379,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     }
     const auto& iriOrLiteral = component.tripleComponent_;
     // TODO<joka921> Perform this normalization right at the beginning of the
-    // parsing.iriOrLiteral =
+    // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
