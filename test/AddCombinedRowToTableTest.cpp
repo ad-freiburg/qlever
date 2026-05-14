@@ -8,6 +8,7 @@
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 static constexpr auto U = Id::makeUndefined();
@@ -285,21 +286,26 @@ Literal fromString(std::string_view string) {
 }
 
 // _____________________________________________________________________________
-LocalVocab createVocabWithSingleString(std::string_view string) {
+LocalVocab createVocabWithSingleString(std::string_view string,
+                                       const LocalVocabContext& context) {
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{fromString(string)});
+  localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{fromString(string), context});
   return localVocab;
 }
 
 // _____________________________________________________________________________
-bool vocabContainsString(const LocalVocab& vocab, std::string_view string) {
+bool vocabContainsString(const LocalVocab& vocab, std::string_view string,
+                         const LocalVocabContext& context) {
   return ad_utility::contains(vocab.getAllWordsForTesting(),
-                              LocalVocabEntry{fromString(string)});
+                              LocalVocabEntry{fromString(string), context});
 }
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
   std::vector<LocalVocab> localVocabs;
@@ -317,11 +323,11 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
       }};
 
   IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
-                          createVocabWithSingleString("a")};
+                          createVocabWithSingleString("a", localVocabContext)};
   IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
-                          createVocabWithSingleString("b")};
+                          createVocabWithSingleString("b", localVocabContext)};
   IdTableWithVocab input3{makeIdTableFromVector({{0, 3}}),
-                          createVocabWithSingleString("c")};
+                          createVocabWithSingleString("c", localVocabContext)};
 
   using ::testing::SizeIs;
 
@@ -347,29 +353,31 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
 
   ASSERT_THAT(localVocabs, SizeIs(5));
 
-  EXPECT_TRUE(vocabContainsString(localVocabs[0], "a"));
-  EXPECT_TRUE(vocabContainsString(localVocabs[0], "b"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[0], "c"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[0], "a", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocabs[0], "b", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[0], "c", localVocabContext));
 
-  EXPECT_TRUE(vocabContainsString(localVocabs[1], "a"));
-  EXPECT_TRUE(vocabContainsString(localVocabs[1], "b"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[1], "c"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[1], "a", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocabs[1], "b", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[1], "c", localVocabContext));
 
-  EXPECT_FALSE(vocabContainsString(localVocabs[2], "a"));
-  EXPECT_TRUE(vocabContainsString(localVocabs[2], "b"));
-  EXPECT_TRUE(vocabContainsString(localVocabs[2], "c"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[2], "a", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocabs[2], "b", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocabs[2], "c", localVocabContext));
 
-  EXPECT_TRUE(vocabContainsString(localVocabs[3], "a"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[3], "b"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[3], "c"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[3], "a", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[3], "b", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[3], "c", localVocabContext));
 
-  EXPECT_TRUE(vocabContainsString(localVocabs[4], "a"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[4], "b"));
-  EXPECT_FALSE(vocabContainsString(localVocabs[4], "c"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[4], "a", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[4], "b", localVocabContext));
+  EXPECT_FALSE(vocabContainsString(localVocabs[4], "c", localVocabContext));
 }
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
   ad_utility::AddCombinedRowToIdTable adder{
@@ -377,9 +385,9 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
       std::make_shared<ad_utility::CancellationHandle<>>(), 1};
 
   IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
-                          createVocabWithSingleString("a")};
+                          createVocabWithSingleString("a", localVocabContext)};
   IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
-                          createVocabWithSingleString("b")};
+                          createVocabWithSingleString("b", localVocabContext)};
 
   adder.setInput(input1, input2);
   adder.addRow(0, 0);
@@ -388,13 +396,15 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
 
   LocalVocab localVocab = std::move(adder.localVocab());
 
-  EXPECT_TRUE(vocabContainsString(localVocab, "a"));
-  EXPECT_TRUE(vocabContainsString(localVocab, "b"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "a", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocab, "b", localVocabContext));
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(2));
 }
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
   ad_utility::AddCombinedRowToIdTable adder{
@@ -402,16 +412,16 @@ TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
       std::make_shared<ad_utility::CancellationHandle<>>(), 1};
 
   IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
-                          createVocabWithSingleString("a")};
+                          createVocabWithSingleString("a", localVocabContext)};
   IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
-                          createVocabWithSingleString("b")};
+                          createVocabWithSingleString("b", localVocabContext)};
 
   adder.setInput(input1, input2);
   adder.addRow(0, 0);
   IdTableWithVocab input3{makeIdTableFromVector({{3, 1}}),
-                          createVocabWithSingleString("c")};
+                          createVocabWithSingleString("c", localVocabContext)};
   IdTableWithVocab input4{makeIdTableFromVector({{3, 2}}),
-                          createVocabWithSingleString("d")};
+                          createVocabWithSingleString("d", localVocabContext)};
   // NOTE: This seemingly redundant call to `setInput` is important, as it tests
   // a previous bug: Each call to `setInput` implicitly also calls `flush` and
   // also possibly clears the local vocab if it is not used anymore. In this
@@ -422,10 +432,10 @@ TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
   adder.addRow(0, 0);
   auto localVocab = adder.localVocab().clone();
 
-  EXPECT_TRUE(vocabContainsString(localVocab, "a"));
-  EXPECT_TRUE(vocabContainsString(localVocab, "b"));
-  EXPECT_TRUE(vocabContainsString(localVocab, "c"));
-  EXPECT_TRUE(vocabContainsString(localVocab, "d"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "a", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocab, "b", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocab, "c", localVocabContext));
+  EXPECT_TRUE(vocabContainsString(localVocab, "d", localVocabContext));
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(4));
 }
 

@@ -11,6 +11,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <filesystem>
 
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -115,8 +116,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  auto makeVocabEntry = [](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str)};
+  auto makeVocabEntry = [&oldIndex](std::string_view str) {
+    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -157,11 +158,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                   std::make_pair(toBits(h),
                                  Id::makeFromVocabIndex(VocabIndex::make(7))),
                   std::make_pair(toBits(j),
-                                 Id::makeFromVocabIndex(VocabIndex::make(14))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(13))),
                   std::make_pair(toBits(l),
-                                 Id::makeFromVocabIndex(VocabIndex::make(16))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(15))),
                   std::make_pair(toBits(m), Id::makeFromVocabIndex(
-                                                VocabIndex::make(17)))));
+                                                VocabIndex::make(16)))));
 
   Index::Vocab newVocab;
   newVocab.resetToType(type);
@@ -179,12 +180,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(9)], HAS_PATTERN_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(10)], HAS_PREDICATE_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(11)], QLEVER_INTERNAL_GRAPH_IRI);
-  EXPECT_EQ(newVocab[VocabIndex::make(12)], LANGUAGE_PREDICATE);
-  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<i>");
-  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<j>");
-  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
-  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
-  EXPECT_EQ(newVocab[VocabIndex::make(17)], "<m>");
+  EXPECT_EQ(newVocab[VocabIndex::make(12)], "<i>");
+  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<j>");
+  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<k>");
+  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<l>");
+  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
 }
 
 // _____________________________________________________________________________
@@ -274,21 +274,17 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                .toValueId(index)
                .value();
 
-  index.deltaTriplesManager().modify<void>([&cancellationHandle,
-                                            g](DeltaTriples& deltaTriples) {
-    LocalVocabEntry entry1{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<a2>")};
-    LocalVocabEntry entry2{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<d2>")};
-    auto a2 = Id::makeFromLocalVocabIndex(&entry1);
-    auto d2 = Id::makeFromLocalVocabIndex(&entry2);
-    deltaTriples.insertTriples(
-        cancellationHandle,
-        {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
-         IdTriple<0>{std::array{V(0), d2, B(1), g}}});
-  });
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
+        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        auto a2 = Id::makeFromLocalVocabIndex(&entry1);
+        auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
+             IdTriple<0>{std::array{V(0), d2, B(1), g}}});
+      });
 
   auto [state, vocabEntries, rawBlocks] =
       index.deltaTriplesManager()
@@ -404,7 +400,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
-  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = "/tmp/createPermutationWriterTask";
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
@@ -487,7 +483,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -525,8 +521,23 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       ad_utility::Exception);
 }
 
+namespace {
+// Get rid of previous files with the specified prefix.
+void cleanFilesWithPrefix(std::string_view prefix) {
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(".")) {
+    std::string name = entry.path().filename().string();
+    if (ql::starts_with(name, prefix)) {
+      ad_utility::deleteFile(name);
+    }
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
+  cleanFilesWithPrefix("my-name");
+  cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -575,6 +586,27 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
   EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+
+  // The index with the same name already exists, so we don't want to overwrite
+  // it.
+  auto request4 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request4).get(),
+      ::testing::HasSubstr("already files with the same base name"));
+
+  // The index has to reside within the same directory as the original index.
+  auto request5 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request5).get(),
+      ::testing::HasSubstr("not located in the same directory"));
+
+  auto request6 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request6).get(),
+      ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }

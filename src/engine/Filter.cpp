@@ -53,7 +53,7 @@ std::string Filter::getDescriptor() const {
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
-      _expression.getPrefilterExpressionForMetadata();
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
   auto optNewSubTree =
       _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
           std::move(prefilterPairs));

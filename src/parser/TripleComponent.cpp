@@ -155,5 +155,5 @@ Id TripleComponent::toValueId(const IndexImpl& index,
   };
   return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
-                      Id::makeFromVocabIndex(upper))));
+                      Id::makeFromVocabIndex(upper), index)));
 }
