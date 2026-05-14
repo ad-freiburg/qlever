@@ -100,16 +100,16 @@ CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
 // file). Typically, exceptions in C++ destructors are very unsafe, because they
 // immediately lead to program termination if the destructor was called while
 // another exception was already handled. The use case is as follows:
-// 1. Declare a class member of type `ThrowInDestructorIfSafe`. This has the
-// effect that automatically the destructor of your class will implicitly be
-// `noexcept(false)` which enables exceptions in destructors.
+// 1. Declare a class member of type `ThrowInDestructorIfSafe` and explicitly
+// mark the enclosing destructor `noexcept(false)` so that an exception can
+// actually propagate out of it.
 // 2. Pass the potentially throwing code in the destructor as a callable to the
-// `ThrowInDestructorIfSafe` object. If this callable. throws, and it is safe to
+// `ThrowInDestructorIfSafe` object. If this callable throws, and it is safe to
 // throw, then the exception is normally propagated. If it is not safe to throw,
 // then the exception is caught and logged, but otherwise ignored. Example:
 // class C {
-//   ThrowOnDestructorIfSafe throwIfSafe_;
-//   ~C() {
+//   ThrowInDestructorIfSafe throwIfSafe_;
+//   ~C() noexcept(false) {
 //     throwIfSafe_([]{throw std::runtime_error("haha");});
 //   }
 class ThrowInDestructorIfSafe {
@@ -157,15 +157,16 @@ class ThrowInDestructorIfSafe {
 // is with `boost::asio` (see example).
 //
 // The collector itself satisfies the `void(std::exception_ptr)` completion
-// handler signature, so you can use `std::ref(collector)` instead of
-// `net::detached`, and `wrap()` which can be used to wrap arbitrary callables.
+// handler signature, so it can be used as `std::ref(collector)` instead of
+// `net::detached`. For executors that do not pass a completion handler (e.g.
+// `net::post`), use `wrap()` to adapt an arbitrary callable.
 //
 // Example:
 //   ad_utility::ExceptionCollector collector;
 //   net::post(pool, collector.wrap([&] { mayThrow(); }));
 //   net::co_spawn(pool, createCoroutineThatMightThrow(), std::ref(collector));
 //   pool.join();
-//   collector.rethrow();
+//   collector.rethrowIfException();
 class ExceptionCollector {
   std::mutex mutex_;
   std::exception_ptr firstException_;

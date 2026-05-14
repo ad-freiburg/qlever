@@ -392,7 +392,9 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
   // `net::post` handler call `std::terminate` and exceptions from a detached
-  // `co_spawn` are silently swallowed.
+  // `co_spawn` are silently swallowed. NOTE: `exceptionCollector` must outlive
+  // `threadPool`, since the worker callables capture a pointer to it via
+  // `wrap()` / `std::ref`; the declaration order here guarantees that.
   ad_utility::ExceptionCollector exceptionCollector;
 
   if (index.usePatterns()) {
