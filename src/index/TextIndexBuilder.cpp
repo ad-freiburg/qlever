@@ -317,7 +317,16 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
       entityPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
     }
   }
-  // Write the last block
+  // Write the last block. We always emit one, even when no postings were
+  // accumulated (empty text index), because `TextMetaData` downstream assumes
+  // `_blocks` is non-empty (see `getBlockInfoByWordRange`, `getOffsetAfter`).
+  // In that empty case the word-range bounds are still at their sentinel
+  // values from `numeric_limits`, so normalize them to avoid an inverted
+  // (min > max) range in the emitted metadata.
+  if (classicPostings.empty()) {
+    currentMinWordIndex = 0;
+    currentMaxWordIndex = 0;
+  }
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
       out, classicPostings, currentOffset, scoreIsInt);
