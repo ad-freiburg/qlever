@@ -60,6 +60,7 @@ Server::Server(
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
+      maxMem_(maxMem),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -73,24 +74,10 @@ Server::Server(
       metricsReader_(std::move(metricsReader)) {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
-
-  // These metrics are required earlier or use values that are only
-  // available here.
-  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
-      "qlever", "0.0.1");
-  metrics_.memoryQueryTotal_ =
-      meter->CreateInt64Gauge("qlever.memory_query_limit",
-                              "Memory allocated for query processing", "By");
-  metrics_.memoryQueryTotal_->Record(maxMem.getBytes());
-  metrics_.memoryCacheLimit_ = meter->CreateInt64Gauge(
-      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) {
-        cache_.setMaxSize(newValue);
-        metrics_.memoryCacheLimit_->Record(newValue.getBytes());
-      });
+      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
   globalRuntimeParameters.wlock()->cacheMaxSizeSingleEntry_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
@@ -127,7 +114,15 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     }
   }
 
-  metrics_ = initializeMetrics();
+  metrics_ = ServerMetrics::create(index_, allocator_, cache_, maxMem_);
+  // Re-register the cache-size action to also record the metric going forward.
+  // This triggers immediately, recording the current cache limit as the initial
+  // value.
+  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSize(newValue);
+        metrics_->memoryCacheLimit_->Record(newValue.getBytes());
+      });
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -189,10 +184,10 @@ void Server::run(const std::string& indexBaseName, bool useText,
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
-      metrics_.httpErrors_->Add(1, {{"type", "http"}});
+      metrics_->httpErrors_->Add(1, {{"type", "http"}});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
-      metrics_.httpErrors_->Add(1, {{"type", "internal"}});
+      metrics_->httpErrors_->Add(1, {{"type", "internal"}});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -705,7 +700,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           msg, ad_utility::truncateOperationString(operationString)));
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      metrics_.startedSparqlOperations_->Add(1, {{"operation", "update"}});
+      metrics_->startedSparqlOperations_->Add(1, {{"operation", "update"}});
       co_return co_await processUpdate(
           std::move(operations), requestTimer, tracer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -714,7 +709,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       ParsedQuery query = std::move(operations[0]);
       AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                            query.hasConstructClause());
-      metrics_.startedSparqlOperations_->Add(1, {{"operation", "query"}});
+      metrics_->startedSparqlOperations_->Add(1, {{"operation", "query"}});
       co_return co_await processQuery(
           parameters, std::move(query), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
@@ -960,7 +955,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
-    metrics_.sparqlErrors_->Add(1, {{"type", "system_error"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "system_error"}});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -977,7 +972,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
-    metrics_.sparqlErrors_->Add(1, {{"type", "send_streamable_response"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "send_streamable_response"}});
   }
 }
 
@@ -1082,7 +1077,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
-      *metrics_.runningSparqlOperations_, "query"};
+      *metrics_->runningSparqlOperations_, "query"};
 
   auto mediaTypes = determineMediaTypes(params, request);
   AD_LOG_INFO << "Requested media types of the result are: "
@@ -1138,10 +1133,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
-  metrics_.sparqlOperationDuration_->Record(
+  metrics_->sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", "query"}});
-  metrics_.finishedSparqlOperations_->Add(1, {{"operation", "query"}});
+  metrics_->finishedSparqlOperations_->Add(1, {{"operation", "query"}});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1247,7 +1242,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
-      *metrics_.runningSparqlOperations_, "update"};
+      *metrics_->runningSparqlOperations_, "update"};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1324,10 +1319,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
-  metrics_.sparqlOperationDuration_->Record(
+  metrics_->sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
       {{"operation", "update"}});
-  metrics_.finishedSparqlOperations_->Add(1, {{"operation", "update"}});
+  metrics_->finishedSparqlOperations_->Add(1, {{"operation", "update"}});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1385,28 +1380,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors_->Add(1, {{"type", "protocol"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "protocol"}});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
-    metrics_.sparqlErrors_->Add(1, {{"type", "syntax"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "syntax"}});
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors_->Add(1, {{"type", "in_use"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "in_use"}});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    metrics_.sparqlErrors_->Add(1, {{"type", "timeout"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "timeout"}});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
     // TODO: this includes missing/wrong access token which should actually be a
     // 403
-    metrics_.sparqlErrors_->Add(1, {{"type", "internal"}});
+    metrics_->sparqlErrors_->Add(1, {{"type", "internal"}});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
@@ -1590,112 +1585,129 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
 }
 
 // _____________________________________________________________________________
-Server::ServerMetrics Server::initializeMetrics() {
+Server::ServerMetrics::ServerMetrics(Index& index,
+                                     ad_utility::AllocatorWithLimit<Id>& alloc,
+                                     QueryResultCache& cache,
+                                     ad_utility::MemorySize maxMem)
+    : index_(index), allocator_(alloc), cache_(cache) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
+  startTimeMetric_ = meter->CreateInt64Gauge(
+      "qlever.server.start_time",
+      "Unix timestamp when the QLever server was started", "s");
+  indexLoadMetric_ = meter->CreateInt64Gauge(
+      "qlever.index.load_time",
+      "Unix timestamp when the current index was loaded", "s");
+  startedSparqlOperations_ = meter->CreateUInt64Counter(
+      "qlever.sparql_operation.started",
+      "Number of SPARQL operations started since server start");
+  runningSparqlOperations_ = meter->CreateInt64UpDownCounter(
+      "qlever.sparql_operation.running",
+      "Number of SPARQL operations currently being processed");
+  finishedSparqlOperations_ = meter->CreateUInt64Counter(
+      "qlever.sparql_operation.finished",
+      "Number of SPARQL operations successfully finished since server start");
+  sparqlOperationDuration_ = meter->CreateDoubleHistogram(
+      "qlever.sparql_operation.duration",
+      "Execution time of successful SPARQL operations", "ms");
+  deltaTriplesMetric_ = meter->CreateInt64ObservableGauge(
+      "qlever.delta_triples",
+      "Number of triples that are updated relative to the index");
+  sparqlErrors_ = meter->CreateUInt64Counter(
+      "qlever.sparql_operation.errors",
+      "Errors during the execution of SPARQL operations");
+  httpErrors_ = meter->CreateUInt64Counter(
+      "qlever.http.errors",
+      "Errors during the execution of non SPARQL operations");
+  memoryQueryFree_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_query_available", "Available memory for query processing",
+      "By");
+  memoryQueryTotal_ =
+      meter->CreateInt64Gauge("qlever.memory_query_limit",
+                              "Memory allocated for query processing", "By");
+  memoryCacheUsed_ = meter->CreateInt64ObservableGauge(
+      "qlever.memory_cache_used", "Memory used for caching", "By");
+  memoryCacheLimit_ = meter->CreateInt64Gauge(
+      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
 
-  // Configure the metrics
-  ServerMetrics metrics{
-      meter->CreateInt64Gauge(
-          "qlever.server.start_time",
-          "Unix timestamp when the QLever server was started", "s"),
-      meter->CreateInt64Gauge(
-          "qlever.index.load_time",
-          "Unix timestamp when the current index was loaded", "s"),
-      meter->CreateUInt64Counter(
-          "qlever.sparql_operation.started",
-          "Number of SPARQL operations started since server start"),
-      meter->CreateInt64UpDownCounter(
-          "qlever.sparql_operation.running",
-          "Number of SPARQL operations currently being processed"),
-      meter->CreateUInt64Counter("qlever.sparql_operation.finished",
-                                 "Number of SPARQL operations successfully "
-                                 "finished since server start"),
-      meter->CreateDoubleHistogram(
-          "qlever.sparql_operation.duration",
-          "Execution time of successful SPARQL operations", "ms"),
-      meter->CreateInt64ObservableGauge(
-          "qlever.delta_triples",
-          "Number of triples that are updated relative to the index"),
-      meter->CreateUInt64Counter(
-          "qlever.sparql_operation.errors",
-          "Errors during the execution of SPARQL operations"),
-      meter->CreateUInt64Counter(
-          "qlever.http.errors",
-          "Errors during the execution of non SPARQL operations"),
-      meter->CreateInt64ObservableGauge("qlever.memory_query_available",
-                                        "Available memory for query processing",
-                                        "By"),
-      std::move(metrics_.memoryQueryTotal_),
-      meter->CreateInt64ObservableGauge("qlever.memory_cache_used",
-                                        "Memory used for caching", "By"),
-      std::move(metrics_.memoryCacheLimit_)
+  auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                 std::chrono::system_clock::now().time_since_epoch())
+                 .count();
+  startTimeMetric_->Record(now);
+  indexLoadMetric_->Record(now);
+  memoryQueryTotal_->Record(maxMem.getBytes());
 
-  };
-  // Record initial values
-  metrics.startTimeMetric_->Record(
-      std::chrono::duration_cast<std::chrono::seconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count());
-  metrics.indexLoadMetric_->Record(
-      std::chrono::duration_cast<std::chrono::seconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count());
-  // Record default value `0` once so that the metric/label combination is
-  // visible from the beginning.
-  ad_utility::metrics::initializeCounter(metrics.startedSparqlOperations_.get(),
+  // Record 0 once per label so every combination appears from the start.
+  ad_utility::metrics::initializeCounter(startedSparqlOperations_.get(),
                                          "operation", {"query", "update"});
-  ad_utility::metrics::initializeCounter(metrics.runningSparqlOperations_.get(),
+  ad_utility::metrics::initializeCounter(runningSparqlOperations_.get(),
+                                         "operation", {"query", "update"});
+  ad_utility::metrics::initializeCounter(finishedSparqlOperations_.get(),
                                          "operation", {"query", "update"});
   ad_utility::metrics::initializeCounter(
-      metrics.finishedSparqlOperations_.get(), "operation",
-      {"query", "update"});
-  ad_utility::metrics::initializeCounter(
-      metrics.sparqlErrors_.get(), "type",
+      sparqlErrors_.get(), "type",
       {"system_error", "internal", "syntax", "timeout",
        "send_streamable_response", "protocol", "in_use"});
-  ad_utility::metrics::initializeCounter(metrics.httpErrors_.get(), "type",
+  ad_utility::metrics::initializeCounter(httpErrors_.get(), "type",
                                          {"internal", "http"});
-  // Set up the callback for asynchronous metrics.
-  metrics.deltaTriplesMetric_->AddCallback(
-      [](opentelemetry::metrics::ObserverResult result, void* state) {
-        auto* self = static_cast<Server*>(state);
+}
 
-        auto observer =
-            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
-                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
-        observer->Observe(
-            self->index()
-                .deltaTriplesManager()
-                .getCurrentLocatedTriplesSharedState()
-                ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
-                .numTriples());
-      },
-      this);
-  metrics.memoryQueryFree_->AddCallback(
-      [](opentelemetry::metrics::ObserverResult result, void* state) {
-        auto* self = static_cast<Server*>(state);
+// _____________________________________________________________________________
+std::shared_ptr<Server::ServerMetrics> Server::ServerMetrics::create(
+    Index& index, ad_utility::AllocatorWithLimit<Id>& allocator,
+    QueryResultCache& cache, ad_utility::MemorySize maxMem) {
+  auto m = std::shared_ptr<ServerMetrics>(
+      new ServerMetrics(index, allocator, cache, maxMem));
+  m->registerCallbacks();
+  return m;
+}
 
-        auto observer =
-            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
-                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
-        observer->Observe(self->allocator_.amountMemoryLeft().getBytes());
-      },
-      this);
-  metrics.memoryCacheUsed_->AddCallback(
-      [](opentelemetry::metrics::ObserverResult result, void* state) {
-        auto* self = static_cast<Server*>(state);
-        auto& cache = self->cache_;
-        auto totalSize = cache.nonPinnedSize() + cache.pinnedSize();
+// _____________________________________________________________________________
+Server::ServerMetrics::~ServerMetrics() {
+  deltaTriplesMetric_->RemoveCallback(&observeDeltaTriples, this);
+  memoryQueryFree_->RemoveCallback(&observeMemoryQueryFree, this);
+  memoryCacheUsed_->RemoveCallback(&observeMemoryCacheUsed, this);
+}
 
-        auto observer =
-            opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
-                opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
-        observer->Observe(totalSize.getBytes());
-      },
-      this);
+// _____________________________________________________________________________
+void Server::ServerMetrics::registerCallbacks() {
+  deltaTriplesMetric_->AddCallback(&observeDeltaTriples, this);
+  memoryQueryFree_->AddCallback(&observeMemoryQueryFree, this);
+  memoryCacheUsed_->AddCallback(&observeMemoryCacheUsed, this);
+}
 
-  return metrics;
+// _____________________________________________________________________________
+void Server::ServerMetrics::observe(
+    opentelemetry::metrics::ObserverResult result, int64_t value) {
+  opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+      opentelemetry::metrics::ObserverResultT<int64_t>>>(result)
+      ->Observe(value);
+}
+
+// _____________________________________________________________________________
+void Server::ServerMetrics::observeDeltaTriples(
+    opentelemetry::metrics::ObserverResult result, void* state) {
+  auto& self = *static_cast<ServerMetrics*>(state);
+  observe(result,
+          self.index_.deltaTriplesManager()
+              .getCurrentLocatedTriplesSharedState()
+              ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
+              .numTriples());
+}
+
+// _____________________________________________________________________________
+void Server::ServerMetrics::observeMemoryQueryFree(
+    opentelemetry::metrics::ObserverResult result, void* state) {
+  auto& self = *static_cast<ServerMetrics*>(state);
+  observe(result, self.allocator_.amountMemoryLeft().getBytes());
+}
+
+// _____________________________________________________________________________
+void Server::ServerMetrics::observeMemoryCacheUsed(
+    opentelemetry::metrics::ObserverResult result, void* state) {
+  auto& self = *static_cast<ServerMetrics*>(state);
+  observe(result,
+          (self.cache_.nonPinnedSize() + self.cache_.pinnedSize()).getBytes());
 }
 
 // For helper function `Server::onlyForTestingProcess`
