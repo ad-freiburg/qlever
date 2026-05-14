@@ -201,7 +201,8 @@ int main(int argc, char** argv) {
       "search or materialized views) are never affected.");
   add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
-      "the main server port (requires a valid access token to scrape).");
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
   po::variables_map optionsMap;
 
   try {
