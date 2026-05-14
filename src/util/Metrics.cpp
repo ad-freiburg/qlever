@@ -15,9 +15,13 @@
 
 #include "opentelemetry/exporters/prometheus/collector.h"
 #include "opentelemetry/metrics/provider.h"
+#include "opentelemetry/sdk/metrics/aggregation/histogram_aggregation.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
+#include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
+#include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
+#include "opentelemetry/sdk/metrics/view/view_factory.h"
 #include "prometheus/text_serializer.h"
 
 namespace metrics_api = opentelemetry::metrics;
@@ -67,6 +71,21 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   auto pullReader = std::make_shared<PullMetricReader>();
 
   auto provider = metrics_sdk::MeterProviderFactory::Create();
+
+  // Custom buckets covering 1 ms – 5 min, suited to SPARQL query latencies.
+  auto histogramConfig =
+      std::make_shared<metrics_sdk::HistogramAggregationConfig>();
+  histogramConfig->boundaries_ = {1,     5,     10,     50,     100,    500,
+                                  1'000, 5'000, 30'000, 60'000, 300'000};
+  provider->AddView(
+      metrics_sdk::InstrumentSelectorFactory::Create(
+          metrics_sdk::InstrumentType::kHistogram,
+          "qlever.sparql_operation.duration", "ms"),
+      metrics_sdk::MeterSelectorFactory::Create("qlever", "", ""),
+      metrics_sdk::ViewFactory::Create("qlever.sparql_operation.duration", "",
+                                       metrics_sdk::AggregationType::kHistogram,
+                                       histogramConfig));
+
   provider->AddMetricReader(pullReader);
 
   metrics_api::Provider::SetMeterProvider(
