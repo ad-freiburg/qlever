@@ -254,8 +254,9 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
-    // Mimic the behavior of `QueryExecutionTree::getJoinColumns` and make nudge
-    // the query planner into returning a query that is sorted the correct way.
+    // Nudge the query planner into producing a tree that is already sorted
+    // the way `QueryExecutionTree::getJoinColumns` expects, so that
+    // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
     pq._isInternalSort = IsInternalSort::True;
     pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
                   ql::views::filter([&visibleVars = pq.getVisibleVariables()](
