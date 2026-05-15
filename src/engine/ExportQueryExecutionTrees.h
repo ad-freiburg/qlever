@@ -32,8 +32,6 @@ class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously

@@ -23,6 +23,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
 #include "util/ChunkedForLoop.h"
+#include "util/CompilerWarnings.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -718,6 +719,7 @@ void DeltaTriples::addFromSnapshotDiff(
 }
 
 // _____________________________________________________________________________
+DISABLE_ATTRIBUTE_WARNINGS
 AD_ALWAYS_INLINE void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
@@ -750,6 +752,7 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
     }
   }
 }
+GCC_REENABLE_WARNINGS
 #endif
 
 // _____________________________________________________________________________

@@ -8,5 +8,5 @@ add_library(http HttpServer.h HttpServer.cpp HttpClient.h HttpClient.cpp HttpUti
         websocket/WebSocketSession.cpp websocket/MessageSender.cpp websocket/QueryToSocketDistributor.cpp
         websocket/QueryHub.cpp websocket/UpdateFetcher.cpp)
 
-qlever_target_link_libraries(http parser util mediaTypes httpParser OpenSSL::SSL OpenSSL::Crypto)
+qlever_target_link_libraries(http parser util mediaTypes httpParser OpenSSL::SSL OpenSSL::Crypto Boost::iostreams)
 endif()

@@ -4,7 +4,7 @@ add_library(sparqlParser
         generated/SparqlAutomaticListener.cpp
         generated/SparqlAutomaticParser.cpp
         generated/SparqlAutomaticVisitor.cpp)
-qlever_target_link_libraries(sparqlParser antlr4_static)
+qlever_target_link_libraries(sparqlParser antlr4_umbrella)
 
 if (USE_PRECOMPILED_HEADERS)
   target_precompile_headers(sparqlParser PRIVATE "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h")

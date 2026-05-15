@@ -1,6 +1,6 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
-qlever_target_link_libraries(SortPerformanceEstimator parser)
+qlever_target_link_libraries(SortPerformanceEstimator index)
 add_library(engine
         QueryExecutionTree.cpp Operation.cpp Result.cpp
         IndexScan.cpp Join.cpp Sort.cpp
@@ -29,7 +29,7 @@ qlever_target_link_libraries(engine util index parser global sparqlExpressions S
 # in two operations, `Service` and `Load`, which we disable when
 # `REDUCED_FEATURE_SET_FOR_CPP17` is set.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
-    target_link_libraries(engine http)
+    target_link_libraries(engine PUBLIC http)
 endif()
 
 add_library(server Server.cpp)
