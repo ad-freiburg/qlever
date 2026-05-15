@@ -970,8 +970,11 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
   }
-  if (!std::holds_alternative<ValueId>(referenceValue)) {
+  auto emptyPrefilterForTypeError = []() {
     return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
+  };
+  if (!std::holds_alternative<ValueId>(referenceValue)) {
+    return emptyPrefilterForTypeError();
   }
   ValueId valueId = std::get<ValueId>(referenceValue);
   switch (valueId.getDatatype()) {
@@ -993,7 +996,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
                                              static_cast<int>(year));
     }
     default:
-      return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{});
+      return emptyPrefilterForTypeError();
   }
 }
 
