@@ -49,7 +49,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+    return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
+                      t2.isExternal_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
@@ -166,15 +167,16 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
-  for (auto& [word, idAndSplitVal] : els) {
-    auto& id = idAndSplitVal.id_;
+  for (auto& [word, idAndExternal] : els) {
+    auto id = idAndExternal.id();
     if (!first && lastWord != word) {
       nextWordId++;
       lastWord = word;
     }
     auto inserted = res.try_emplace(id, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    id = nextWordId;
+    idAndExternal = PartialVocabIndexWithExternalFlag{
+        nextWordId, idAndExternal.isExternal()};
     first = false;
   }
   return res;
@@ -237,14 +239,13 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& [word, idAndSplitVal] : els) {
+  for (const auto& [word, idAndExternal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    const auto& [id, splitVal] = idAndSplitVal;
     byteBuffer << word;
-    byteBuffer << splitVal.isExternalized_;
-    byteBuffer << id;
+    byteBuffer << idAndExternal.isExternal();
+    byteBuffer << idAndExternal.id();
 
     if (byteBuffer.data().size() >= flushThreshold) {
       flush();
@@ -280,7 +281,7 @@ inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
           using T = ItemVec::value_type;
           ql::ranges::transform(
               singleMap.map_, els.begin() + offsets[i],
-              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
+              [](auto& el) -> T { return {el.first, el.second}; });
         });
     ++i;
   }

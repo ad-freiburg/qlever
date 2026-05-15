@@ -619,9 +619,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
-                                                          std::string_view b) {
-      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](
+                        std::string_view a, bool aIsExternal,
+                        std::string_view b, bool bIsExternal) {
+      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -1355,12 +1356,11 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
-    if (idIfNotString.has_value()) {
-      resultTriple[index] = idIfNotString.value();
-    } else {
-      // `toRdfLiteral` handles literals as well as IRIs correctly.
-      resultTriple[index] = std::move(el);
-    }
+    resultTriple[index] =
+        idIfNotString.has_value()
+            ? TripleComponent{idIfNotString.value()}
+            // `toRdfLiteral` handles literals as well as IRIs correctly.
+            : std::move(el);
   };
   handleStringOrId(&TurtleTriple::subject_, 0);
   handleStringOrId(&TurtleTriple::predicate_, 1);
@@ -1372,13 +1372,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
-  for (auto& el : resultTriple) {
-    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
+  for (auto& component : resultTriple) {
+    if (component.tripleComponent_.isId()) {
       // If we already have an ID, we can just continue;
       continue;
     }
-    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    const auto& iriOrLiteral = component.iriOrLiteral_;
+    const auto& iriOrLiteral = component.tripleComponent_;
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
@@ -1548,14 +1547,15 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
       return vocabMapsToVector(*items);
     }();
-    const auto identicalPred = [&c = vocab->getCaseComparator()](
-                                   const auto& a, const auto& b) {
-      return c(a.second.splitVal_, b.second.splitVal_,
-               decltype(vocab_)::SortLevel::TOTAL);
-    };
     {
       ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(&vec, identicalPred, true);
+      sortVocabVector(
+          &vec,
+          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
+            return c.isLessInTotalWithExternalFlag(
+                a.first, a.second.isExternal(), b.first, b.second.isExternal());
+          },
+          true);
     }
     auto mapping = [&]() {
       ad_utility::TimeBlockAndLog l{"creating internal mapping"};
@@ -1568,7 +1568,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
       vec.erase(std::unique(vec.begin(), vec.end(),
                             [](const auto& a, const auto& b) {
-                              return a.second.id_ == b.second.id_;
+                              return a.second.id() == b.second.id();
                             }),
                 vec.end());
     }

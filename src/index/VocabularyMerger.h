@@ -61,10 +61,11 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-// Concept for a callable that compares two `string_view`s.
+// Concept for a callable that compares two `string_view`s with respective
+// `isExternal` flags.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, std::string_view>;
+    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
