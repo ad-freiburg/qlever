@@ -14,6 +14,7 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Metrics.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
@@ -413,6 +414,51 @@ MATCHER_P(StatusIs, status,
 }
 
 using namespace serverTestHelpers;
+
+// A minimal MetricsReader that returns a fixed Prometheus-format string.
+// Used for testing the /metrics endpoint routing without a real OTEL provider.
+class FakeMetricsReader : public ad_utility::metrics::MetricsReader {
+ public:
+  std::string getMetricsText() const override {
+    return "# HELP fake_counter A test counter.\nfake_counter 42\n";
+  }
+};
+
+// _____________________________________________________________________________
+TEST(ServerTest, metricsEndpoint) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto expectMetrics =
+      [&qec](std::optional<std::string> accessToken,
+             std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+             const auto& responseMatcher, const auto& bodyMatcher,
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(l);
+        SimulateHttpRequest sim{qec->getIndex().getOnDiskBase(),
+                                std::move(metricsReader)};
+        auto request = makeGetRequest("/metrics");
+        if (accessToken) {
+          request.set(http::field::authorization,
+                      "Bearer " + accessToken.value());
+        }
+        auto response = sim.processRaw(request);
+
+        EXPECT_THAT(response, responseMatcher);
+        EXPECT_THAT(
+            SimulateHttpRequest::bodyToString(std::move(response.body())),
+            bodyMatcher);
+      };
+  expectMetrics("accessToken", nullptr, StatusIs(http::status::not_found),
+                testing::StrEq("Metrics not enabled (use --enable-metrics)"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      expectMetrics(std::nullopt, nullptr, testing::_, testing::_),
+      testing::HasSubstr("metrics requires a valid access token"));
+  auto reader = std::make_shared<FakeMetricsReader>();
+  expectMetrics("accessToken", reader, StatusIs(http::status::ok),
+                testing::HasSubstr("fake_counter 42"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      expectMetrics(std::nullopt, reader, testing::_, testing::_),
+      testing::HasSubstr("metrics requires a valid access token"));
+}
 
 // _____________________________________________________________________________
 TEST(ServerTest, gspHead) {

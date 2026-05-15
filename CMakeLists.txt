@@ -414,9 +414,39 @@ FetchContent_Declare(
 )
 
 ################################
+# OpenTelemetry C++ SDK
+################################
+set(WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
+set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
+set(WITH_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(WITH_FUNC_TESTS OFF CACHE BOOL "" FORCE)
+set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
+set(WITH_STL ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_2 ON CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        opentelemetry-cpp
+        GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
+        GIT_TAG v1.26.0
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
+        SYSTEM
+)
+
+################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin opentelemetry-cpp)
+# spatialjoin's CMakeLists.txt uses list(REMOVE_ITEM) with a relative path to
+# exclude SpatialJoinMain.cpp from spatialjoin-dev, but GLOB_RECURSE produces
+# absolute paths, so the removal silently no-ops. Fix it here so tests that
+# link against spatialjoin-dev don't end up with a duplicate main().
+get_target_property(_sj_sources spatialjoin-dev SOURCES)
+list(FILTER _sj_sources EXCLUDE REGEX "SpatialJoinMain\\.cpp$")
+set_target_properties(spatialjoin-dev PROPERTIES SOURCES "${_sj_sources}")
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -431,6 +461,7 @@ include_directories(${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
+target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -528,13 +559,13 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain util)
+qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS

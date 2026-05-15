@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Metrics.h"  // for ad_utility::metrics::initialize
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
@@ -49,6 +50,7 @@ int main(int argc, char** argv) {
   bool noAccessCheck = false;
   bool text = false;
   unsigned short port;
+  bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
   bool onlyPsoAndPosPermutations;
@@ -197,6 +199,10 @@ int main(int argc, char** argv) {
       "prefix are rejected. To disable all federated queries, set this option "
       "to an invalid IRI prefix like `-`. Magic services (for example spatial "
       "search or materialized views) are never affected.");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus /metrics endpoint on "
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
   po::variables_map optionsMap;
 
   try {
@@ -222,8 +228,10 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
+    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), noAccessCheck, !noPatterns);
+                  std::move(accessToken), noAccessCheck, !noPatterns,
+                  std::move(metricsReader));
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {
