@@ -440,6 +440,25 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+TEST(IndexTest, emptyTextIndex) {
+  std::array<std::string, 2> inputs = {
+      "<a:> <a:> <a:> .",
+      "<a:> <a:> \"\" .",
+  };
+  for (auto input : inputs) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(input);
+    config.createTextIndex = true;
+    auto* qec = ad_utility::testing::getQec(std::move(config));
+    // Building an empty text index must succeed, and scanning it for any word
+    // must yield no postings.
+    IdTable result =
+        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    EXPECT_EQ(result.size(), 0);
+  }
+}
+
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
