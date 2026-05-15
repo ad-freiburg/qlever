@@ -189,6 +189,56 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 }
 
 // ______________________________________________________________________________________________
+TEST(StringSortComparatorTest, IsLessInTotalWithExternalFlag) {
+  TripleComponentComparator comp("en", "US", false);
+
+  // When the strings differ on the TOTAL level, the external flags must not
+  // influence the result.
+  for (bool aExt : {false, true}) {
+    for (bool bExt : {false, true}) {
+      EXPECT_TRUE(comp.isLessInTotalWithExternalFlag("\"alpha\"", aExt,
+                                                     "\"beta\"", bExt));
+      EXPECT_FALSE(comp.isLessInTotalWithExternalFlag("\"beta\"", aExt,
+                                                      "\"alpha\"", bExt));
+      // Language tags are a tiebreaker on the TOTAL level.
+      EXPECT_TRUE(comp.isLessInTotalWithExternalFlag("\"Hannibal\"@af", aExt,
+                                                     "\"Hannibal\"@en", bExt));
+      EXPECT_FALSE(comp.isLessInTotalWithExternalFlag("\"Hannibal\"@en", aExt,
+                                                      "\"Hannibal\"@af", bExt));
+    }
+  }
+
+  // When the strings are equal on the TOTAL level, the external flag breaks
+  // the tie: `external == true` comes before `external == false`.
+  EXPECT_TRUE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+  // Equal strings with equal flags are never less than each other
+  // (irreflexive).
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", true));
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", false));
+
+  // Use the function to sort a sequence of (string, isExternal) entries and
+  // verify that equal entries with `isExternal == true` come first.
+  using Entry = std::pair<std::string, bool>;
+  std::vector<Entry> entries{
+      {"\"beta\"", false}, {"\"alpha\"", false}, {"\"beta\"", true},
+      {"\"alpha\"", true}, {"\"beta\"", false},
+  };
+  ql::ranges::sort(entries, [&comp](const Entry& a, const Entry& b) {
+    return comp.isLessInTotalWithExternalFlag(a.first, a.second, b.first,
+                                              b.second);
+  });
+  EXPECT_THAT(entries, ::testing::ElementsAre(
+                           Entry{"\"alpha\"", true}, Entry{"\"alpha\"", false},
+                           Entry{"\"beta\"", true}, Entry{"\"beta\"", false},
+                           Entry{"\"beta\"", false}));
+}
+
+// ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, SimpleStringComparator) {
   SimpleStringComparator comp("en", "US", true);
 

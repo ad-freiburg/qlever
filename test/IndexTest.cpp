@@ -460,15 +460,14 @@ TEST(IndexTest, emptyTextIndex) {
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
-// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
-// bool `isExternal`.
-
-auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
-  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
-      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
-                                ::testing::Eq(content)),
-                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
-                                ::testing::Eq(isExternal))));
+// `PossiblyExternalizedTripleComponent` that matches `content` and the bool
+// `isExternal`.
+auto IsPossiblyExternalString = [](const TripleComponent& content,
+                                   bool isExternal) {
+  return ::testing::AllOf(AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   tripleComponent_, ::testing::Eq(content)),
+                          AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   isExternal_, ::testing::Eq(isExternal)));
 };
 
 TEST(IndexTest, processTriple) {
@@ -505,7 +504,8 @@ TEST(IndexTest, processTriple) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
+    EXPECT_EQ(Id::makeFromDouble(42.0),
+              result.triple_[2].tripleComponent_.getId());
   }
 }
 
