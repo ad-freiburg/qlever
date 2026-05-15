@@ -54,7 +54,7 @@ endif ()
 function(addLinkAndDiscoverTestImpl basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN} )
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
     else ()
         addTest(${basename})
         linkAndDiscoverTest(${basename} ${ARGN})
@@ -513,6 +513,10 @@ addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest index engine parser)
+addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
+addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
+
+addLinkAndDiscoverTest(FilesystemHelpersTest util)

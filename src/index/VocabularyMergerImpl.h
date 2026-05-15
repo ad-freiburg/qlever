@@ -49,7 +49,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+    return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
+                      t2.isExternal_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
@@ -162,28 +163,29 @@ CPP_template_def(typename C, typename L)(
 // ____________________________________________________________________________________________________________
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(2 * els.size());
+  res.reserve(els.size());
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
-  for (auto& [word, idAndSplitVal] : els) {
-    auto& id = idAndSplitVal.id_;
+  for (auto& [word, idAndExternal] : els) {
+    auto id = idAndExternal.id();
     if (!first && lastWord != word) {
       nextWordId++;
       lastWord = word;
     }
-    AD_CONTRACT_CHECK(!res.count(id));
-    res[id] = nextWordId;
-    id = nextWordId;
+    auto inserted = res.try_emplace(id, nextWordId).second;
+    AD_CORRECTNESS_CHECK(inserted);
+    idAndExternal = PartialVocabIndexWithExternalFlag{
+        nextWordId, idAndExternal.isExternal()};
     first = false;
   }
   return res;
 }
 
 // ________________________________________________________________________________________________________
-template <typename T>
 inline void writeMappedIdsToExtVec(
-    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
@@ -211,51 +213,77 @@ inline void writeMappedIdsToExtVec(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
-  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  byteBuffer.reserve(1'000'000'000);
+
+  static constexpr size_t flushThreshold = 16ULL * 1024 * 1024;  // 16 MB
+
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
-  uint64_t size = els.size();  // really make sure that this has 64bits;
-  serializer << size;
-  for (const auto& [word, idAndSplitVal] : els) {
-    // When merging the vocabulary, we need the actual word, the (internal) id
-    // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
-    const auto& [id, splitVal] = idAndSplitVal;
-    byteBuffer << word;
-    byteBuffer << splitVal.isExternalized_;
-    byteBuffer << id;
-  }
-  {
+  // TODO<RobinTF> Ideally the `FileWriteSerializer` should come with its own
+  // buffer to avoid having to implement this logic here. Despite `fwrite`
+  // (which is called by `FileWriteSerializer::serializeBytes`) buffering data
+  // on its own it is faster to buffer with our own buffer, presumably because
+  // `fwrite` is thread-safe and therefore has to acquire a mutex for every
+  // call.
+  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
+  byteBuffer.reserve(flushThreshold + 1024);  // + slack for the last item
+
+  uint64_t size = els.size();
+  byteBuffer << size;
+
+  auto flush = [&]() {
     ad_utility::TimeBlockAndLog t{"performing the actual write"};
     serializer.serializeBytes(byteBuffer.data().data(),
                               byteBuffer.data().size());
-    serializer.close();
+    byteBuffer.clear();
+  };
+
+  // This is essentially a `VectorIncrementalSerializer` with a custom
+  // serialization function, which the infrastructure currently does not
+  // support.
+  for (const auto& [word, idAndExternal] : els) {
+    // When merging the vocabulary, we need the actual word, the (internal) id
+    // we have assigned to this word, and the information, whether this word
+    // belongs to the internal or external vocabulary.
+    byteBuffer << word;
+    byteBuffer << idAndExternal.isExternal();
+    byteBuffer << idAndExternal.id();
+
+    if (byteBuffer.data().size() >= flushThreshold) {
+      flush();
+    }
   }
+
+  // Flush remaining data.
+  flush();
+  serializer.close();
+
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(ItemMapArray& map) {
+inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
   ItemVec els;
-  std::vector<size_t> offsets;
-  size_t totalEls =
-      std::accumulate(map.begin(), map.end(), 0,
-                      [&offsets](const auto& x, const auto& y) mutable {
-                        offsets.push_back(x);
-                        return x + y.map_.size();
-                      });
+  std::array<size_t, std::tuple_size_v<ItemMapArray>> offsets;
+  // This is essentially `std::transform_exclusive_scan`, but GCC 8 doesn't
+  // support this yet.
+  size_t totalEls = std::accumulate(
+      map.begin(), map.end(), 0,
+      [&offsets, idx = 0](const auto& x, const auto& y) mutable {
+        offsets.at(idx) = x;
+        idx++;
+        return x + y.map_.size();
+      });
   els.resize(totalEls);
-  std::vector<std::future<void>> futures;
+  std::array<std::future<void>, std::tuple_size_v<ItemMapArray>> futures;
   size_t i = 0;
-  for (auto& singleMap : map) {
-    futures.push_back(
+  for (const auto& singleMap : map) {
+    futures.at(i) =
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
           ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
                                 [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
+                                  return {el.first, el.second};
                                 });
-        }));
+        });
     ++i;
   }
   for (auto& fut : futures) {
@@ -286,12 +314,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
-  ad_utility::HashMap<Id, Id> res;
   auto vec = getIdMapFromFile(filename);
-  for (const auto& [partialId, globalId] : vec) {
-    res[partialId] = globalId;
-  }
-  return res;
+  return ad_utility::HashMap<Id, Id>{vec.begin(), vec.end()};
 }
 }  // namespace ad_utility::vocabulary_merger
 
