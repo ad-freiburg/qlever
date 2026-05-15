@@ -72,7 +72,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.parsedTriples_.idTriples_,
       indexBuilderData.parsedTriples_.numTriplesPerPartialVocab_,
-      NUM_TRIPLES_PER_PARTIAL_VOCAB, isQleverInternalTriple);
+      isQleverInternalTriple);
 
   return {std::move(indexBuilderData.vocabularyMetaData_),
           std::move(firstSorter)};
@@ -647,6 +647,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
+  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
+               << std::endl;
+
   return {std::move(mergeRes), std::move(parsedTriples)};
 }
 
@@ -654,12 +657,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-    size_t linesPerPartial, Func isQLeverInternalTriple)
+    Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
-  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
-               << std::endl;
 
   // Iterate over all partial vocabularies.
   auto resultPtr =
