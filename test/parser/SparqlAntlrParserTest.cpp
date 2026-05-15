@@ -699,6 +699,15 @@ TEST(SparqlParser, propertyPaths) {
   expectPathOrVar("a:a{,3}",
                   WithLength(Iri("<http://www.example.com/a>"), 0, 3),
                   {{"a", "<http://www.example.com/>"}});
+  // Zero bounds round-trip correctly through `WithLength`.
+  expectPathOrVar("a:a{0}", WithLength(Iri("<http://www.example.com/a>"), 0, 0),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{0,0}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 0),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{0,5}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 5),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected = Alternative(

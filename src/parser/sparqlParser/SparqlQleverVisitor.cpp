@@ -2174,37 +2174,35 @@ std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
   }
 }
 
-// ____________________________________________________________________________________
+// ____________________________________________________________________________
 std::pair<size_t, size_t> Visitor::visit(
     Parser::PathSyntaxExtensionContext* ctx) {
-  /*
-  SPARQL 1.1 Syntax extension from
-  https://www.w3.org/TR/sparql11-property-paths/
-
-  elt{n,m}	A path between n and m occurrences of elt.
-  elt{n}	Exactly n occurrences of elt. A fixed length path.
-  elt{n,}	n or more occurrences of elt.
-  elt{,n}	Between 0 and n occurrences of elt.
-  */
+  // Syntax extension from
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax:
+  //
+  //   path{n}    Exactly n repetitions of `path`.
+  //   path{n,m}  Between n and m repetitions of `path`.
+  //   path{n,}   At least n repetitions of `path`.
+  //   path{,n}   At most n repetitions of `path`.
 
   if (ctx->minMax()) {
-    int64_t stepsMin = visit(ctx->minMax()->integer(0));
-    int64_t stepsMax = visit(ctx->minMax()->integer(1));
+    auto stepsMin = visit(ctx->minMax()->integer(0));
+    auto stepsMax = visit(ctx->minMax()->integer(1));
     return {stepsMin, stepsMax};
   }
 
   if (ctx->exactLength()) {
-    int64_t stepsExact = visit(ctx->exactLength()->integer());
+    auto stepsExact = visit(ctx->exactLength()->integer());
     return {stepsExact, stepsExact};
   }
 
   if (ctx->onlyMin()) {
-    int64_t stepsMin = visit(ctx->onlyMin()->integer());
+    auto stepsMin = visit(ctx->onlyMin()->integer());
     return {stepsMin, std::numeric_limits<size_t>::max()};
   }
 
   AD_CORRECTNESS_CHECK(ctx->onlyMax());
-  int64_t stepsMax = visit(ctx->onlyMax()->integer());
+  auto stepsMax = visit(ctx->onlyMax()->integer());
   return {0, stepsMax};
 }
 

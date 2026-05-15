@@ -372,6 +372,10 @@ pathMod
     : '+' | '*' | '?' | pathSyntaxExtension
     ;
 
+// The `{n}`, `{n,m}`, `{n,}`, `{,n}` shortcuts described in the
+// W3C Property Paths note
+// (https://www.w3.org/TR/sparql11-property-paths/#path-syntax). These are not
+// part of the formal SPARQL 1.1 grammar but are widely supported.
 pathSyntaxExtension
     : '{' ( exactLength | onlyMin | minMax | onlyMax ) '}'
     ;

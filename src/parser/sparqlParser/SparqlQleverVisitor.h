@@ -422,6 +422,9 @@ class SparqlQleverVisitor {
   // lower and upper bounds of the path length.
   static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
+  // Same, but for the brace-quantifier shortcuts `{n}`, `{n,m}`, `{n,}`,
+  // `{,n}` from the W3C Property Paths note (see
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax).
   static std::pair<size_t, size_t> visit(
       Parser::PathSyntaxExtensionContext* ctx);
 
