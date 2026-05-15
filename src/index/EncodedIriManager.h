@@ -33,12 +33,12 @@ inline std::optional<std::string_view> matchDigitsPrefix(
     std::string_view repr) {
 #ifdef QLEVER_CHEAPER_COMPILATION
   static const re2::RE2 re{"([0-9]+)>"};
-  re2::StringPiece digits;
+  std::string_view digits;
   if (!RE2::FullMatch(re2::StringPiece(repr.data(), repr.size()), re,
                       &digits)) {
     return std::nullopt;
   }
-  return std::string_view{digits.data(), digits.size()};
+  return digits;
 #else
   static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
   auto match = ctre::match<regex>(repr);

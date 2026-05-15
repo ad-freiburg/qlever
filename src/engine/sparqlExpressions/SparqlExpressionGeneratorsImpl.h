@@ -19,11 +19,12 @@
 
 namespace sparqlExpression::detail {
 
-// Return the `Id` if the passed `value` contains one, alternatively add the
-// literal or iri in the `value` to the `localVocab` and return the newly
-// created `Id` instead.
-inline Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
-                               LocalVocab* localVocab) {
+#ifndef QLEVER_CHEAPER_COMPILATION
+inline
+#endif
+    Id
+    idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
+                         LocalVocab* localVocab) {
   return std::visit(
       ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
                                        makeStringResultGetter(localVocab)},

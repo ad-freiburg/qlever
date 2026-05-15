@@ -104,12 +104,13 @@ struct SortByColumns {
 };
 
 #ifdef QLEVER_CHEAPER_COMPILATION
-// Extern-template declarations for the CompressedExternalIdTableSorter
+// Extern-template declarations for the `CompressedExternalIdTableSorter`
 // specialisations used during index building. Without these declarations every
-// TU that includes IndexImpl.h or PatternCreator.h would instantiate all member
-// functions of each specialisation (~100 s cumulative per ftime-trace). The
-// corresponding explicit instantiation definitions live in
-// CompressedExternalIdTableSorterInstantiations.cpp.
+// `TU` that includes `IndexImpl.h` or `PatternCreator.h` would instantiate all
+// member functions of each specialisation (~100 s cumulative per ftime-trace).
+// The corresponding explicit instantiation definitions live in
+// `CompressedExternalIdTableSorterInstantiations.cpp`
+// .
 namespace ad_utility {
 
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,

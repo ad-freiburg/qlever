@@ -21,9 +21,7 @@
 
 #ifndef QLEVER_CHEAPER_COMPILATION
 #include <ctre-unicode.hpp>
-#endif
-
-#ifdef QLEVER_CHEAPER_COMPILATION
+#else
 #include <re2/re2.h>
 #endif
 
@@ -112,13 +110,8 @@ class ParseableDuration {
     // while POSIX [[:space:]] matches [\t\n\f\r\v ] — matching CTRE's \s.
     static const re2::RE2 re{
         R"([[:space:]]*(-?\d+)[[:space:]]*(ns|us|ms|s|min|h)[[:space:]]*)"};
-    re2::StringPiece amountPiece, unitPiece;
     matched = RE2::FullMatch(re2::StringPiece(arg.data(), arg.size()), re,
-                             &amountPiece, &unitPiece);
-    if (matched) {
-      amount = std::string_view{amountPiece.data(), amountPiece.size()};
-      unit = std::string_view{unitPiece.data(), unitPiece.size()};
-    }
+                             &amount, &unit);
 #else
     auto m = ctre::match<detail::durationPatternRegex>(arg);
     matched = static_cast<bool>(m);
