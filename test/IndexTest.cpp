@@ -440,31 +440,48 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
-// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
-// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
-// bool `isExternal`.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+TEST(IndexTest, emptyTextIndex) {
+  std::array<std::string, 2> inputs = {
+      "<a:> <a:> <a:> .",
+      "<a:> <a:> \"\" .",
+  };
+  for (auto input : inputs) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(input);
+    config.createTextIndex = true;
+    auto* qec = ad_utility::testing::getQec(std::move(config));
+    // Building an empty text index must succeed, and scanning it for any word
+    // must yield no postings.
+    IdTable result =
+        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    EXPECT_EQ(result.size(), 0);
+  }
+}
 
-auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
-  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
-      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
-                                ::testing::Eq(content)),
-                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
-                                ::testing::Eq(isExternal))));
+// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
+// `PossiblyExternalizedTripleComponent` that matches `content` and the bool
+// `isExternal`.
+auto IsPossiblyExternalString = [](const TripleComponent& content,
+                                   bool isExternal) {
+  return ::testing::AllOf(AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   tripleComponent_, ::testing::Eq(content)),
+                          AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   isExternal_, ::testing::Eq(isExternal)));
 };
 
-TEST(IndexTest, TripleToInternalRepresentation) {
+TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_TRUE(result.langtag_.empty());
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), true));
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
@@ -473,23 +490,22 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(result.langtag_, "fr");
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(Id::makeFromDouble(42.0),
+              result.triple_[2].tripleComponent_.getId());
   }
 }
 
@@ -499,7 +515,9 @@ TEST(IndexTest, NumDistinctEntities) {
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const auto& qec = *getQec(turtleInput);
+  TestIndexConfig config{turtleInput};
+  config.addHasWordTriples = true;
+  const auto& qec = *getQec(config);
   const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
@@ -513,10 +531,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
-  // predicate for each combination of predicate+language that is actually used
-  // (e.g. `@en@label`).
-  EXPECT_EQ(numPredicates.internal, 3);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // and one added predicate for each combination of predicate+language that is
+  // actually used (e.g. `@en@label`).
+  EXPECT_EQ(numPredicates.internal, 4);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -527,9 +545,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
-  // Two added triples for each triple that has an object with a language tag
-  // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal, 5);
+  // Two added triples for each triple that has an object with a language tag,
+  // one triple per subject for the pattern, and one ql:has-word triple per
+  // word in the literals (5 literals with 1 word each = 5 word triples).
+  EXPECT_EQ(numTriples.internal, 10);
 
   auto multiplicities =
       index.getMultiplicities(index.getPermutation(Permutation::SPO));
@@ -597,6 +616,18 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
+  // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
+  // that the assertion is only active when `LOGLEVEL >= INFO`. At
+  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
+  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
+  // `testing::_` (match anything) in that case.
+  auto onlyAtInfoOrAbove = [](auto matcher) {
+    if constexpr (LOGLEVEL < INFO) {
+      return testing::_;
+    } else {
+      return matcher;
+    }
+  };
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
@@ -607,7 +638,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -615,9 +647,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -630,9 +662,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -642,9 +674,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -657,7 +689,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -707,12 +740,12 @@ TEST(IndexImpl, recomputeStatistics) {
 
   // Now, modify the index by adding triples.
   Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
-  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId](
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
+                                            &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>")};
-    LocalVocabEntry literal{
-        ad_utility::triple_component::Literal::fromStringRepresentation(
-            "\"test\"@en")};
+    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
+    LocalVocabEntry literal =
+        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
@@ -910,4 +943,18 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, graphNameManagerIntegration) {
+  TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "2> . <a> <b> <c> <http://example.org/1> .")};
+  c.indexType = qlever::Filetype::NQuad;
+  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto qec = getQec(c);
+  const auto graphManager = qec->getIndex().graphNameManager();
+  EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
+  EXPECT_THAT(graphManager.prefixWithoutBraces_,
+              testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }

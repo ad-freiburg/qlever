@@ -203,8 +203,15 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
       }
     };
 
-    res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, 1_GB);
+    TripleComponentComparator comparator;
+    res = mergeVocabulary(
+        _basePath, 2,
+        [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
+                      bool bIsExternal) {
+          return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
+                                                          bIsExternal);
+        },
+        internalVocabularyAction, 1_GB);
   }
 
   EXPECT_THAT(mergeResult,
@@ -229,25 +236,23 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
-  using S = LocalVocabIndexAndSplitVal;
-  TripleComponentComparator::SplitValNonOwningWithSortKey
-      d;  // dummy value that is unused in this case.
-  input.emplace_back("alpha", S{5, d});
-  input.emplace_back("beta", S{4, d});
-  input.emplace_back("beta", S{42, d});
-  input.emplace_back("d", S{8, d});
-  input.emplace_back("e", S{9, d});
-  input.emplace_back("e", S{38, d});
-  input.emplace_back("xenon", S{0, d});
+  using S = PartialVocabIndexWithExternalFlag;
+  input.emplace_back("alpha", S{5, false});
+  input.emplace_back("beta", S{4, false});
+  input.emplace_back("beta", S{42, false});
+  input.emplace_back("d", S{8, false});
+  input.emplace_back("e", S{9, false});
+  input.emplace_back("e", S{38, false});
+  input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id_);
-  ASSERT_EQ(1u, input[1].second.id_);
-  ASSERT_EQ(1u, input[2].second.id_);
-  ASSERT_EQ(2u, input[3].second.id_);
-  ASSERT_EQ(3u, input[4].second.id_);
-  ASSERT_EQ(3u, input[5].second.id_);
-  ASSERT_EQ(4u, input[6].second.id_);
+  ASSERT_EQ(0u, input[0].second.id());
+  ASSERT_EQ(1u, input[1].second.id());
+  ASSERT_EQ(1u, input[2].second.id());
+  ASSERT_EQ(2u, input[3].second.id());
+  ASSERT_EQ(3u, input[4].second.id());
+  ASSERT_EQ(3u, input[5].second.id());
+  ASSERT_EQ(4u, input[6].second.id());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);

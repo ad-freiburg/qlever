@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -67,6 +68,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -839,10 +841,13 @@ auto QueryPlanner::seedWithScansAndText(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
-          "necessary also rebuild the index.");
+          "necessary also rebuild the index");
     }
 
-    // Backward compatibility with spatial search predicates
+    // Backward compatibility with spatial search predicates.
+    // GCC's `-Wdangling-reference` cannot trace through `std::visit` to see
+    // that the returned reference points into the variant, not the visitor.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
@@ -853,6 +858,7 @@ auto QueryPlanner::seedWithScansAndText(
               return var.name();
             }},
         node.triple_.p_);
+    GCC_REENABLE_WARNINGS
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         ql::ends_with(input, '>')) {
@@ -3134,6 +3140,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3257,10 +3265,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& index = planner_._qec->getIndex();
-  const auto& vocab = index.getVocab();
-  auto config =
-      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
+  auto config = pathQuery.toPathSearchConfiguration(planner_._qec->getIndex());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
@@ -3352,6 +3357,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  auto externalValues =
+      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+  auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _____________________________________________________________________________
