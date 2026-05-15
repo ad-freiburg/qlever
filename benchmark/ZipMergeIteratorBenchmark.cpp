@@ -95,8 +95,8 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
       {
         std::vector<std::string> rowNames = {"result"};
         std::vector<std::string> columnNames = {
-            "Vector iteration", "BlockSorted iteration", "Set iteration",
-            "Set copy",         "SortedVector copy",     "BlockSorted copy"};
+            "Set iteration", "Vector iteration",  "BlockSorted iteration",
+            "Set copy",      "SortedVector copy", "BlockSorted copy"};
 
         ResultTable& fixedTable = results.addTable(
             "N=" + nStr + " iteration and copy", rowNames, columnNames);
@@ -104,7 +104,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
         auto allSorted = generateSorted(N, 42);
 
         // Vector iteration (baseline).
-        fixedTable.addMeasurement(0, 0, [&]() {
+        fixedTable.addMeasurement(0, 1, [&]() {
           volatile size_t count = 0;
           for (const auto& item : allSorted) {
             if (item.insertOrDelete_) {
@@ -118,7 +118,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
           BlockSortedLocatedTriplesVector bvec =
               BlockSortedLocatedTriplesVector::fromSorted(
                   std::vector(allSorted));
-          fixedTable.addMeasurement(0, 1, [&]() {
+          fixedTable.addMeasurement(0, 2, [&]() {
             volatile size_t count = 0;
             for (const auto& item : bvec) {
               if (item.insertOrDelete_) {
@@ -132,7 +132,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
         {
           std::set<LocatedTriple, LocatedTripleCompare> s(allSorted.begin(),
                                                           allSorted.end());
-          fixedTable.addMeasurement(0, 2, [&]() {
+          fixedTable.addMeasurement(0, 0, [&]() {
             volatile size_t count = 0;
             for (const auto& item : s) {
               if (item.insertOrDelete_) {

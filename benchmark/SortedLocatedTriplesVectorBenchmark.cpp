@@ -115,12 +115,12 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
 
       // Column names
       std::vector<std::string> columnNames = {"N items",
-                                              "Vector: Insert only",
-                                              "Vector: Integration",
                                               "Set: Insert",
-                                              "Vector: Copy",
                                               "Set: Copy",
                                               "Set: Copy (slow)",
+                                              "Vector: Insert only",
+                                              "Vector: Integration",
+                                              "Vector: Copy",
                                               "BlockSorted: Insert only",
                                               "BlockSorted: Integration",
                                               "BlockSorted: Copy"};
@@ -140,42 +140,17 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
         std::vector<LocatedTriple> preExisting = generatePreExisting(N);
         std::vector<LocatedTriple> newItems = generateNewItems(M, 1000 + N);
 
-        // Column 1: Vector Raw Insertion (insert M items without integration)
-        // Setup: Create vector and insert N pre-existing items (not measured)
-        SortedLocatedTriplesVector vec;
-        for (const auto& item : preExisting) {
-          vec.insert(item);
-        }
-        // Measure: Insert M new items
-        table.addMeasurement(nIdx, 1, [&]() {
-          for (const auto& item : newItems) {
-            vec.insert(item);
-          }
-        });
-
-        // Column 2: Vector Integration (measure only ensureIntegration)
-        table.addMeasurement(nIdx, 2, [&]() { vec.consolidate(); });
-
-        // Column 3: Set Insertion (insert M items one-by-one)
+        // Column 1: Set Insertion (insert M items one-by-one)
         std::set<LocatedTriple, LocatedTripleCompare> s(preExisting.begin(),
                                                         preExisting.end());
-        table.addMeasurement(nIdx, 3, [&]() {
+        table.addMeasurement(nIdx, 1, [&]() {
           for (const auto& item : newItems) {
             s.insert(item);
           }
         });
 
-        // Column 4: Vector Copy (copy after integration)
-        table.addMeasurement(nIdx, 4, [&]() {
-          SortedLocatedTriplesVector copy = vec;
-
-          // Use result to prevent optimization
-          volatile size_t dummy = copy.size();
-          (void)dummy;
-        });
-
-        // Column 5: Set Copy
-        table.addMeasurement(nIdx, 5, [&]() {
+        // Column 2: Set Copy
+        table.addMeasurement(nIdx, 2, [&]() {
           // Measure only the copy
           std::set<LocatedTriple, LocatedTripleCompare> copy = s;
 
@@ -184,11 +159,37 @@ class SortedLocatedTriplesVectorBenchmark : public BenchmarkInterface {
           (void)dummy;
         });
 
-        // Column 6: Set Copy (purposefully slow)
-        table.addMeasurement(nIdx, 6, [&]() {
+        // Column 3: Set Copy (purposefully slow)
+        table.addMeasurement(nIdx, 3, [&]() {
           // Measure only the copy
           std::set<LocatedTriple, LocatedTripleCompare> copy(s.begin(),
                                                              s.end());
+
+          // Use result to prevent optimization
+          volatile size_t dummy = copy.size();
+          (void)dummy;
+        });
+
+        // Column 4: Vector Raw Insertion (insert M items without integration)
+        // Setup: Create vector and insert N pre-existing items (not measured)
+        SortedLocatedTriplesVector vec;
+        for (const auto& item : preExisting) {
+          vec.insert(item);
+        }
+        vec.consolidate(0);
+        // Measure: Insert M new items
+        table.addMeasurement(nIdx, 4, [&]() {
+          for (const auto& item : newItems) {
+            vec.insert(item);
+          }
+        });
+
+        // Column 5: Vector Integration (measure only ensureIntegration)
+        table.addMeasurement(nIdx, 5, [&]() { vec.consolidate(); });
+
+        // Column 6: Vector Copy (copy after integration)
+        table.addMeasurement(nIdx, 6, [&]() {
+          SortedLocatedTriplesVector copy = vec;
 
           // Use result to prevent optimization
           volatile size_t dummy = copy.size();

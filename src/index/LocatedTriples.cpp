@@ -68,7 +68,7 @@ void SortedLocatedTriplesVector::sortAndMergeParts() {
   // Merge the two sorted parts which contain up to one `LocatedTriple` per
   // triple.
   storage merged;
-  merged.reserve(triples_.size());
+  merged.reserve(triples_.capacity());
 
   LocatedTripleCompare lt;
 
