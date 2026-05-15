@@ -126,7 +126,6 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   std::vector<WordIndex> blockBoundaries_;
-  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
