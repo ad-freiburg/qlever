@@ -523,10 +523,10 @@ class BlockSortedLocatedTriplesVectorImpl {
 };
 
 using BlockSortedLocatedTriplesVector =
-    BlockSortedLocatedTriplesVectorImpl<16384>;
+    BlockSortedLocatedTriplesVectorImpl<200>;
 static_assert(std::ranges::range<BlockSortedLocatedTriplesVector>);
 
-using LocatedTriples = BlockSortedLocatedTriplesVector;
+using LocatedTriples = SortedLocatedTriplesVector;
 
 // This operator is only for debugging and testing. It returns a
 // human-readable representation.
