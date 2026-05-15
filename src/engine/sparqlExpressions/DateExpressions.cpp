@@ -114,7 +114,9 @@ struct ExtractEpoch {
     }
     return Id::makeFromInt(epoch.value());
 #else
-    throw std::runtime_error("This function is not supported for CPP17.");
+    throw std::runtime_error(
+        "This QLever server does not support ql:toEpoch because it was "
+        "compiled with the restricted feature set on C++ 17");
 #endif
   }
 };
