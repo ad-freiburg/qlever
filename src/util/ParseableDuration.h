@@ -108,7 +108,10 @@ class ParseableDuration {
 #ifdef QLEVER_CHEAPER_COMPILATION
     // Use RE2 (runtime regex) to avoid instantiating the expensive CTRE
     // compile-time automaton in every TU that includes this header.
-    static const re2::RE2 re{R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)"};
+    // Use [[:space:]] rather than \s: RE2's \s is [\t\n\f\r ] and excludes \v,
+    // while POSIX [[:space:]] matches [\t\n\f\r\v ] — matching CTRE's \s.
+    static const re2::RE2 re{
+        R"([[:space:]]*(-?\d+)[[:space:]]*(ns|us|ms|s|min|h)[[:space:]]*)"};
     re2::StringPiece amountPiece, unitPiece;
     matched = RE2::FullMatch(re2::StringPiece(arg.data(), arg.size()), re,
                              &amountPiece, &unitPiece);
