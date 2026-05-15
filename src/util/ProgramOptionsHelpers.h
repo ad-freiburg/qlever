@@ -11,7 +11,6 @@
 #include "global/RuntimeParameters.h"
 #include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "util/CompilerWarnings.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -96,28 +95,20 @@ class ParameterToProgramOptionFactory {
     AD_CONTRACT_CHECK(_parameters != nullptr);
   }
 
-  /**
-   * Return a `boost::program_option::value` that is connected to the parameter
-   * with the given `name`.
-   * @tparam name The name of a parameter that is contained in the `Parameters`
-   * @return A `boost::program_options::value` with the parameter's current
-   * value as the default value. When that value is parsed, the parameter is set
-   * to the parsed value.
-   */
+  // Return a `boost::program_options::value` that is connected to the
+  // parameter identified by `ParameterPtr` (a pointer-to-member into
+  // `Parameters`). The current value of the parameter is used as the default,
+  // and parsing the option from the command line writes back into the
+  // parameter via the attached notifier.
   template <auto ParameterPtr>
   auto getProgramOption() {
-    // Get the current value of the parameter, it will become the default
-    // value of the command-line option. GCC's `-Wdangling-reference` fires
-    // here because it cannot prove that the reference returned by `rlock()`
-    // does not point into the temporary lock guard rather than into the
-    // persistent underlying `RuntimeParameters` object.
-    DISABLE_DANGLING_REFERENCE_WARNINGS
-    const auto& param =
-        std::invoke(ParameterPtr, *globalRuntimeParameters.rlock());
-    GCC_REENABLE_WARNINGS
-    auto defaultValue = param.get();
+    // Read the current value of the parameter; it will become the default
+    // value of the command-line option. The read lock is bound to a named
+    // local so it is held across both reads below.
+    auto lock = globalRuntimeParameters.rlock();
+    auto defaultValue = std::invoke(ParameterPtr, *lock).get();
     // This is needed for types that boost can't convert to string.
-    auto defaultValueAsString = param.toString();
+    auto defaultValueAsString = std::invoke(ParameterPtr, *lock).toString();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
