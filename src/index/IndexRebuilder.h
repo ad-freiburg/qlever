@@ -25,9 +25,18 @@ namespace qlever {
 namespace indexRebuilder {
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
+// `insertionPositions`. This is the most performance critical code of the
 // rebuild.
+// The overload with the extra `hint` argument checks the position denoted by
+// this `hint` first to see if it's the one we're searching for. If it is, the
+// hint is unchanged for the next call. If it's not, the next position is
+// checked and the hint is updated to that position if it's the correct one. If
+// neither of them is correct, we fall back the to normal computation using
+// `ql::ranges::upper_bound`. This can significantly speed up remapping when
+// there are long sequences of ids that are mostly monotonically increasing.
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions,
+                size_t& hint);
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
 // id space left by random allocation of blank node ids. Return an empty

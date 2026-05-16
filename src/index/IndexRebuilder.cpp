@@ -133,17 +133,65 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
+namespace {
+// Compute by what offset `value` needs to be increase to fit in the new index.
+AD_ALWAYS_INLINE size_t computeIndexOffset(
+    VocabIndex value, const InsertionPositions& insertionPositions) {
+  return ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, value, std::less{}));
+}
+
+// Apply `offset` to `value` and return the new `VocabIndex` resulting from
+// this.
+AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+}
+}  // namespace
+
+// _____________________________________________________________________________
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
+  auto value = original.getVocabIndex();
+  return applyOffset(value, computeIndexOffset(value, insertionPositions));
+}
+
+// _____________________________________________________________________________
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions,
+                                 size_t& hint) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  AD_EXPENSIVE_CHECK(hint <= insertionPositions.size(),
+                     "Hint must be a valid index into the insertion positions "
+                     "or equal to its size.");
+  auto value = original.getVocabIndex();
+  auto isUpperBound = [value, &insertionPositions](size_t candidate) {
+    return candidate == insertionPositions.size() ||
+           insertionPositions[candidate] > value;
+  };
+
+  // Check if the cached hint is still the upper_bound for `value`.
+  if (isUpperBound(hint)) [[likely]] {
+    if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+      return applyOffset(value, hint);
+    }
+  } else {
+    // Try the next index if we're no longer the upper bound.
+    size_t next = hint + 1;
+    if (isUpperBound(next)) [[likely]] {
+      hint = next;
+      return applyOffset(value, hint);
+    }
+  }
+
+  // Fallback and write the hint for the next iteration.
+  hint = computeIndexOffset(value, insertionPositions);
+  return applyOffset(value, hint);
 }
 
 // _____________________________________________________________________________
@@ -202,7 +250,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
-                  mappedId = Id::makeUndefined()](Id& id) mutable {
+                  mappedId = Id::makeUndefined(),
+                  vocabHint = size_t{0}](Id& id) mutable {
     if (lastId.getBits() == id.getBits()) {
       id = mappedId;
       return;
@@ -211,7 +260,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions);
+      id = remapVocabId(id, insertionPositions, vocabHint);
     } else if (datatype == LocalVocabIndex) {
       id = localVocabMapping.at(id.getBits());
     } else if (datatype == BlankNodeIndex) {
