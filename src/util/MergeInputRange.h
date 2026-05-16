@@ -31,8 +31,8 @@ CPP_template(typename It, typename Compare = std::less<>,
              class Projection = ql::identity)(
     requires true) class ZipMergeIteratorImpl {
  public:
-  using iterator_category = std::input_iterator_tag;
-  using iterator_concept = std::input_iterator_tag;
+  using iterator_category = std::forward_iterator_tag;
+  using iterator_concept = std::forward_iterator_tag;
   using value_type = std::iterator_traits<It>::value_type;
   using difference_type = std::ptrdiff_t;
   using pointer = std::iterator_traits<It>::pointer;
