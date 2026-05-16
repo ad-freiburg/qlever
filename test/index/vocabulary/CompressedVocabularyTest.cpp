@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
@@ -98,18 +99,25 @@ struct CompressedVocabularyF : public testing::Test {
   static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
-  static constexpr auto createCompressedVocabulary(
-      const std::string& filename) {
-    return [filename](const std::vector<std::string>& words) {
+  static auto createCompressedVocabulary(const std::string& filename) {
+    const auto* testInfo =
+        ::testing::UnitTest::GetInstance()->current_test_info();
+    AD_CORRECTNESS_CHECK(testInfo != nullptr);
+    std::string suffix =
+        absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
+    ql::ranges::replace(suffix, '/', '_');
+    std::string uniqueFilename = absl::StrCat(filename, "_", suffix);
+    return [uniqueFilename = std::move(uniqueFilename)](
+               const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
-      auto writerPtr = vocab.makeDiskWriterPtr(filename);
+      auto writerPtr = vocab.makeDiskWriterPtr(uniqueFilename);
       auto& writer = *writerPtr;
       for (const auto& word : words) {
         writer(word, false);
       }
       writer.finish();
-      vocab.open(filename);
+      vocab.open(uniqueFilename);
       return vocab;
     };
   }
@@ -147,7 +155,14 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
-  const std::string filename = "compressedVocabSerializerTest";
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  std::string suffix =
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
+  ql::ranges::replace(suffix, '/', '_');
+  const std::string filename =
+      absl::StrCat("compressedVocabSerializerTest_", suffix);
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {

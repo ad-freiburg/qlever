@@ -669,7 +669,7 @@ TEST(CompressedRelationWriter, AdditionalColumns) {
   }
   // The additional columns don't yet work properly with located triples /
   // SPARQL UPDATE, so we have to disable the
-  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.0);
+  testWithDifferentBlockSizes(inputs, "additionalColumns", 0.0);
 }
 
 TEST(CompressedRelationWriter, MultiplicityCornerCases) {

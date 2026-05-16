@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
@@ -15,7 +16,12 @@ namespace {
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  auto filename = "vocabInMemoryCreation.tmp";
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  auto filename =
+      absl::StrCat("vocabInMemoryCreation_", testInfo->test_suite_name(), "_",
+                   testInfo->name(), ".tmp");
   {
     Vocab v;
     auto writerPtr = v.makeDiskWriterPtr(filename);
