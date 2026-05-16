@@ -183,10 +183,16 @@ LocatedTriple& SortedLocatedTriplesVector::back() {
 const LocatedTriple& SortedLocatedTriplesVector::back() const {
   AD_CONTRACT_CHECK(!triples_.empty());
   AD_CONTRACT_CHECK(isClean());
-  if (triples_.at(0).triple_ < triples_.at(numItemsLargePart_).triple_) {
-    return triples_.at(numItemsLargePart_ - 1);
-  } else {
+  if (numItemsLargePart_ == triples_.size()) {
+    // The small part is empty
     return triples_.back();
+  }
+  auto& lastLargePart = triples_.at(numItemsLargePart_ - 1);
+  auto& lastSmallPart = triples_.back();
+  if (lastLargePart.triple_ > lastSmallPart.triple_) {
+    return lastLargePart;
+  } else {
+    return lastSmallPart;
   }
 }
 
