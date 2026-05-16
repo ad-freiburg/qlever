@@ -419,10 +419,9 @@ TEST(RdfParserTest, base) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("@base <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.base());
-    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
+                  .toStringRepresentation(),
               "<http://www.example.org/path/>");
-    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
-              "<http://www.example.org/>");
     parser.setInputStream("@base \"no iriref\" .");
     ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
   };
@@ -434,10 +433,9 @@ TEST(RdfParserTest, sparqlBase) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("BASE <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.sparqlBase());
-    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
+                  .toStringRepresentation(),
               "<http://www.example.org/path/>");
-    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
-              "<http://www.example.org/>");
     parser.setInputStream("BASE \"no iriref\" .");
     ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
   };

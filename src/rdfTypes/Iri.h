@@ -21,6 +21,7 @@
 #include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
+#include "util/ParsedUri.h"
 
 namespace ad_utility::triple_component {
 
@@ -111,14 +112,10 @@ class Iri : public BasicIri<true> {
   // without a scheme, prepend the base prefix for relative IRIs (like
   // `<UPI001AF4585D>`) or for absolute IRIs (like `</prosite/PS51927>`).
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const Iri& basePrefixForRelativeIris,
-                                    const Iri& basePrefixForAbsoluteIris);
+                                    const ParsedUri& baseUri);
 
-  // Get the base IRI from this `Iri` object. The returned `Iri`
-  // always has a `/` at the end. If `domainOnly` is true, remove the path
-  // part, for example, for `<http://purl.uniprot.org/uniprot/>` the method
-  // returns `<http://purl.uniprot.org/>`.
-  Iri getBaseIri(bool domainOnly) const;
+  // Create an `Iri` object given from the given `ParsedUri` object.
+  static Iri fromUri(const ParsedUri& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).
