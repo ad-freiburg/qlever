@@ -511,6 +511,31 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitPathMod(
       SparqlAutomaticParser::PathModContext* /*ctx*/) override {}
 
+  virtual void enterPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* /*ctx*/) override {}
+  virtual void exitPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* /*ctx*/) override {}
+
+  virtual void enterExactLength(
+      SparqlAutomaticParser::ExactLengthContext* /*ctx*/) override {}
+  virtual void exitExactLength(
+      SparqlAutomaticParser::ExactLengthContext* /*ctx*/) override {}
+
+  virtual void enterOnlyMin(
+      SparqlAutomaticParser::OnlyMinContext* /*ctx*/) override {}
+  virtual void exitOnlyMin(
+      SparqlAutomaticParser::OnlyMinContext* /*ctx*/) override {}
+
+  virtual void enterMinMax(
+      SparqlAutomaticParser::MinMaxContext* /*ctx*/) override {}
+  virtual void exitMinMax(
+      SparqlAutomaticParser::MinMaxContext* /*ctx*/) override {}
+
+  virtual void enterOnlyMax(
+      SparqlAutomaticParser::OnlyMaxContext* /*ctx*/) override {}
+  virtual void exitOnlyMax(
+      SparqlAutomaticParser::OnlyMaxContext* /*ctx*/) override {}
+
   virtual void enterPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* /*ctx*/) override {}
   virtual void exitPathPrimary(
