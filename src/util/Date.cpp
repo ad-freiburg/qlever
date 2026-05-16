@@ -114,8 +114,11 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
+    // If getHour returns -1 the date does not specify time, therefore just
+    // assume 0 hours.
+    auto hour = std::max(getHour(), 0);
     Date::Nanoseconds result =
-        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
+        sys_days(date) + hours{hour - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<nanoseconds>(
             second);  // Here all times are converted to a UTC time.
@@ -123,6 +126,20 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
   } else {
     // Invalid `Date` does not have Unix Epoch time.
     return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<int64_t> Date::toEpochInt() const {
+  std::optional<Date::Nanoseconds> result = toEpoch();
+  if (!result.has_value()) {
+    return std::nullopt;  // Invalid date.
+  } else {
+    // First convert the timepoint to its duration representation and then cast
+    // to total seconds.
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               result.value().time_since_epoch())
+        .count();
   }
 }
 
@@ -154,6 +171,7 @@ Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
 }
 
 #endif
+
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.

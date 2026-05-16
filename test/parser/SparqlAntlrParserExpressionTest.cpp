@@ -324,6 +324,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(ql, "toEpoch>(?x)"),
+                     matchUnary(&makeToEpochExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
                      matchUnary(&makeEnvelopeLowerLeftExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),
