@@ -26,8 +26,7 @@ namespace ad_benchmark {
 static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
   return [waitDuration]() {
     auto end = std::chrono::steady_clock::now() + waitDuration;
-    while (std::chrono::steady_clock::now() < end)
-      ;
+    while (std::chrono::steady_clock::now() < end);
   };
 }
 

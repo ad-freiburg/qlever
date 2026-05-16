@@ -279,10 +279,9 @@ inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
     futures.at(i) =
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, el.second};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, el.second}; });
         });
     ++i;
   }
