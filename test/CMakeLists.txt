@@ -175,6 +175,8 @@ addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
+addLinkAndDiscoverTest(SortedVectorTest index)
+
 addLinkAndDiscoverTestSerial(IdTripleTest index)
 
 addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
@@ -289,6 +291,8 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
+
+addLinkAndDiscoverTestNoLibs(MergeInputRangeTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
