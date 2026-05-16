@@ -21,8 +21,14 @@
 
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/Exception.h"
 #include "util/Random.h"
-#include "util/json.h"
+// Use the raw nlohmann header rather than `util/json.h` to avoid pulling in
+// `util/File.h` (which uses AD_LOG macros) during the processing of Log.h.
+#ifndef JSON_USE_IMPLICIT_CONVERSIONS
+#define JSON_USE_IMPLICIT_CONVERSIONS 0
+#endif
+#include <nlohmann/json.hpp>
 
 namespace ad_utility {
 
@@ -113,6 +119,19 @@ CPP_template(typename Derived,
     return std::get<0>(
         Derived::descriptions_.at(static_cast<size_t>(it - descs.begin())));
   }
+
+  // Functors wrapping fromString() and toString() for use with
+  // ad_utility::Parameter and similar template-functor APIs.
+  struct FromString {
+    Derived operator()(const std::string& s) const {
+      return Derived::fromString(s);
+    }
+  };
+  struct ToString {
+    std::string operator()(const Derived& d) const {
+      return std::string{d.toString()};
+    }
+  };
 
   // Return all the possible enum values as a comma-separated single string.
   static std::string getListOfSupportedValues() {

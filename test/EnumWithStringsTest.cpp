@@ -93,3 +93,13 @@ TEST(EnumWithStrings, BoostProgramOptions) {
 }
 
 #endif  // __wasm__
+
+// _____________________________________________________________________________
+TEST(EnumWithStrings, FromStringAndToStringFunctors) {
+  using V = ad_utility::VocabularyType;
+  EXPECT_EQ(V::OnDiskCompressed, V::FromString{}("on-disk-compressed"));
+  EXPECT_EQ("on-disk-compressed", V::ToString{}(V::OnDiskCompressed));
+  EXPECT_EQ(V::InMemoryUncompressed, V::FromString{}("in-memory-uncompressed"));
+  EXPECT_EQ("in-memory-uncompressed", V::ToString{}(V::InMemoryUncompressed));
+  EXPECT_THROW(V::FromString{}("not-a-valid-type"), std::runtime_error);
+}
