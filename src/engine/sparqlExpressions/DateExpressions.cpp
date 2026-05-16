@@ -105,9 +105,7 @@ struct ExtractEpoch {
       return Id::makeUndefined();
     }
     Date date = d.value().getDate();
-    if (!date.hasTime()) {
-      return Id::makeUndefined();
-    }
+
     std::optional<int64_t> epoch = date.toEpochInt();
     if (!epoch.has_value()) {
       return Id::makeUndefined();
