@@ -138,3 +138,32 @@ TEST(VocabularyInMemoryBinSearch, ErrorOnNonAscendingIds) {
 TEST(VocabularyInMemoryBinSearch, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
+
+TEST(VocabularyInMemoryBinSearch, LookupBatch) {
+  // Create vocabulary with non-contiguous IDs.
+  std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  std::vector<uint64_t> ids{0, 5, 10, 15};
+  VocabularyCreator creator{"LookupBatch"};
+  auto vocab = creator.createVocabularyImpl(words, ids);
+
+  // Batch lookup for existing indices (out of order).
+  std::array<size_t, 3> indices{10, 0, 15};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  ASSERT_TRUE((*result)[0].has_value());
+  EXPECT_EQ((*result)[0].value(), "gamma");
+  ASSERT_TRUE((*result)[1].has_value());
+  EXPECT_EQ((*result)[1].value(), "alpha");
+  ASSERT_TRUE((*result)[2].has_value());
+  EXPECT_EQ((*result)[2].value(), "delta");
+
+  // Lookup for a non-existing index returns nullopt.
+  std::array<size_t, 1> missing{7};
+  auto missingResult = vocab.lookupBatch(missing);
+  ASSERT_EQ(missingResult->size(), 1);
+  EXPECT_FALSE((*missingResult)[0].has_value());
+
+  // Empty batch.
+  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
+}

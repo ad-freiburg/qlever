@@ -80,6 +80,19 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     checkGeoVocabContents(geoVocab);
 
+    // Test lookupBatch.
+    {
+      std::array<size_t, 2> indices{1, 0};
+      auto result = geoVocab.lookupBatch(indices);
+      ASSERT_EQ(result->size(), 2);
+      EXPECT_EQ((*result)[0], testLiterals[1]);
+      EXPECT_EQ((*result)[1], testLiterals[0]);
+
+      // Empty batch.
+      auto emptyResult = geoVocab.lookupBatch(ql::span<const size_t>{});
+      EXPECT_EQ(emptyResult->size(), 0);
+    }
+
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
     ASSERT_EQ(geoVocab.getUnderlyingVocabulary().size(), testLiterals.size());
