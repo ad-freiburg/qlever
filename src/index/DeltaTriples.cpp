@@ -647,6 +647,7 @@ void DeltaTriples::readFromDisk() {
       triples.emplace_back(
           std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
     }
+    ql::ranges::sort(triples);
     return triples;
   };
   auto cancellationHandle =

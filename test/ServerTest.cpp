@@ -7,6 +7,7 @@
 #include <boost/beast/http.hpp>
 
 #include "ServerTestHelpers.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -390,18 +391,34 @@ TEST(ServerTest, checkAccessToken) {
 }
 
 // _____________________________________________________________________________
-MATCHER_P(ContentTypeIs, contentType,
-          absl::StrCat("Content-Type is ", negation ? "not " : "",
-                       contentType)) {
-  auto it = arg.find(http::field::content_type);
+MATCHER_P2(HeaderFieldIs, field, matcher,
+           absl::StrCat(std::string{boost::beast::http::to_string(field)}, " ",
+                        testing::DescribeMatcher<std::string>(matcher,
+                                                              negation))) {
+  auto it = arg.find(field);
   if (it == arg.end()) {
-    *result_listener << "which has no Content-Type header";
+    *result_listener << "which has no " << field << " header";
     return false;
   }
-  auto actualContentType = it->value();
-  *result_listener << "which has Content-Type " << actualContentType;
-  return actualContentType == contentType;
+  auto fieldValue = it->value();
+  *result_listener << "which has " << field << " with " << fieldValue;
+  return testing::ExplainMatchResult(matcher, fieldValue, result_listener);
 }
+
+// _____________________________________________________________________________
+auto ContentTypeIs = [](const std::string& contentType) {
+  return HeaderFieldIs(http::field::content_type, testing::StrEq(contentType));
+};
+
+// _____________________________________________________________________________
+auto LocationIs = [](const std::string& location) {
+  return HeaderFieldIs(http::field::location, testing::StrEq(location));
+};
+
+// _____________________________________________________________________________
+auto HasHeader = [](http::field field) {
+  return HeaderFieldIs(field, testing::Not(testing::IsEmpty()));
+};
 
 // _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
@@ -508,4 +525,100 @@ TEST(ServerTest, gspDelete) {
   };
   testDelete("default", StatusIs(http::status::ok));
   testDelete("graph=foo", StatusIs(http::status::not_found));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPost = [](const SimulateHttpRequest& simulateHttpRequest,
+                     auto request, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  auto testPostCreateNewGraph =
+      [&testPost](const SimulateHttpRequest& simulateHttpRequest,
+                  const std::string& body, const auto& bodyMatcher,
+                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        auto request =
+            makeRequest(http::verb::post,
+                        "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+                        {{http::field::authorization, "Bearer accessToken"},
+                         {http::field::host, "example.org"},
+                         {http::field::content_type, "text/turtle"}},
+                        body);
+        testPost(simulateHttpRequest, request, bodyMatcher, l);
+      };
+  auto setupTest = [&testPostCreateNewGraph](std::string indexInput,
+                                             bool persistUpdates) {
+    std::string indexBasename = "ServerTest_gspPostCreateNewGraph";
+    TestIndexConfig c{std::move(indexInput)};
+    c.indexType = qlever::Filetype::NQuad;
+    auto index = makeTestIndex(indexBasename, std::move(c));
+    SimulateHttpRequest::ServerSettings settings;
+    settings.persistUpdates = persistUpdates;
+    SimulateHttpRequest simulateHttpRequest{indexBasename, settings};
+    return [simulateHttpRequest = std::move(simulateHttpRequest),
+            &testPostCreateNewGraph](const std::string& body,
+                                     const std::string& expectedCreatedGraph) {
+      testPostCreateNewGraph(simulateHttpRequest, body,
+                             testing::AllOf(LocationIs(expectedCreatedGraph),
+                                            StatusIs(http::status::created)));
+    };
+  };
+
+  // NOTE: `SimulateHttpRequest` starts a new `Server` for every call. This
+  // means that effectively there is a restart between every call and the index
+  // and updates are loaded from disk for each call.
+  {
+    // With an empty index the allocated graphs start at 1 and are persisted
+    // across restarts of the server.
+    auto test = setupTest("", true);
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/2");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/3");
+  }
+  {
+    // When updates are not persisted, the newly created graphs always start at
+    // the value determined during the index build. Because the index is empty
+    // this starts at 1 here.
+    auto test = setupTest("", false);
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/1");
+  }
+  {
+    // The index already contains an allocated graph so the newly generated
+    // graphs start after that.
+    auto test = setupTest(
+        "<a> <b> <c> "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/graph/6> .",
+        true);
+    test("<a> <b> <c>",
+         "http://qlever.cs.uni-freiburg.de/builtin-functions/graph/7");
+  }
+  auto IsPostNoCreatedGraph = [](http::status status) {
+    return testing::AllOf(StatusIs(status),
+                          testing::Not(HasHeader(http::field::location)));
+  };
+  // Here we only care that logic for creating a new graph doesn't fire. The
+  // updated triples are not the primary concern here.
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?default",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?graph=foo",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
 }

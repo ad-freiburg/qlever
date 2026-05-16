@@ -176,7 +176,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
         ql::starts_with(name, indexBasename + ".index") ||
         ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
+        ql::starts_with(name, indexBasename + ".update-triples") ||
+        ql::starts_with(name, indexBasename + ".allocated-graphs-state")) {
       ad_utility::deleteFile(entry.path());
     }
   }
