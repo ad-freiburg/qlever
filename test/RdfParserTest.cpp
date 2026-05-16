@@ -5,19 +5,24 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/cleanup/cleanup.h>
+#include <gmock/gmock.h>
+
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "parser/ParallelBuffer.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
+#include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
@@ -891,7 +896,9 @@ std::vector<TurtleTriple> parseFromFile(
                     encodedIriManager(),
                     bufferSize};
     } else {
-      return Parser{filename, encodedIriManager(), bufferSize};
+      return Parser{
+          std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
+          encodedIriManager()};
     }
   }();
 
@@ -1236,7 +1243,9 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
                         encodedIriManager(),
                         40_B};
         } else {
-          return Parser{filename, encodedIriManager(), 40_B, 10ms};
+          return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
+                        encodedIriManager(),
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
         }
       }();
       timer.cont();
@@ -1658,4 +1667,137 @@ TEST(RdfParserTest, parseTriplesObject) {
   expectParse("_:bar", AD_PROPERTY(TripleComponent, isString, IsTrue()));
   // Not a single object
   EXPECT_ANY_THROW(Parser::parseTripleObject("[ a <bar> ]"));
+}
+
+// _____________________________________________________________________________
+// Exercise the error path in `RdfStreamParser<T>::getLineImpl` that triggers
+// when the internal `byteVec_` grows past `RDF_PARSER_MAX_TOTAL_BUFFER_SIZE`
+// while the last `statement()` attempt threw a `ParseException`. The pending
+// exception is expected to be rethrown and the error log has to mention the
+// offending input.
+TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
+  using Parser = RdfStreamParser<TurtleParser<Tokenizer>>;
+  auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
+  auto oldLimit = limit;
+  limit = ad_utility::MemorySize::bytes(128);
+  absl::Cleanup cleanup{[&limit, oldLimit] {
+    limit = oldLimit;
+    ad_utility::setGlobalLoggingStream(&std::cout);
+  }};
+  std::stringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+
+  // `@prefix` without a terminating dot raises a `ParseException` on every
+  // attempt, so a pending exception is always present when the buffer limit
+  // is reached.
+  std::string filename{"rdfParserTooLargeBufferPendingException.dat"};
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    for (int i = 0; i < 20; ++i) {
+      of << "@prefix : <http://x/>\n";
+    }
+  }
+  absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
+  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
+                encodedIriManager()};
+
+  TurtleTriple triple;
+  EXPECT_THROW(parser.getLine(triple), TurtleParser<Tokenizer>::ParseException);
+
+  const std::string log = logStream.str();
+  EXPECT_THAT(log, ::testing::HasSubstr("Could not parse"));
+  EXPECT_THAT(log, ::testing::HasSubstr("of Turtle input"));
+  EXPECT_THAT(log,
+              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
+  EXPECT_THAT(log, ::testing::HasSubstr("@prefix : <http://x/>"));
+}
+
+// _____________________________________________________________________________
+// Same buffer-size limit as the test above, but for the branch in which the
+// last `statement()` attempt returned `false` without throwing (a triple with
+// no terminating dot satisfies this). The parser must then synthesize its own
+// `ParseException` via `raise(...)`.
+TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
+  using Parser = RdfStreamParser<TurtleParser<Tokenizer>>;
+  auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
+  auto oldLimit = limit;
+  limit = ad_utility::MemorySize::bytes(128);
+  absl::Cleanup cleanup{[&limit, oldLimit] {
+    limit = oldLimit;
+    ad_utility::setGlobalLoggingStream(&std::cout);
+  }};
+  std::stringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+
+  // `<a> <b> <c>\n` parses successfully up to the (missing) dot, so
+  // `statement()` returns false without raising. The parser is forced to
+  // synthesize its own exception.
+  std::string filename{"rdfParserTooLargeBufferNoPendingException.dat"};
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    for (int i = 0; i < 20; ++i) {
+      of << "<a> <b> <c>\n";
+    }
+  }
+  absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
+  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
+                encodedIriManager()};
+
+  TurtleTriple triple;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parser.getLine(triple),
+      ::testing::HasSubstr(
+          "Too many bytes parsed without finishing a turtle statement"));
+
+  const std::string log = logStream.str();
+  EXPECT_THAT(log, ::testing::HasSubstr("Could not parse"));
+  EXPECT_THAT(log, ::testing::HasSubstr("of Turtle input"));
+  EXPECT_THAT(log,
+              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
+  EXPECT_THAT(log, ::testing::HasSubstr("<a> <b> <c>"));
+}
+
+// _____________________________________________________________________________
+// Exercise the `AD_LOG_INFO` path that runs once the underlying buffer is
+// exhausted but `tok_` still has unparsed bytes (and the last `statement()`
+// attempt did not throw). The parser must surface the previously emitted
+// triples and then mark itself exhausted while logging the remainder.
+TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
+  using Parser = RdfStreamParser<TurtleParser<Tokenizer>>;
+  std::string filename{"rdfParserGetLineLogsRemainingUnparsedBytes.dat"};
+  std::string trailingGarbage =
+      "@@@invalid trailing bytes that cannot be parsed@@@";
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    of << "<a> <b> <c> .\n" << trailingGarbage;
+  }
+  std::stringstream logStream;
+  absl::Cleanup cleanup{[&] {
+    ad_utility::setGlobalLoggingStream(&std::cout);
+    ad_utility::deleteFile(filename);
+  }};
+  ad_utility::setGlobalLoggingStream(&logStream);
+
+  Parser parser{
+      std::make_unique<ParallelFileBuffer>((2_kB).getBytes(), filename),
+      encodedIriManager()};
+  TurtleTriple triple;
+  ASSERT_TRUE(parser.getLine(triple));
+  EXPECT_EQ(triple.subject_, iri("<a>"));
+  EXPECT_EQ(triple.predicate_, iri("<b>"));
+  EXPECT_EQ(triple.object_, iri("<c>"));
+  // The parser logs the unparsed trailing bytes, marks itself exhausted, and
+  // returns `false` from subsequent `getLine` calls instead of throwing.
+  EXPECT_FALSE(parser.getLine(triple));
+
+  std::string log = logStream.str();
+  EXPECT_THAT(log, ::testing::HasSubstr(
+                       "Parsing of line has Failed, but parseInput is not "
+                       "yet exhausted"));
+  EXPECT_THAT(log,
+              ::testing::HasSubstr("Remaining bytes: " +
+                                   std::to_string(trailingGarbage.size())));
+  EXPECT_THAT(log,
+              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
+  EXPECT_THAT(log, ::testing::HasSubstr(trailingGarbage));
 }

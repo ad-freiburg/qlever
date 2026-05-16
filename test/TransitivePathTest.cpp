@@ -847,6 +847,45 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 }
 
 // _____________________________________________________________________________
+// Exactly `n` occurrences (`{n}` with `n > 1`); on a chain graph the result
+// must contain only the pairs at distance `n`.
+TEST_P(TransitivePathTest, exactLengthGreaterThanOne) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  auto expected = makeIdTableFromVector({{0, 2}, {1, 3}, {2, 4}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 2, 2);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+// `{n,m}` with `n > m` (e.g. `{5,3}`). The natural reading of the W3C
+// equivalence (empty union over `[n, m]`) is "empty result", and QLever's
+// DFS produces exactly that.
+TEST_P(TransitivePathTest, minGreaterThanMaxIsEmpty) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  IdTable expected{2, sub.getAllocator()};
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 5, 3);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, zeroLength) {
   std::string index = "<a> a 0 , 1 , 2 , 4 , 7 , 10 , 11 .";
 
