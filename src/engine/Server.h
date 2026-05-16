@@ -200,7 +200,9 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
-          const std::optional<PlannedQuery>& plannedQuery);
+          const std::optional<PlannedQuery>& plannedQuery,
+          std::shared_ptr<std::atomic<ad_utility::websocket::QueryStatus>>
+              queryStatus);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -256,7 +258,8 @@ class Server {
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk);
+                        TimeLimit timeLimit, bool accessTokenOk,
+                        std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -283,7 +286,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation);
+          const RequestT& request, std::string_view operation,
+          std::string_view clientIp = {});
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
@@ -322,7 +326,8 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
-      getQueryId(const RequestT& request, std::string_view query);
+      getQueryId(const RequestT& request, std::string_view query,
+                 std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing

@@ -54,6 +54,15 @@ TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationException, stateAccessorReturnsConstructorReason) {
+  EXPECT_EQ(CancellationException{TIMEOUT}.state(), TIMEOUT);
+  EXPECT_EQ(CancellationException{MANUAL}.state(), MANUAL);
+  // Message-only constructor: defaults to MANUAL.
+  EXPECT_EQ(CancellationException{"some message"}.state(), MANUAL);
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
   auto message = "Message";
   auto operation = "Operation";

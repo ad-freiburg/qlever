@@ -1,0 +1,110 @@
+// Copyright 2026, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Tanmay Garg (gargt@cs.uni-freiburg.de)
+
+#include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <filesystem>
+#include <fstream>
+#include <set>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include "./util/FileTestHelpers.h"
+#include "util/QueryEventLog.h"
+
+namespace {
+namespace fs = std::filesystem;
+using ad_utility::QueryEventLog;
+using ad_utility::testing::readLines;
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  // Local instance (not the singleton) so the test is self-contained.
+  QueryEventLog log;
+  // No `setOutputFile` call. `push` must silently drop the line and not
+  // create any file.
+  log.push("this should be discarded\n");
+  EXPECT_FALSE(fs::exists(path));
+}
+
+// _____________________________________________________________________________
+TEST(QueryEventLog, DoubleConfigureThrows) {
+  auto [first, cleanupFirst] = ad_utility::testing::filenameForTesting();
+  auto [second, cleanupSecond] = ad_utility::testing::filenameForTesting();
+  QueryEventLog log;
+  log.setOutputFile(first);
+  EXPECT_ANY_THROW(log.setOutputFile(second));
+}
+
+// _____________________________________________________________________________
+TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    log.push("first\n");
+    log.push("second\n");
+    // Destructor finishes the queue, joins the writer (which drains the
+    // remaining lines and flushes), then closes the file.
+  }
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0], "first");
+  EXPECT_EQ(lines[1], "second");
+}
+
+// _____________________________________________________________________________
+TEST(QueryEventLog, ConcurrentProducersProduceWellFormedLines) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  constexpr size_t kThreads = 8;
+  constexpr size_t kLinesPerThread = 1000;
+
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+
+    std::vector<std::thread> producers;
+    producers.reserve(kThreads);
+    for (size_t t = 0; t < kThreads; ++t) {
+      producers.emplace_back([&log, t] {
+        for (size_t n = 0; n < kLinesPerThread; ++n) {
+          // Format: "<threadId>:<seq>\n". Cheap to parse back without a
+          // JSON dependency, and uniquely identifies each pushed line.
+          log.push(absl::StrCat(t, ":", n, "\n"));
+        }
+      });
+    }
+    for (auto& th : producers) {
+      th.join();
+    }
+    // Let the local `log` go out of scope here: its destructor drains
+    // the queue and joins the writer before we re-open the file below.
+  }
+
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), kThreads * kLinesPerThread)
+      << "Expected exactly one line per push with no truncation or merging.";
+
+  // Verify every line is well-formed and that the multiset of (thread, seq)
+  // pairs matches what producers pushed. Using a set is enough because
+  // every pair is unique by construction.
+  std::set<std::pair<size_t, size_t>> seen;
+  for (const auto& line : lines) {
+    auto colon = line.find(':');
+    ASSERT_NE(colon, std::string::npos) << "malformed line: " << line;
+    size_t t = std::stoul(line.substr(0, colon));
+    size_t n = std::stoul(line.substr(colon + 1));
+    ASSERT_LT(t, kThreads);
+    ASSERT_LT(n, kLinesPerThread);
+    auto [_, inserted] = seen.emplace(t, n);
+    ASSERT_TRUE(inserted) << "duplicate line: " << line;
+  }
+  EXPECT_EQ(seen.size(), kThreads * kLinesPerThread);
+}

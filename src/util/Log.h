@@ -34,10 +34,10 @@ enum class LogLevel {
   FATAL = 0,
   ERROR = 1,
   WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
+  INFO = 4,
+  DEBUG = 5,
+  TIMING = 6,
+  TRACE = 7
 };
 
 // Macros for the different log levels.
