@@ -234,6 +234,10 @@ class DayTimeDuration {
   [[nodiscard]] DayTimeDuration operator-(const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
+  // Addition of two `DayTimeDuration` objects.
+  [[nodiscard]] DayTimeDuration operator+(const DayTimeDuration& rhs) const;
+
+  //____________________________________________________________________________
   template <typename H>
   friend H AbslHashValue(H h, const DayTimeDuration& d) {
     return H::combine(std::move(h), d.toBits());

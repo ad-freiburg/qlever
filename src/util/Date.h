@@ -67,6 +67,9 @@ constexpr void checkBoundsExcludingMax(const T& element, const T& min,
 }
 }  // namespace detail
 
+// TODO <yarox-1> improve this
+class DateYearOrDuration;
+
 /**
  * @brief This class encodes a xsd:DateTime value in 64 bits. Comparisons
  * (==, <=>) are maximally efficient, as they are directly performed on the
@@ -180,6 +183,8 @@ class Date {
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
+  using Milliseconds = std::chrono::sys_time<std::chrono::milliseconds>;
+  using Seconds = std::chrono::sys_time<std::chrono::seconds>;
 #endif
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
@@ -346,16 +351,26 @@ class Date {
   // Calculates `DayTimeDuration` between the two `Dates` using Epoch time.
   std::optional<DayTimeDuration> operator-(const Date& rhs) const;
 
-  // Calculates `Date` that is time of the `DayTimeDuration` earlier.
-  std::optional<Date> operator-(const DayTimeDuration& rhs) const;
+  // Calculates `Date` that is time of the `DayTimeDuration` earlier. If the
+  // resulting dates year is not in [-9999,9999] this will return a `LargeYear`.
+  // Therefore the return type is `DateYearOrDuration`.
+  std::optional<DateYearOrDuration> operator-(const DayTimeDuration& rhs) const;
+
+  // Calculates `Date` that is time of the `DayTimeDuration` later. As seen
+  // above this can result in a `LargeYear`.
+  std::optional<DateYearOrDuration> operator+(const DayTimeDuration& rhs) const;
 
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
-  std::optional<Nanoseconds> toEpoch() const;
+  std::optional<Milliseconds> toEpoch() const;
+  // Uses `toEpoch` to return the Epoch time in seconds.
+  std::optional<int64_t> toEpochInt() const;
 
-  // From a Unix Epoch timestamp, construct the corresponding `Date`.
-  static Date makeFromEpoch(Nanoseconds timestamp, TimeZone tz);
+  // From a Unix Epoch timestamp, construct the corresponding `Date` or
+  // `LargeYear`.
+  static DateYearOrDuration makeFromEpoch(Milliseconds timestamp, TimeZone tz);
 #endif
+
   static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };
