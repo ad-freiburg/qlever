@@ -208,6 +208,13 @@ void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
 }
 
 // ____________________________________________________________________________
+void SortedLocatedTriplesVector::erase(ql::span<LocatedTriple> sortedTriples) {
+  AD_CONTRACT_CHECK(isClean());
+  eraseSortedSubRange(triples_, sortedTriples);
+  numItemsLargePart_ = triples_.size();
+}
+
+// ____________________________________________________________________________
 size_t SortedLocatedTriplesVector::size() const {
   AD_CONTRACT_CHECK(isClean());
   return triples_.size();

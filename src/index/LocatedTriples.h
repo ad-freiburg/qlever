@@ -199,6 +199,7 @@ class SortedLocatedTriplesVector {
 
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
+  void erase(ql::span<LocatedTriple> sortedTriples);
   CPP_template(typename R)(
       requires ql::ranges::range<
           R>) static void eraseSortedSubRange(std::vector<LocatedTriple>&
