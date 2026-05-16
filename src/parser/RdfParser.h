@@ -525,7 +525,9 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   // return the current position of the tokenizer in the input string
   // can be used to test if the advancing of the tokenizer works
   // as expected
-  size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
+  size_t getPosition() const {
+    return this->tok_.data().data() - tmpToParse_.data();
+  }
 
   // Disable use of @base, @prefix and multiline string literals for turtle
   // parsers during parallel parsing.

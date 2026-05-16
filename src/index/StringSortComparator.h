@@ -53,8 +53,89 @@ class LocaleManager {
    */
   // TODO<GCC12> As soon as we have constexpr std::string, this class can
   //  become constexpr.
-  using U8String = std::basic_string<uint8_t>;
-  using U8StringView = std::basic_string_view<uint8_t>;
+  // Newer libc++ no longer provides a `std::char_traits<uint8_t>`
+  // specialization, and we may not legally add one (specializing standard
+  // library templates for non-user-defined types is undefined behavior).
+  // This local traits class implements the same byte-wise semantics that
+  // `std::char_traits<char>` would over the same byte sequence, and is
+  // passed as the second template argument to `basic_string` /
+  // `basic_string_view` below.
+  struct U8CharTraits {
+    using char_type = uint8_t;
+    using int_type = int;
+    using off_type = std::streamoff;
+    using pos_type = std::streampos;
+    using state_type = std::mbstate_t;
+
+    static constexpr void assign(char_type& c1, const char_type& c2) noexcept {
+      c1 = c2;
+    }
+    static constexpr bool eq(char_type c1, char_type c2) noexcept {
+      return c1 == c2;
+    }
+    static constexpr bool lt(char_type c1, char_type c2) noexcept {
+      return c1 < c2;
+    }
+
+    static constexpr int compare(const char_type* s1, const char_type* s2,
+                                 std::size_t n) noexcept {
+      for (std::size_t i = 0; i < n; ++i) {
+        if (s1[i] < s2[i]) return -1;
+        if (s2[i] < s1[i]) return 1;
+      }
+      return 0;
+    }
+
+    static constexpr std::size_t length(const char_type* s) noexcept {
+      std::size_t i = 0;
+      while (s[i] != 0) ++i;
+      return i;
+    }
+
+    static constexpr const char_type* find(const char_type* s, std::size_t n,
+                                           const char_type& a) noexcept {
+      for (std::size_t i = 0; i < n; ++i) {
+        if (s[i] == a) return s + i;
+      }
+      return nullptr;
+    }
+
+    static char_type* move(char_type* s1, const char_type* s2,
+                           std::size_t n) noexcept {
+      if (n == 0) return s1;
+      return static_cast<char_type*>(std::memmove(s1, s2, n));
+    }
+
+    static char_type* copy(char_type* s1, const char_type* s2,
+                           std::size_t n) noexcept {
+      if (n == 0) return s1;
+      return static_cast<char_type*>(std::memcpy(s1, s2, n));
+    }
+
+    static char_type* assign(char_type* s, std::size_t n,
+                             char_type a) noexcept {
+      for (std::size_t i = 0; i < n; ++i) s[i] = a;
+      return s;
+    }
+
+    static constexpr int_type to_int_type(char_type c) noexcept {
+      return static_cast<int_type>(c);
+    }
+    static constexpr char_type to_char_type(int_type c) noexcept {
+      return static_cast<char_type>(c);
+    }
+    static constexpr bool eq_int_type(int_type c1, int_type c2) noexcept {
+      return c1 == c2;
+    }
+    static constexpr int_type eof() noexcept {
+      return static_cast<int_type>(-1);
+    }
+    static constexpr int_type not_eof(int_type c) noexcept {
+      return c == eof() ? 0 : c;
+    }
+  };
+  using U8String = std::basic_string<uint8_t, U8CharTraits>;
+  using U8StringView = std::basic_string_view<uint8_t, U8CharTraits>;
 
   CPP_template(typename T)(requires ad_utility::SimilarToAny<
                            T, U8String, U8StringView>) class SortKeyImpl {
@@ -85,8 +166,8 @@ class LocaleManager {
    private:
     T sortKey_;
   };
-  using SortKey = SortKeyImpl<std::basic_string<uint8_t>>;
-  using SortKeyView = SortKeyImpl<std::basic_string_view<uint8_t>>;
+  using SortKey = SortKeyImpl<U8String>;
+  using SortKeyView = SortKeyImpl<U8StringView>;
 
   /// Copy constructor
   LocaleManager(const LocaleManager& rhs)
