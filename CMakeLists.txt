@@ -440,13 +440,6 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin opentelemetry-cpp)
-# spatialjoin's CMakeLists.txt uses list(REMOVE_ITEM) with a relative path to
-# exclude SpatialJoinMain.cpp from spatialjoin-dev, but GLOB_RECURSE produces
-# absolute paths, so the removal silently no-ops. Fix it here so tests that
-# link against spatialjoin-dev don't end up with a duplicate main().
-get_target_property(_sj_sources spatialjoin-dev SOURCES)
-list(FILTER _sj_sources EXCLUDE REGEX "SpatialJoinMain\\.cpp$")
-set_target_properties(spatialjoin-dev PROPERTIES SOURCES "${_sj_sources}")
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
