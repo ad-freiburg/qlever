@@ -6,6 +6,8 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include <charconv>
+
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 

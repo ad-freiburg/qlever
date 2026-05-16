@@ -50,6 +50,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Disable nlohmann implicit conversions (e.g. json → std::string) globally so
+# all TUs, including those compiled via PCH, see the same flag value.
+add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
@@ -60,6 +64,8 @@ if (CHEAPER_COMPILATION)
     # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
     # even with debug builds.
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    # General flag used throughout the codebase to opt into cheaper-to-compile alternatives.
+    add_compile_definitions(QLEVER_CHEAPER_COMPILATION)
 endif()
 
 # Coroutines require an additional compiler flag that is called differently
@@ -507,22 +513,83 @@ if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "
   message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
-##################################################
-# Precompiled headers
-set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
-
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
-if (USE_PRECOMPILED_HEADERS)
-    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
-    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
-endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+
+##################################################
+# Precompiled headers
+#
+# PRECOMPILED_HEADER_FILES_EXTERNAL: stable third-party headers that never change
+# and are expensive to parse. Applied to every library target.
+# NOTE: nlohmann/json.hpp is included here because it is pulled in by many TUs.
+# However, clang's -fpch-instantiate-templates (added automatically by CMake for
+# PCH builds) eagerly instantiates cross-type conversions between nlohmann::json
+# (basic_json<std::map>) and nlohmann::ordered_json
+# (basic_json<nlohmann::ordered_map>). If a TU mixes both types and calls
+# push_back/emplace_back on a json container with an ordered_json value (or vice
+# versa), the compiler finds multiple viable overloads — the implicit conversion
+# chain is already baked into the PCH — causing an ambiguity error. The fix at
+# each such site is to insert an explicit json{...} or ordered_json{...} cast
+# around the value being pushed. See Server.cpp for an example.
+set(PRECOMPILED_HEADER_FILES_EXTERNAL
+    <absl/strings/str_cat.h>
+    <absl/container/flat_hash_map.h>
+    <absl/container/flat_hash_set.h>
+    <range/v3/all.hpp>
+    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
+    # nlohmann header already sees the correct flag value.
+    <nlohmann/json.hpp>
+)
+
+# PRECOMPILED_HEADER_FILES_WITH_BEAST: extends EXTERNAL with boost networking and
+# iostreams. Applied to targets that transitively include beast.h or
+# boost::iostreams (engine, index, http). Without this, the index target would
+# still parse beast.h (~8 s) on every TU that reaches it via
+# Operation.h → QueryExecutionContext.h → ResponseMiddleware.h → beast.h, even
+# though it is already covered for engine TUs.
+set(PRECOMPILED_HEADER_FILES_WITH_BEAST
+    <util/http/beast.h>
+    <boost/iostreams/filter/gzip.hpp>
+    <boost/iostreams/filtering_stream.hpp>
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_ENGINE
+    src/util/HashMap.h
+    src/engine/Operation.h
+    src/engine/QueryExecutionTree.h
+    ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+set(PRECOMPILED_HEADER_FILES_PARSER
+    src/engine/sparqlExpressions/AggregateExpression.h
+    ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp
+    ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS
+   src/engine/sparqlExpressions/SparqlExpression.h
+   ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+    target_precompile_headers(sparqlExpressions PRIVATE ${PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS})
+    # Use HEAVY: index TUs that include Operation.h transitively pull in beast.h
+    # and boost::iostreams via ResponseMiddleware.h / CompressorStream.h.
+    target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        target_precompile_headers(http PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    endif ()
+    target_precompile_headers(rdfTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(rdfEscaping PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+endif ()
+
 add_subdirectory(benchmark)
 
 enable_testing()

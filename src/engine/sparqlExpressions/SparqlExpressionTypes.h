@@ -427,13 +427,9 @@ CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
 
 // Helper to check if an `ExpressionResult` variant holds a constant.
 // Used by the type erased expression.
-inline bool isConstantExpressionResult(const ExpressionResult& res) {
-  return std::visit(
-      [](const auto& el) {
-        return isConstantResult<std::decay_t<decltype(el)>>;
-      },
-      res);
-}
+// Implementation lives in SparqlExpressionTypes.cpp to avoid instantiating
+// the std::visit vtable (6 alternatives × N TUs) in every including TU.
+bool isConstantExpressionResult(const ExpressionResult& res);
 
 // Helper type to convert the type from `IdOrLiteralOrIri` to
 // `IdOrLocalVocabEntry`. For other types, the type is unchanged.
