@@ -512,9 +512,8 @@ TEST(ServerTest, gspDelete) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, gspPost) {
-  // TODO: this is only a regression test for a special case; test more broadly
-  // and also the delta triples after the operation
-  {
+  // TODO: test more broadly including the delta triples after the operation
+  auto expectPost = [](std::string body, const auto& responseMatcher) {
     auto baseName = "ServerTest_gspPost";
     makeTestIndex(baseName, "");
     SimulateHttpRequest simulateHttpRequest{baseName};
@@ -523,8 +522,10 @@ TEST(ServerTest, gspPost) {
                     {{http::field::authorization, "Bearer accessToken"},
                      {http::field::host, "example.org"},
                      {http::field::content_type, "text/turtle"}},
-                    "");
+                    body);
     auto response = simulateHttpRequest.processRaw(request);
-    EXPECT_THAT(response, StatusIs(http::status::no_content));
-  }
+    EXPECT_THAT(response, responseMatcher);
+  };
+  expectPost("", StatusIs(http::status::no_content));
+  expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
 }

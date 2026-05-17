@@ -133,14 +133,14 @@ CPP_template(typename RequestType)(requires HttpRequest<RequestType>) ResponseT
                                     http::status status,
                                     const RequestType& request,
                                     std::optional<MediaType> mediaType,
-                                    bool doPreparePayload) {
+                                    bool preparePayload) {
   ResponseT response{status, request.version()};
   if (mediaType.has_value()) {
     response.set(http::field::content_type, toString(mediaType.value()));
   }
   setBody(response, request, std::move(body));
   response.keep_alive(request.keep_alive());
-  if (doPreparePayload) {
+  if (preparePayload) {
     // Set Content-Length (if available) or Transfer-Encoding to `chunked`.
     // NOTE: `prepare_payload()` throws an error if it cannot guarantee that the
     // body is empty when it should be according to HTTP. The body size cannot
@@ -264,12 +264,11 @@ CPP_template(typename RequestType)(
                                                               std::optional<
                                                                   MediaType>
                                                                   mediaType) {
-  auto resp =
-      createHttpResponseFromString("", status, request, mediaType, false);
   // `prepare_payload` throws an error if it cannot guarantee that the response
   // body is empty. The size is unknown for `streamable_body`. So don't
-  // call it and set `Content-Length` manually.
-  resp.content_length(0);
+  // call it.
+  auto resp =
+      createHttpResponseFromString("", status, request, mediaType, false);
   return resp;
 }
 
