@@ -140,7 +140,8 @@ void SortedLocatedTriplesVector::insert(LocatedTriple lt) {
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::begin() {
   AD_CONTRACT_CHECK(isClean());
   return iterator(triples_.begin(), triples_.begin() + numItemsLargePart_,
-                  triples_.begin() + numItemsLargePart_, triples_.end());
+                  triples_.begin() + numItemsLargePart_, triples_.end(), {},
+                  &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
@@ -148,7 +149,8 @@ SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::begin()
     const {
   AD_CONTRACT_CHECK(isClean());
   return const_iterator(triples_.begin(), triples_.begin() + numItemsLargePart_,
-                        triples_.begin() + numItemsLargePart_, triples_.end());
+                        triples_.begin() + numItemsLargePart_, triples_.end(),
+                        {}, &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
@@ -156,7 +158,7 @@ SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::end() {
   AD_CONTRACT_CHECK(isClean());
   return iterator(triples_.begin() + numItemsLargePart_,
                   triples_.begin() + numItemsLargePart_, triples_.end(),
-                  triples_.end());
+                  triples_.end(), {}, &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
@@ -165,7 +167,7 @@ SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::end()
   AD_CONTRACT_CHECK(isClean());
   return const_iterator(triples_.begin() + numItemsLargePart_,
                         triples_.begin() + numItemsLargePart_, triples_.end(),
-                        triples_.end());
+                        triples_.end(), {}, &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
