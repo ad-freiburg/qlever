@@ -97,10 +97,13 @@ class GraphStoreProtocol {
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
   // Creates a `ResponseMiddleware` that sets the `Location` of the response to
-  // the iri and the HTTP status to `201 Created`.
+  // the IRI and the HTTP status to `201 Created`.
   static ResponseMiddleware makePostNewGraphMiddleware(
       const ad_utility::triple_component::Iri& graphIri);
 
+  // Determine if the graph identifies the instance. Then the payload of this
+  // GSP POST must be inserted into a new graph. If it cannot be determined
+  // whether the graph identifies the instance, `false` is returned.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<
           RequestT>) static bool mustInsertIntoNewGraph(const RequestT&
@@ -111,11 +114,15 @@ class GraphStoreProtocol {
         rawRequest.find(boost::beast::http::field::host) == rawRequest.end()) {
       return false;
     }
+    // In a better world, we'd get the external URL of the instance as a
+    // configuration value. Try our best to estimate it and fix the protocol to
+    // `http`. It doesn't matter that the URL is not `https` since it is not
+    // actually accessed.
     ad_utility::triple_component::Iri graphStoreLocation =
         ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
             "<http://",
             std::string(rawRequest[boost::beast::http::field::host]), "/",
-            GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, +">"));
+            GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, ">"));
     return graphStoreLocation == std::get<GraphRef>(graph);
   }
 
@@ -126,12 +133,12 @@ class GraphStoreProtocol {
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index, GraphNameManager& manager) {
     throwIfRequestBodyEmpty(rawRequest);
-    auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
-    const GraphOrDefault effectiveGraph =
-        insertIntoNewGraph ? manager.allocateNewGraph() : graph;
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
+    const GraphOrDefault effectiveGraph =
+        insertIntoNewGraph ? manager.allocateNewGraph() : graph;
     auto convertedTriples =
         convertTriples(effectiveGraph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
