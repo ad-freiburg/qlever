@@ -330,8 +330,7 @@ auto Server::prepareOperation(
   auto qec = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, &materializedViewsManager_,
-      std::move(messageSender).extractUpdateCallback(), pinSubtrees,
-      pinResult);
+      std::move(messageSender).extractUpdateCallback(), pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
