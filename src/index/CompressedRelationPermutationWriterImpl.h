@@ -145,7 +145,7 @@ struct CompressedRelationWriter::PermutationWriter {
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
         twinRelationSorter_{
             basename + ".twin-twinRelationSorter", numColumns_,
-            8 * ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE * numColumns_,
+            64 * ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE * numColumns_,
             alloc_},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
     static_assert(WritePair);
