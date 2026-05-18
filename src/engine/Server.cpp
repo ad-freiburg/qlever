@@ -714,8 +714,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(
-            std::move(operation), request, index_, index().graphNameManager());
+        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
+                                                        request, index_);
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -723,8 +723,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
       requireValidAccessToken("Update from Graph Store Protocol");
     }
-
-    index().graphNameManager().writeToDisk();
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.

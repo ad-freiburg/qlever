@@ -22,6 +22,7 @@
 
 // Generates new graphs with a fixed prefix that don't exist yet. Currently,
 // the graphs are of the form `{prefix}/{ascending number}`.
+// NOTE: this is currently not actively used.
 class GraphNameManager {
   std::string prefixWithoutBraces_ = std::string(QLEVER_NEW_GRAPH_PREFIX);
   // The smallest number such that the graph for this number and all after it

@@ -98,6 +98,13 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
 }
 
 // ____________________________________________________________________________
+ad_utility::triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
+  ad_utility::UuidGenerator uuidGen;
+  return ad_utility::triple_component::Iri::fromIriref(
+      absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX, uuidGen(), ">"));
+}
+
+// ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(
     const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
   // Construct the parsed query from its short equivalent SPARQL Update

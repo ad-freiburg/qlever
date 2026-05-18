@@ -115,41 +115,17 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
                            "detected in \"application/unknown\"."));
   };
 
-  {
-    auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
-    runTests(
-        [&index](http::request<http::string_body> request,
-                 GraphOrDefault graph) {
-          return GraphStoreProtocol::transformPost(request, graph, index,
-                                                   index.graphNameManager());
-        },
-        true);
-    runTests(
-        [&index](http::request<http::string_body> request,
-                 GraphOrDefault graph) {
-          return GraphStoreProtocol::transformTsop(request, graph, index);
-        },
-        false);
-  }
-  {
-    auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
-    EXPECT_THAT(
-        GraphStoreProtocol::transformPost(
-            makeRequest(http::verb::post,
-                        "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
-                        {{http::field::content_type, "text/turtle"},
-                         {http::field::host, "example.org"}},
-                        "<a> <b> <c> ."),
-            iri("<http://example.org/http-graph-store>"), index,
-            index.graphNameManager()),
-        testing::AllOf(
-            HasMiddleware,
-            m::UpdateClause(
-                m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
-                                     iri("<http://qlever.cs.uni-freiburg.de/"
-                                         "builtin-functions/graph/1>")}}),
-                m::GraphPattern())));
-  }
+  auto index = makeTestIndex("GraphStoreProtocolTest", TestIndexConfig{});
+  runTests(
+      [&index](http::request<http::string_body> request, GraphOrDefault graph) {
+        return GraphStoreProtocol::transformPost(request, graph, index);
+      },
+      true);
+  runTests(
+      [&index](http::request<http::string_body> request, GraphOrDefault graph) {
+        return GraphStoreProtocol::transformTsop(request, graph, index);
+      },
+      false);
 }
 
 // _____________________________________________________________________________________________
@@ -255,8 +231,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                                                   TestIndexConfig{});
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
-                  ad_utility::testing::makeGetRequest("/?default"), index,
-                  index.graphNameManager()),
+                  ad_utility::testing::makeGetRequest("/?default"), index),
               testing::ElementsAre(m::ConstructQuery(
                   {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
                   m::GraphPattern(matchers::Triples({SparqlTriple(
@@ -266,7 +241,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makePostRequest(
               "/?default", "application/n-triples", "<foo> <bar> <baz> ."),
-          index, index.graphNameManager()),
+          index),
       testing::ElementsAre(m::UpdateClause(
           m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                std::monostate{}}}),
@@ -277,7 +252,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                       "TSOP", "/?default",
                       {{http::field::content_type, "application/n-triples"}},
                       "<foo> <bar> <baz> ."),
-                  index, index.graphNameManager()),
+                  index),
               testing::ElementsAre(m::UpdateClause(
                   m::GraphUpdate({{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                    std::monostate{}}},
@@ -287,7 +262,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{iri("<foo>")},
           ad_utility::testing::makeRequest(http::verb::delete_, "/?graph=foo"),
-          index, index.graphNameManager()),
+          index),
       testing::ElementsAre(ClearGraph(iri("<foo>"))));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
@@ -295,7 +270,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           ad_utility::testing::makeRequest(
               http::verb::put, "/?graph=foo",
               {{http::field::content_type, "text/turtle"}}, "<a> <b> <c>"),
-          index, index.graphNameManager()),
+          index),
       testing::ElementsAre(
           ClearGraph(iri("<foo>")),
           m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
@@ -305,7 +280,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                   GraphStoreOperation{iri("<foo>")},
                   ad_utility::testing::makeRequest(http::verb::head,
                                                    "/?graph=foo", {}, ""),
-                  index, index.graphNameManager()),
+                  index),
               testing::ElementsAre(
                   testing::AllOf(GetGraph(iri("<foo>")), HasMiddleware)));
   auto expectUnsupportedMethod = [&index](const http::verb method,
@@ -315,8 +290,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         GraphStoreProtocol::transformGraphStoreProtocol(
             GraphStoreOperation{DEFAULT{}},
-            ad_utility::testing::makeRequest(method, "/?default"), index,
-            index.graphNameManager()),
+            ad_utility::testing::makeRequest(method, "/?default"), index),
         testing::HasSubstr(
             absl::StrCat(std::string{boost::beast::http::to_string(method)},
                          " in the SPARQL Graph Store HTTP Protocol")));
@@ -327,13 +301,12 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
                                            "/?default"),
-          index, index.graphNameManager()),
+          index),
       testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index,
-          index.graphNameManager()),
+          ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index),
       testing::HasSubstr("Unsupported HTTP method \"PUMPKIN\""));
 }
 
@@ -476,8 +449,7 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index,
-                                                  index.graphNameManager()),
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
                 matcher);
   };
 
