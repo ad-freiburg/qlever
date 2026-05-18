@@ -5,6 +5,8 @@
 #ifndef QLEVER_MESSAGESENDER_H
 #define QLEVER_MESSAGESENDER_H
 
+#include <functional>
+
 #include "util/UniqueCleanup.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/QueryId.h"
@@ -19,22 +21,11 @@ using unique_cleanup::UniqueCleanup;
 /// from the non-asio world.
 class MessageSender {
  private:
-  /// Keep the OwningQueryId alive until
-  /// distributorAndOwningQueryId_->signalEnd() is called (see the constructor
-  /// of `MessageSender` for details).
-  struct DistributorAndOwningQueryId {
-    std::shared_ptr<QueryToSocketDistributor> distributor_;
-    OwningQueryId owningQueryId_;
-
-    // There seems to be a bug with gcc < 13 where aggregate-initializing
-    // this struct in combination with coroutines leads to segfaults
-    DistributorAndOwningQueryId(
-        std::shared_ptr<QueryToSocketDistributor> distributor,
-        OwningQueryId owningQueryId)
-        : distributor_{std::move(distributor)},
-          owningQueryId_{std::move(owningQueryId)} {}
-  };
-  UniqueCleanup<DistributorAndOwningQueryId> distributorAndOwningQueryId_;
+  // Job B: registry ticket. Its own cleanup unregisters and logs "end".
+  OwningQueryId owningQueryId_;
+  // Job A: send channel; cleanup calls signalEnd() once. Declared after
+  // owningQueryId_ so the constructor can use the query id.
+  UniqueCleanup<std::shared_ptr<QueryToSocketDistributor>> distributor_;
   net::any_io_executor executor_;
 
  public:
@@ -44,13 +35,19 @@ class MessageSender {
   MessageSender(MessageSender&&) noexcept = default;
   MessageSender& operator=(MessageSender&&) noexcept = default;
 
-  /// Broadcast the string to all listeners of this query asynchronously.
+  // Broadcast the string to all listeners. Precondition: the channel was
+  // not moved out via extractUpdateCallback().
   void operator()(std::string) const;
 
-  /// Get read only view of underlying `QueryId`.
+  // Get read only view of underlying `QueryId`.
   const QueryId& getQueryId() const noexcept {
-    return distributorAndOwningQueryId_->owningQueryId_.toQueryId();
+    return owningQueryId_.toQueryId();
   }
+
+  // Move the send channel (Job A) out into a standalone callback; this
+  // MessageSender then keeps only Job B. signalEnd() fires when the returned
+  // callback is destroyed (after the plan's last late update).
+  std::function<void(std::string)> extractUpdateCallback() &&;
 };
 
 }  // namespace ad_utility::websocket
