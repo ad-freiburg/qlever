@@ -218,10 +218,10 @@ std::vector<nlohmann::json> parseAll(const std::vector<std::string>& lines) {
 }
 
 // Acceptance invariant: every JSONL line begins with the literal
-// `{"ts_ms":` so the TUI can byte-slice the timestamp without a JSON
+// `{"ts-ms":` so the TUI can byte-slice the timestamp without a JSON
 // parse.
 void expectAllStartWithTsMs(const std::vector<std::string>& lines) {
-  static constexpr std::string_view kPrefix = "{\"ts_ms\":";
+  static constexpr std::string_view kPrefix = "{\"ts-ms\":";
   for (const auto& line : lines) {
     EXPECT_EQ(line.rfind(kPrefix, 0), 0u) << "bad line: " << line;
   }
@@ -258,8 +258,8 @@ TEST(QueryRegistry, registrationEmitsStartEventLine) {
   const auto& start = events.front();
   EXPECT_EQ(start.at("event").get<std::string>(), "start");
   EXPECT_EQ(start.at("qid").get<std::string>(), "01123581321345589144");
-  EXPECT_EQ(start.at("ts_ms").get<int64_t>(), expectedStartedAt);
-  EXPECT_EQ(start.at("client_ip").get<std::string>(), "");
+  EXPECT_EQ(start.at("ts-ms").get<int64_t>(), expectedStartedAt);
+  EXPECT_EQ(start.at("client-ip").get<std::string>(), "");
   EXPECT_EQ(start.at("query").get<std::string>(), "SELECT * WHERE {}");
 }
 
@@ -295,7 +295,7 @@ TEST(QueryRegistry, destructionEmitsEndEventLine) {
   const auto& end = events.back();
   EXPECT_EQ(end.at("event").get<std::string>(), "end");
   EXPECT_EQ(end.at("qid").get<std::string>(), "01123581321345589144");
-  EXPECT_GE(end.at("ts_ms").get<int64_t>(), startedAtMs);
+  EXPECT_GE(end.at("ts-ms").get<int64_t>(), startedAtMs);
   // `setStatus` was never called, so the end event must carry the
   // sentinel `"unknown"` rather than be missing the field.
   EXPECT_EQ(end.at("status").get<std::string>(), "unknown");

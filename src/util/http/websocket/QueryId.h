@@ -210,10 +210,10 @@ class QueryRegistry {
     // `to_json(QueryId)` is defined only for the default flavour, so
     // we convert `queryId` through it.
     nlohmann::ordered_json startLine = {
-        {"ts_ms", startedAtMs},
+        {"ts-ms", startedAtMs},
         {"event", "start"},
         {"qid", nlohmann::json(queryId)},
-        {"client_ip", clientIp},
+        {"client-ip", clientIp},
         {"query", query},
     };
     auto startPayload = startLine.dump();
@@ -236,7 +236,7 @@ class QueryRegistry {
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
       nlohmann::ordered_json endLine = {
-          {"ts_ms", endedAtMs},
+          {"ts-ms", endedAtMs},
           {"event", "end"},
           {"qid", nlohmann::json(qid)},
           {"status", toString(status->load())},
