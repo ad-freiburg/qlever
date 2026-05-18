@@ -24,10 +24,7 @@ using ad_utility::vocabulary_merger::writePartialVocabularyToFile;
 // Helper to conveniently create an entry for `ItemVec`.
 ItemVec::value_type makeEntry(std::string_view word, bool isExternalized,
                               uint64_t id) {
-  ItemVec::value_type::second_type local{};
-  local.id_ = id;
-  local.splitVal_.isExternalized_ = isExternalized;
-  return {word, local};
+  return {word, ItemVec::value_type::second_type{id, isExternalized}};
 }
 
 // Read back a file written by `writePartialVocabularyToFile` and return its
