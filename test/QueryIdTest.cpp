@@ -249,7 +249,7 @@ TEST(QueryRegistry, registrationEmitsStartEventLine) {
                               activeIt->second.startedAt_.time_since_epoch())
                               .count();
     }  // OwningQueryId + registry destroyed → end event also pushed.
-  }    // log destroyed → queue drained, file closed.
+  }  // log destroyed → queue drained, file closed.
 
   auto lines = readLines(path);
   expectAllStartWithTsMs(lines);

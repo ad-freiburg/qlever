@@ -645,12 +645,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // case of errors to create an informative error message that includes the
   // runtime information.
   std::optional<PlannedQuery> plannedQuery;
-  // Handle to the per-request `OwningQueryId`'s terminal-status atomic.
-  // Null when no registry entry was created (no end event will fire).
-  std::shared_ptr<std::atomic<ad_utility::websocket::QueryStatus>> queryStatus;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery, &queryStatus, this](
+       &requestTimer, &plannedQuery, this](
           std::vector<ParsedQuery> operations, std::string operationName,
           const std::string operationString,
           std::function<bool(const ParsedQuery&)> expectedOperation,
@@ -668,29 +665,46 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     std::string_view clientIp = request.base()["X-Real-IP"];
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString, clientIp);
-    queryStatus = messageSender.sharedStatus();
-
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
-    auto& qec = *qecPtr;
-    if (!ql::ranges::all_of(operations, expectedOperation)) {
-      throw std::runtime_error(absl::StrCat(
-          msg, ad_utility::truncateOperationString(operationString)));
-    }
-    if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      co_return co_await processUpdate(
-          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
-    } else {
-      AD_CORRECTNESS_CHECK(operations.size() == 1);
-      ParsedQuery query = std::move(operations[0]);
-      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
-                           query.hasConstructClause());
-      co_return co_await processQuery(
-          parameters, std::move(query), requestTimer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
+    // Publish the terminal status into the `OwningQueryId`'s shared atomic
+    // *here*, while `messageSender` (and with it the query id) is still alive
+    using ad_utility::websocket::QueryStatus;
+    auto queryStatus = messageSender.sharedStatus();
+    try {
+      auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
+          prepareOperation(operationName, operationString,
+                           std::move(messageSender), parameters,
+                           timeLimit.value(), accessTokenOk, clientIp);
+      auto& qec = *qecPtr;
+      if (!ql::ranges::all_of(operations, expectedOperation)) {
+        throw std::runtime_error(absl::StrCat(
+            msg, ad_utility::truncateOperationString(operationString)));
+      }
+      if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+        co_await processUpdate(std::move(operations), requestTimer, tracer,
+                               cancellationHandle, qec, std::move(request),
+                               send, timeLimit.value(), plannedQuery);
+      } else {
+        AD_CORRECTNESS_CHECK(operations.size() == 1);
+        ParsedQuery query = std::move(operations[0]);
+        AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
+                             query.hasConstructClause());
+        co_await processQuery(parameters, std::move(query), requestTimer,
+                              cancellationHandle, qec, std::move(request), send,
+                              timeLimit.value(), plannedQuery);
+      }
+      queryStatus->store(QueryStatus::Ok);
+      co_return;
+    } catch (const ad_utility::CancellationException& e) {
+      queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
+                             ? QueryStatus::Timeout
+                             : QueryStatus::Cancelled);
+      throw;
+    } catch (...) {
+      // Every other exception type maps to `Failed` in
+      // `processOperation`'s handlers; mirror that single outcome here and
+      // rethrow so the existing response-building logic stays untouched.
+      queryStatus->store(QueryStatus::Failed);
+      throw;
     }
   };
   auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
@@ -773,7 +787,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
-      requestTimer, request, send, plannedQuery, std::move(queryStatus));
+      requestTimer, request, send, plannedQuery);
 }
 
 // ____________________________________________________________________________
@@ -1312,18 +1326,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
         ad_utility::url_parser::sparqlOperation::Operation operation,
         VisitorT visitor, const ad_utility::Timer& requestTimer,
         const RequestT& request, ResponseT& send,
-        const std::optional<PlannedQuery>& plannedQuery,
-        std::shared_ptr<std::atomic<ad_utility::websocket::QueryStatus>>
-            queryStatus) {
-  using ad_utility::websocket::QueryStatus;
-  // Publish the terminal status of the per-request `OwningQueryId`, if a
-  // registry entry was created. The unregister lambda reads the atomic
-  // when `OwningQueryId` is destroyed.
-  auto setStatus = [&queryStatus](QueryStatus s) noexcept {
-    if (queryStatus) {
-      queryStatus->store(s);
-    }
-  };
+        const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1354,14 +1357,11 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   std::optional<ExceptionMetadata> metadata;
   try {
     co_await std::visit(visitor, std::move(operation));
-    setStatus(QueryStatus::Ok);
     co_return;
   } catch (const HttpError& e) {
-    setStatus(QueryStatus::Failed);
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
   } catch (const ParseException& e) {
-    setStatus(QueryStatus::Failed);
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
@@ -1370,15 +1370,11 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
-    setStatus(e.state() == ad_utility::CancellationState::TIMEOUT
-                  ? QueryStatus::Timeout
-                  : QueryStatus::Cancelled);
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
   } catch (const std::exception& e) {
-    setStatus(QueryStatus::Failed);
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
   }
