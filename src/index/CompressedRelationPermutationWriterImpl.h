@@ -143,8 +143,10 @@ struct CompressedRelationWriter::PermutationWriter {
                        std::move(writerAndCallback2.callback_),
                        writer1_->blocksize()},
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
-        twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
-                            4_GB, alloc_},
+        twinRelationSorter_{
+            basename + ".twin-twinRelationSorter", numColumns_,
+            ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE * numColumns_,
+            alloc_},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
     static_assert(WritePair);
     // This logic only works for permutations that have the graph as the fourth
