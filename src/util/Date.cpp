@@ -124,7 +124,10 @@ std::optional<DateYearOrDuration> Date::operator+(
 // _____________________________________________________________________________
 std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
-  auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
+  // If a `xsd:gYear` is stored in a `Date` month and day are 0.
+  // Here a `xsd:gYear` is represented as 1st January of the year.
+  auto date = year_month_day{year(getYear()) / std::max(getMonth(), 1) /
+                             std::max(getDay(), 1)};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
