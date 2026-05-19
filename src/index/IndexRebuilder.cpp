@@ -386,7 +386,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  // This allocator is not being used for anything.
+  IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
