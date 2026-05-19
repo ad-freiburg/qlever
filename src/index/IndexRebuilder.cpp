@@ -190,15 +190,22 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns) {
+    const std::vector<ColumnIndex>& additionalColumns) {
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  auto fullScan = permutation.lazyScan(
-      scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, LimitOffsetClause{});
+  auto reader = std::make_unique<CompressedRelationReader>(
+      permutation.reader().withAllocator(
+          ad_utility::makeUnlimitedAllocator<Id>()));
+  auto fullScan = reader->lazyScan(
+      scanSpecAndBlocks.scanSpec_,
+      CompressedRelationReader::convertBlockMetadataRangesToVector(
+          scanSpecAndBlocks.blockMetadata_),
+      additionalColumns, cancellationHandle,
+      permutation.getLocatedTriplesForPermutation(*locatedTriplesSharedState),
+      LimitOffsetClause{});
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -222,8 +229,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
-          std::move(fullScan),
-          [remapId = std::move(remapId)](IdTable& idTable) {
+          std::move(fullScan), [remapId = std::move(remapId),
+                                reader = std::move(reader)](IdTable& idTable) {
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be

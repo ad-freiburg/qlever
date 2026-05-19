@@ -50,7 +50,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns);
+    const std::vector<ColumnIndex>& additionalColumns);
 
 // Get the number of columns in the given `blockMetadataRanges`. If this cannot
 // be determined, return 4 as a "safe" default, representing subject + predicate
