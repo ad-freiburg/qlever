@@ -31,8 +31,8 @@ CPP_template(typename It, typename Compare = std::less<>,
              class Projection = ql::identity)(
     requires true) class ZipMergeIteratorImpl {
  public:
-  using iterator_category = std::input_iterator_tag;
-  using iterator_concept = std::input_iterator_tag;
+  using iterator_category = std::forward_iterator_tag;
+  using iterator_concept = std::forward_iterator_tag;
   using value_type = std::iterator_traits<It>::value_type;
   using difference_type = std::ptrdiff_t;
   using pointer = std::iterator_traits<It>::pointer;
@@ -50,6 +50,14 @@ CPP_template(typename It, typename Compare = std::less<>,
   explicit ZipMergeIteratorImpl(It b1, It e1, It b2, It e2, Compare cmp = {},
                                 Projection proj = {})
       : it1(b1), end1(e1), it2(b2), end2(e2), comp(cmp), proj(proj) {
+    if constexpr (std::is_pointer_v<Compare> ||
+                  std::is_member_pointer_v<Compare>) {
+      AD_CONTRACT_CHECK(comp != nullptr);
+    }
+    if constexpr (std::is_pointer_v<Projection> ||
+                  std::is_member_pointer_v<Projection>) {
+      AD_CONTRACT_CHECK(proj != nullptr);
+    }
     decision_ = decide();
   }
 

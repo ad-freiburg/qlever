@@ -57,14 +57,16 @@ auto makeZipRange(std::vector<T>& a, std::vector<T>& b, Compare cmp = {},
 // ---------- ZipMergeIteratorImpl tests ----------
 
 // Iterator traits.
-TEST(ZipMergeIterator, IsInputIterator) {
+TEST(ZipMergeIterator, IsForwardIterator) {
   using It = decltype(zipIterator.operator()(
       std::declval<std::vector<int>::iterator>(),
       std::declval<std::vector<int>::iterator>(),
       std::declval<std::vector<int>::iterator>(),
       std::declval<std::vector<int>::iterator>()));
-  static_assert(std::is_same_v<It::iterator_category, std::input_iterator_tag>);
-  static_assert(std::is_same_v<It::iterator_concept, std::input_iterator_tag>);
+  static_assert(
+      std::is_same_v<It::iterator_category, std::forward_iterator_tag>);
+  static_assert(
+      std::is_same_v<It::iterator_concept, std::forward_iterator_tag>);
   static_assert(std::is_same_v<It::value_type, int>);
 }
 
@@ -153,6 +155,17 @@ TEST(ZipMergeIterator, PostIncrement) {
   auto [begin, end] = makeZipRange(a, b);
   auto old = begin++;
   EXPECT_EQ(*old, 1);
+  EXPECT_EQ(*begin, 2);
+}
+
+// Multi-pass: advancing a copy does not affect the original.
+TEST(ZipMergeIterator, MultiPass) {
+  std::vector<int> a{1, 3}, b{2, 4};
+  auto [begin, end] = makeZipRange(a, b);
+  auto copy = begin;
+  EXPECT_EQ(*begin, *copy);
+  ++begin;
+  EXPECT_EQ(*copy, 1);
   EXPECT_EQ(*begin, 2);
 }
 
