@@ -108,7 +108,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
           volatile size_t count = 0;
           for (const auto& item : allSorted) {
             if (item.insertOrDelete_) {
-              count++;
+              count = count + 1;
             }
           }
         });
@@ -122,7 +122,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
             volatile size_t count = 0;
             for (const auto& item : bvec) {
               if (item.insertOrDelete_) {
-                count++;
+                count = count + 1;
               }
             }
           });
@@ -136,7 +136,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
             volatile size_t count = 0;
             for (const auto& item : s) {
               if (item.insertOrDelete_) {
-                count++;
+                count = count + 1;
               }
             }
           });
@@ -208,7 +208,7 @@ class ZipMergeIteratorBenchmark : public BenchmarkInterface {
               volatile size_t count = 0;
               for (const auto& item : vec) {
                 if (item.insertOrDelete_) {
-                  count++;
+                  count = count + 1;
                 }
               }
             });
