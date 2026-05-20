@@ -107,13 +107,16 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`
     // column index so that it matches the keys in
     // `BatchEvaluationResult::variablesByColumn_`.
+    std::vector<size_t> tripleColumns;
     for (const PrecomputedVariable& var :
          ad_utility::filterRangeOfVariantsByType<PrecomputedVariable>(
              *preprocessedTriple)) {
       if (seenColumns.insert(var.columnIndex_).second) {
         result.uniqueVariableColumns_.push_back(var.columnIndex_);
       }
+      tripleColumns.push_back(var.columnIndex_);
     }
+    result.variableColumnsPerTriple_.push_back(std::move(tripleColumns));
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 

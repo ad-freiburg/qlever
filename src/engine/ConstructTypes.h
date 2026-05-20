@@ -87,6 +87,9 @@ struct PreprocessedConstructTemplate {
   // The dedupicated set of `IdTable` column indices that appear in the template
   // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
+  // index i contains the variables (identified by their column index in the
+  // `IdTable`) that are contained in template triple at index i.
+  std::vector<std::vector<size_t>> variableColumnsPerTriple_;
 };
 
 // Result of instantiating a single template triple for a specific result table

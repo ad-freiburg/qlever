@@ -34,7 +34,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
-        CancellationHandle cancellationHandle) {
+        CancellationHandle cancellationHandle, SeenTriples& seenTriples) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -49,7 +49,8 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
       tableWithVocab.localVocab(), index, cache);
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
-  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
+  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
+                          ctx, seenTriples);
 }
 
 //______________________________________________________________________________
@@ -61,8 +62,10 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
+  SeenTriples seenTriples;
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
                        &index, cancellationHandle, cache = std::move(cache),
+                       seenTriples = std::move(seenTriples),
                        accumulatedRowOffset =
                            rowOffset](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
@@ -73,11 +76,11 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
 
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
            ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
-                                 cancellationHandle,
+                                 cancellationHandle, &seenTriples,
                                  tableRowOffset](auto chunkView) {
-             return computeBatch(table.tableWithVocab_, chunkView,
-                                 preprocessedTemplate, index, cache,
-                                 tableRowOffset, cancellationHandle);
+             return computeBatch(
+                 table.tableWithVocab_, chunkView, preprocessedTemplate, index,
+                 cache, tableRowOffset, cancellationHandle, seenTriples);
            }) |
            ql::views::join;
   };

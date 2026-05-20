@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
@@ -49,6 +50,8 @@ static constexpr auto matchesEvaluatedTriple = [](const auto& s, const auto& p,
       AD_FIELD(EvaluatedTriple, predicate_, matchesEvaluatedTerm(p, nullptr)),
       AD_FIELD(EvaluatedTriple, object_, matchesEvaluatedTerm(o, nullptr)));
 };
+
+SeenTriples makeEmptySeenTriples() { return {}; }
 
 // ============================================================================
 //                      TESTS FOR `instantiateTerm`
@@ -178,7 +181,10 @@ TEST(InstantiateBatch, EmptyTemplate) {
   PreprocessedConstructTemplate tmpl = {};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 ctx, seenTriples);
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -193,7 +199,10 @@ TEST(InstantiateBatch, EmptyBatch) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 0};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 ctx, seenTriples);
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -208,7 +217,10 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 ctx, seenTriples);
 
   EXPECT_THAT(
       result,
@@ -240,7 +252,9 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
                                 PrecomputedConstant{p},
                                 PrecomputedConstant{o}}};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result = instantiateBatch(tmpl, batchResult, 0, ctx, seenTriples);
 
   EXPECT_THAT(
       result,
@@ -263,7 +277,10 @@ TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
                                 PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 2};
 
-  auto result = instantiateBatch(tmpl, batchResult, /*batchOffset=*/5);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result =
+      instantiateBatch(tmpl, batchResult, /*batchOffset=*/5, ctx, seenTriples);
 
   EXPECT_THAT(
       result,
@@ -289,7 +306,9 @@ TEST(InstantiateBatch, MultipleTriples) {
                                 PrecomputedConstant{o2}}};
   auto batchResult = BatchEvaluationResult{{}, 2};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  auto seenTriples = makeEmptySeenTriples();
+  auto result = instantiateBatch(tmpl, batchResult, 0, ctx, seenTriples);
 
   // Row-major: for each row, all triples in template order.
   EXPECT_THAT(

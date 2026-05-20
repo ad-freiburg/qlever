@@ -43,13 +43,28 @@ std::optional<EvaluatedTerm> instantiateTerm(
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t batchOffset) {
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    const BatchEvaluationContext& ctx, SeenTriples& seenTriples) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
-    for (const auto& triple : tmpl.preprocessedTriples_) {
+    const size_t absoluteRow = ctx.firstRow_ + rowInBatch;
+    for (size_t tripleIdx :
+         ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
+      const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
+      const auto& tripleColumns = tmpl.variableColumnsPerTriple_[tripleIdx];
+
+      std::vector<ValueId> ids;
+      ids.reserve(tripleColumns.size());
+      for (size_t col : tripleColumns) {
+        ids.push_back(ctx.idTable_[absoluteRow][col]);
+      }
+      if (!seenTriples.insert({tripleIdx, std::move(ids)}).second) {
+        continue;
+      }
+
       auto instantiate = [&triple, &batchResult, rowInBatch,
                           blankNodeRowId](size_t pos) {
         return instantiateTerm(triple[pos], batchResult, rowInBatch,

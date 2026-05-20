@@ -12,11 +12,14 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
+#include "global/ValueId.h"
+#include "util/HashSet.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
@@ -32,14 +35,20 @@ std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
     size_t rowIdxInBatch, size_t rowIdxTotal);
 
+using SeenTriples =
+    ad_utility::HashSet<std::pair<size_t, std::vector<ValueId>>>;
+
 // Instantiates all template triples for all rows in a batch. For each row,
 // every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
 // any unbound term are silently dropped. `batchOffset` is the absolute
 // row ID of the first row in the batch (used to generate unique blank node
-// IDs).
+// IDs). `ctx` and `seenTriples` are used to deduplicate: for each
+// (tripleIdx, row), the raw `ValueId`s at the variable columns of that triple
+// are checked against `seenTriples`; the triple is skipped if already seen.
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t batchOffset);
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    const BatchEvaluationContext& ctx, SeenTriples& seenTriples);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals
