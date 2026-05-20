@@ -22,6 +22,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
+#include "util/GTestHelpers.h"
 
 using namespace ad_utility::vocabulary_merger;
 namespace {
@@ -232,6 +233,39 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   IdMap mapping1 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
                                     std::to_string(1));
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
+}
+
+// _____________________________________________________________________________
+TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  auto callback = [](const auto&, bool) { return uint64_t{0}; };
+
+  std::string basePath = "MergeVocabulary.mergeVocabularyAssertion";
+
+  auto writeUnorderedFile = [](const auto& path) {
+    ad_utility::serialization::FileWriteSerializer partialVocab(path);
+    // Intentionally in wrong order.
+    std::array<std::string_view, 3> strings{"\"c\"", "\"b\"", "\"a\""};
+    partialVocab << strings.size();
+    size_t localIdx = 0;
+    for (auto s : strings) {
+      partialVocab << s;
+      partialVocab << false;
+      partialVocab << localIdx;
+      localIdx++;
+    }
+  };
+
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0));
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      mergeVocabulary(
+          basePath, 2,
+          [](std::string_view a, bool, std::string_view b, bool) {
+            return std::less{}(a, b);
+          },
+          callback, 1_GB),
+      ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
