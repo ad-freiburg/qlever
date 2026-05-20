@@ -49,8 +49,8 @@ const auto equalityCheckPrefilterVectors =
                               const PrefilterExprVariablePair& expPair) {
     if (*resPair.first != *expPair.first || resPair.second != expPair.second) {
       std::stringstream stream;
-      stream << "The following value pairs don't match:"
-             << "\nRESULT: " << *resPair.first << "EXPECTED: " << *expPair.first
+      stream << "The following value pairs don't match:" << "\nRESULT: "
+             << *resPair.first << "EXPECTED: " << *expPair.first
              << "RESULT: VARIABLE" << resPair.second.name()
              << "\nEXPECTED: VARIABLE" << expPair.second.name() << std::endl;
       ADD_FAILURE() << stream.str();
