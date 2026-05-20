@@ -233,7 +233,7 @@ TEST(TripleComponent, toValueId) {
     EXPECT_THAT(lve.lowerBoundInVocab_, boundMatcher);
     EXPECT_THAT(lve.upperBoundInVocab_, boundMatcher);
   };
-  expectLocalVocab(iri("<notexisting>"), 6);
+  expectLocalVocab(iri("<notexisting>"), 5);
   expectLocalVocab(lit("\"a\""), 0);
   expectLocalVocab(lit("\"b\""), 1);
 }
@@ -278,9 +278,9 @@ TEST(TripleComponent, toValueIdOrBounds) {
   expectBounds(lit("\"a\""), bounds(0, 0));
   expectBounds(lit("\"b\""), bounds(1, 1));
   expectBounds(iri("<a>"), bounds(1, 1));
-  expectBounds(iri("<k>"), bounds(6, 6));
-  expectBounds(iri("<xx>"), bounds(7, 7));
-  expectBounds(iri("<yy>"), bounds(8, 8));
+  expectBounds(iri("<k>"), bounds(5, 5));
+  expectBounds(iri("<xx>"), bounds(6, 6));
+  expectBounds(iri("<yy>"), bounds(7, 7));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {

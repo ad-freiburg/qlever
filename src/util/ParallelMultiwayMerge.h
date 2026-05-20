@@ -264,9 +264,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto mergeRange2 = parallelMerge(splitIt, end);
 
     return ResultT{ad_utility::streams::runStreamAsync(
-        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
-                                decltype(mergeRange1), decltype(mergeRange2),
-                                ComparisonFuncT>(
+        LazyBinaryMerge<T, moveElements, SizeGetter, decltype(mergeRange1),
+                        decltype(mergeRange2), ComparisonFuncT>(
             maxMemPerNode, blocksize, std::move(mergeRange1),
             std::move(mergeRange2), comparison),
         2)};
