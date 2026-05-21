@@ -491,7 +491,12 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
     ad_utility::HashSet<Variable> otherVars;
     for (size_t i = indexOfFirstVar + 1; i < 3; ++i) {
       const auto& el = *scan.getPermutedTriple()[i];
-      if (el.isVariable()) {
+      if (el.isVariable() &&
+          // Variables that get stripped immediately by `scan` should not be
+          // taken into account as they are not part of the result (and will not
+          // be joined on).
+          (!scan.varsToKeep_.has_value() ||
+           scan.varsToKeep_.value().contains(el.getVariable()))) {
         otherVars.insert(el.getVariable());
       }
     }
