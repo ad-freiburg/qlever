@@ -11,6 +11,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
@@ -208,51 +209,27 @@ TEST(InstantiateBatch, EmptyBatch) {
 }
 
 // _____________________________________________________________________________
-TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
-  auto s = makeTerm("<http://s>");
-  auto p = makeTerm("<http://p>");
-  auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
-  tmpl.preprocessedTriples_ = {
-      {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
-  auto batchResult = BatchEvaluationResult{{}, 3};
-
-  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
-  auto seenTriples = makeEmptySeenTriples();
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
-                                 ctx, seenTriples);
-
-  EXPECT_THAT(
-      result,
-      ElementsAre(
-          matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>"),
-          matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>"),
-          matchesEvaluatedTriple("<http://s>", "<http://p>", "<http://o>")));
-
-  // check pointer equality here:
-  EXPECT_EQ(result[0].subject_.get(), result[1].subject_.get());
-  EXPECT_EQ(result[0].subject_.get(), result[2].subject_.get());
-  EXPECT_EQ(result[0].predicate_.get(), result[1].predicate_.get());
-  EXPECT_EQ(result[0].predicate_.get(), result[2].predicate_.get());
-  EXPECT_EQ(result[0].object_.get(), result[1].object_.get());
-  EXPECT_EQ(result[0].object_.get(), result[2].object_.get());
-}
-
-// _____________________________________________________________________________
 TEST(InstantiateBatch, UnboundVariableDropsTriple) {
+  // Tests that a triple is dropped when one of its variables is unbound for a
+  // specific result row. Row 1 has `std::nullopt` for `?sub` in the evaluated
+  // values, so only rows 0 and 2 produce output triples. Each row carries a
+  // unique ID in column 0 so the deduplication logic treats them as distinct.
   size_t variableColumnIndex = 0;
   // column 0: [bound, unbound, bound]
+
   EvaluatedVariableValues vals = {makeTerm("<http://a>"), std::nullopt,
                                   makeTerm("<http://c>")};
   auto batchResult = BatchEvaluationResult{{{variableColumnIndex, vals}}, 3};
-  auto p = makeTerm("<http://p>");
-  auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
-  tmpl.preprocessedTriples_ = {{PrecomputedVariable{variableColumnIndex},
-                                PrecomputedConstant{p},
-                                PrecomputedConstant{o}}};
 
-  auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+  auto tmpl = ConstructTemplatePreprocessor::preprocess(
+      {{Variable{"?sub"}, Iri{"<http://p>"}, Iri{"<http://o>"}}}, varMap);
+
+  auto ctx = BatchEvaluationContext{
+      makeIdTableFromVector(
+          {{Id::makeFromInt(0)}, {Id::makeFromInt(1)}, {Id::makeFromInt(2)}}),
+      0, 0};
   auto seenTriples = makeEmptySeenTriples();
   auto result = instantiateBatch(tmpl, batchResult, 0, ctx, seenTriples);
 

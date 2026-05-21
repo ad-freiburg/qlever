@@ -84,6 +84,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
+  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
@@ -101,6 +103,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
+  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
@@ -118,6 +122,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
+  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
@@ -139,6 +144,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   EXPECT_EQ(result.uniqueVariableColumns_[0], 3);
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(3));
+  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
@@ -154,6 +161,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
+  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
@@ -172,6 +180,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
   ASSERT_TRUE(result.uniqueVariableColumns_.empty());
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
+  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_TRUE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
@@ -190,6 +200,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
   ASSERT_TRUE(result.uniqueVariableColumns_.empty());
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
+  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_TRUE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
@@ -200,6 +212,7 @@ TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
+  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -221,6 +234,8 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_EQ(result.uniqueVariableColumns_[0], 5);
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(5, 5));
+  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -248,6 +263,9 @@ TEST(ConstructTemplatePreprocessorTest,
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(2));
   EXPECT_THAT(result.variableColumnsPerTriple_[1], ElementsAre(2));
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -268,6 +286,8 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_THAT(result.uniqueVariableColumns_, UnorderedElementsAre(0, 1));
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0, 1));
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -299,6 +319,10 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0, 1));
   EXPECT_THAT(result.variableColumnsPerTriple_[1], ElementsAre(0, 2));
   EXPECT_THAT(result.variableColumnsPerTriple_[2], ElementsAre(1, 2));
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 3);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[2]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
@@ -315,6 +339,7 @@ TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
   EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
+  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -340,6 +365,8 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_EQ(result.uniqueVariableColumns_[0], 0);
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0));
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
@@ -365,6 +392,9 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
   EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
   EXPECT_TRUE(result.variableColumnsPerTriple_[1].empty());
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
@@ -391,6 +421,9 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
   ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
   EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(4));
   EXPECT_TRUE(result.variableColumnsPerTriple_[1].empty());
+  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
+  EXPECT_TRUE(result.tripleContainsBlankNode_[1]);
 }
 
 // =============================================================================

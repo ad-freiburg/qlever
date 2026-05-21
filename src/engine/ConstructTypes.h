@@ -90,6 +90,13 @@ struct PreprocessedConstructTemplate {
   // index i contains the variables (identified by their column index in the
   // `IdTable`) that are contained in template triple at index i.
   std::vector<std::vector<size_t>> variableColumnsPerTriple_;
+  // For each template triple at index i, this flag is true if the triple
+  // contains at least one blank node term (either a user-defined blank-node
+  // term like `_:a` or an anonymous blank node `[]`). Used during deduplication
+  // of CONSTRUCT query results: triples that contain blank nodes are excluded
+  // from deduplication because blank node IDs are generated per-row, making
+  // every instantiation distinct across result rows.
+  std::vector<bool> tripleContainsBlankNode_;
 };
 
 // Result of instantiating a single template triple for a specific result table

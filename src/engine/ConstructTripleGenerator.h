@@ -76,6 +76,7 @@ class ConstructTripleGenerator {
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
   FRIEND_TEST(MakeIdCache, multipleVariables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, acrossBatchBoundary);
   FRIEND_TEST(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables);
   FRIEND_TEST(ConstructTripleGeneratorTest, cannotCancelDuringBatch);
   FRIEND_TEST(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches);

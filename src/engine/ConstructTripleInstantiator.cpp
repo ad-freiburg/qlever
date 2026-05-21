@@ -56,13 +56,17 @@ std::vector<EvaluatedTriple> instantiateBatch(
       const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
       const auto& tripleColumns = tmpl.variableColumnsPerTriple_[tripleIdx];
 
-      std::vector<ValueId> ids;
-      ids.reserve(tripleColumns.size());
-      for (size_t col : tripleColumns) {
-        ids.push_back(ctx.idTable_[absoluteRow][col]);
-      }
-      if (!seenTriples.insert({tripleIdx, std::move(ids)}).second) {
-        continue;
+      // triples containing blank nodes are always distinct across rows because
+      // blank node IDs are generated per-row. Skip the dedup check for them.
+      if (!tmpl.tripleContainsBlankNode_[tripleIdx]) {
+        std::vector<ValueId> ids;
+        ids.reserve(tripleColumns.size());
+        for (size_t col : tripleColumns) {
+          ids.push_back(ctx.idTable_[absoluteRow][col]);
+        }
+        if (!seenTriples.insert({tripleIdx, std::move(ids)}).second) {
+          continue;
+        }
       }
 
       auto instantiate = [&triple, &batchResult, rowInBatch,

@@ -19,6 +19,12 @@
 
 namespace qlever::constructExport {
 
+static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
+  return ql::ranges::any_of(triple, [](const PreprocessedTerm& term) {
+    return std::holds_alternative<PrecomputedBlankNode>(term);
+  });
+}
+
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
@@ -117,6 +123,8 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
       tripleColumns.push_back(var.columnIndex_);
     }
     result.variableColumnsPerTriple_.push_back(std::move(tripleColumns));
+    result.tripleContainsBlankNode_.push_back(
+        tripleContainsBlankNode(*preprocessedTriple));
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 
