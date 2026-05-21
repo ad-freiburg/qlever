@@ -489,16 +489,23 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
     AD_CORRECTNESS_CHECK(numVars <= 3);
     size_t indexOfFirstVar = 3 - numVars;
     ad_utility::HashSet<Variable> otherVars;
+    auto addOtherVar = [&otherVars, &scan](const Variable& el) {
+      // Variables that get stripped immediately by `scan` should not be
+      // taken into account as they are not part of the result (and will not
+      // be joined on).
+      if (!scan.varsToKeep_.has_value() ||
+          scan.varsToKeep_.value().contains(el)) {
+        otherVars.insert(el);
+      }
+    };
     for (size_t i = indexOfFirstVar + 1; i < 3; ++i) {
       const auto& el = *scan.getPermutedTriple()[i];
-      if (el.isVariable() &&
-          // Variables that get stripped immediately by `scan` should not be
-          // taken into account as they are not part of the result (and will not
-          // be joined on).
-          (!scan.varsToKeep_.has_value() ||
-           scan.varsToKeep_.value().contains(el.getVariable()))) {
-        otherVars.insert(el.getVariable());
+      if (el.isVariable()) {
+        addOtherVar(el.getVariable());
       }
+    }
+    for (const auto& var : scan.additionalVariables()) {
+      addOtherVar(var);
     }
     return std::pair{*scan.getPermutedTriple()[3 - numVars],
                      std::move(otherVars)};
