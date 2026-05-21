@@ -1,0 +1,76 @@
+name: Upload conformance tests result (new)
+
+on:
+  workflow_run:
+    workflows: [sparql-conformance-new]
+    types:
+      - completed
+
+jobs:
+  upload:
+    continue-on-error: true
+    env:
+      SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_NEW_SERVER_URL }}
+      API_KEY: ${{ secrets.SPARQL_CONFORMANCE_NEW_TOKEN }}
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: 'Download artifact'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "conformance-report"
+            })[0];
+            var download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/conformance-report.zip', Buffer.from(download.data));
+      - name: Unzip conformance report
+        run: unzip conformance-report.zip
+      - name: Read conformance report metadata
+        run: |
+          echo "github_event=$(cat event)"                              >> $GITHUB_ENV
+          echo "pr_number=$(cat pr)"                                    >> $GITHUB_ENV
+          echo "original_github_ref=$(cat github_ref)"                 >> $GITHUB_ENV
+          echo "commit_sha=$(cat sha)"                                  >> $GITHUB_ENV
+          echo "original_github_repository=$(cat github_repository)"   >> $GITHUB_ENV
+          echo "head_ref=$(cat head_ref)"                              >> $GITHUB_ENV
+      - name: "Submit data to new server"
+        run: |
+          if [[ "${{ env.original_github_ref }}" == refs/tags/* ]]; then
+            REF_KIND="tag"
+          else
+            REF_KIND="branch"
+          fi
+
+          response=$(curl -L -s -o temp_response.txt -w "%{http_code}" \
+            -H "x-api-key: $API_KEY" \
+            -H "x-repo-full-name: ${{ env.original_github_repository }}" \
+            -H "x-commit-sha: ${{ env.commit_sha }}" \
+            -H "x-engine-name: qlever" \
+            -H "x-ref-name: ${{ env.original_github_ref }}" \
+            -H "x-ref-kind: $REF_KIND" \
+            -H "x-pr-number: ${{ env.pr_number }}" \
+            -H "x-head-ref: ${{ env.head_ref }}" \
+            -H "x-workflow-run-id: ${{ github.event.workflow_run.id }}" \
+            -H "x-upload-source: ci" \
+            -F "file=@${{ env.commit_sha }}.json.bz2" \
+            "$SERVER_URL/api/upload")
+
+          echo "Server response:"
+          cat temp_response.txt
+          echo "HTTP Status: $response"
+          if [ "$response" -gt 200 ]; then
+            echo "Server did not respond with status 200. Failing the workflow."
+            exit 1
+          fi
