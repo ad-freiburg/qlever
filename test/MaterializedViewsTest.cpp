@@ -1652,3 +1652,34 @@ INSTANTIATE_TEST_SUITE_P(
         // An additional `BIND` is ignored and the view can still be used for
         // query rewriting. Also uses a different sorting.
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
+  // Regression test for #2866.
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("testView1", plan);
+
+  auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s1> ;
+                   view:column-p ?p .
+        }
+      }
+    )");
+  auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s2> ;
+                   view:column-p ?p .
+        }
+      }
+    )");
+  auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
+  auto indexScanRight = dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
+  EXPECT_NO_THROW(
+      IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight));
+}
