@@ -28,6 +28,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "gmock/gmock.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
@@ -1660,7 +1661,10 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", plan);
 
-  auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
+  // Test that the placeholder variable for the third column of both views,
+  // which is not read, does not trigger an assertion error.
+  {
+    auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
         SERVICE view:testView1 {
@@ -1669,7 +1673,7 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
         }
       }
     )");
-  auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
+    auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
         SERVICE view:testView1 {
@@ -1678,8 +1682,43 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
         }
       }
     )");
-  auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
-  auto indexScanRight = dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
-  EXPECT_NO_THROW(
-      IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight));
+    auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
+    auto indexScanRight =
+        dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
+    EXPECT_NO_THROW(
+        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight));
+  }
+
+  // Test that an join column that is not in the first three columns is
+  // correctly checked and thus triggers the assertion.
+  {
+    auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s1> ;
+                   view:column-p ?p ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s2> ;
+                   view:column-p ?p ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
+    auto indexScanRight =
+        dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight),
+        ::testing::HasSubstr(
+            "The two IndexScans for a lazy single-column join have "
+            "more than one column in common."));
+  }
 }

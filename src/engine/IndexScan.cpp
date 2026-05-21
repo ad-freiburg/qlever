@@ -519,7 +519,9 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   for (auto& var : other1) {
     other2.insert(var);
   }
-  AD_CONTRACT_CHECK(other2.size() == numTotal);
+  AD_CONTRACT_CHECK(other2.size() == numTotal,
+                    "The two IndexScans for a lazy single-column join have "
+                    "more than one column in common.");
 
   auto metaBlocks1 = s1.getMetadataForScan();
   auto metaBlocks2 = s2.getMetadataForScan();
