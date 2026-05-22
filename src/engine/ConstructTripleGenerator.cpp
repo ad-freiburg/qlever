@@ -34,13 +34,20 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
-        CancellationHandle cancellationHandle, SeenTriples& seenTriples) {
+        CancellationHandle cancellationHandle, SeenTriples& seenTriples,
+        const DeduplicationMode& mode) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
   const size_t batchBegin = *ql::ranges::begin(batch);
   const size_t batchEnd =
       batchBegin + static_cast<size_t>(ql::ranges::size(batch));
+
+  if (const auto* bw = std::get_if<DeduplicationMode::BatchWise>(&mode.value)) {
+    if ((batchBegin % bw->batchSize == 0)) {
+      seenTriples.clear();
+    }
+  }
 
   BatchEvaluationContext ctx{tableWithVocab.idTable(), batchBegin, batchEnd};
 
@@ -57,7 +64,8 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
     const Index& index, CancellationHandle cancellationHandle,
-    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset) {
+    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+    DeduplicationMode mode) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
@@ -66,8 +74,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
                        &index, cancellationHandle, cache = std::move(cache),
                        seenTriples = std::move(seenTriples),
-                       accumulatedRowOffset =
-                           rowOffset](const TableWithRange& table) mutable {
+                       accumulatedRowOffset = rowOffset,
+                       mode](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
     // Snapshot the offset for this table, then advance it for the next table.
@@ -77,10 +85,10 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
            ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
                                  cancellationHandle, &seenTriples,
-                                 tableRowOffset](auto chunkView) {
+                                 tableRowOffset, mode](auto chunkView) {
              return computeBatch(
                  table.tableWithVocab_, chunkView, preprocessedTemplate, index,
-                 cache, tableRowOffset, cancellationHandle, seenTriples);
+                 cache, tableRowOffset, cancellationHandle, seenTriples, mode);
            }) |
            ql::views::join;
   };
@@ -97,10 +105,10 @@ ConstructTripleGenerator::generateFormattedTriples(
     const Triples& templateTriples, const VariableToColumnMap& variableColums,
     const Index& index, CancellationHandle cancellationhandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-    ad_utility::MediaType mediaType) {
+    ad_utility::MediaType mediaType, DeduplicationMode dedupMode) {
   auto evaluatedTriples =
       evaluateTables(templateTriples, variableColums, index, cancellationhandle,
-                     std::move(rowIndices), rowOffset);
+                     std::move(rowIndices), rowOffset, dedupMode);
 
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
     return formatTriple(triple, mediaType);
@@ -114,10 +122,11 @@ InputRangeTypeErased<StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const Triples& templateTriples, const VariableToColumnMap& variableColums,
     const Index& index, CancellationHandle cancellationhandle,
-    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset) {
+    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+    DeduplicationMode mode) {
   auto evaluatedTriples =
       evaluateTables(templateTriples, variableColums, index, cancellationhandle,
-                     std::move(rowIndices), rowOffset);
+                     std::move(rowIndices), rowOffset, mode);
 
   auto transformer = [](const EvaluatedTriple& triple) {
     return createStringTriple(triple);

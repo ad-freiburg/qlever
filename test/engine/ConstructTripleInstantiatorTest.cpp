@@ -246,23 +246,21 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
 
 // _____________________________________________________________________________
 TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
-  auto p = makeTerm("<http://p>");
-  auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
-  tmpl.preprocessedTriples_ = {{PrecomputedBlankNode{"_:g", ""},
-                                PrecomputedConstant{p},
-                                PrecomputedConstant{o}}};
+  VariableToColumnMap varMap;
+  auto tmpl = ConstructTemplatePreprocessor::preprocess(
+      {{BlankNode{true, "g"}, Iri{"<http://p>"}, Iri{"<http://o>"}}}, varMap);
   auto batchResult = BatchEvaluationResult{{}, 2};
-
   auto ctx = BatchEvaluationContext{makeIdTableFromVector({}), 0, 0};
+
   auto seenTriples = makeEmptySeenTriples();
   auto result =
       instantiateBatch(tmpl, batchResult, /*batchOffset=*/5, ctx, seenTriples);
 
   EXPECT_THAT(
       result,
-      ElementsAre(matchesEvaluatedTriple("_:g5", "<http://p>", "<http://o>"),
-                  matchesEvaluatedTriple("_:g6", "<http://p>", "<http://o>")));
+      ElementsAre(
+          matchesEvaluatedTriple("_:g5_g", "<http://p>", "<http://o>"),
+          matchesEvaluatedTriple("_:g6_g", "<http://p>", "<http://o>")));
 
   // check pointer equality here:
   EXPECT_EQ(result[0].predicate_.get(), result[1].predicate_.get());

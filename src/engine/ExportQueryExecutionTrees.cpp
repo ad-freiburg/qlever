@@ -40,6 +40,7 @@ namespace {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
+using DeduplicationMode = qlever::constructExport::DeduplicationMode;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -265,7 +266,8 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize, CancellationHandle cancellationHandle) {
+    uint64_t& resultSize, CancellationHandle cancellationHandle,
+    DeduplicationMode mode) {
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require
@@ -277,7 +279,8 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   return qlever::constructExport::ConstructTripleGenerator::
       generateStringTriples(constructTriples, qet.getVariableColumns(),
                             qet.getQec()->getIndex(), cancellationHandle,
-                            std::move(rowIndices), limitAndOffset._offset);
+                            std::move(rowIndices), limitAndOffset._offset,
+                            mode);
 }
 
 // _____________________________________________________________________________
@@ -759,7 +762,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
-    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder,
+    DeduplicationMode mode) {
   using enum MediaType;
   static constexpr std::array supportedFormats{
       octetStream, csv,        tsv,    sparqlXml,
@@ -789,7 +793,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       generateFormattedTriples(constructTriples, qet.getVariableColumns(),
                                qet.getQec()->getIndex(), cancellationHandle,
                                std::move(rowIndices), limitAndOffset._offset,
-                               format);
+                               format, mode);
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
