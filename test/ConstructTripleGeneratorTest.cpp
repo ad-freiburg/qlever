@@ -125,10 +125,9 @@ TEST_F(ConstructTripleGeneratorTest, emptyTable) {
   EXPECT_TRUE(run(templateTriples, {}, table).empty());
 }
 
-// All-constants template: Every template triple is exactly yielded once.
-// If the Where-clause result contains at least one row, every ground triple
-// in the construct template is exactly yielded once.
-TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOnce) {
+// All-constants template: every result row emits one identical triple,
+// regardless of `IdTable` cell contents.
+TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
   //              col 0
   // row 0:       undefined
   // row 1:       undefined
@@ -138,7 +137,9 @@ TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOnce) {
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   EXPECT_THAT(run(templateTriples, {}, table),
-              ElementsAre(matchTriple("<s>", "<p>", "<o>")));
+              ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<s>", "<p>", "<o>")));
 }
 
 // Variable in subject position: correctly resolved from the `IdTable` column.
@@ -276,36 +277,18 @@ TEST_F(ConstructTripleGeneratorTest, viewSubrangeReadsCorrectRowsOfIdTable) {
 TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
   constexpr size_t N = ConstructTripleGenerator::BATCH_SIZE + 1;
 
-  std::string nTriples;
-  for (size_t i = 0; i < N; ++i) {
-    nTriples += "<s" + std::to_string(i) + "> <p> <o> . \n";
-  }
-  auto localQec = ad_utility::testing::getQec(nTriples);
-  auto makeId = ad_utility::testing::makeGetId(localQec->getIndex());
-
-  std::vector<std::vector<IntOrId>> rows;
-  rows.reserve(N);
-  for (size_t i = 0; i < N; ++i) {
-    rows.push_back(std::vector<IntOrId>(
-        1, IntOrId(makeId("<s" + std::to_string(i) + ">"))));
-  }
-
+  std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
   auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
-  auto handle = makeHandle();
-  auto stringTriples = ConstructTripleGenerator::evaluateTables(
-      templateTriples, varMap, localQec->getIndex(), handle,
-      singleTableRange(std::move(table)), 0);
-  auto collected = ::ranges::to_vector(stringTriples);
+  auto collected = run(templateTriples, varMap, table);
 
   ASSERT_EQ(collected.size(), N);
-  for (size_t i = 0; i < N; ++i) {
-    EXPECT_THAT(collected[i],
-                matchTriple("<s" + std::to_string(i) + ">", "<p>", "<o>"));
+  for (const auto& triple : collected) {
+    EXPECT_THAT(triple, matchTriple("<s>", "<p>", "<o>"));
   }
 }
 
@@ -315,32 +298,17 @@ TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
 TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
   constexpr size_t N = ConstructTripleGenerator::BATCH_SIZE + 1;
 
-  std::string nTriples;
-  for (size_t i = 0; i < N; ++i) {
-    nTriples += "<s" + std::to_string(i) + "> <p> <o> .\n";
-  }
-  auto* localQec = ad_utility::testing::getQec(nTriples);
-  auto makeId = ad_utility::testing::makeGetId(localQec->getIndex());
-
-  std::vector<std::vector<IntOrId>> rows;
-  rows.reserve(N);
-  for (size_t i = 0; i < N; ++i) {
-    rows.push_back(std::vector<IntOrId>(
-        1, IntOrId(makeId("<s" + std::to_string(i) + ">"))));
-  }
-
+  std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
-  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
-  VariableToColumnMap varMap;
-  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
-      templateTriples, varMap, localQec->getIndex(), handle,
-      singleTableRange(table), 0);
+      templateTriples, {}, index_, handle, singleTableRange(table), 0);
 
-  // Drain all ConstructTripleGenerator::BATCH_SIZE triples from batch 0.
+  // Drain all ConstructTripleGenerator::BATCH_SIZE triples from batch
+  // 0.
   for (size_t i = 0; i < ConstructTripleGenerator::BATCH_SIZE; ++i) {
     ASSERT_TRUE(range.get().has_value());
   }
@@ -359,14 +327,12 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
   static_assert(2 < ConstructTripleGenerator::BATCH_SIZE);
   auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 2);
-  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
-  VariableToColumnMap varMap;
-  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
-      templateTriples, varMap, index_, handle,
-      singleTableRange(std::move(table)), 0);
+      templateTriples, {}, index_, handle, singleTableRange(std::move(table)),
+      0);
 
   // First triple succeeds.
   ASSERT_TRUE(range.get().has_value());
@@ -388,26 +354,17 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
 TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
   constexpr size_t N = ConstructTripleGenerator::BATCH_SIZE + 1;
 
-  // The subject column holds the same ID (`idS_`) in every row so the second
-  // batch is guaranteed to be a cache hit if the cache is carried over. The
-  // object column holds a unique integer ID per row to prevent deduplication
-  // to collapse all triples into one. This relies on the cache capacity being
+  // All rows hold the same ID so the second batch is guaranteed to be a cache
+  // hit if the cache is carried over. This relies on the cache capacity being
   // larger than `BATCH_SIZE`. The minimum cache capacity is
   // `CACHE_ENTRIES_PER_VARIABLE` (due to the std::max floor in `makeIdCache`),
   // which currently exceeds `BATCH_SIZE`.
-  std::vector<std::vector<IntOrId>> rows;
-  rows.reserve(N);
-  for (size_t i = 0; i < N; ++i) {
-    rows.push_back(
-        std::vector<IntOrId>{IntOrId(idS_), IntOrId(Id::makeFromInt(i))});
-  }
+  std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
-  auto templateTriples =
-      oneTriple(Variable{"?sub"}, Iri{"<p>"}, Variable{"?obj"});
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
-  varMap[Variable{"?obj"}] = makeAlwaysDefinedColumn(1);
 
   auto collected = run(templateTriples, varMap, std::move(table));
   ASSERT_EQ(collected.size(), N);

@@ -7,6 +7,7 @@
 
 #include <gmock/gmock.h>
 
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "index/Index.h"
@@ -82,10 +83,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
                                 Const("<http://o>")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
-  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
@@ -101,10 +98,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
                                 Const("hello")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
-  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
@@ -121,8 +114,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
-  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
@@ -142,10 +133,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   // The unique variable columns should contain column 3.
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 3);
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(3));
-  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
@@ -160,8 +147,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
-  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
@@ -178,10 +163,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
                                 Const("<http://o>")));
 
   ASSERT_TRUE(result.uniqueVariableColumns_.empty());
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
-  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_TRUE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
@@ -198,10 +179,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
                                 Const("<http://o>")));
 
   ASSERT_TRUE(result.uniqueVariableColumns_.empty());
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
-  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_TRUE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
@@ -211,14 +188,11 @@ TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
-  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest,
      sameVariableWithinSingleTripleDeduplicates) {
-  // ?x appears in subject and object of the same triple: one unique column,
-  // but variableColumnsPerTriple_ records both occurrences.
+  // ?x appears in subject and object of the same triple: one unique column.
   Triples triples;
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri{"<http://p>"}},
                      GraphTerm{Variable{"?x"}}});
@@ -232,16 +206,11 @@ TEST(ConstructTemplatePreprocessorTest,
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 5);
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(5, 5));
-  EXPECT_EQ(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
      sameVariableAcrossMultipleTriplesDeduplicates) {
-  // ?x appears in two different triples: still one unique column globally,
-  // but each triple's variableColumnsPerTriple_ entry records it independently.
+  // ?x appears in two different triples: still one unique column.
   Triples triples;
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri{"<http://p1>"}},
                      GraphTerm{Iri{"<http://o1>"}}});
@@ -260,12 +229,6 @@ TEST(ConstructTemplatePreprocessorTest,
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 2);
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(2));
-  EXPECT_THAT(result.variableColumnsPerTriple_[1], ElementsAre(2));
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -284,10 +247,6 @@ TEST(ConstructTemplatePreprocessorTest,
               matchSingleTriple(Var(0), Const("<http://p>"), Var(1)));
 
   EXPECT_THAT(result.uniqueVariableColumns_, UnorderedElementsAre(0, 1));
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0, 1));
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -315,14 +274,6 @@ TEST(ConstructTemplatePreprocessorTest,
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 3);
   EXPECT_THAT(result.uniqueVariableColumns_, UnorderedElementsAre(0, 1, 2));
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 3);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0, 1));
-  EXPECT_THAT(result.variableColumnsPerTriple_[1], ElementsAre(0, 2));
-  EXPECT_THAT(result.variableColumnsPerTriple_[2], ElementsAre(1, 2));
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 3);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[2]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
@@ -338,15 +289,13 @@ TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  EXPECT_TRUE(result.variableColumnsPerTriple_.empty());
-  EXPECT_TRUE(result.tripleContainsBlankNode_.empty());
 }
 
 TEST(ConstructTemplatePreprocessorTest,
      unboundVariableDropsOnlyAffectedTriple) {
   // Triple 1 has ?unbound (not in varMap) -> dropped.
   // Triple 2 has ?x (bound, column 0) -> kept.
-  // variableColumnsPerTriple_ has only one entry (for the kept triple).
+  // ?x should still appear in uniqueVariableColumns_.
   Triples triples;
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri{"<http://p>"}},
                      GraphTerm{Variable{"?unbound"}}});
@@ -363,10 +312,6 @@ TEST(ConstructTemplatePreprocessorTest,
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 0);
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0));
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 1);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
@@ -389,12 +334,6 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
                               Const("<http://o2>"))));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
-  EXPECT_TRUE(result.variableColumnsPerTriple_[0].empty());
-  EXPECT_TRUE(result.variableColumnsPerTriple_[1].empty());
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[1]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
@@ -418,12 +357,6 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 4);
-  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 2);
-  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(4));
-  EXPECT_TRUE(result.variableColumnsPerTriple_[1].empty());
-  EXPECT_THAT(result.tripleContainsBlankNode_.size(), 2);
-  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
-  EXPECT_TRUE(result.tripleContainsBlankNode_[1]);
 }
 
 // =============================================================================
