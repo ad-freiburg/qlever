@@ -26,6 +26,7 @@
 namespace qlever::constructExport {
 
 using StringTriple = QueryExecutionTree::StringTriple;
+using DeduplicationMode = ad_utility::DeduplicationMode;
 
 // Instantiates a single preprocessed term for a specific row.
 // For constants: returns the precomputed string.
@@ -50,7 +51,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
     const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
-    DeduplicationMode mode);
+    const DeduplicationMode& mode);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

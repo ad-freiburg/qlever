@@ -47,7 +47,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
     const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
-    DeduplicationMode mode) {
+    const DeduplicationMode& mode) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
@@ -61,6 +61,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
       // triples containing blank nodes are always distinct across rows because
       // blank node IDs are generated per-row. Skip the dedup check for them.
+      // For `None` mode, skip deduplication entirely.
       if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
           !tmpl.tripleContainsBlankNode_[tripleIdx]) {
         std::vector<ValueId> ids;
