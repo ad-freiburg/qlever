@@ -556,7 +556,7 @@ CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
-                                    const EvaluationContext* context) const {
+                                    const EvaluationContext * context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
     case EncodedVal:
@@ -593,8 +593,8 @@ CPP_template_out_def(typename RequestedInfo)(
 CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
-        RequestedInfo)>::operator()(const LiteralOrIri& litOrIri,
-                                    [[maybe_unused]] const EvaluationContext*
+        RequestedInfo)>::operator()(const LiteralOrIri & litOrIri,
+                                    [[maybe_unused]] const EvaluationContext *
                                         context) const {
   // If we receive only a literal, we have no choice but to parse it and compute
   // the geometry info ad hoc.

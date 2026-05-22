@@ -58,7 +58,9 @@ class ExplicitIdTableOperationTest : public ::testing::Test {
     qec_ = getTestQec();
     testTable_ = createTestIdTable(3, 2);
     testVariables_ = createTestVariableMap(2);
-    testSortedColumns_ = {ColumnIndex{0}};
+    // Avoid initializer_list assignment to sidestep a GCC 12 false positive
+    // (-Werror=array-bounds).
+    testSortedColumns_ = std::vector<ColumnIndex>(1, ColumnIndex{0});
     testCacheKey_ = "[dummy cache key]";
   }
 

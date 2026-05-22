@@ -561,22 +561,19 @@ class TripleComponentComparator {
   template <class InnerString, class LanguageTag, class FullString>
   struct SplitValBase {
     SplitValBase() = default;
-    SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized,
+    SplitValBase(char fst, InnerString trans, LanguageTag l,
                  FullString fullInputForTotalComparison)
         : firstOriginalChar_(fst),
           transformedVal_(std::move(trans)),
           langtag_(std::move(l)),
-          isExternalized_{externalized},
           fullInput_{std::move(fullInputForTotalComparison)} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
     char firstOriginalChar_ = '\0';
-    InnerString transformedVal_;   /// The original inner value, possibly
-                                   /// transformed by a locale().
-    LanguageTag langtag_;          /// The language tag, possibly empty.
-    bool isExternalized_ = false;  /// Does this word belong to the externalized
-                                   /// vocabulary.
+    InnerString transformedVal_;  /// The original inner value, possibly
+                                  /// transformed by a locale().
+    LanguageTag langtag_;         /// The language tag, possibly empty.
     FullString fullInput_;
   };
 
@@ -595,13 +592,6 @@ class TripleComponentComparator {
    */
   using SplitValNonOwning =
       SplitValBase<std::string_view, std::string_view, std::string_view>;
-
-  // This class only holds `string_view`s, but the contents are stored as a view
-  // to a sort key. This is used during index building for more efficient memory
-  // allocations.
-  using SplitValNonOwningWithSortKey =
-      SplitValBase<LocaleManager::SortKeyView, std::string_view,
-                   std::string_view>;
 
   /**
    * \brief Compare two elements from the Vocabulary.
@@ -623,14 +613,14 @@ class TripleComponentComparator {
    */
   bool operator()(std::string_view a, const SplitVal& spB,
                   const Level level) const {
-    auto spA = extractAndTransformComparable(a, level, false);
+    auto spA = extractAndTransformComparable(a, level);
     return compare(spA, spB, level) < 0;
   }
 
   // Same operator, but with switched argument types.
   bool operator()(const SplitVal& spA, std::string_view b,
                   const Level level) const {
-    auto spB = extractAndTransformComparable(b, level, false);
+    auto spB = extractAndTransformComparable(b, level);
     return compare(spA, spB, level) < 0;
   }
 
@@ -644,12 +634,27 @@ class TripleComponentComparator {
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
-    auto splitA = extractComparable<SplitValNonOwning>(a, level, false);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level, false);
+    auto splitA = extractComparable<SplitValNonOwning>(a, level);
+    auto splitB = extractComparable<SplitValNonOwning>(b, level);
     // We have to have a total ordering of unique elements in the vocabulary,
     // so if they compare equal according to the locale, use strcmp
     auto cmp = compare(splitA, splitB, level);
     return cmp;
+  }
+
+  // Total comparison, using the "is external" flags as a tiebreaker. The
+  // direction of the tiebreaker (external before non-external) is arbitrary:
+  // downstream the merge ORs the flag across all duplicates of the same word
+  // (see `VocabularyMergerImpl.h`), so the order of duplicates does not affect
+  // the final result, only the deterministic shape of the sort.
+  bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
+                                     std::string_view b,
+                                     bool bIsExternal) const {
+    int cmp = compare(a, b, Level::TOTAL);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    return aIsExternal && !bIsExternal;
   }
 
   /**
@@ -657,21 +662,8 @@ class TripleComponentComparator {
    * value according to the held locale
    */
   [[nodiscard]] SplitVal extractAndTransformComparable(
-      std::string_view a, const Level level, bool isExternal = false) const {
-    return extractComparable<SplitVal>(a, level, isExternal);
-  }
-
-  // Similar to `extractAndTransformComparable` but returns a `SplitVal` that
-  // contains of `string_views` the contents of which will be allocated using
-  // the `allocator`. Note: the user has to take care of the deallocation
-  // manually, otherwise the memory will leak. This is currently used during the
-  // index building.
-  [[nodiscard]] SplitValNonOwningWithSortKey
-  extractAndTransformComparableNonOwning(
-      std::string_view a, const Level level, bool isExternal,
-      ql::pmr::polymorphic_allocator<char>* allocator) const {
-    return extractComparable<SplitValNonOwningWithSortKey>(a, level, isExternal,
-                                                           allocator);
+      std::string_view a, const Level level) const {
+    return extractComparable<SplitVal>(a, level);
   }
 
   /**
@@ -729,7 +721,7 @@ class TripleComponentComparator {
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
     AD_CONTRACT_CHECK(level == Level::PRIMARY);
-    auto transformed = extractAndTransformComparable(s, Level::PRIMARY, false);
+    auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
     // The `firstOriginalChar_` is either " or < or @
     AD_CONTRACT_CHECK(
         static_cast<unsigned char>(transformed.firstOriginalChar_) <
@@ -774,12 +766,11 @@ class TripleComponentComparator {
    */
   template <class SplitValType>
   [[nodiscard]] SplitValType extractComparable(
-      std::string_view a, [[maybe_unused]] const Level level, bool isExternal,
-      ql::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
+      std::string_view a, [[maybe_unused]] const Level level) const {
     std::string_view res = a;
-    const char first = a.empty() ? char(0) : a[0];
+    const char first = a.empty() ? char{0} : a[0];
     std::string_view langtag;
-    if (ql::starts_with(res, '"')) {
+    if (first == '"') {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks
@@ -797,32 +788,10 @@ class TripleComponentComparator {
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string(langtag),
-              isExternal, std::string{a}};
+      return {first, _locManager.getSortKey(res, level), std::string{langtag},
+              std::string{a}};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {first, res, langtag, isExternal, a};
-    } else if constexpr (std::is_same_v<SplitValType,
-                                        SplitValNonOwningWithSortKey>) {
-      // For the non-owning sort key we allocate all the strings using the
-      // `allocator`
-      AD_CONTRACT_CHECK(allocator != nullptr);
-      auto add = [allocator](auto s) -> decltype(s) {
-        static_assert(
-            ad_utility::isInstantiation<decltype(s), std::basic_string_view>);
-        using Char = typename decltype(s)::value_type;
-        auto alloc =
-            ql::pmr::polymorphic_allocator<Char>(allocator->resource());
-        auto ptr = alloc.allocate(s.size());
-        ql::ranges::copy(s, ptr);
-        return {ptr, s.size()};
-      };
-      LocaleManager::SortKeyView sortKey;
-      auto writeSortKey = [&sortKey, &add](const uint8_t* begin, size_t sz) {
-        sortKey = LocaleManager::SortKeyView{
-            add(LocaleManager::U8StringView{begin, sz})};
-      };
-      _locManager.getSortKey(res, level, writeSortKey);
-      return {first, sortKey, add(langtag), isExternal, add(a)};
+      return {first, res, langtag, a};
     } else {
       static_assert(ad_utility::alwaysFalse<SplitValType>);
     }
