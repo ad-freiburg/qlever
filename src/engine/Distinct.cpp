@@ -223,11 +223,10 @@ std::unique_ptr<Operation> Distinct::cloneImpl() const {
                                     keepIndices_);
 }
 
-// `outOfPlaceDistinct<WIDTH>` is part of the public API (called from tests with
-// explicit template arguments). Under QLEVER_CHEAPER_COMPILATION,
-// DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE=2, so callFixedSizeVi only implicitly
-// instantiates WIDTH=1 and WIDTH=2. Provide explicit instantiations for the
-// remaining standard widths so they remain available for direct calls.
-template IdTable Distinct::outOfPlaceDistinct<3>(const IdTable&) const;
-template IdTable Distinct::outOfPlaceDistinct<4>(const IdTable&) const;
-template IdTable Distinct::outOfPlaceDistinct<5>(const IdTable&) const;
+// ____________________________________________________________________________
+IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
+  size_t width = input.numColumns();
+  return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+    return self->outOfPlaceDistinct<width>(input);
+  });
+}

@@ -1,6 +1,6 @@
 add_subdirectory(vocabulary)
 add_library(index
-        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
+        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
         Vocabulary.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp

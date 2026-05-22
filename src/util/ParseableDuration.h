@@ -11,6 +11,7 @@
 
 #include <boost/lexical_cast.hpp>
 #include <chrono>
+#include <ctre-unicode.hpp>
 #include <iostream>
 
 #include "backports/keywords.h"
@@ -19,21 +20,13 @@
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
-#ifndef QLEVER_CHEAPER_COMPILATION
-#include <ctre-unicode.hpp>
-#else
-#include <re2/re2.h>
-#endif
-
 namespace ad_utility {
 
-#ifndef QLEVER_CHEAPER_COMPILATION
 namespace detail {
-// CTRE regex pattern for C++17 compatibility
+// CTRE regex pattern for C++17 compatibility.
 constexpr ctll::fixed_string durationPatternRegex =
     R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)";
 }  // namespace detail
-#endif
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
@@ -97,29 +90,16 @@ class ParseableDuration {
     using namespace std::chrono;
     using ad_utility::use_type_identity::ti;
 
-    // Both branches produce `matched`, `amount`, and `unit` as plain values so
-    // the duration-conversion code below does not need to be duplicated.
     bool matched;
     std::string_view amount;
     std::string_view unit;
 
-#ifdef QLEVER_CHEAPER_COMPILATION
-    // Use RE2 (runtime regex) to avoid instantiating the expensive CTRE
-    // compile-time automaton in every TU that includes this header.
-    // Use [[:space:]] rather than \s: RE2's \s is [\t\n\f\r ] and excludes \v,
-    // while POSIX [[:space:]] matches [\t\n\f\r\v ] — matching CTRE's \s.
-    static const re2::RE2 re{
-        R"([[:space:]]*(-?\d+)[[:space:]]*(ns|us|ms|s|min|h)[[:space:]]*)"};
-    matched = RE2::FullMatch(re2::StringPiece(arg.data(), arg.size()), re,
-                             &amount, &unit);
-#else
     auto m = ctre::match<detail::durationPatternRegex>(arg);
     matched = static_cast<bool>(m);
     if (matched) {
       amount = m.template get<1>().to_view();
       unit = m.template get<2>().to_view();
     }
-#endif
 
     if (matched) {
       auto toDuration = [&amount](auto t) {
@@ -196,5 +176,11 @@ static_assert(
 static_assert(
     std::is_copy_assignable_v<ParseableDuration<std::chrono::seconds>>);
 }  // namespace ad_utility
+
+// Suppress duplicate CTRE automaton instantiation in every TU.
+#ifdef QLEVER_CHEAPER_COMPILATION
+extern template class ad_utility::ParseableDuration<std::chrono::seconds>;
+extern template class ad_utility::ParseableDuration<std::chrono::milliseconds>;
+#endif
 
 #endif  // QLEVER_PARSEABLEDURATION_H

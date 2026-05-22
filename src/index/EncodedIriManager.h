@@ -15,39 +15,11 @@
 #include "util/Log.h"
 #include "util/json.h"
 
-#ifndef QLEVER_CHEAPER_COMPILATION
-#include "util/CtreHelpers.h"
-namespace detail {
-// CTRE named capture group identifiers for C++17 compatibility.
-constexpr ctll::fixed_string digitsCaptureGroup = "digits";
-}  // namespace detail
-#else
-#include <re2/re2.h>
-#endif
-
 namespace detail {
 // Match `repr` against the pattern `([0-9]+)>` and return the digit
 // substring as a `string_view` into `repr` on success, or `std::nullopt` if
-// the pattern does not match. Encapsulates the CTRE / RE2 selection.
-inline std::optional<std::string_view> matchDigitsPrefix(
-    std::string_view repr) {
-#ifdef QLEVER_CHEAPER_COMPILATION
-  static const re2::RE2 re{"([0-9]+)>"};
-  std::string_view digits;
-  if (!RE2::FullMatch(re2::StringPiece(repr.data(), repr.size()), re,
-                      &digits)) {
-    return std::nullopt;
-  }
-  return digits;
-#else
-  static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
-  auto match = ctre::match<regex>(repr);
-  if (!match) {
-    return std::nullopt;
-  }
-  return match.template get<digitsCaptureGroup>().to_view();
-#endif
-}
+// the pattern does not match.
+std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
 }  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix

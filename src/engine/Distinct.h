@@ -17,9 +17,13 @@ class Distinct : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> keepIndices_;
 
+ public:
   static constexpr int64_t CHUNK_SIZE = 100'000;
 
- public:
+  // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
+  // Dispatches to the right WIDTH via `callFixedSizeVi`.
+  IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
+
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            const std::vector<ColumnIndex>& keepIndices);
@@ -93,10 +97,6 @@ class Distinct : public Operation {
   // if they're actually unique.
   template <size_t WIDTH>
   IdTable outOfPlaceDistinct(const IdTable& dynInput) const;
-
-  FRIEND_TEST(Distinct, distinct);
-  FRIEND_TEST(Distinct, distinctWithEmptyInput);
-  FRIEND_TEST(Distinct, testChunkEdgeCases);
 };
 
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H
