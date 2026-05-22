@@ -26,6 +26,12 @@
 
 namespace ad_utility {
 
+// Parse a GeoPoint from a WKT literal. Returns nullopt if the literal is not a
+// valid WKT point, or if checkDatatype is true and the datatype is not
+// geo:wktLiteral.
+std::optional<GeoPoint> parseGeoPointFromLiteral(
+    const triple_component::Literal& value, bool checkDatatype = true);
+
 namespace detail {
 
 static constexpr double invalidCoordinate =

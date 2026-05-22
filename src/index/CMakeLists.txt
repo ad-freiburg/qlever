@@ -1,4 +1,7 @@
 add_subdirectory(vocabulary)
+# RdfParser and TripleComponent are compiled directly into the index library
+# (rather than as separate linked libraries) because they depend on full index
+# types and structures. Making them standalone would create a circular dependency.
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
         Vocabulary.cpp ../parser/RdfParser.cpp

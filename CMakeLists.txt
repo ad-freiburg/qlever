@@ -57,6 +57,11 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # Note: This option magically influences the behavior of `add_library`, see
 # https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
 # details.
+# Note on tests: With BUILD_SHARED_LIBS=ON, each test binary is smaller because
+# shared libraries are loaded at runtime rather than linked statically. However,
+# the per-test-case discovery regime (CTest discovering individual gtest cases
+# via a subprocess invocation) becomes noticeably slower because every subprocess
+# invocation triggers shared-library loading overhead.
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -293,9 +298,9 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella re2
-            ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
+    target_link_libraries(${target} PUBLIC ${ARGN}
+            absl::base absl::strings absl::status absl::statusor absl::time absl::hash absl::synchronization
+            re2 ICU::uc ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -454,12 +459,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-#set(BUILD_SHARED_LIBS OFF)
-FetchContent_MakeAvailable(abseil)
-set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
-
-FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
+FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
 
 IF (BUILD_SHARED_LIBS)
     target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
@@ -484,18 +484,6 @@ target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
-# A single library for all abseil targets (probably not required once everything works).
-add_library(absl_umbrella INTERFACE)
-target_link_libraries(absl_umbrella
-        INTERFACE
-        absl::base
-        absl::strings
-        absl::status
-        absl::statusor
-        absl::time
-        absl::hash
-        absl::synchronization
-)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})

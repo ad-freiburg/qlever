@@ -5,6 +5,9 @@ add_subdirectory(data)
 add_library(basicParser ParallelBuffer.cpp Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp)
 qlever_target_link_libraries(basicParser util rdfTypes parserData)
 
+# TODO: Consider moving files that don't depend on the engine (sparqlExpressions,
+# index) into basicParser or a new intermediate library to clean up the
+# dependency graph.
 add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp

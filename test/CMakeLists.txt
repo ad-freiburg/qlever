@@ -41,6 +41,10 @@ function(linkAndDiscoverTestSerial basename)
     add_test(NAME ${basename} COMMAND ${basename} PROPERTIES RUN_SERIAL)
 endfunction()
 
+# Note: with BUILD_SHARED_LIBS=ON, shared library loading overhead makes
+# individual gtest-case discovery via CTest significantly slower because every
+# subprocess invocation triggers shared-library loading. No solution is known at
+# this time.
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
