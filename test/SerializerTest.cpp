@@ -329,13 +329,8 @@ auto testWithCallableSerializer = [](auto testFunction) {
 };
 
 auto testWithFileSerialization = [](auto testFunction) {
-  const auto* testInfo =
-      ::testing::UnitTest::GetInstance()->current_test_info();
-  ASSERT_NE(testInfo, nullptr);
-  std::string testKey =
-      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
-  ql::ranges::replace(testKey, '/', '_');
-  const std::string filename = "serializationTest_" + testKey + ".tmp";
+  const std::string filename =
+      absl::StrCat("serializationTest_", gtestCurrentTestName(), ".tmp");
   FileWriteSerializer writer{filename};
   auto makeReaderFromWriter = [filename, &writer] {
     writer.close();

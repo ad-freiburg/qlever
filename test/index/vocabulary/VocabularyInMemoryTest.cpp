@@ -16,12 +16,8 @@ namespace {
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  const auto* testInfo =
-      ::testing::UnitTest::GetInstance()->current_test_info();
-  AD_CORRECTNESS_CHECK(testInfo != nullptr);
   auto filename =
-      absl::StrCat("vocabInMemoryCreation_", testInfo->test_suite_name(), "_",
-                   testInfo->name(), ".tmp");
+      absl::StrCat("vocabInMemoryCreation_", gtestCurrentTestName(), ".tmp");
   {
     Vocab v;
     auto writerPtr = v.makeDiskWriterPtr(filename);

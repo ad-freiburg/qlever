@@ -181,13 +181,7 @@ class OperationTestFixture : public testing::Test {
   Index index = []() {
     TestIndexConfig indexConfig{};
     indexConfig.blocksizePermutations = 32_B;
-    const auto* testInfo =
-        ::testing::UnitTest::GetInstance()->current_test_info();
-    AD_CORRECTNESS_CHECK(testInfo != nullptr);
-    return makeTestIndex(
-        absl::StrCat("OperationTest_", testInfo->test_suite_name(), "_",
-                     testInfo->name()),
-        std::move(indexConfig));
+    return makeTestIndex(gtestCurrentTestName(), std::move(indexConfig));
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;

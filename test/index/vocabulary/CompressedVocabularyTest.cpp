@@ -100,13 +100,8 @@ struct CompressedVocabularyF : public testing::Test {
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static auto createCompressedVocabulary(const std::string& filename) {
-    const auto* testInfo =
-        ::testing::UnitTest::GetInstance()->current_test_info();
-    AD_CORRECTNESS_CHECK(testInfo != nullptr);
-    std::string suffix =
-        absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
-    ql::ranges::replace(suffix, '/', '_');
-    std::string uniqueFilename = absl::StrCat(filename, "_", suffix);
+    std::string uniqueFilename =
+        absl::StrCat(filename, "_", gtestCurrentTestName());
     return [uniqueFilename = std::move(uniqueFilename)](
                const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
@@ -155,14 +150,8 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
-  const auto* testInfo =
-      ::testing::UnitTest::GetInstance()->current_test_info();
-  AD_CORRECTNESS_CHECK(testInfo != nullptr);
-  std::string suffix =
-      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
-  ql::ranges::replace(suffix, '/', '_');
   const std::string filename =
-      absl::StrCat("compressedVocabSerializerTest_", suffix);
+      absl::StrCat("compressedVocabSerializerTest_", gtestCurrentTestName());
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {
