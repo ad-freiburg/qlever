@@ -3,7 +3,6 @@
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -181,7 +180,7 @@ class OperationTestFixture : public testing::Test {
   Index index = []() {
     TestIndexConfig indexConfig{};
     indexConfig.blocksizePermutations = 32_B;
-    return makeTestIndex(gtestCurrentTestName(), std::move(indexConfig));
+    return makeTestIndex(std::move(indexConfig));
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
