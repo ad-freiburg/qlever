@@ -29,6 +29,7 @@ using Triples = ad_utility::sparql_types::Triples;
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;
+using DeduplicationMode = ad_utility::DeduplicationMode;
 
 // Generates triples from the CONSTRUCT query results by instantiating the
 // template triple patterns with the values from the result table produced by
@@ -49,7 +50,7 @@ class ConstructTripleGenerator {
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType, DeduplicationMode dedupMode);
+      ad_utility::MediaType mediaType, DeduplicationMode mode);
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
@@ -72,7 +73,7 @@ class ConstructTripleGenerator {
       const VariableToColumnMap& variableColumns, const Index& index,
       CancellationHandle cancellationhandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset, DeduplicationMode dedupMode);
+      size_t rowOffset, DeduplicationMode mode);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);

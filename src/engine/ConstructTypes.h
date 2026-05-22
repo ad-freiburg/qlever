@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
+#include <util/Parameters.h>
+
 #include <array>
 #include <memory>
 #include <string>
@@ -105,55 +107,6 @@ struct EvaluatedTriple {
   EvaluatedTerm subject_;
   EvaluatedTerm predicate_;
   EvaluatedTerm object_;
-};
-
-// Controls whether and how duplicate triples are deduplicated in CONSTRUCT
-// query results.
-struct DeduplicationMode {
-  struct None {};  // every triple is emitted, no deduplication.
-  struct Global {
-  };  // a triple is emitted at most once across the entire result.
-  struct BatchWise {
-    size_t batchSize;
-  };  // deduplication with non-overlapping windows
-      // of `batchSize` consecutive rows.
-  std::variant<None, Global, BatchWise> value;
-};
-
-// Serializers for use with ad_utility::Parameter<DeduplicationMode, ...>.
-struct DeduplicationModeFromString {
-  DeduplicationMode operator()(const std::string& s) const {
-    if (s == "false") return {DeduplicationMode::None{}};
-    if (s == "global") return {DeduplicationMode::Global{}};
-    try {
-      size_t deduplicationBatchSize = std::stoull(s);
-      if (deduplicationBatchSize == 0) {
-        throw std::runtime_error(
-            "Deduplication batch size must be a positive integer.");
-      }
-      return {DeduplicationMode::BatchWise{deduplicationBatchSize}};
-    } catch (const std::exception&) {
-      throw std::runtime_error(absl::StrCat(
-          "Invalid value for construct-deduplicate: \"", s,
-          "\" Expected \"false\", \"global\", or a positive integer."));
-    }
-  }
-};
-
-struct DeduplicationModeToString {
-  std::string operator()(const DeduplicationMode& m) const {
-    return std::visit(ad_utility::OverloadCallOperator{
-                          [](const DeduplicationMode::None&) -> std::string {
-                            return "false";
-                          },
-                          [](const DeduplicationMode::Global&) -> std::string {
-                            return "global";
-                          },
-                          [](const DeduplicationMode::BatchWise& bw) {
-                            return std::to_string(bw.batchSize);
-                          }},
-                      m.value);
-  }
 };
 
 }  // namespace qlever::constructExport

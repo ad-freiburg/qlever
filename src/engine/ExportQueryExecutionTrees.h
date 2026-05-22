@@ -35,7 +35,7 @@ class ExportQueryExecutionTrees {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
-  using DeduplicationMode = qlever::constructExport::DeduplicationMode;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously

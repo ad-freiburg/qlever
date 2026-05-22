@@ -21,6 +21,9 @@ struct RuntimeParameters {
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
+  using DeduplicationModeParameter =
+      ad_utility::detail::parameterShortNames::DeduplicationModeParameter;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE
@@ -166,6 +169,13 @@ struct RuntimeParameters {
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
+
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "global": a triple is emitted at most once across the entire result.
+  // "false": no deduplication, every triple is emitted.
+  // N (positive integer): deduplication with non-overlapping windows of N rows.
+  DeduplicationModeParameter constructDeduplicate_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplicate"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

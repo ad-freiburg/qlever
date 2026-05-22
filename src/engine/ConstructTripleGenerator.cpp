@@ -13,12 +13,15 @@
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
+#include "global/RuntimeParameters.h"
+#include "util/Parameters.h"
 #include "util/Views.h"
 
 namespace qlever::constructExport {
 
 using ad_utility::InputRangeTypeErased;
 using StringTriple = QueryExecutionTree::StringTriple;
+using ad_utility::DeduplicationMode;
 
 //______________________________________________________________________________
 IdCache ConstructTripleGenerator::makeIdCache(
@@ -35,7 +38,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
         CancellationHandle cancellationHandle, SeenTriples& seenTriples,
-        const DeduplicationMode& mode) {
+        const ad_utility::DeduplicationMode& mode) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -69,6 +72,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
+  DeduplicationMode mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>();
 
   SeenTriples seenTriples;
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
@@ -105,10 +110,10 @@ ConstructTripleGenerator::generateFormattedTriples(
     const Triples& templateTriples, const VariableToColumnMap& variableColums,
     const Index& index, CancellationHandle cancellationhandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-    ad_utility::MediaType mediaType, DeduplicationMode dedupMode) {
+    ad_utility::MediaType mediaType, DeduplicationMode mode) {
   auto evaluatedTriples =
       evaluateTables(templateTriples, variableColums, index, cancellationhandle,
-                     std::move(rowIndices), rowOffset, dedupMode);
+                     std::move(rowIndices), rowOffset, mode);
 
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
     return formatTriple(triple, mediaType);
