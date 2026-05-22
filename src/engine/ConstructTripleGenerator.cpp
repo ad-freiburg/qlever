@@ -64,7 +64,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
   return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
-                          ctx, seenTriples);
+                          ctx, seenTriples, mode);
 }
 
 //______________________________________________________________________________
