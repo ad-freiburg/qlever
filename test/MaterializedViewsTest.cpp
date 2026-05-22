@@ -1473,8 +1473,7 @@ constexpr std::string_view geoBoundingBoxesViewQuery = R"(
 
 // Automatic `BIND` push-down for bounding boxes in `SpatialJoin`.
 TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
-  const std::string onDiskBase =
-      materializedViewsTestHelpers::makeMaterializedViewsTestBasename();
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "geoms";
 
   // Initialize engine on test index.
@@ -1588,8 +1587,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
       " <m2> <p2> <http://example.com/> . \n"
       " <m2> <p3> \"abc\" . \n"
       " <s2> <p3> <o3> . \n";
-  const std::string onDiskBase =
-      materializedViewsTestHelpers::makeMaterializedViewsTestBasename();
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewChain";
 
   // Initialized libqlever.

@@ -50,8 +50,7 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
       " <s2> <p1> <o1b> . \n"
       " <s2> <p2> <o2b> . \n"
       " <s2> <p3> <o3a> . \n";
-  const std::string onDiskBase =
-      materializedViewsTestHelpers::makeMaterializedViewsTestBasename();
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewStar";
 
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
