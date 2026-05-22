@@ -13,10 +13,12 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 
 namespace qlever::constructExport {
+using ad_utility::DeduplicationMode;
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> instantiateTerm(
@@ -44,7 +46,8 @@ std::optional<EvaluatedTerm> instantiateTerm(
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const BatchEvaluationContext& ctx, SeenTriples& seenTriples) {
+    const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
+    DeduplicationMode mode) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
@@ -58,7 +61,8 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
       // triples containing blank nodes are always distinct across rows because
       // blank node IDs are generated per-row. Skip the dedup check for them.
-      if (!tmpl.tripleContainsBlankNode_[tripleIdx]) {
+      if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
+          !tmpl.tripleContainsBlankNode_[tripleIdx]) {
         std::vector<ValueId> ids;
         ids.reserve(tripleColumns.size());
         for (size_t col : tripleColumns) {

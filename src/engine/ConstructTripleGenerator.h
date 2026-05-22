@@ -73,7 +73,7 @@ class ConstructTripleGenerator {
       const VariableToColumnMap& variableColumns, const Index& index,
       CancellationHandle cancellationhandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset, DeduplicationMode mode);
+      size_t queryOffset, DeduplicationMode mode);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);

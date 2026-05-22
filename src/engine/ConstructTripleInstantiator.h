@@ -18,6 +18,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/http/MediaTypes.h"
@@ -48,7 +49,8 @@ using SeenTriples =
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const BatchEvaluationContext& ctx, SeenTriples& seenTriples);
+    const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
+    DeduplicationMode mode);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

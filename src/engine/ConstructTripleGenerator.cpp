@@ -38,7 +38,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
         CancellationHandle cancellationHandle, SeenTriples& seenTriples,
-        const ad_utility::DeduplicationMode& mode) {
+        const DeduplicationMode& mode, size_t queryOffset) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -47,7 +47,11 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
       batchBegin + static_cast<size_t>(ql::ranges::size(batch));
 
   if (const auto* bw = std::get_if<DeduplicationMode::BatchWise>(&mode.value)) {
-    if ((batchBegin % bw->batchSize == 0)) {
+    // `tableRowOffset` + `batchbegin` gives the global row index across all
+    // `IdTable` blocks. We subtract `queryOffset` (the OFFSET clause value) so
+    // that window boundaries are aligned to the start of the actually processed
+    // result rows, not the absolute start of the full result.
+    if ((tableRowOffset + batchBegin - queryOffset) % bw->batchSize == 0) {
       seenTriples.clear();
     }
   }
@@ -67,19 +71,37 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
     const Index& index, CancellationHandle cancellationHandle,
-    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+    InputRangeTypeErased<TableWithRange> rowIndices, size_t queryOffset,
     DeduplicationMode mode) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
-  DeduplicationMode mode =
-      getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>();
 
   SeenTriples seenTriples;
+
+  // Row index terminology used in this lambda and in `computeBatch`:
+  //
+  // TODO<ms2144>: The row index handling in this pipeline is confusing and
+  // should be cleaned up and documented more carefully in the future.
+  // `queryOffset`: the value of the SPARQL OFFSET clause. Row indices in the
+  // result start at this value.
+  // `accumulatedRowOffset`: The global row index of the first row of the
+  // current `IdTable` block, accumulated across all previously processed
+  // blocks. Starts at `queryOffset`.
+  // `batchBegin`: the row index of the first row of the current evaluation
+  // chunk within the current `IdTable` block. For the first block, this may be
+  // non-zero if the OFFSET clause falls within that block; for all
+  // subsequent blocks it is 0.
+  // `accumulatedRowOffset + batchBegin`: intended to be the global row index of
+  // the first row of the current chunk across all blocks.
+  // `accumulatedRowOffset + batchBegin - queryOffset`: intended to be the index
+  // of the first row of the current chunk relative to the start of the
+  // processed result, used for aligning deduplication windows. However, due to
+  // the confusion above, this may not be entirely correct.
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
                        &index, cancellationHandle, cache = std::move(cache),
                        seenTriples = std::move(seenTriples),
-                       accumulatedRowOffset = rowOffset,
+                       accumulatedRowOffset = queryOffset, queryOffset,
                        mode](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
@@ -90,10 +112,12 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
            ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
                                  cancellationHandle, &seenTriples,
-                                 tableRowOffset, mode](auto chunkView) {
-             return computeBatch(
-                 table.tableWithVocab_, chunkView, preprocessedTemplate, index,
-                 cache, tableRowOffset, cancellationHandle, seenTriples, mode);
+                                 tableRowOffset, mode,
+                                 queryOffset](auto chunkView) {
+             return computeBatch(table.tableWithVocab_, chunkView,
+                                 preprocessedTemplate, index, cache,
+                                 tableRowOffset, cancellationHandle,
+                                 seenTriples, mode, queryOffset);
            }) |
            ql::views::join;
   };

@@ -22,6 +22,28 @@
 namespace ad_utility {
 
 // Controls whether and how triples are deduplicated in CONSTRUCT query results.
+//
+// Per the SPARQL 1.1 specification
+// (https://www.w3.org/TR/sparql-query/#construct), the result of a construct
+// query is an RDF graph formed by set union of all instantiated triples,
+// meaning duplicates are eliminated by definition.
+// However, it is unclear whether a SPARQL engine is required to enforce this.
+// See also: https://github.com/w3c-cg/sparql-dev/issues/86
+//
+// `Global` is the strictly spec-compliant mode, but requires memory
+// proportional to the number of unique triples in the result, which can be
+// prohibitive for large result sets.
+// `BatchWise` is the recommended default: it significantly reduces duplicates
+// in practice with bounded memory usage, at the cost of not guaranteeing a
+// fully deduplicated result.
+// `None` preserves the original QLever behaviour (no deduplication) for users
+// who need minimal memory overhead and no deduplication cost.
+//
+// TODO<ms2144>: a future improvement could be to spill the deduplication hash
+// set to disk when memory usage grows too large, allowing `Global`
+// deduplication with bounded memory usage while retaining streaming. The hash
+// set is used to track already yielded triples, and spilling it to disk would
+// introduce disk I/O overhead.
 struct DeduplicationMode {
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Global {
