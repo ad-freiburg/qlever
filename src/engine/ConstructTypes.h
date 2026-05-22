@@ -10,8 +10,6 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
-#include <util/Parameters.h>
-
 #include <array>
 #include <memory>
 #include <string>

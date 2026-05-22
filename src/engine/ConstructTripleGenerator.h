@@ -18,6 +18,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
 #include "util/CancellationHandle.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
 

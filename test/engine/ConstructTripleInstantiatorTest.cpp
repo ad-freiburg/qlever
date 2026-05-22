@@ -16,6 +16,7 @@
 
 namespace {
 using namespace qlever::constructExport;
+using ad_utility::DeduplicationMode;
 using ::testing::ElementsAre;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
@@ -178,7 +179,8 @@ TEST(InstantiateBatch, EmptyTemplate) {
   PreprocessedConstructTemplate tmpl = {};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 ad_utility::DeduplicationMode::none());
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -193,7 +195,8 @@ TEST(InstantiateBatch, EmptyBatch) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 0};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 DeduplicationMode::none());
 
   EXPECT_THAT(result, ::testing::IsEmpty());
 }
@@ -208,7 +211,8 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
-  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
+  auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal,
+                                 DeduplicationMode::none());
 
   EXPECT_THAT(
       result,
@@ -240,7 +244,8 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
                                 PrecomputedConstant{p},
                                 PrecomputedConstant{o}}};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto result =
+      instantiateBatch(tmpl, batchResult, 0, DeduplicationMode::none());
 
   EXPECT_THAT(
       result,
@@ -263,7 +268,8 @@ TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
                                 PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 2};
 
-  auto result = instantiateBatch(tmpl, batchResult, /*batchOffset=*/5);
+  auto result = instantiateBatch(tmpl, batchResult, /*batchOffset=*/5,
+                                 DeduplicationMode::none());
 
   EXPECT_THAT(
       result,
@@ -289,7 +295,8 @@ TEST(InstantiateBatch, MultipleTriples) {
                                 PrecomputedConstant{o2}}};
   auto batchResult = BatchEvaluationResult{{}, 2};
 
-  auto result = instantiateBatch(tmpl, batchResult, 0);
+  auto result =
+      instantiateBatch(tmpl, batchResult, 0, DeduplicationMode::none());
 
   // Row-major: for each row, all triples in template order.
   EXPECT_THAT(

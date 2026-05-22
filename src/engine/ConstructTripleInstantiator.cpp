@@ -42,18 +42,39 @@ std::optional<EvaluatedTerm> instantiateTerm(
       term);
 }
 
+// Returns true if the triple at `tripleIdx` for `absoluteRow` has already
+// been seen and should be skipped, inserting it into `seenTriples` as a side
+// effect if not.
+static bool isDuplicate(size_t tripleIdx, size_t absoluteRow,
+                        const std::vector<size_t>& tripleColumns,
+                        const BatchEvaluationContext& ctx,
+                        SeenTriples& seenTriples) {
+  std::vector<ValueId> ids;
+  ids.reserve(tripleColumns.size());
+  for (size_t col : tripleColumns) {
+    ids.push_back(ctx.idTable_[absoluteRow][col]);
+  }
+  return !seenTriples.insert({tripleIdx, std::move(ids)}).second;
+}
+
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
-    const DeduplicationMode& mode) {
+    const DeduplicationMode& mode,
+    std::optional<std::reference_wrapper<SeenTriples>> seenTriples,
+    std::optional<std::reference_wrapper<const BatchEvaluationContext>> ctx) {
+  // `seenTriples` and `ctx` must be provided when deduplication is active,
+  // since they are accessed during the dedup check.
+  AD_CONTRACT_CHECK(
+      std::holds_alternative<DeduplicationMode::None>(mode.value) ||
+      (seenTriples.has_value() && ctx.has_value()));
+
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
-    const size_t absoluteRow = ctx.firstRow_ + rowInBatch;
     for (size_t tripleIdx :
          ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
       const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
@@ -64,13 +85,10 @@ std::vector<EvaluatedTriple> instantiateBatch(
       // For `None` mode, skip deduplication entirely.
       if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
           !tmpl.tripleContainsBlankNode_[tripleIdx]) {
-        std::vector<ValueId> ids;
-        ids.reserve(tripleColumns.size());
-        for (size_t col : tripleColumns) {
-          ids.push_back(ctx.idTable_[absoluteRow][col]);
-        }
-        if (!seenTriples.insert({tripleIdx, std::move(ids)}).second) {
-          continue;
+        const size_t absoluteRow = ctx->get().firstRow_ + rowInBatch;
+        if (isDuplicate(tripleIdx, absoluteRow, tripleColumns, ctx->get(),
+                        seenTriples->get())) {
+          continue;  // do not instantiate triple
         }
       }
 

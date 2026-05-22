@@ -50,8 +50,11 @@ using SeenTriples =
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const BatchEvaluationContext& ctx, SeenTriples& seenTriples,
-    const DeduplicationMode& mode);
+    const DeduplicationMode& mode,
+    std::optional<std::reference_wrapper<SeenTriples>> seenTriples =
+        std::nullopt,
+    std::optional<std::reference_wrapper<const BatchEvaluationContext>> ctx =
+        std::nullopt);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

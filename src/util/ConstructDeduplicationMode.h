@@ -51,6 +51,12 @@ struct DeduplicationMode {
     size_t batchSize;  // `batchSize` consecutive rows.
   };
   std::variant<None, Global, BatchWise> value;
+
+  static DeduplicationMode none() { return {None{}}; }
+  static DeduplicationMode global() { return {Global{}}; }
+  static DeduplicationMode batchWise(size_t batchSize) {
+    return {BatchWise{batchSize}};
+  }
 };
 
 // Serializers for use with ad_utility::Parameter<DeduplicationMode, ...>.
