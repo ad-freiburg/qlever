@@ -16,7 +16,6 @@
 
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
-#include "util/Parameters.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
