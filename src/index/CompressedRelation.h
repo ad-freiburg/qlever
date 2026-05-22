@@ -963,15 +963,17 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriples);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
-  // `getCol1IdsAndCounts`.
-  CPP_template(typename IdGetter)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
-      getDistinctColIdsAndCountsImpl(
-          IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
-          const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-          const LimitOffsetClause& limitOffset) const;
+  // `getCol1IdsAndCounts`. `columnIndex` is the index of the column whose
+  // distinct values and counts are computed (0 for `col0Id_`, 1 for `col1Id_`).
+  // It determines both which column is read and the prefix of columns that must
+  // agree between `firstTriple_` and `lastTriple_` of a block for the block to
+  // count as homogeneous (since the triples are sorted lexicographically by
+  // `(col0, col1, col2)`).
+  IdTable getDistinctColIdsAndCountsImpl(
+      size_t columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

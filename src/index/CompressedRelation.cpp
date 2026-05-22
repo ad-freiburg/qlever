@@ -39,23 +39,23 @@ static auto getBeginAndEnd(T& range) {
 // helper functions/methods from below (getMaskedTriple,
 // containsConsistentTriples, isConsistentWith) for consistency checking.
 
-// Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
+// Extract the Ids from the given `PermutedTriple` in an array w.r.t. the
 // position (column index) defined by `ignoreIndex`. The ignored positions are
 // filled with Ids `Id::min()`. `Id::min()` is guaranteed
 // to be smaller than Ids of all other types.
-static auto getMaskedTriple(
+static std::array<Id, 3> getMaskedTriple(
     const CompressedBlockMetadata::PermutedTriple& triple,
     size_t ignoreIndex = 3) {
   const Id& undefined = Id::min();
   switch (ignoreIndex) {
     case 3:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+      return {triple.col0Id_, triple.col1Id_, triple.col2Id_};
     case 2:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, undefined);
+      return {triple.col0Id_, triple.col1Id_, undefined};
     case 1:
-      return std::make_tuple(triple.col0Id_, undefined, undefined);
+      return {triple.col0Id_, undefined, undefined};
     case 0:
-      return std::make_tuple(undefined, undefined, undefined);
+      return {undefined, undefined, undefined};
     default:
       // ignoreIndex out of bound.
       AD_FAIL();
@@ -974,14 +974,12 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename IdGetter)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
-    CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-        IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
-        const CancellationHandle& cancellationHandle,
-        const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-        const LimitOffsetClause& limitOffset) const {
+IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
+    size_t columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LimitOffsetClause& limitOffset) const {
+  AD_CORRECTNESS_CHECK(columnIndex <= 1);
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -1043,12 +1041,11 @@ CPP_template_def(typename IdGetter)(
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
-    Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
-    Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
-    if (firstColId == lastColId) {
+    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1)) {
       // The whole block has the same `colId` -> we get all the information
       // from the metadata.
-      bool abort = processColId(firstColId, blockMetadata.numRows_);
+      Id colId = getMaskedTriple(blockMetadata.firstTriple_)[columnIndex];
+      bool abort = processColId(colId, blockMetadata.numRows_);
       if (abort) {
         return std::move(table).toDynamic();
       }
@@ -1095,9 +1092,9 @@ IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
-  return getDistinctColIdsAndCountsImpl(
-      &CompressedBlockMetadata::PermutedTriple::col0Id_, scanSpecAndBlocks,
-      cancellationHandle, locatedTriplesPerBlock, limitOffset);
+  return getDistinctColIdsAndCountsImpl(0, scanSpecAndBlocks,
+                                        cancellationHandle,
+                                        locatedTriplesPerBlock, limitOffset);
 }
 
 // ____________________________________________________________________________
@@ -1106,9 +1103,9 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
-  return getDistinctColIdsAndCountsImpl(
-      &CompressedBlockMetadata::PermutedTriple::col1Id_, scanSpecAndBlocks,
-      cancellationHandle, locatedTriplesPerBlock, limitOffset);
+  return getDistinctColIdsAndCountsImpl(1, scanSpecAndBlocks,
+                                        cancellationHandle,
+                                        locatedTriplesPerBlock, limitOffset);
 }
 
 // ____________________________________________________________________________
