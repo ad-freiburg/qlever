@@ -2036,7 +2036,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 }
 
 // _____________________________________________________________________________
-// Regression test for a bug where `getDistinctColIdsAndCountsImpl` would
+// Regression test for a bug where `getDistinctColIdsAndCounts` would
 // shortcut a block using only the metadata when `firstTriple_.col1Id_ ==
 // lastTriple_.col1Id_`.
 // This would sometimes occur for queries of the form:

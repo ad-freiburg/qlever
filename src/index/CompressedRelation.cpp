@@ -974,12 +974,12 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-    size_t columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
+IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
+    ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
-  AD_CORRECTNESS_CHECK(columnIndex <= 1);
+  AD_CORRECTNESS_CHECK(columnIndex <= 1, "Only column 0 and 1 are supported");
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -1084,28 +1084,6 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   // Don't forget to add the last `col1Id` and its count.
   processColId(std::nullopt, 0);
   return std::move(table).toDynamic();
-}
-
-// ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
-    const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
-  return getDistinctColIdsAndCountsImpl(0, scanSpecAndBlocks,
-                                        cancellationHandle,
-                                        locatedTriplesPerBlock, limitOffset);
-}
-
-// ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
-    const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
-  return getDistinctColIdsAndCountsImpl(1, scanSpecAndBlocks,
-                                        cancellationHandle,
-                                        locatedTriplesPerBlock, limitOffset);
 }
 
 // ____________________________________________________________________________
