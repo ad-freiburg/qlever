@@ -9,7 +9,6 @@
 #include <absl/strings/str_format.h>
 
 #include "global/Constants.h"
-#include "util/DateYearDuration.h"
 
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
@@ -96,32 +95,6 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 }
 
 // _____________________________________________________________________________
-std::optional<DateYearOrDuration> Date::operator-(
-    const DayTimeDuration& rhs) const {
-  auto epochLhs = toEpoch();
-  if (!epochLhs.has_value()) {
-    return std::nullopt;
-  }
-  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Milliseconds newDate =
-      epochLhs.value() - std::chrono::milliseconds(totalMillisecondsRhs);
-  return makeFromEpoch(newDate, getTimeZone());
-}
-
-// _____________________________________________________________________________
-std::optional<DateYearOrDuration> Date::operator+(
-    const DayTimeDuration& rhs) const {
-  auto epochLhs = toEpoch();
-  if (!epochLhs.has_value()) {
-    return std::nullopt;
-  }
-  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Milliseconds newDate =
-      epochLhs.value() + std::chrono::milliseconds(totalMillisecondsRhs);
-  return makeFromEpoch(newDate, getTimeZone());
-}
-
-// _____________________________________________________________________________
 std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
   // If a `xsd:gYear` is stored in a `Date` month and day are 0.
@@ -159,46 +132,6 @@ std::optional<int64_t> Date::toEpochInt() const {
         .count();
   }
 }
-
-// _____________________________________________________________________________
-DateYearOrDuration Date::makeFromEpoch(Milliseconds timestamp, TimeZone tz) {
-  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
-  // Shift the timestamp according to the given `TimeZone`offset.
-  timestamp = timestamp + std::chrono::hours{offset};
-
-  // Extract date from epoch timestamp.
-  auto days = std::chrono::floor<std::chrono::days>(timestamp);
-  std::chrono::year_month_day date = std::chrono::year_month_day{days};
-
-  auto time = timestamp - days;
-  // Extract time from remaining seconds.
-  auto seconds = std::chrono::floor<std::chrono::seconds>(time);
-  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
-
-  // Extract remaining milliseconds to later reconstruct the seconds correctly.
-  auto milliseconds =
-      std::chrono::floor<std::chrono::milliseconds>(time - seconds);
-
-  auto year = static_cast<int>(date.year());
-  // Check if the result can be stored in a `Date`.
-  if (-9999 <= year && year <= 9999) {
-    // The methods `year`, `month`, `day` return
-    // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
-    // static casts are necessary. For `month` and `day` only `operator
-    // unsigned` is supported, therefore two casts are necessary.
-    return DateYearOrDuration{
-        Date{year, static_cast<int>(static_cast<unsigned>(date.month())),
-             static_cast<int>(static_cast<unsigned>(date.day())),
-             static_cast<int>(remainder.hours().count()),
-             static_cast<int>(remainder.minutes().count()),
-             static_cast<double>(remainder.seconds().count() +
-                                 (milliseconds.count() / 1'000.0)),
-             tz}};
-  } else {  // nNeeds to be stored as a `LargeYear`.
-    return DateYearOrDuration{year, DateYearOrDuration::Type::Year};
-  }
-}
-
 #endif
 
 // _____________________________________________________________________________
