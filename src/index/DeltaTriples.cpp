@@ -553,6 +553,8 @@ INSTANTIATE_MODIFY(void);
 INSTANTIATE_MODIFY(UpdateMetadata);
 INSTANTIATE_MODIFY(DeltaTriplesCount);
 INSTANTIATE_MODIFY(nlohmann::json);
+// Used by Server::processQuery when `construct-insert=true`.
+INSTANTIATE_MODIFY(nlohmann::ordered_json);
 #undef INSTANTIATE_MODIFY
 
 // _____________________________________________________________________________

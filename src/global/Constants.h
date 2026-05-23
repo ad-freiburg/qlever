@@ -97,6 +97,15 @@ constexpr inline std::string_view default_graph = "default-graph";
 constexpr inline std::string_view DEFAULT_GRAPH_IRI =
     makeQleverInternalIriConst<string_constants::detail::default_graph>();
 namespace string_constants::detail {
+constexpr inline std::string_view inferred_graph = "inferred-graph";
+}  // namespace string_constants::detail
+// The default named graph used when CONSTRUCT queries are executed with the
+// `construct-insert` parameter but no explicit `construct-insert-graph` is
+// specified. Using a dedicated graph (rather than the default graph) provides
+// built-in provenance separation between base data and inferred triples.
+constexpr inline std::string_view QLEVER_INFERRED_GRAPH_IRI =
+    makeQleverInternalIriConst<string_constants::detail::inferred_graph>();
+namespace string_constants::detail {
 constexpr inline std::string_view internal_graph = "internal-graph";
 }  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =

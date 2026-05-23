@@ -293,6 +293,26 @@ class Server {
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
+  // Build the JSON response returned after a successful `construct-insert`
+  // operation. This mirrors `createResponseMetadataForUpdate` but uses a
+  // "construct-insert" field and includes the target graph.
+  static nlohmann::ordered_json createResponseMetadataForConstructInsert(
+      const Index& index, const LocatedTriplesState& locatedTriples,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+      const UpdateMetadata& metadata,
+      const ad_utility::triple_component::Iri& targetGraph,
+      const ad_utility::timer::TimeTracer& tracer);
+
+  // Execute the insertion phase of a `construct-insert` operation.
+  // The function must have exclusive access to the DeltaTriples object.
+  UpdateMetadata processConstructInsert(
+      const PlannedQuery& plannedQuery,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples,
+      const ad_utility::triple_component::Iri& targetGraph,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
+
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,
       const ad_utility::Timer& requestTimer,

@@ -10,6 +10,7 @@
 #include "engine/UpdateMetadata.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
+#include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
@@ -24,6 +25,21 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const CancellationHandle& cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Execute a CONSTRUCT query and insert the resulting triples into the index
+  // as new delta triples. This is the foundation for rule-based reasoning in
+  // QLever. All generated triples are placed into `targetGraph`. Triples with
+  // any undefined (unbound) component are silently skipped, and duplicate
+  // triples are removed before insertion.
+  //
+  // Note: `query` must have a CONSTRUCT clause.
+  static UpdateMetadata executeConstructInsert(
+      const Index& index, const ParsedQuery& query,
+      const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const ad_utility::triple_component::Iri& targetGraph,
       const CancellationHandle& cancellationHandle,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);

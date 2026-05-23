@@ -167,6 +167,18 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // Controls whether external/user-initiated CONSTRUCT→INSERT operations are
+  // permitted. When false (the default), the `construct-insert=true` URL
+  // parameter is rejected with an error. Set to true to enable it.
+  // When an internal reasoner is added it will have its own `reasoner-enabled`
+  // control independent of this parameter.
+  Bool allowConstructInsert_{false, "allow-construct-insert"};
+
+  // Maximum number of unique triples that a single `construct-insert` operation
+  // may produce after deduplication. Guards against accidental materialization
+  // of very large result sets. 0 means unlimited.
+  SizeT constructInsertMaxTriples_{1'000'000, "construct-insert-max-triples"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
