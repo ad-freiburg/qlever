@@ -434,7 +434,7 @@ void checkPropertiesForPrefilterConstruction(
 // Use `makePrefilterExpressionVec` to retrieve the actual `PrefilterExpression`
 // (with corresponding `Variable`).
 std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-    CompOp comparison, const int year);
+    CompOp comparison, int yearFloor, int yearCeil);
 
 //______________________________________________________________________________
 // Creates a `RelationalExpression<comparison>` prefilter expression based on

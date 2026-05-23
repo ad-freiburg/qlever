@@ -624,20 +624,39 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
         makeExpression(yearSprqlExpr(var), Id::makeUndefined()),
         pr(inExpr({}), var));
   }
-  // For Double reference values, the year is rounded to the nearest integer.
+  // For Double reference values, the bounds are derived from ⌊year⌋ and ⌈year⌉.
   evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), DoubleId(2000.7)),
                        pr(ge(getDateId(2001)), var));
   evalAndEqualityCheck(geSprql(yearSprqlExpr(var), DoubleId(2000.7)),
                        pr(ge(getDateId(2001)), var));
-  evalAndEqualityCheck(
-      eqSprql(yearSprqlExpr(var), DoubleId(1999.5)),
-      pr(andExpr(lt(getDateId(2001)), ge(getDateId(2000))), var));
   evalAndEqualityCheck(ltSprql(yearSprqlExpr(var), DoubleId(-10.3)),
                        pr(lt(getDateId(-10)), var));
   evalAndEqualityCheck(leSprql(yearSprqlExpr(var), DoubleId(-10.3)),
                        pr(lt(getDateId(-10)), var));
+  // For non-integer `EQ` reference values, the  range is empty.
+  evalAndEqualityCheck(
+      eqSprql(yearSprqlExpr(var), DoubleId(1999.5)),
+      pr(andExpr(lt(getDateId(2000)), ge(getDateId(2000))), var));
+  // For non-integer `NE` reference values, the prefilter is the complement
+  // of an empty range and thus matches every `YEAR`.
   evalAndEqualityCheck(
       neqSprql(yearSprqlExpr(var), DoubleId(2030.4)),
+      pr(orExpr(lt(getDateId(2031)), ge(getDateId(2031))), var));
+  evalAndEqualityCheck(
+      neqSprql(yearSprqlExpr(var), DoubleId(1970.4)),
+      pr(orExpr(lt(getDateId(1971)), ge(getDateId(1971))), var));
+  evalAndEqualityCheck(neqSprql(yearSprqlExpr(var), DoubleId(-10.3)),
+                       pr(orExpr(lt(getDateId(-10)), ge(getDateId(-10))), var));
+  evalAndEqualityCheck(
+      neqSprql(DoubleId(2030.4), yearSprqlExpr(var)),
+      pr(orExpr(lt(getDateId(2031)), ge(getDateId(2031))), var));
+  // For integer-valued doubles, `EQ` and `NE` behave exactly like the
+  // corresponding `Int` cases.
+  evalAndEqualityCheck(
+      eqSprql(yearSprqlExpr(var), DoubleId(2000.0)),
+      pr(andExpr(lt(getDateId(2001)), ge(getDateId(2000))), var));
+  evalAndEqualityCheck(
+      neqSprql(yearSprqlExpr(var), DoubleId(2030.0)),
       pr(orExpr(lt(getDateId(2030)), ge(getDateId(2031))), var));
 }
 

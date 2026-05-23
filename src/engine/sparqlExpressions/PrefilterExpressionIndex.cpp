@@ -925,7 +925,7 @@ void checkPropertiesForPrefilterConstruction(
 
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-    CompOp comparison, const int year) {
+    CompOp comparison, int yearFloor, int yearCeil) {
   using GeExpr = GreaterEqualExpression;
   using LtExpr = LessThanExpression;
 
@@ -940,19 +940,19 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
   using enum CompOp;
   switch (comparison) {
     case EQ:
-      return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
-                                 make<GeExpr>(getDateId(year)));
+      return make<AndExpression>(make<LtExpr>(getDateId(yearFloor + 1)),
+                                 make<GeExpr>(getDateId(yearCeil)));
     case LT:
-      return make<LtExpr>(getDateId(year));
+      return make<LtExpr>(getDateId(yearCeil));
     case LE:
-      return make<LtExpr>(getDateId(year + 1));
+      return make<LtExpr>(getDateId(yearFloor + 1));
     case GE:
-      return make<GeExpr>(getDateId(year));
+      return make<GeExpr>(getDateId(yearCeil));
     case GT:
-      return make<GeExpr>(getDateId(year + 1));
+      return make<GeExpr>(getDateId(yearFloor + 1));
     case NE:
-      return make<OrExpression>(make<LtExpr>(getDateId(year)),
-                                make<GeExpr>(getDateId(year + 1)));
+      return make<OrExpression>(make<LtExpr>(getDateId(yearCeil)),
+                                make<GeExpr>(getDateId(yearFloor + 1)));
     default:
       throw std::runtime_error(
           absl::StrCat("Set unknown (relational) comparison operator for "
@@ -978,22 +978,27 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   }
   ValueId valueId = std::get<ValueId>(referenceValue);
   switch (valueId.getDatatype()) {
-    case Int:
-      return makePrefilterExpressionYearImpl(
-          comparison, static_cast<int>(valueId.getInt()));
+    case Int: {
+      int year = static_cast<int>(valueId.getInt());
+      return makePrefilterExpressionYearImpl(comparison, year, year);
+    }
     case Double: {
+      // We translate the double `year` to `⌈year⌉` and `⌊year⌋` and let
+      // `makePrefilterExpressionYearImpl` produce the date-`Id` ranges.
+      // Specifically:
+      //
+      //   YEAR <  year  ⇔  YEAR < ⌈year⌉   (e.g. YEAR < 1970.4 ⇔ YEAR < 1971)
+      //   YEAR >= year  ⇔  YEAR ≥ ⌈year⌉   (e.g. YEAR ≥ 1970.4 ⇔ YEAR ≥ 1971)
+      //   YEAR >  year  ⇔  YEAR ≥ ⌊year⌋+1 (e.g. YEAR > 1970.4 ⇔ YEAR ≥ 1971)
+      //   YEAR <= year  ⇔  YEAR < ⌊year⌋+1 (e.g. YEAR ≤ 1970.4 ⇔ YEAR < 1971)
+      //   YEAR =  year  ⇔  ⌈year⌉ ≤ YEAR < ⌊year⌋+1
+      //                       (empty range for non-integer `year`)
+      //   YEAR != year  ⇔  YEAR < ⌈year⌉ OR YEAR ≥ ⌊year⌋+1
+      //                       (full range for non-integer `year`)
       double year = valueId.getDouble();
-      // Account for rounding semantics.
-      using enum CompOp;
-      if constexpr (comparison == LT || comparison == GE) {
-        year = std::ceil(year);
-      } else if constexpr (comparison == GT || comparison == LE) {
-        year = std::floor(year);
-      } else {
-        year = std::round(year);
-      }
       return makePrefilterExpressionYearImpl(comparison,
-                                             static_cast<int>(year));
+                                             static_cast<int>(std::floor(year)),
+                                             static_cast<int>(std::ceil(year)));
     }
     default:
       return emptyPrefilterForTypeError();
