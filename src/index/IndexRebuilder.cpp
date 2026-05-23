@@ -317,6 +317,8 @@ boost::asio::awaitable<void> createPermutationWriterTask(
       net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationB)),
                     net::use_awaitable);
 
+  // Workaround for the bug at
+  // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
   auto resultA = co_await std::move(taskA);
   auto& [_, metaA] = resultA;
   auto resultB = co_await std::move(taskB);

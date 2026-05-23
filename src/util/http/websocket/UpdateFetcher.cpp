@@ -12,6 +12,8 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   AD_CORRECTNESS_CHECK(distributor_);
   AD_EXPENSIVE_CHECK(strand().running_in_this_thread());
 
+  // Workaround for the bug at
+  // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
   auto dataPiece = co_await distributor_->waitForNextDataPiece(currentIndex_);
   auto& [data, latest] = dataPiece;
   currentIndex_ = latest;

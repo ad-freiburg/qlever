@@ -419,8 +419,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
-    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\""
-                << ": " << actionMsg << std::endl;
+    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\"" << ": "
+                << actionMsg << std::endl;
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
@@ -661,6 +661,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString);
 
+    // Workaround for the bug at
+    // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
     auto preparedOp = prepareOperation(operationName, operationString,
                                        std::move(messageSender), parameters,
                                        timeLimit.value(), accessTokenOk);
