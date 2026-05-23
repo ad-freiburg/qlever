@@ -553,7 +553,7 @@ class IndexImpl {
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, Func isQLeverInternalTriple);
+      Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

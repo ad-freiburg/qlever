@@ -61,11 +61,15 @@ class IfExpression : public IfExpressionImpl {
 
     // Check if condition is a `BOUND()` expression using RTTI.
     // Create a dummy expression to get the typeid.
+    // The IIFE returns a reference to a `static` local, which is valid, but
+    // GCC's `-Wdangling-reference` cannot trace through it.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     static const auto& dummyBoundExprRef = []() -> const SparqlExpression& {
       static auto expr = makeBoundExpression(
           std::make_unique<VariableExpression>(Variable{"?dummy"}));
       return *expr;
     }();
+    GCC_REENABLE_WARNINGS
     if (typeid(*condition) == typeid(dummyBoundExprRef)) {
       // condition is a BOUND expression, get its argument
       const auto& boundChildren = condition->children();
