@@ -324,9 +324,14 @@ class Server {
   // Execute the OWL/RDFS forward-chaining materialisation.
   // The function must have exclusive access to the DeltaTriples object.
   // Clears the query-result caches after inserting new triples.
+  // Run OWL/RDFS materialisation inside an already-locked DeltaTriples
+  // transaction. When `seedPredicates` is non-empty, incremental semi-naive
+  // evaluation is used (only rules whose input predicates overlap with the
+  // seeds fire in round 0). An empty vector triggers a full materialisation.
   nlohmann::ordered_json processMaterialize(
       DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-      SharedCancellationHandle handle);
+      SharedCancellationHandle handle,
+      std::vector<std::string> seedPredicates = {});
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

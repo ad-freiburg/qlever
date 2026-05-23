@@ -5,6 +5,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
@@ -15,6 +17,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace testing;
@@ -281,4 +284,213 @@ TEST(Reasoner, responseMetadataContainsExpectedKeys) {
   EXPECT_TRUE(json["materialize"]["rules"].is_array());
   EXPECT_EQ(json["materialize"]["rules"].size(), 2u);
   EXPECT_EQ(json["delta-triples"]["new"], 7);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// extractPredicatesFromUpdate tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// Helper: run Reasoner::materialize with explicit seed predicates.
+Reasoner::MaterializationResult runMaterializeSeeded(
+    Index& index, std::vector<std::string> seeds) {
+  const auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  const auto targetGraph = ad_utility::triple_component::Iri::fromIriref(
+      QLEVER_INFERRED_GRAPH_IRI);
+
+  QueryResultCache cache;
+  NamedResultCache namedResultCache;
+  MaterializedViewsManager materializedViewsManager;
+  QueryExecutionContext qec(
+      index, &cache,
+      ad_utility::testing::makeAllocator(
+          ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{}, &namedResultCache, &materializedViewsManager);
+
+  Reasoner::MaterializationResult result;
+  index.deltaTriplesManager().modify<void>(
+      [&](DeltaTriples& deltaTriples) {
+        qec.setLocatedTriplesForEvaluation(
+            deltaTriples.getLocatedTriplesSharedStateReference());
+        result = Reasoner::materialize(index, deltaTriples, qec, targetGraph,
+                                        handle, std::move(seeds));
+      });
+  return result;
+}
+
+}  // namespace
+
+// extractPredicatesFromUpdate correctly extracts an IRI predicate.
+TEST(Reasoner, extractPredicatesFromUpdateIriPredicate) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_extractPredicatesIri",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  const std::string insertUpdate = R"(
+    INSERT DATA {
+      <http://ex.org/bob>
+          <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+          <http://ex.org/Animal> .
+    }
+  )";
+  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), insertUpdate);
+  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+
+  ASSERT_EQ(preds.size(), 1u);
+  EXPECT_EQ(preds[0],
+            "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+}
+
+// extractPredicatesFromUpdate returns the WILDCARD sentinel for variable
+// predicates.
+TEST(Reasoner, extractPredicatesFromUpdateVariablePredicateGivesWildcard) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_extractPredicatesWildcard",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  const std::string insertUpdate = R"(
+    INSERT { <http://ex.org/s> ?p <http://ex.org/o> }
+    WHERE  { <http://ex.org/s> ?p <http://ex.org/o> }
+  )";
+  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), insertUpdate);
+  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+
+  EXPECT_THAT(preds,
+              Contains(std::string(reasoner_iris::WILDCARD)));
+}
+
+// The same predicate appearing in both INSERT and DELETE templates is returned
+// only once (no duplicates).
+TEST(Reasoner, extractPredicatesFromUpdateDeduplication) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_extractPredicatesDedup",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  const std::string update = R"(
+    DELETE {
+      <http://ex.org/a>
+          <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+          <http://ex.org/Cat> .
+    }
+    INSERT {
+      <http://ex.org/a>
+          <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+          <http://ex.org/Animal> .
+    }
+    WHERE { }
+  )";
+  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), update);
+  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+
+  // rdf:type should appear exactly once despite being in both templates.
+  const std::string rdfType =
+      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+  EXPECT_EQ(std::count(preds.begin(), preds.end(), rdfType), 1)
+      << "rdf:type appears " << std::count(preds.begin(), preds.end(), rdfType)
+      << " time(s) instead of exactly 1";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Seeded (incremental) materialisation tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Seeding with a predicate that no rule cares about produces 0 new triples and
+// reaches fixpoint in exactly 1 round (semi-naive immediately skips all rules).
+TEST(Reasoner, seededMaterializeWithIrrelevantPredicateProducesNoInferences) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_irrelevantSeed",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  auto result =
+      runMaterializeSeeded(index, {"<http://ex.org/irrelevantPredicate>"});
+
+  EXPECT_EQ(result.totalNewTriples, 0u);
+  EXPECT_EQ(result.numRounds, 1u);
+  EXPECT_EQ(result.numRulesActivated, 0u);
+}
+
+// scm-sco depends only on rdfs:subClassOf, NOT on rdf:type. When the seed is
+// only rdf:type, scm-sco must produce 0 new triples (it is skipped in round 0
+// because its inputPredicates do not overlap with the seeds).
+TEST(Reasoner, seededMaterializeScmScoNotActivatedByRdfTypeOnly) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_rdfTypeSeed",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  // rdf:type seed activates cax-sco (which uses rdf:type AND rdfs:subClassOf)
+  // but NOT scm-sco (which uses only rdfs:subClassOf).
+  auto result = runMaterializeSeeded(
+      index, {std::string(reasoner_iris::RDF_TYPE)});
+
+  auto scmSco = std::find_if(
+      result.triplesPerRule.begin(), result.triplesPerRule.end(),
+      [](const auto& p) { return p.first == "scm-sco"; });
+  ASSERT_NE(scmSco, result.triplesPerRule.end());
+  EXPECT_EQ(scmSco->second, 0u)
+      << "scm-sco depends only on rdfs:subClassOf — it must NOT fire when "
+         "seeded with rdf:type only";
+}
+
+// After a full materialisation, a seeded run with rdf:type finds all
+// rdf:type-dependent inferences already in the delta → 0 new triples.
+// This verifies that the seeded path respects the deduplication inside
+// executeConstructInsert.
+TEST(Reasoner, seededMaterializeAfterFullMaterializeIsIdempotent) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_seededIdempotent",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  // Full materialisation first.
+  auto r1 = runMaterialize(index);
+  EXPECT_GT(r1.totalNewTriples, 0u);
+
+  // Incremental run seeded with rdf:type.
+  auto r2 = runMaterializeSeeded(
+      index, {std::string(reasoner_iris::RDF_TYPE)});
+  EXPECT_EQ(r2.totalNewTriples, 0u)
+      << "All rdf:type-dependent inferences are already in the delta";
+  EXPECT_EQ(r2.numRulesActivated, 0u);
+}
+
+// Seeding with both rdf:type and rdfs:subClassOf activates cax-sco AND scm-sco.
+// Before any prior materialisation, scm-sco must produce at least the
+// Cat→LivingThing triple.
+TEST(Reasoner, seededMaterializeWithSubClassOfSeedActivatesScmSco) {
+  Index index = ad_utility::testing::makeTestIndex(
+      "Reasoner_subClassOfSeed",
+      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+
+  auto result = runMaterializeSeeded(
+      index, {std::string(reasoner_iris::RDFS_SUB_CLASS_OF)});
+
+  auto scmSco = std::find_if(
+      result.triplesPerRule.begin(), result.triplesPerRule.end(),
+      [](const auto& p) { return p.first == "scm-sco"; });
+  ASSERT_NE(scmSco, result.triplesPerRule.end());
+  EXPECT_GE(scmSco->second, 1u)
+      << "scm-sco should have derived Cat rdfs:subClassOf LivingThing when "
+         "seeded with rdfs:subClassOf";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime parameter registration
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Verify that the new `reasoner-auto-materialize` parameter is registered in
+// the runtime parameter map so it can be set and read via the string interface.
+TEST(Reasoner, reasonerAutoMaterializeParameterIsRegistered) {
+  // Enable.
+  EXPECT_NO_THROW(globalRuntimeParameters.wlock()->setFromString(
+      "auto-materialize-after-update", "true"));
+  EXPECT_EQ(
+      getRuntimeParameter<&RuntimeParameters::autoMaterializeAfterUpdate_>(),
+      true);
+
+  // Disable again — restore the default so subsequent tests are unaffected.
+  globalRuntimeParameters.wlock()->setFromString(
+      "auto-materialize-after-update", "false");
+  EXPECT_EQ(
+      getRuntimeParameter<&RuntimeParameters::autoMaterializeAfterUpdate_>(),
+      false);
 }

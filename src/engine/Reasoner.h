@@ -10,6 +10,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 
@@ -47,7 +48,21 @@ class Reasoner {
     int64_t numInsertedAfter = 0;
   };
 
-  // Run the full RDFS / OWL 2 RL forward-chaining materialisation.
+  // Extract the predicate IRIs affected by a parsed SPARQL UPDATE.
+  //
+  // Each IRI predicate in the INSERT/DELETE templates is returned once, in
+  // angle-bracket form (e.g. "<http://…#type>"). Variable predicates produce
+  // the WILDCARD sentinel ("*"). Duplicate predicates are suppressed.
+  //
+  // The result is passed as `seedPredicates` to `materialize()` so that
+  // incremental runs only activate rules whose input predicates overlap with
+  // the set of changed predicates, instead of running all rules in round 0.
+  //
+  // Precondition: `update.hasUpdateClause()` must be true.
+  static std::vector<std::string> extractPredicatesFromUpdate(
+      const ParsedQuery& update);
+
+  // Run the RDFS / OWL 2 RL forward-chaining materialisation.
   //
   // All inferred triples are inserted into `targetGraph` as delta triples.
   // The caller is responsible for:
@@ -56,9 +71,16 @@ class Reasoner {
   //   2. Clearing the query-result cache after this function returns (since
   //      the delta triples have changed).
   //
+  // When `seedPredicates` is non-empty the semi-naive tracker is pre-seeded
+  // with those predicates before round 0 runs, so only rules whose input
+  // predicates overlap with the seeds are activated in the first round
+  // (incremental mode). Passing an empty vector gives the default "full"
+  // behaviour where all rules fire in round 0.
+  //
   // Throws if cancellation is requested via `handle`.
   static MaterializationResult materialize(
       Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
       const ad_utility::triple_component::Iri& targetGraph,
-      const CancellationHandle& handle);
+      const CancellationHandle& handle,
+      std::vector<std::string> seedPredicates = {});
 };

@@ -61,6 +61,7 @@ RuntimeParameters::RuntimeParameters() {
   add(allowConstructInsert_);
   add(reasonerMaxRounds_);
   add(constructInsertMaxTriples_);
+  add(autoMaterializeAfterUpdate_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

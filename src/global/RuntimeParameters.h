@@ -182,6 +182,16 @@ struct RuntimeParameters {
   // of very large result sets. 0 means unlimited.
   SizeT constructInsertMaxTriples_{1'000'000, "construct-insert-max-triples"};
 
+  // When true, each successful SPARQL UPDATE automatically triggers an
+  // incremental OWL/RDFS materialisation seeded with the predicates that
+  // appear in the UPDATE's INSERT/DELETE templates. The materialisation runs
+  // in a separate transaction after the UPDATE commits; only rules whose
+  // input predicates overlap with the seed are activated (semi-naive from
+  // round 0), so the overhead for updates that touch no ontology predicates
+  // is a single no-op round. Has no effect when no OWL/RDFS axioms are
+  // present.
+  Bool autoMaterializeAfterUpdate_{false, "auto-materialize-after-update"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

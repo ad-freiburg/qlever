@@ -1420,14 +1420,16 @@ nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
 // ____________________________________________________________________________
 nlohmann::ordered_json Server::processMaterialize(
     DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-    SharedCancellationHandle handle) {
+    SharedCancellationHandle handle,
+    std::vector<std::string> seedPredicates) {
   ad_utility::Timer timer(ad_utility::Timer::Started);
 
   const auto targetGraph =
       ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   Reasoner::MaterializationResult result =
-      Reasoner::materialize(index_, deltaTriples, qec, targetGraph, handle);
+      Reasoner::materialize(index_, deltaTriples, qec, targetGraph, handle,
+                            std::move(seedPredicates));
 
   // Cache invalidation: new delta triples invalidate all cached results.
   cache_.clearAll();
@@ -1457,6 +1459,24 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
+
+  // ── Seed predicates for incremental materialisation ───────────────────────
+  // Must be extracted before `computeInNewThread` moves each `update` into
+  // `planQuery()`. An empty vector means "skip auto-materialize".
+  const bool doIncrementalMaterialize =
+      getRuntimeParameter<&RuntimeParameters::autoMaterializeAfterUpdate_>();
+  std::vector<std::string> seedPredicates;
+  if (doIncrementalMaterialize) {
+    for (const auto& update : updates) {
+      auto fromUpdate = Reasoner::extractPredicatesFromUpdate(update);
+      for (auto& p : fromUpdate) {
+        if (std::find(seedPredicates.begin(), seedPredicates.end(), p) ==
+            seedPredicates.end()) {
+          seedPredicates.push_back(std::move(p));
+        }
+      }
+    }
+  }
 
   // If multiple updates are part of a single request, those have to run
   // atomically. This is ensured, because the updates below are run on the
@@ -1522,10 +1542,50 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
+
+  // ── Incremental materialisation (separate transaction) ───────────────────
+  // Runs AFTER the UPDATE commits, seeded with the predicates extracted above,
+  // so only rules whose input predicates overlap with the seeds fire in round 0.
+  // Uses a fresh QueryExecutionContext with an up-to-date located-triples
+  // snapshot. Only runs when seedPredicates is non-empty (i.e. when
+  // `reasoner-auto-materialize` is true and the UPDATE had at least one
+  // statically-known predicate in its INSERT/DELETE template).
+  std::optional<nlohmann::ordered_json> materializeResultJson;
+  if (!seedPredicates.empty()) {
+    QueryExecutionContext materializeQec(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        &namedResultCache_, &materializedViewsManager_);
+    auto matCoroutine = computeInNewThread(
+        updateThreadPool_,
+        [this, &materializeQec, &cancellationHandle,
+         &seedPredicates]() -> nlohmann::ordered_json {
+          return index_.deltaTriplesManager()
+              .modify<nlohmann::ordered_json>(
+                  [this, &materializeQec, &cancellationHandle,
+                   &seedPredicates](DeltaTriples& deltaTriples) {
+                    materializeQec.setLocatedTriplesForEvaluation(
+                        deltaTriples.getLocatedTriplesSharedStateReference());
+                    // seedPredicates is not used after this call; move it to
+                    // avoid copying the vector of strings.
+                    return processMaterialize(deltaTriples, materializeQec,
+                                              cancellationHandle,
+                                              std::move(seedPredicates));
+                  });
+        },
+        cancellationHandle);
+    materializeResultJson = co_await std::move(matCoroutine);
+    AD_LOG_INFO << "Done with incremental materialisation after UPDATE."
+                << std::endl;
+  }
+
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
   responseJson["time"] = outerTracer->getJSONShort()["update"];
+  if (materializeResultJson.has_value()) {
+    responseJson["auto-materialize"] =
+        std::move(materializeResultJson.value());
+  }
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."

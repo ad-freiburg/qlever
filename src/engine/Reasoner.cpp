@@ -11,6 +11,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/ReasonerRules.h"
 #include "global/RuntimeParameters.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/Algorithm.h"
 #include "util/Log.h"
@@ -76,12 +77,52 @@ struct PreparedRule {
 }  // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Reasoner::extractPredicatesFromUpdate
+// ─────────────────────────────────────────────────────────────────────────────
+std::vector<std::string> Reasoner::extractPredicatesFromUpdate(
+    const ParsedQuery& update) {
+  AD_CONTRACT_CHECK(update.hasUpdateClause());
+
+  std::vector<std::string> result;
+
+  // Iterate the triple templates and collect predicate IRIs (or WILDCARD for
+  // variable predicates).  Duplicates are suppressed with a linear scan —
+  // the number of distinct predicates in a single UPDATE is small.
+  auto addFromTriples = [&result](
+                            const std::vector<SparqlTripleSimpleWithGraph>&
+                                triples) {
+    for (const auto& triple : triples) {
+      if (triple.p_.isIri()) {
+        // angle-bracket form matches the constants in ReasonerRules.h.
+        std::string iri = triple.p_.getIri().toStringRepresentation();
+        if (!ad_utility::contains(result, iri)) {
+          result.push_back(std::move(iri));
+        }
+      } else if (triple.p_.isVariable()) {
+        // Unknown predicate at parse time: use the wildcard sentinel so that
+        // all rules with variable-predicate WHERE clauses are re-activated.
+        std::string wc{reasoner_iris::WILDCARD};
+        if (!ad_utility::contains(result, wc)) {
+          result.push_back(std::move(wc));
+        }
+      }
+    }
+  };
+
+  const auto& op = update.updateClause().op_;
+  addFromTriples(op.toInsert_.triples_);
+  addFromTriples(op.toDelete_.triples_);
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Reasoner::materialize
 // ─────────────────────────────────────────────────────────────────────────────
 Reasoner::MaterializationResult Reasoner::materialize(
     Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
     const ad_utility::triple_component::Iri& targetGraph,
-    const CancellationHandle& handle) {
+    const CancellationHandle& handle,
+    std::vector<std::string> seedPredicates) {
   MaterializationResult result;
   result.numInsertedBefore = deltaTriples.numInserted();
 
@@ -106,10 +147,38 @@ Reasoner::MaterializationResult Reasoner::materialize(
   const size_t maxTriples =
       getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
 
-  AD_LOG_INFO << "[Reasoner] Starting materialisation with " << rules.size()
-              << " rules, max " << maxRounds << " rounds." << std::endl;
-
+  // ── Seed the semi-naive tracker from caller-supplied predicates ───────────
+  // When seeds are non-empty, semi-naive evaluation applies from round 0:
+  // only rules whose inputPredicates overlap with the seeds will fire in the
+  // first round (incremental mode). Empty seeds give the default "full"
+  // behaviour where all rules fire in round 0.
+  //
+  // The string_views added here borrow from `seedPredicates`, which is owned
+  // by the caller and outlives this function.  After round 0 the tracker is
+  // replaced by `nextTracker` (whose views borrow from the static kRules),
+  // so there are no dangling references.
   SemiNaiveTracker tracker;
+  const bool hasSeeds = !seedPredicates.empty();
+  if (hasSeeds) {
+    for (const auto& p : seedPredicates) {
+      if (p == reasoner_iris::WILDCARD) {
+        tracker.wildcardActive = true;
+      } else {
+        std::string_view sv{p};
+        if (!ad_utility::contains(tracker.newPredicates, sv)) {
+          tracker.newPredicates.push_back(sv);
+        }
+      }
+    }
+    AD_LOG_INFO << "[Reasoner] Incremental materialisation seeded with "
+                << tracker.newPredicates.size() << " predicate(s)"
+                << (tracker.wildcardActive ? " + wildcard" : "")
+                << "." << std::endl;
+  }
+
+  AD_LOG_INFO << "[Reasoner] Starting " << (hasSeeds ? "incremental " : "")
+              << "materialisation with " << rules.size() << " rules, max "
+              << maxRounds << " rounds." << std::endl;
 
   for (size_t round = 0; unlimitedRounds || round < maxRounds; ++round) {
     handle->throwIfCancelled();
@@ -122,13 +191,16 @@ Reasoner::MaterializationResult Reasoner::materialize(
 
     size_t newTriplesThisRound = 0;
     SemiNaiveTracker nextTracker;
-    bool firstRound = (round == 0);
+
+    // In the first round without seeds all rules run unconditionally (classic
+    // semi-naive round 0).  With seeds, semi-naive already applies in round 0.
+    const bool firstRound = !hasSeeds && (round == 0);
 
     for (auto& pr : prepared) {
       handle->throwIfCancelled();
 
-      // Semi-naive: in rounds > 0 skip rules whose input predicates have not
-      // gained new triples in the previous round.
+      // Semi-naive: in rounds > 0 (or round 0 with seeds) skip rules whose
+      // input predicates have not gained new triples in the previous round.
       if (!firstRound && !tracker.isActive(pr.rule)) {
         continue;
       }
