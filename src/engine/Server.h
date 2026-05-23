@@ -15,6 +15,7 @@
 
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
+#include "engine/Reasoner.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -80,6 +81,13 @@ class Server {
   // Get server statistics.
   json composeStatsJson() const;
   json composeCacheStatsJson() const;
+
+  // Build the JSON response returned after a successful `cmd=materialize`
+  // operation. Exposed as public so that tests can verify the JSON structure
+  // without going through the full HTTP stack.
+  static nlohmann::ordered_json createResponseMetadataForMaterialize(
+      const Reasoner::MaterializationResult& result,
+      const ad_utility::Timer& timer);
 
   // Helper struct bundling a parsed query with a query execution tree.
   // As the `QueryExecutionTree` stores a raw pointer to the
@@ -312,6 +320,13 @@ class Server {
       const ad_utility::triple_component::Iri& targetGraph,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Execute the OWL/RDFS forward-chaining materialisation.
+  // The function must have exclusive access to the DeltaTriples object.
+  // Clears the query-result caches after inserting new triples.
+  nlohmann::ordered_json processMaterialize(
+      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+      SharedCancellationHandle handle);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

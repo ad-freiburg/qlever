@@ -170,9 +170,12 @@ struct RuntimeParameters {
   // Controls whether external/user-initiated CONSTRUCT→INSERT operations are
   // permitted. When false (the default), the `construct-insert=true` URL
   // parameter is rejected with an error. Set to true to enable it.
-  // When an internal reasoner is added it will have its own `reasoner-enabled`
-  // control independent of this parameter.
   Bool allowConstructInsert_{false, "allow-construct-insert"};
+
+  // Maximum number of fixpoint rounds the built-in OWL/RDFS reasoner
+  // (cmd=materialize) is allowed to execute. A value of 0 means unlimited
+  // (the reasoner stops only when no new triples are produced).
+  SizeT reasonerMaxRounds_{100, "reasoner-max-rounds"};
 
   // Maximum number of unique triples that a single `construct-insert` operation
   // may produce after deduplication. Guards against accidental materialization

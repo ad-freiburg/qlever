@@ -59,6 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(allowConstructInsert_);
+  add(reasonerMaxRounds_);
   add(constructInsertMaxTriples_);
 
   defaultQueryTimeout_.setParameterConstraint(
