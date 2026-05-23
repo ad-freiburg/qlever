@@ -661,10 +661,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString);
 
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk);
+    auto preparedOp = prepareOperation(operationName, operationString,
+                                       std::move(messageSender), parameters,
+                                       timeLimit.value(), accessTokenOk);
+    auto& [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] = preparedOp;
     auto& qec = *qecPtr;
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(

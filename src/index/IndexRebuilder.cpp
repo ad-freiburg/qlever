@@ -317,8 +317,10 @@ boost::asio::awaitable<void> createPermutationWriterTask(
       net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationB)),
                     net::use_awaitable);
 
-  auto [_, metaA] = co_await std::move(taskA);
-  auto [__, metaB] = co_await std::move(taskB);
+  auto resultA = co_await std::move(taskA);
+  auto& [_, metaA] = resultA;
+  auto resultB = co_await std::move(taskB);
+  auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);
 
   auto makeFinalizerTasks =

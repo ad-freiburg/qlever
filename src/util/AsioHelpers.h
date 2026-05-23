@@ -150,7 +150,8 @@ inline net::awaitable<T> interruptible(
     while (running->test()) {
       handle->throwIfCancelled(loc);
       timer->expires_after(timeout);
-      auto [ec] = co_await timer->async_wait(net::as_tuple(net::deferred));
+      auto waitResult = co_await timer->async_wait(net::as_tuple(net::deferred));
+      auto& [ec] = waitResult;
       if (ec) {
         AD_CORRECTNESS_CHECK(ec == net::error::operation_aborted);
         break;

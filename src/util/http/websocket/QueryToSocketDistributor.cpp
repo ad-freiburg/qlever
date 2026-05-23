@@ -20,8 +20,9 @@ QueryToSocketDistributor::QueryToSocketDistributor(
 
 // _____________________________________________________________________________
 net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
-  auto [error] = co_await infiniteTimer_.async_wait(
+  auto waitResult = co_await infiniteTimer_.async_wait(
       net::bind_executor(strand_, net::as_tuple(net::use_awaitable)));
+  auto& [error] = waitResult;
   // If this fails this means the infinite timer expired or aborted with an
   // unexpected error code. This should not happen at all
   AD_CORRECTNESS_CHECK(error == net::error::operation_aborted);

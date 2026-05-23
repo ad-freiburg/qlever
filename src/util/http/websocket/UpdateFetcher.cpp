@@ -12,8 +12,8 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   AD_CORRECTNESS_CHECK(distributor_);
   AD_EXPENSIVE_CHECK(strand().running_in_this_thread());
 
-  auto [data, latest] =
-      co_await distributor_->waitForNextDataPiece(currentIndex_);
+  auto dataPiece = co_await distributor_->waitForNextDataPiece(currentIndex_);
+  auto& [data, latest] = dataPiece;
   currentIndex_ = latest;
   co_return data;
 }
