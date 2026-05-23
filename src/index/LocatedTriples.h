@@ -160,8 +160,13 @@ class SortedLocatedTriplesVector {
   }
 
   // Whether the items are all sorted and deduplicated. Items can only be read
-  // if `isClean` is true.
-  bool isClean() const { return smallPartIsSorted_; }
+  // if `isClean` is true. Also enforces the class invariant that the boundary
+  // index `numItemsLargePart_` lies within `triples_`; if it ever drifts out of
+  // range, sorted-access methods fail this check rather than silently UB'ing
+  // through `triples_.begin() + numItemsLargePart_`.
+  bool isClean() const {
+    return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
+  }
 
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   friend class ad_benchmark::ZipMergeIteratorBenchmark;
