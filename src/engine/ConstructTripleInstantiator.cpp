@@ -78,7 +78,6 @@ std::vector<EvaluatedTriple> instantiateBatch(
     for (size_t tripleIdx :
          ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
       const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
-      const auto& tripleColumns = tmpl.variableColumnsPerTriple_[tripleIdx];
 
       // triples containing blank nodes are always distinct across rows because
       // blank node IDs are generated per-row. Skip the dedup check for them.
@@ -86,6 +85,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
       if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
           !tmpl.tripleContainsBlankNode_[tripleIdx]) {
         const size_t absoluteRow = ctx->get().firstRow_ + rowInBatch;
+        const auto& tripleColumns = tmpl.variableColumnsPerTriple_[tripleIdx];
         if (isDuplicate(tripleIdx, absoluteRow, tripleColumns, ctx->get(),
                         seenTriples->get())) {
           continue;  // do not instantiate triple
