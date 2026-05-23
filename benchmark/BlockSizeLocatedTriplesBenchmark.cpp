@@ -153,7 +153,7 @@ class BlockSizeLocatedTriplesBenchmark : public BenchmarkInterface {
       table.addMeasurement(rowIdx, nIdx + 1, [&]() {
         volatile size_t checksum = 0;
         for (const auto& lt : vec) {
-          checksum += lt.blockIndex_;
+          checksum = checksum + lt.blockIndex_;
         }
         (void)checksum;
       });

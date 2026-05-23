@@ -171,7 +171,7 @@ class LocatedTriplesInsertScenariosBenchmark : public BenchmarkInterface {
           volatile size_t count = 0;
           for (size_t rep = 0; rep < kRepIterate; rep++) {
             for (const auto& item : svec) {
-              if (item.insertOrDelete_) count++;
+              if (item.insertOrDelete_) count = count + 1;
             }
           }
         });
@@ -184,7 +184,7 @@ class LocatedTriplesInsertScenariosBenchmark : public BenchmarkInterface {
           volatile size_t count = 0;
           for (size_t rep = 0; rep < kRepIterate; rep++) {
             for (const auto& item : bvec) {
-              if (item.insertOrDelete_) count++;
+              if (item.insertOrDelete_) count = count + 1;
             }
           }
         });
