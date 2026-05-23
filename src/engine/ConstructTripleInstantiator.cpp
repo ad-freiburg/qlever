@@ -83,13 +83,11 @@ std::vector<EvaluatedTriple> instantiateBatch(
       // blank node IDs are generated per-row. Skip the dedup check for them.
       // For `None` mode, skip deduplication entirely.
       if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
-          !tmpl.tripleContainsBlankNode_[tripleIdx]) {
-        const size_t absoluteRow = ctx->get().firstRow_ + rowInBatch;
-        const auto& tripleColumns = tmpl.variableColumnsPerTriple_[tripleIdx];
-        if (isDuplicate(tripleIdx, absoluteRow, tripleColumns, ctx->get(),
-                        seenTriples->get())) {
-          continue;  // do not instantiate triple
-        }
+          !tmpl.tripleContainsBlankNode_[tripleIdx] &&
+          isDuplicate(tripleIdx, ctx->get().firstRow_ + rowInBatch,
+                      tmpl.variableColumnsPerTriple_[tripleIdx], ctx->get(),
+                      seenTriples->get())) {
+        continue;  // do not instantiate triple
       }
 
       auto instantiate = [&triple, &batchResult, rowInBatch,
