@@ -667,17 +667,15 @@ TEST(ExecuteUpdate, executeConstructInsert) {
         auto l = generateLocationTrace(sourceLocation);
         const auto sharedHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
-        auto pq =
-            SparqlParser::parseQuery(&index.encodedIriManager(), query);
+        auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
         QueryResultCache cache;
         NamedResultCache namedResultCache;
         MaterializedViewsManager materializedViewsManager;
-        QueryExecutionContext qec(
-            index, &cache,
-            ad_utility::testing::makeAllocator(
-                ad_utility::MemorySize::megabytes(100)),
-            SortPerformanceEstimator{}, &namedResultCache,
-            &materializedViewsManager);
+        QueryExecutionContext qec(index, &cache,
+                                  ad_utility::testing::makeAllocator(
+                                      ad_utility::MemorySize::megabytes(100)),
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  &materializedViewsManager);
         index.deltaTriplesManager().modify<void>(
             [&index, &pq, &qec, &sharedHandle,
              &targetGraph](DeltaTriples& deltaTriples) {
@@ -694,66 +692,52 @@ TEST(ExecuteUpdate, executeConstructInsert) {
             });
       };
 
-  const Iri inferredGraph =
-      Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
+  const Iri inferredGraph = Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   // A CONSTRUCT query matching 2 `<is-a>` triples inserts 2 new triples.
   {
     Index index = ad_utility::testing::makeTestIndex(
-        "ConstructInsert_twoMatches",
-        ad_utility::testing::TestIndexConfig());
-    runConstructInsert(
-        index,
-        "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
-        inferredGraph,
-        NumTriples(2, 0, 2));
+        "ConstructInsert_twoMatches", ad_utility::testing::TestIndexConfig());
+    runConstructInsert(index,
+                       "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
+                       inferredGraph, NumTriples(2, 0, 2));
   }
 
   // A CONSTRUCT query that matches nothing should insert no triples.
   {
     Index index = ad_utility::testing::makeTestIndex(
-        "ConstructInsert_noMatches",
-        ad_utility::testing::TestIndexConfig());
+        "ConstructInsert_noMatches", ad_utility::testing::TestIndexConfig());
     runConstructInsert(
         index,
         "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <nonexistent-pred> ?o }",
-        inferredGraph,
-        NumTriples(0, 0, 0));
+        inferredGraph, NumTriples(0, 0, 0));
   }
 
   // A CONSTRUCT template with all constants produces one unique triple even
   // when the WHERE clause has multiple solutions.
   {
     Index index = ad_utility::testing::makeTestIndex(
-        "ConstructInsert_deduplicated",
-        ad_utility::testing::TestIndexConfig());
-    runConstructInsert(
-        index,
-        "CONSTRUCT { <s1> <p1> <o1> } WHERE { ?s <is-a> ?o }",
-        inferredGraph,
-        NumTriples(1, 0, 1));
+        "ConstructInsert_deduplicated", ad_utility::testing::TestIndexConfig());
+    runConstructInsert(index,
+                       "CONSTRUCT { <s1> <p1> <o1> } WHERE { ?s <is-a> ?o }",
+                       inferredGraph, NumTriples(1, 0, 1));
   }
 
   // Inserting into a custom named graph works the same way.
   {
     Index index = ad_utility::testing::makeTestIndex(
-        "ConstructInsert_customGraph",
-        ad_utility::testing::TestIndexConfig());
-    const Iri customGraph =
-        Iri::fromIriref("<http://example.org/inferred>");
-    runConstructInsert(
-        index,
-        "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
-        customGraph,
-        NumTriples(2, 0, 2));
+        "ConstructInsert_customGraph", ad_utility::testing::TestIndexConfig());
+    const Iri customGraph = Iri::fromIriref("<http://example.org/inferred>");
+    runConstructInsert(index,
+                       "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
+                       customGraph, NumTriples(2, 0, 2));
   }
 
   // Running the same CONSTRUCT INSERT twice is idempotent because duplicates
   // are removed before insertion.
   {
     Index index = ad_utility::testing::makeTestIndex(
-        "ConstructInsert_idempotent",
-        ad_utility::testing::TestIndexConfig());
+        "ConstructInsert_idempotent", ad_utility::testing::TestIndexConfig());
     auto sharedHandle = std::make_shared<ad_utility::CancellationHandle<>>();
     const std::string query =
         "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }";
@@ -761,11 +745,11 @@ TEST(ExecuteUpdate, executeConstructInsert) {
     QueryResultCache cache;
     NamedResultCache namedResultCache;
     MaterializedViewsManager materializedViewsManager;
-    QueryExecutionContext qec(
-        index, &cache,
-        ad_utility::testing::makeAllocator(
-            ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedResultCache, &materializedViewsManager);
+    QueryExecutionContext qec(index, &cache,
+                              ad_utility::testing::makeAllocator(
+                                  ad_utility::MemorySize::megabytes(100)),
+                              SortPerformanceEstimator{}, &namedResultCache,
+                              &materializedViewsManager);
     // First insertion.
     index.deltaTriplesManager().modify<void>(
         [&index, &pq, &qec, &sharedHandle,
@@ -793,10 +777,9 @@ TEST(ExecuteUpdate, executeConstructInsert) {
                                                 inferredGraph, sharedHandle);
         });
     // After two identical insertions, we still have at least 2 triples.
-    index.deltaTriplesManager().modify<void>(
-        [](DeltaTriples& deltaTriples) {
-          EXPECT_GE(deltaTriples.numInserted(), 2);
-          EXPECT_EQ(deltaTriples.numDeleted(), 0);
-        });
+    index.deltaTriplesManager().modify<void>([](DeltaTriples& deltaTriples) {
+      EXPECT_GE(deltaTriples.numInserted(), 2);
+      EXPECT_EQ(deltaTriples.numDeleted(), 0);
+    });
   }
 }

@@ -1120,8 +1120,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // the resulting triples as new delta triples rather than streaming a result
   // set to the client. This is the core primitive for rule-based reasoning in
   // QLever. A valid access token is required, same as for SPARQL UPDATE.
-  if (ad_utility::url_parser::checkParameter(params, "construct-insert",
-                                             "true")
+  if (ad_utility::url_parser::checkParameter(params, "construct-insert", "true")
           .has_value()) {
     // Check server-level permission first. The `allow-construct-insert`
     // runtime parameter defaults to false; operators must opt in explicitly.
@@ -1342,14 +1341,13 @@ nlohmann::ordered_json Server::createResponseMetadataForConstructInsert(
   setIfHasValue(&UpdateMetadata::countAfter_, "after");
   setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
   if (metadata.countAfter_.has_value() && metadata.countBefore_.has_value()) {
-    response["delta-triples"]["difference"] =
-        nlohmann::json(metadata.countAfter_.value() -
-                       metadata.countBefore_.value());
+    response["delta-triples"]["difference"] = nlohmann::json(
+        metadata.countAfter_.value() - metadata.countBefore_.value());
   }
   response["time"] = tracer.getJSONShort()["construct-insert"];
   for (auto permutation : Permutation::ALL) {
-    response["located-triples"][Permutation::toString(permutation)]
-            ["blocks-affected"] =
+    response["located-triples"][Permutation::toString(
+        permutation)]["blocks-affected"] =
         locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
             .numBlocks();
     auto numBlocks = index.getPimpl()
