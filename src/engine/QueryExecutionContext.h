@@ -96,8 +96,9 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 class NamedResultCache;
 class MaterializedViewsManager;
 
-// Execution context for queries.
-// Holds references to index and engine, implements caching.
+// Execution context for queries. Holds a `std::shared_ptr` to the `Index`
+// and `MaterializedViewsManager` to ensure that they stay alive as long as
+// this context is alive.
 class QueryExecutionContext
     : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
@@ -213,6 +214,9 @@ class QueryExecutionContext
   // header.
   static bool areWebSocketUpdatesEnabled();
   static std::chrono::milliseconds websocketUpdateInterval();
+
+  // Shared pointer to the `Index` to ensure that it stays alive as long as
+  // this context is alive.
   std::shared_ptr<const Index> _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -251,6 +255,8 @@ class QueryExecutionContext
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
+  // Shared pointer to the `MaterializedViewsManager` to ensure that it stays
+  // alive as long as this context is alive.
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
