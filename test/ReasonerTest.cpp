@@ -49,26 +49,25 @@ static const std::string kOwlTurtle = R"(
 // Helper: run Reasoner::materialize on the given Index and return the result.
 Reasoner::MaterializationResult runMaterialize(Index& index) {
   const auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  const auto targetGraph = ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_INFERRED_GRAPH_IRI);
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   QueryResultCache cache;
   NamedResultCache namedResultCache;
   MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(
-      index, &cache,
-      ad_utility::testing::makeAllocator(
-          ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, &namedResultCache, &materializedViewsManager);
+  QueryExecutionContext qec(index, &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            SortPerformanceEstimator{}, &namedResultCache,
+                            &materializedViewsManager);
 
   Reasoner::MaterializationResult result;
-  index.deltaTriplesManager().modify<void>(
-      [&](DeltaTriples& deltaTriples) {
-        qec.setLocatedTriplesForEvaluation(
-            deltaTriples.getLocatedTriplesSharedStateReference());
-        result = Reasoner::materialize(index, deltaTriples, qec, targetGraph,
-                                        handle);
-      });
+  index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    qec.setLocatedTriplesForEvaluation(
+        deltaTriples.getLocatedTriplesSharedStateReference());
+    result =
+        Reasoner::materialize(index, deltaTriples, qec, targetGraph, handle);
+  });
   return result;
 }
 
@@ -128,8 +127,7 @@ TEST(ReasonerRules, allQueriesContainConstruct) {
 // So numInsertedAfter - numInsertedBefore == 7.
 TEST(Reasoner, materializeOwlOntology) {
   Index index = ad_utility::testing::makeTestIndex(
-      "Reasoner_owlOntology",
-      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+      "Reasoner_owlOntology", ad_utility::testing::TestIndexConfig(kOwlTurtle));
 
   auto result = runMaterialize(index);
 
@@ -148,18 +146,21 @@ TEST(Reasoner, materializeOwlOntology) {
   EXPECT_EQ(result.triplesPerRule.size(), getAllReasonerRules().size());
 
   // scm-sco must have produced at least 1 new triple (Cat → LivingThing).
-  auto it = std::find_if(result.triplesPerRule.begin(),
-                         result.triplesPerRule.end(),
-                         [](const auto& p) { return p.first == "scm-sco"; });
+  auto it =
+      std::find_if(result.triplesPerRule.begin(), result.triplesPerRule.end(),
+                   [](const auto& p) { return p.first == "scm-sco"; });
   ASSERT_NE(it, result.triplesPerRule.end());
-  EXPECT_GE(it->second, 1u) << "scm-sco should have inferred Cat subClassOf LivingThing";
+  EXPECT_GE(it->second, 1u)
+      << "scm-sco should have inferred Cat subClassOf LivingThing";
 
-  // cax-sco must have produced at least 2 new triples (type Animal + LivingThing).
-  auto it2 = std::find_if(result.triplesPerRule.begin(),
-                          result.triplesPerRule.end(),
-                          [](const auto& p) { return p.first == "cax-sco"; });
+  // cax-sco must have produced at least 2 new triples (type Animal +
+  // LivingThing).
+  auto it2 =
+      std::find_if(result.triplesPerRule.begin(), result.triplesPerRule.end(),
+                   [](const auto& p) { return p.first == "cax-sco"; });
   ASSERT_NE(it2, result.triplesPerRule.end());
-  EXPECT_GE(it2->second, 2u) << "cax-sco should have inferred felix type Animal and LivingThing";
+  EXPECT_GE(it2->second, 2u)
+      << "cax-sco should have inferred felix type Animal and LivingThing";
 }
 
 // An index with NO OWL/RDFS predicates at all should produce zero inferences
@@ -191,8 +192,7 @@ TEST(Reasoner, emptyOntologyReachesFixpointImmediately) {
 // triples (all are already in the delta).
 TEST(Reasoner, materializeIsIdempotent) {
   Index index = ad_utility::testing::makeTestIndex(
-      "Reasoner_idempotent",
-      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+      "Reasoner_idempotent", ad_utility::testing::TestIndexConfig(kOwlTurtle));
 
   auto r1 = runMaterialize(index);
   EXPECT_GT(r1.totalNewTriples, 0u);
@@ -208,8 +208,7 @@ TEST(Reasoner, materializeIsIdempotent) {
 // then stops even if more triples could be inferred.
 TEST(Reasoner, maxRoundsLimitStopsEarly) {
   Index index = ad_utility::testing::makeTestIndex(
-      "Reasoner_maxRounds",
-      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+      "Reasoner_maxRounds", ad_utility::testing::TestIndexConfig(kOwlTurtle));
 
   // Set max-rounds to 1 so only the first round executes.
   globalRuntimeParameters.wlock()->setFromString("reasoner-max-rounds", "1");
@@ -232,12 +231,11 @@ TEST(Reasoner, maxRoundsLimitStopsEarly) {
 // immediately (no rules execute, cancellation is detected in round 0).
 TEST(Reasoner, cancelledHandleThrows) {
   Index index = ad_utility::testing::makeTestIndex(
-      "Reasoner_cancelled",
-      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+      "Reasoner_cancelled", ad_utility::testing::TestIndexConfig(kOwlTurtle));
 
   const auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  const auto targetGraph = ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_INFERRED_GRAPH_IRI);
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   // Cancel the handle before materialisation starts.
   handle->cancel(ad_utility::CancellationState::MANUAL);
@@ -245,20 +243,18 @@ TEST(Reasoner, cancelledHandleThrows) {
   QueryResultCache cache;
   NamedResultCache namedResultCache;
   MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(
-      index, &cache,
-      ad_utility::testing::makeAllocator(
-          ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, &namedResultCache, &materializedViewsManager);
+  QueryExecutionContext qec(index, &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            SortPerformanceEstimator{}, &namedResultCache,
+                            &materializedViewsManager);
 
   EXPECT_THROW(
-      index.deltaTriplesManager().modify<void>(
-          [&](DeltaTriples& deltaTriples) {
-            qec.setLocatedTriplesForEvaluation(
-                deltaTriples.getLocatedTriplesSharedStateReference());
-            Reasoner::materialize(index, deltaTriples, qec, targetGraph,
-                                   handle);
-          }),
+      index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+        qec.setLocatedTriplesForEvaluation(
+            deltaTriples.getLocatedTriplesSharedStateReference());
+        Reasoner::materialize(index, deltaTriples, qec, targetGraph, handle);
+      }),
       ad_utility::CancellationException);
 }
 

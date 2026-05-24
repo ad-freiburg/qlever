@@ -15,10 +15,10 @@
 
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Reasoner.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Reasoner.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"

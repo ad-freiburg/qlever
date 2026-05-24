@@ -19,13 +19,13 @@
 
 #include "CompilationInfo.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Reasoner.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
 #include "engine/HttpError.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Reasoner.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
@@ -600,7 +600,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("materialize");
     logCommand(cmd, "run OWL/RDFS forward-chaining materialisation");
 
-    auto materializeHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto materializeHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
     std::optional<TimeLimit> materializeTimeLimit =
         co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
@@ -614,24 +615,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Create a QueryExecutionContext on the coroutine stack; it outlives
     // the co_await below because the coroutine frame is heap-allocated and
     // stays alive until the awaitable completes.
-    QueryExecutionContext materializeQec(index_, &cache_, allocator_,
-                                         sortPerformanceEstimator_,
-                                         &namedResultCache_,
-                                         &materializedViewsManager_);
+    QueryExecutionContext materializeQec(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        &namedResultCache_, &materializedViewsManager_);
 
     auto materializeCoroutine = computeInNewThread(
         updateThreadPool_,
         [this, &materializeQec,
          &materializeHandle]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager()
-              .modify<nlohmann::ordered_json>(
-                  [this, &materializeQec,
-                   &materializeHandle](DeltaTriples& deltaTriples) {
-                    materializeQec.setLocatedTriplesForEvaluation(
-                        deltaTriples.getLocatedTriplesSharedStateReference());
-                    return processMaterialize(deltaTriples, materializeQec,
-                                              materializeHandle);
-                  });
+          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+              [this, &materializeQec,
+               &materializeHandle](DeltaTriples& deltaTriples) {
+                materializeQec.setLocatedTriplesForEvaluation(
+                    deltaTriples.getLocatedTriplesSharedStateReference());
+                return processMaterialize(deltaTriples, materializeQec,
+                                          materializeHandle);
+              });
         },
         materializeHandle);
     auto materializeResultJson = co_await std::move(materializeCoroutine);
@@ -1120,8 +1119,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // the resulting triples as new delta triples rather than streaming a result
   // set to the client. This is the core primitive for rule-based reasoning in
   // QLever. A valid access token is required, same as for SPARQL UPDATE.
-  if (ad_utility::url_parser::checkParameter(params, "construct-insert",
-                                             "true")
+  if (ad_utility::url_parser::checkParameter(params, "construct-insert", "true")
           .has_value()) {
     // Check server-level permission first. The `allow-construct-insert`
     // runtime parameter defaults to false; operators must opt in explicitly.
@@ -1342,14 +1340,13 @@ nlohmann::ordered_json Server::createResponseMetadataForConstructInsert(
   setIfHasValue(&UpdateMetadata::countAfter_, "after");
   setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
   if (metadata.countAfter_.has_value() && metadata.countBefore_.has_value()) {
-    response["delta-triples"]["difference"] =
-        nlohmann::json(metadata.countAfter_.value() -
-                       metadata.countBefore_.value());
+    response["delta-triples"]["difference"] = nlohmann::json(
+        metadata.countAfter_.value() - metadata.countBefore_.value());
   }
   response["time"] = tracer.getJSONShort()["construct-insert"];
   for (auto permutation : Permutation::ALL) {
-    response["located-triples"][Permutation::toString(permutation)]
-            ["blocks-affected"] =
+    response["located-triples"][Permutation::toString(
+        permutation)]["blocks-affected"] =
         locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
             .numBlocks();
     auto numBlocks = index.getPimpl()

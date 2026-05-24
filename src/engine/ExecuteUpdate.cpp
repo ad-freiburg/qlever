@@ -303,8 +303,8 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeConstructInsert(
-    const Index& index, const ParsedQuery& query,
-    const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
+    DeltaTriples& deltaTriples,
     const ad_utility::triple_component::Iri& targetGraph,
     const CancellationHandle& cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
@@ -333,9 +333,8 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
                                  triple[2].toTripleComponent(), targetGraph);
   }
 
-  auto [transformedTripleTemplates, localVocab] =
-      transformTriplesTemplate(index.getPimpl(), qet.getVariableColumns(),
-                               tripleTemplates);
+  auto [transformedTripleTemplates, localVocab] = transformTriplesTemplate(
+      index.getPimpl(), qet.getVariableColumns(), tripleTemplates);
 
   // Read the safety cap (0 = unlimited).
   const size_t maxTriples =

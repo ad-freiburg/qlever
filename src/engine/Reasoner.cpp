@@ -139,8 +139,8 @@ Reasoner::MaterializationResult Reasoner::materialize(
   std::vector<PreparedRule> prepared;
   prepared.reserve(rules.size());
   for (auto& rule : rules) {
-    ParsedQuery pq =
-        SparqlParser::parseQuery(&index.encodedIriManager(), rule.constructQuery);
+    ParsedQuery pq = SparqlParser::parseQuery(&index.encodedIriManager(),
+                                              rule.constructQuery);
     prepared.push_back({rule, std::move(pq), 0});
   }
 
@@ -205,10 +205,11 @@ Reasoner::MaterializationResult Reasoner::materialize(
         continue;
       }
 
-      // Deep-copy the ParsedQuery before planning: QueryPlanner::createExecutionTree
-      // takes ParsedQuery by mutable reference and QueryPlanner::optimize() receives
-      // a non-const pointer to the root graph pattern, so the query may be mutated
-      // during planning. We keep `pr.parsedQuery` pristine for subsequent rounds.
+      // Deep-copy the ParsedQuery before planning:
+      // QueryPlanner::createExecutionTree takes ParsedQuery by mutable
+      // reference and QueryPlanner::optimize() receives a non-const pointer to
+      // the root graph pattern, so the query may be mutated during planning. We
+      // keep `pr.parsedQuery` pristine for subsequent rounds.
       ParsedQuery pqForPlanning = pr.parsedQuery;
 
       // Re-plan the rule each round: a fresh QueryExecutionTree is produced so
@@ -234,11 +235,13 @@ Reasoner::MaterializationResult Reasoner::materialize(
       }
 
       // Guard against runaway materialisation (0 = unlimited).
-      if (maxTriples > 0 && result.totalNewTriples + newTriplesThisRound > maxTriples) {
+      if (maxTriples > 0 &&
+          result.totalNewTriples + newTriplesThisRound > maxTriples) {
         throw std::runtime_error(absl::StrCat(
             "[Reasoner] construct-insert-max-triples limit (", maxTriples,
             ") exceeded during materialisation. Increase the limit via the "
-            "'construct-insert-max-triples' runtime parameter if intentional."));
+            "'construct-insert-max-triples' runtime parameter if "
+            "intentional."));
       }
     }
 
