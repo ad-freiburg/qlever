@@ -88,26 +88,26 @@ std::vector<std::string> Reasoner::extractPredicatesFromUpdate(
   // Iterate the triple templates and collect predicate IRIs (or WILDCARD for
   // variable predicates).  Duplicates are suppressed with a linear scan —
   // the number of distinct predicates in a single UPDATE is small.
-  auto addFromTriples = [&result](
-                            const std::vector<SparqlTripleSimpleWithGraph>&
-                                triples) {
-    for (const auto& triple : triples) {
-      if (triple.p_.isIri()) {
-        // angle-bracket form matches the constants in ReasonerRules.h.
-        std::string iri = triple.p_.getIri().toStringRepresentation();
-        if (!ad_utility::contains(result, iri)) {
-          result.push_back(std::move(iri));
+  auto addFromTriples =
+      [&result](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+        for (const auto& triple : triples) {
+          if (triple.p_.isIri()) {
+            // angle-bracket form matches the constants in ReasonerRules.h.
+            std::string iri = triple.p_.getIri().toStringRepresentation();
+            if (!ad_utility::contains(result, iri)) {
+              result.push_back(std::move(iri));
+            }
+          } else if (triple.p_.isVariable()) {
+            // Unknown predicate at parse time: use the wildcard sentinel so
+            // that all rules with variable-predicate WHERE clauses are
+            // re-activated.
+            std::string wc{reasoner_iris::WILDCARD};
+            if (!ad_utility::contains(result, wc)) {
+              result.push_back(std::move(wc));
+            }
+          }
         }
-      } else if (triple.p_.isVariable()) {
-        // Unknown predicate at parse time: use the wildcard sentinel so that
-        // all rules with variable-predicate WHERE clauses are re-activated.
-        std::string wc{reasoner_iris::WILDCARD};
-        if (!ad_utility::contains(result, wc)) {
-          result.push_back(std::move(wc));
-        }
-      }
-    }
-  };
+      };
 
   const auto& op = update.updateClause().op_;
   addFromTriples(op.toInsert_.triples_);
@@ -121,8 +121,7 @@ std::vector<std::string> Reasoner::extractPredicatesFromUpdate(
 Reasoner::MaterializationResult Reasoner::materialize(
     Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
     const ad_utility::triple_component::Iri& targetGraph,
-    const CancellationHandle& handle,
-    std::vector<std::string> seedPredicates) {
+    const CancellationHandle& handle, std::vector<std::string> seedPredicates) {
   MaterializationResult result;
   result.numInsertedBefore = deltaTriples.numInserted();
 
@@ -172,8 +171,8 @@ Reasoner::MaterializationResult Reasoner::materialize(
     }
     AD_LOG_INFO << "[Reasoner] Incremental materialisation seeded with "
                 << tracker.newPredicates.size() << " predicate(s)"
-                << (tracker.wildcardActive ? " + wildcard" : "")
-                << "." << std::endl;
+                << (tracker.wildcardActive ? " + wildcard" : "") << "."
+                << std::endl;
   }
 
   AD_LOG_INFO << "[Reasoner] Starting " << (hasSeeds ? "incremental " : "")

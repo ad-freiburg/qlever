@@ -1417,8 +1417,7 @@ nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
 // ____________________________________________________________________________
 nlohmann::ordered_json Server::processMaterialize(
     DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-    SharedCancellationHandle handle,
-    std::vector<std::string> seedPredicates) {
+    SharedCancellationHandle handle, std::vector<std::string> seedPredicates) {
   ad_utility::Timer timer(ad_utility::Timer::Started);
 
   const auto targetGraph =
@@ -1542,8 +1541,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // ── Incremental materialisation (separate transaction) ───────────────────
   // Runs AFTER the UPDATE commits, seeded with the predicates extracted above,
-  // so only rules whose input predicates overlap with the seeds fire in round 0.
-  // Uses a fresh QueryExecutionContext with an up-to-date located-triples
+  // so only rules whose input predicates overlap with the seeds fire in round
+  // 0. Uses a fresh QueryExecutionContext with an up-to-date located-triples
   // snapshot. Only runs when seedPredicates is non-empty (i.e. when
   // `reasoner-auto-materialize` is true and the UPDATE had at least one
   // statically-known predicate in its INSERT/DELETE template).
@@ -1556,18 +1555,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         updateThreadPool_,
         [this, &materializeQec, &cancellationHandle,
          &seedPredicates]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager()
-              .modify<nlohmann::ordered_json>(
-                  [this, &materializeQec, &cancellationHandle,
-                   &seedPredicates](DeltaTriples& deltaTriples) {
-                    materializeQec.setLocatedTriplesForEvaluation(
-                        deltaTriples.getLocatedTriplesSharedStateReference());
-                    // seedPredicates is not used after this call; move it to
-                    // avoid copying the vector of strings.
-                    return processMaterialize(deltaTriples, materializeQec,
-                                              cancellationHandle,
-                                              std::move(seedPredicates));
-                  });
+          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+              [this, &materializeQec, &cancellationHandle,
+               &seedPredicates](DeltaTriples& deltaTriples) {
+                materializeQec.setLocatedTriplesForEvaluation(
+                    deltaTriples.getLocatedTriplesSharedStateReference());
+                // seedPredicates is not used after this call; move it to
+                // avoid copying the vector of strings.
+                return processMaterialize(deltaTriples, materializeQec,
+                                          cancellationHandle,
+                                          std::move(seedPredicates));
+              });
         },
         cancellationHandle);
     materializeResultJson = co_await std::move(matCoroutine);
@@ -1580,8 +1578,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   outerTracer->endTrace("update");
   responseJson["time"] = outerTracer->getJSONShort()["update"];
   if (materializeResultJson.has_value()) {
-    responseJson["auto-materialize"] =
-        std::move(materializeResultJson.value());
+    responseJson["auto-materialize"] = std::move(materializeResultJson.value());
   }
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a

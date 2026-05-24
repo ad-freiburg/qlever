@@ -292,26 +292,25 @@ namespace {
 Reasoner::MaterializationResult runMaterializeSeeded(
     Index& index, std::vector<std::string> seeds) {
   const auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  const auto targetGraph = ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_INFERRED_GRAPH_IRI);
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   QueryResultCache cache;
   NamedResultCache namedResultCache;
   MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(
-      index, &cache,
-      ad_utility::testing::makeAllocator(
-          ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, &namedResultCache, &materializedViewsManager);
+  QueryExecutionContext qec(index, &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            SortPerformanceEstimator{}, &namedResultCache,
+                            &materializedViewsManager);
 
   Reasoner::MaterializationResult result;
-  index.deltaTriplesManager().modify<void>(
-      [&](DeltaTriples& deltaTriples) {
-        qec.setLocatedTriplesForEvaluation(
-            deltaTriples.getLocatedTriplesSharedStateReference());
-        result = Reasoner::materialize(index, deltaTriples, qec, targetGraph,
-                                        handle, std::move(seeds));
-      });
+  index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    qec.setLocatedTriplesForEvaluation(
+        deltaTriples.getLocatedTriplesSharedStateReference());
+    result = Reasoner::materialize(index, deltaTriples, qec, targetGraph,
+                                   handle, std::move(seeds));
+  });
   return result;
 }
 
@@ -337,8 +336,7 @@ TEST(Reasoner, extractPredicatesFromUpdateIriPredicate) {
   auto preds = Reasoner::extractPredicatesFromUpdate(pqs.front());
 
   ASSERT_EQ(preds.size(), 1u);
-  EXPECT_EQ(preds[0],
-            "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+  EXPECT_EQ(preds[0], "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }
 
 // extractPredicatesFromUpdate returns the WILDCARD sentinel for variable
@@ -358,8 +356,7 @@ TEST(Reasoner, extractPredicatesFromUpdateVariablePredicateGivesWildcard) {
   ASSERT_FALSE(pqs.empty());
   auto preds = Reasoner::extractPredicatesFromUpdate(pqs.front());
 
-  EXPECT_THAT(preds,
-              Contains(std::string(reasoner_iris::WILDCARD)));
+  EXPECT_THAT(preds, Contains(std::string(reasoner_iris::WILDCARD)));
 }
 
 // The same predicate appearing in both INSERT and DELETE templates is returned
@@ -420,17 +417,16 @@ TEST(Reasoner, seededMaterializeWithIrrelevantPredicateProducesNoInferences) {
 // because its inputPredicates do not overlap with the seeds).
 TEST(Reasoner, seededMaterializeScmScoNotActivatedByRdfTypeOnly) {
   Index index = ad_utility::testing::makeTestIndex(
-      "Reasoner_rdfTypeSeed",
-      ad_utility::testing::TestIndexConfig(kOwlTurtle));
+      "Reasoner_rdfTypeSeed", ad_utility::testing::TestIndexConfig(kOwlTurtle));
 
   // rdf:type seed activates cax-sco (which uses rdf:type AND rdfs:subClassOf)
   // but NOT scm-sco (which uses only rdfs:subClassOf).
-  auto result = runMaterializeSeeded(
-      index, {std::string(reasoner_iris::RDF_TYPE)});
+  auto result =
+      runMaterializeSeeded(index, {std::string(reasoner_iris::RDF_TYPE)});
 
-  auto scmSco = std::find_if(
-      result.triplesPerRule.begin(), result.triplesPerRule.end(),
-      [](const auto& p) { return p.first == "scm-sco"; });
+  auto scmSco =
+      std::find_if(result.triplesPerRule.begin(), result.triplesPerRule.end(),
+                   [](const auto& p) { return p.first == "scm-sco"; });
   ASSERT_NE(scmSco, result.triplesPerRule.end());
   EXPECT_EQ(scmSco->second, 0u)
       << "scm-sco depends only on rdfs:subClassOf — it must NOT fire when "
@@ -451,8 +447,7 @@ TEST(Reasoner, seededMaterializeAfterFullMaterializeIsIdempotent) {
   EXPECT_GT(r1.totalNewTriples, 0u);
 
   // Incremental run seeded with rdf:type.
-  auto r2 = runMaterializeSeeded(
-      index, {std::string(reasoner_iris::RDF_TYPE)});
+  auto r2 = runMaterializeSeeded(index, {std::string(reasoner_iris::RDF_TYPE)});
   EXPECT_EQ(r2.totalNewTriples, 0u)
       << "All rdf:type-dependent inferences are already in the delta";
   EXPECT_EQ(r2.numRulesActivated, 0u);
@@ -469,9 +464,9 @@ TEST(Reasoner, seededMaterializeWithSubClassOfSeedActivatesScmSco) {
   auto result = runMaterializeSeeded(
       index, {std::string(reasoner_iris::RDFS_SUB_CLASS_OF)});
 
-  auto scmSco = std::find_if(
-      result.triplesPerRule.begin(), result.triplesPerRule.end(),
-      [](const auto& p) { return p.first == "scm-sco"; });
+  auto scmSco =
+      std::find_if(result.triplesPerRule.begin(), result.triplesPerRule.end(),
+                   [](const auto& p) { return p.first == "scm-sco"; });
   ASSERT_NE(scmSco, result.triplesPerRule.end());
   EXPECT_GE(scmSco->second, 1u)
       << "scm-sco should have derived Cat rdfs:subClassOf LivingThing when "
