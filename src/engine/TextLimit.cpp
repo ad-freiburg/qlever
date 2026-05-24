@@ -178,8 +178,8 @@ std::string TextLimit::getDescriptor() const {
 // _____________________________________________________________________________
 std::string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "TEXT LIMIT: "
-     << " with n: " << limit_ << ", with child: " << child_->getCacheKey()
+  os << "TEXT LIMIT: " << " with n: " << limit_
+     << ", with child: " << child_->getCacheKey()
      << " and ColumnIndices: " << textRecordColumn_ << ", {";
   for (const auto& column : entityColumns_) {
     os << column << ", ";
