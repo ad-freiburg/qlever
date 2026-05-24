@@ -49,16 +49,12 @@ struct SemiNaiveTracker {
 
   // True if the given rule should run in the next round.
   [[nodiscard]] bool isActive(const ReasonerRule& rule) const {
-    for (const auto& p : rule.inputPredicates) {
+    return std::ranges::any_of(rule.inputPredicates, [this](const auto& p) {
       if (p == reasoner_iris::WILDCARD) {
-        // This rule uses a variable predicate in its WHERE clause.
-        // Re-activate if any wildcard-output rule fired.
-        if (wildcardActive) return true;
-      } else if (ad_utility::contains(newPredicates, std::string_view{p})) {
-        return true;
+        return wildcardActive;
       }
-    }
-    return false;
+      return ad_utility::contains(newPredicates, std::string_view{p});
+    });
   }
 
   void reset() {
@@ -119,7 +115,8 @@ std::vector<std::string> Reasoner::extractPredicatesFromUpdate(
 // Reasoner::materialize
 // ─────────────────────────────────────────────────────────────────────────────
 Reasoner::MaterializationResult Reasoner::materialize(
-    Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+    const Index& index, DeltaTriples& deltaTriples,
+    QueryExecutionContext& qec,
     const ad_utility::triple_component::Iri& targetGraph,
     const CancellationHandle& handle, std::vector<std::string> seedPredicates) {
   MaterializationResult result;
@@ -140,7 +137,7 @@ Reasoner::MaterializationResult Reasoner::materialize(
   for (auto& rule : rules) {
     ParsedQuery pq = SparqlParser::parseQuery(&index.encodedIriManager(),
                                               rule.constructQuery);
-    prepared.push_back({rule, std::move(pq), 0});
+    prepared.emplace_back(rule, std::move(pq), 0);
   }
 
   const size_t maxTriples =

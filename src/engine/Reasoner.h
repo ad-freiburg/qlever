@@ -79,7 +79,8 @@ class Reasoner {
   //
   // Throws if cancellation is requested via `handle`.
   static MaterializationResult materialize(
-      Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+      const Index& index, DeltaTriples& deltaTriples,
+      QueryExecutionContext& qec,
       const ad_utility::triple_component::Iri& targetGraph,
       const CancellationHandle& handle,
       std::vector<std::string> seedPredicates = {});
