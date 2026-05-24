@@ -19,13 +19,13 @@
 
 #include "CompilationInfo.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Reasoner.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
 #include "engine/HttpError.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Reasoner.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
@@ -600,7 +600,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("materialize");
     logCommand(cmd, "run OWL/RDFS forward-chaining materialisation");
 
-    auto materializeHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto materializeHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
     std::optional<TimeLimit> materializeTimeLimit =
         co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
@@ -614,24 +615,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Create a QueryExecutionContext on the coroutine stack; it outlives
     // the co_await below because the coroutine frame is heap-allocated and
     // stays alive until the awaitable completes.
-    QueryExecutionContext materializeQec(index_, &cache_, allocator_,
-                                         sortPerformanceEstimator_,
-                                         &namedResultCache_,
-                                         &materializedViewsManager_);
+    QueryExecutionContext materializeQec(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        &namedResultCache_, &materializedViewsManager_);
 
     auto materializeCoroutine = computeInNewThread(
         updateThreadPool_,
         [this, &materializeQec,
          &materializeHandle]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager()
-              .modify<nlohmann::ordered_json>(
-                  [this, &materializeQec,
-                   &materializeHandle](DeltaTriples& deltaTriples) {
-                    materializeQec.setLocatedTriplesForEvaluation(
-                        deltaTriples.getLocatedTriplesSharedStateReference());
-                    return processMaterialize(deltaTriples, materializeQec,
-                                              materializeHandle);
-                  });
+          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+              [this, &materializeQec,
+               &materializeHandle](DeltaTriples& deltaTriples) {
+                materializeQec.setLocatedTriplesForEvaluation(
+                    deltaTriples.getLocatedTriplesSharedStateReference());
+                return processMaterialize(deltaTriples, materializeQec,
+                                          materializeHandle);
+              });
         },
         materializeHandle);
     auto materializeResultJson = co_await std::move(materializeCoroutine);

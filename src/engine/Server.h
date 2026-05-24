@@ -15,10 +15,10 @@
 
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Reasoner.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Reasoner.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
@@ -324,9 +324,9 @@ class Server {
   // Execute the OWL/RDFS forward-chaining materialisation.
   // The function must have exclusive access to the DeltaTriples object.
   // Clears the query-result caches after inserting new triples.
-  nlohmann::ordered_json processMaterialize(
-      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-      SharedCancellationHandle handle);
+  nlohmann::ordered_json processMaterialize(DeltaTriples& deltaTriples,
+                                            QueryExecutionContext& qec,
+                                            SharedCancellationHandle handle);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

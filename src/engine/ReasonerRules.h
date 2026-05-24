@@ -223,7 +223,8 @@ WHERE      { ?p1 owl:inverseOf ?p2 . ?x ?p2 ?y })SPARQL",
       },
 
       // prp-symp  (OWL 2 RL Table 5)
-      // Symmetric property: ?p rdf:type owl:SymmetricProperty, ?x ?p ?y → ?y ?p ?x.
+      // Symmetric property: ?p rdf:type owl:SymmetricProperty, ?x ?p ?y → ?y ?p
+      // ?x.
       {
           "prp-symp",
           "Symmetric property",
