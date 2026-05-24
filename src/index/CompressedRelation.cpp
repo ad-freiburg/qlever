@@ -1041,6 +1041,11 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
+    // The `numRows_` metadata shortcut is safe iff all rows of the block
+    // agree on the grouped column. Because triples within a block are sorted
+    // lexicographically by `(col0Id, col1Id, col2Id)`, that is equivalent to
+    // `firstTriple_` and `lastTriple_` agreeing on the first `columnIndex + 1`
+    // columns.
     if (!blockMetadata.containsInconsistentTriples(columnIndex + 1)) {
       // The whole block has the same `colId` -> we get all the information
       // from the metadata.
