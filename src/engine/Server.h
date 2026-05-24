@@ -74,8 +74,8 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  Index& index() { return *index_; }
+  const Index& index() const { return *index_; }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -122,10 +122,11 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  std::shared_ptr<Index> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
