@@ -334,8 +334,11 @@ TEST(Reasoner, extractPredicatesFromUpdateIriPredicate) {
           <http://ex.org/Animal> .
     }
   )";
-  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), insertUpdate);
-  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+  ad_utility::BlankNodeManager bnm;
+  auto pqs =
+      SparqlParser::parseUpdate(&bnm, &index.encodedIriManager(), insertUpdate);
+  ASSERT_FALSE(pqs.empty());
+  auto preds = Reasoner::extractPredicatesFromUpdate(pqs.front());
 
   ASSERT_EQ(preds.size(), 1u);
   EXPECT_EQ(preds[0],
@@ -353,8 +356,11 @@ TEST(Reasoner, extractPredicatesFromUpdateVariablePredicateGivesWildcard) {
     INSERT { <http://ex.org/s> ?p <http://ex.org/o> }
     WHERE  { <http://ex.org/s> ?p <http://ex.org/o> }
   )";
-  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), insertUpdate);
-  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+  ad_utility::BlankNodeManager bnm;
+  auto pqs =
+      SparqlParser::parseUpdate(&bnm, &index.encodedIriManager(), insertUpdate);
+  ASSERT_FALSE(pqs.empty());
+  auto preds = Reasoner::extractPredicatesFromUpdate(pqs.front());
 
   EXPECT_THAT(preds,
               Contains(std::string(reasoner_iris::WILDCARD)));
@@ -380,8 +386,11 @@ TEST(Reasoner, extractPredicatesFromUpdateDeduplication) {
     }
     WHERE { }
   )";
-  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), update);
-  auto preds = Reasoner::extractPredicatesFromUpdate(pq);
+  ad_utility::BlankNodeManager bnm;
+  auto pqs =
+      SparqlParser::parseUpdate(&bnm, &index.encodedIriManager(), update);
+  ASSERT_FALSE(pqs.empty());
+  auto preds = Reasoner::extractPredicatesFromUpdate(pqs.front());
 
   // rdf:type should appear exactly once despite being in both templates.
   const std::string rdfType =
