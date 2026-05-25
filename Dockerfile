@@ -1,7 +1,7 @@
-FROM ubuntu:24.04 AS base
+FROM debian:trixie-slim AS base
 LABEL maintainer="Hannah Bast <bast@cs.uni-freiburg.de>"
 
-# Packages needed for both both building and running the binaries.
+# Packages needed for both building and running the binaries.
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV LC_CTYPE=C.UTF-8
@@ -11,9 +11,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 # stage to keep the final image small).
 FROM base AS builder
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget
-RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
-RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev
+# Debian Trixie ships CMake 3.28+ natively, so no additional PPA is needed.
+# ca-certificates + gnupg are required to add the LLVM apt repository below.
+# libomp-dev provides OpenMP support for the parallel sort used in index building.
+RUN apt-get update && apt-get install -y wget ca-certificates gnupg build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost-dev libboost-program-options-dev libboost-iostreams-dev libboost-url-dev libboost-container-dev libomp-dev
+
+# Add the LLVM 22 apt repository for Debian Trixie and install Clang 22.
+# We configure the repository directly rather than using llvm.sh, which requires
+# lsb_release and other tools not present in debian:trixie-slim.
+RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | \
+      gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] https://apt.llvm.org/trixie/ llvm-toolchain-trixie-22 main" \
+      > /etc/apt/sources.list.d/llvm.list && \
+    apt-get update && apt-get install -y clang-22
 
 # Copy everything we need to build the binaries.
 #
@@ -36,7 +46,7 @@ COPY GitVersion.cmake /qlever/
 # `-march=native`.
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_C_COMPILER=clang-22 -DCMAKE_CXX_COMPILER=clang++-22 -DADDITIONAL_COMPILER_FLAGS="-Wno-deprecated-declarations" -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
@@ -44,10 +54,12 @@ RUN if [ "$RUN_TESTS" = "true" ]; then \
     fi
 
 # Install the packages needed for the final image.
+# libicu76: Debian Trixie ships ICU 76 (Ubuntu 24.04 had libicu74).
+# libboost-*1.83.0: Trixie has Boost 1.83, same versioned runtime lib names as Ubuntu.
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu76 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).
