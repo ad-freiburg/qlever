@@ -1425,7 +1425,7 @@ nlohmann::ordered_json Server::processMaterialize(
 
   Reasoner::MaterializationResult result =
       Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle,
-                            std::move(seedPredicates));  
+                            std::move(seedPredicates));
 
   // Cache invalidation: new delta triples invalidate all cached results.
   cache_.clearAll();
@@ -1550,12 +1550,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   if (!seedPredicates.empty()) {
     QueryExecutionContext materializeQec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
-        &namedResultCache_, &materializedViewsManager_);
+        &namedResultCache_, materializedViewsManager_);
     auto matCoroutine = computeInNewThread(
         updateThreadPool_,
         [this, &materializeQec, &cancellationHandle,
          &seedPredicates]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
               [this, &materializeQec, &cancellationHandle,
                &seedPredicates](DeltaTriples& deltaTriples) {
                 materializeQec.setLocatedTriplesForEvaluation(

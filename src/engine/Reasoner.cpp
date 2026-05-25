@@ -115,8 +115,7 @@ std::vector<std::string> Reasoner::extractPredicatesFromUpdate(
 // Reasoner::materialize
 // ─────────────────────────────────────────────────────────────────────────────
 Reasoner::MaterializationResult Reasoner::materialize(
-    const Index& index, DeltaTriples& deltaTriples,
-    QueryExecutionContext& qec,
+    const Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
     const ad_utility::triple_component::Iri& targetGraph,
     const CancellationHandle& handle, std::vector<std::string> seedPredicates) {
   MaterializationResult result;

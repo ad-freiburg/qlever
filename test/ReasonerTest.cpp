@@ -299,12 +299,13 @@ Reasoner::MaterializationResult runMaterializeSeeded(
 
   QueryResultCache cache;
   NamedResultCache namedResultCache;
-  MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(index, &cache,
+  auto materializedViewsManager3 = std::make_shared<MaterializedViewsManager>();
+  auto indexPtr3 = std::shared_ptr<Index>(&index, [](Index*) {});
+  QueryExecutionContext qec(indexPtr3, &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
                             SortPerformanceEstimator{}, &namedResultCache,
-                            &materializedViewsManager);
+                            materializedViewsManager3);
 
   Reasoner::MaterializationResult result;
   index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
