@@ -84,17 +84,29 @@ COPY GitVersion.cmake /qlever/
 #   -fuse-ld=lld      LLVM lld linker — 2-3x faster than GNU ld. Always on.
 #   -flto=thin        ThinLTO — cross-module inlining at link time between QLever
 #                     and its FetchContent dependencies (abseil, re2, s2geometry).
-#                     Disabled by default: during the ThinLTO link step, lld loads
-#                     all LLVM bitcode modules simultaneously, which can require
-#                     10-16 GB of RAM for a codebase of this size. Enable with
-#                     --build-arg USE_LTO=true on machines with ample RAM (≥16 GB
-#                     recommended for Docker Desktop).
+#                     Enabled by default: Disable with `--build-arg USE_LTO=false` 
+#                     on machines with limited RAM (≤12 GB).
 #
 # MARCH defaults to empty: the RUN step below auto-selects x86-64-v3 on amd64
 # and leaves the flag unset on all other architectures (e.g. arm64).
+# USE_LTO=false  default: standard build, safe for ≤12 GB build environments.
+# USE_LTO=true   enables ThinLTO with memory-conserving options:
+#   -flto=thin              cross-module inlining at link time
+#   -Wl,--thinlto-jobs=3    cap lld's parallel backend workers at 3 threads;
+#                            without this lld spawns N_cores workers, each
+#                            holding a module in RAM simultaneously
+# Recommended minimum: 16 GB memory with USE_LTO=true.
+#
+# SHOW_BUILD_STATS=false  default: no extra output.
+# SHOW_BUILD_STATS=true   adds -fproc-stat-report, which prints peak RSS to
+#                          stderr after every compilation step. Use this once
+#                          to identify which TUs consume the most memory, then
+#                          disable it for normal builds.
+#   Example: docker build --build-arg USE_LTO=true --build-arg SHOW_BUILD_STATS=true .
 ARG RUN_TESTS=true
 ARG MARCH=
 ARG USE_LTO=true
+ARG SHOW_BUILD_STATS=false
 WORKDIR /qlever/build/
 RUN set -e && \
     ARCH=$(uname -m) && \
@@ -107,10 +119,15 @@ RUN set -e && \
     fi && \
     if [ "${USE_LTO}" = "true" ]; then \
         LTO_CFLAGS="-flto=thin"; \
-        LTO_LFLAGS="-flto=thin"; \
+        LTO_LFLAGS="-flto=thin -Wl,--thinlto-jobs=3"; \
     else \
         LTO_CFLAGS=""; \
         LTO_LFLAGS=""; \
+    fi && \
+    if [ "${SHOW_BUILD_STATS}" = "true" ]; then \
+        STATS_FLAG="-fproc-stat-report"; \
+    else \
+        STATS_FLAG=""; \
     fi && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
@@ -120,7 +137,7 @@ RUN set -e && \
         -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \
         -DCMAKE_C_COMPILER=clang-22 \
         -DCMAKE_CXX_COMPILER=clang++-22 \
-        "-DADDITIONAL_COMPILER_FLAGS=-Wno-deprecated-declarations ${MARCH_FLAG} ${LTO_CFLAGS}" \
+        "-DADDITIONAL_COMPILER_FLAGS=-Wno-deprecated-declarations ${MARCH_FLAG} ${LTO_CFLAGS} ${STATS_FLAG}" \
         "-DADDITIONAL_LINKER_FLAGS=-fuse-ld=lld ${LTO_LFLAGS}" \
         -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
