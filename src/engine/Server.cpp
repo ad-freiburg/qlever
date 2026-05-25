@@ -617,13 +617,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // stays alive until the awaitable completes.
     QueryExecutionContext materializeQec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
-        &namedResultCache_, &materializedViewsManager_);
+        &namedResultCache_, materializedViewsManager_);
 
     auto materializeCoroutine = computeInNewThread(
         updateThreadPool_,
         [this, &materializeQec,
          &materializeHandle]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
               [this, &materializeQec,
                &materializeHandle](DeltaTriples& deltaTriples) {
                 materializeQec.setLocatedTriplesForEvaluation(
@@ -1424,7 +1424,7 @@ nlohmann::ordered_json Server::processMaterialize(
       ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   Reasoner::MaterializationResult result =
-      Reasoner::materialize(index_, deltaTriples, qec, targetGraph, handle);
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle);
 
   // Cache invalidation: new delta triples invalidate all cached results.
   cache_.clearAll();
