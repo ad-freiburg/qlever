@@ -54,12 +54,13 @@ Reasoner::MaterializationResult runMaterialize(Index& index) {
 
   QueryResultCache cache;
   NamedResultCache namedResultCache;
-  MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(index, &cache,
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto indexPtr = std::shared_ptr<Index>(&index, [](Index*) {});
+  QueryExecutionContext qec(indexPtr, &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
                             SortPerformanceEstimator{}, &namedResultCache,
-                            &materializedViewsManager);
+                            materializedViewsManager);
 
   Reasoner::MaterializationResult result;
   index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
@@ -242,12 +243,13 @@ TEST(Reasoner, cancelledHandleThrows) {
 
   QueryResultCache cache;
   NamedResultCache namedResultCache;
-  MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec(index, &cache,
+  auto materializedViewsManager2 = std::make_shared<MaterializedViewsManager>();
+  auto indexPtr2 = std::shared_ptr<Index>(&index, [](Index*) {});
+  QueryExecutionContext qec(indexPtr2, &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
                             SortPerformanceEstimator{}, &namedResultCache,
-                            &materializedViewsManager);
+                            materializedViewsManager2);
 
   EXPECT_THROW(
       index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {

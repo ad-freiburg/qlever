@@ -617,13 +617,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // stays alive until the awaitable completes.
     QueryExecutionContext materializeQec(
         index_, &cache_, allocator_, sortPerformanceEstimator_,
-        &namedResultCache_, &materializedViewsManager_);
+        &namedResultCache_, materializedViewsManager_);
 
     auto materializeCoroutine = computeInNewThread(
         updateThreadPool_,
         [this, &materializeQec,
          &materializeHandle]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
               [this, &materializeQec,
                &materializeHandle](DeltaTriples& deltaTriples) {
                 materializeQec.setLocatedTriplesForEvaluation(
@@ -1160,7 +1160,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         updateThreadPool_,
         [this, &plannedQuery, &cancellationHandle, &qec,
          targetGraph]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
               [this, &plannedQuery, &cancellationHandle, &qec,
                &targetGraph](DeltaTriples& deltaTriples) {
                 qec.setLocatedTriplesForEvaluation(
@@ -1171,7 +1171,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     targetGraph, tracer);
                 tracer.endTrace("construct-insert");
                 return createResponseMetadataForConstructInsert(
-                    index_,
+                    *index_,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     plannedQuery.value(),
                     plannedQuery.value().queryExecutionTree(), metadata,
@@ -1372,7 +1372,7 @@ UpdateMetadata Server::processConstructInsert(
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata metadata = ExecuteUpdate::executeConstructInsert(
-      index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
+      *index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
       cancellationHandle, tracer);
   metadata.countBefore_ = countBefore;
   metadata.countAfter_ = deltaTriples.getCounts();
@@ -1424,8 +1424,8 @@ nlohmann::ordered_json Server::processMaterialize(
       ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   Reasoner::MaterializationResult result =
-      Reasoner::materialize(index_, deltaTriples, qec, targetGraph, handle,
-                            std::move(seedPredicates));
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle,
+                            std::move(seedPredicates));  
 
   // Cache invalidation: new delta triples invalidate all cached results.
   cache_.clearAll();
