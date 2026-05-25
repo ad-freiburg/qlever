@@ -1,3 +1,4 @@
-sut:
-  build: .
-  entrypoint: e2e/e2e.sh
+services:
+  sut:
+    build: .
+    entrypoint: e2e/e2e.sh
