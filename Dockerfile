@@ -65,16 +65,19 @@ COPY GitVersion.cmake /qlever/
 #
 #   MARCH (default: auto)
 #     Controls the CPU microarchitecture target. Leave empty (the default) for
-#     automatic selection: x86-64-v3 on amd64 builds, no -march on all others.
-#       x86-64-v3  AVX2 + FMA + BMI2  (Intel Haswell 2013+, AMD Zen1 2017+)
-#                  Auto-selected on amd64. 256-bit SIMD for sort, hash maps, strings.
-#       x86-64-v4  AVX-512            (Intel Ice Lake 2019+, AMD Zen4 2022+)
-#                  Maximum SIMD width; great for Wikidata-scale deployments.
-#       x86-64-v2  SSE4.2 / POPCNT    (2008+ Intel, 2011+ AMD)
-#                  For older but still 64-bit capable hardware.
-#       x86-64     SSE2 baseline       Fully portable across all x86-64 CPUs.
-#       native     Build machine CPU   Only use for local (non-distributed) builds.
-#                  NOTE: produces a non-portable binary.
+#     automatic selection per architecture:
+#       amd64  → x86-64-v3  (AVX2 + FMA + BMI2, Intel Haswell 2013+, AMD Zen1 2017+)
+#       arm64  → armv8.2-a+dotprod+crypto  (Graviton2, Neoverse N1, Ampere Altra 2018+)
+#       other  → no -march flag (compiler default - baseline, portable but suboptimal)
+#
+#     Common overrides:
+#       x86-64      (baseline)      SSE2 — fully portable across all x86-64
+#       x86-64-v2                   SSE4.2 / POPCNT — older x86-64 hardware
+#       x86-64-v4                   AVX-512 (Intel Ice Lake 2019+, AMD Zen4 2022+)
+#       armv8-a     (baseline)      NEON 128-bit (pre-2018 hardware, e.g. Graviton1)
+#       armv8.4-a                   SVE 256-bit — Graviton3, Neoverse V1 (2021+)
+#       armv9-a                     SVE2 — Graviton4, Neoverse V2 (2023+)
+#       native                      Build machine CPU (non-portable, local builds only)
 #     Example: docker build --build-arg MARCH=x86-64-v4 .
 #
 # -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE prevents fsst from auto-detecting the
@@ -89,13 +92,13 @@ COPY GitVersion.cmake /qlever/
 #
 # MARCH defaults to empty: the RUN step below auto-selects x86-64-v3 on amd64
 # and leaves the flag unset on all other architectures (e.g. arm64).
-# USE_LTO=false  default: standard build, safe for ≤12 GB build environments.
-# USE_LTO=true   enables ThinLTO with memory-conserving options:
-#   -flto=thin              cross-module inlining at link time
-#   -Wl,--thinlto-jobs=3    cap lld's parallel backend workers at 3 threads;
-#                            without this lld spawns N_cores workers, each
-#                            holding a module in RAM simultaneously
-# Recommended minimum: 16 GB memory with USE_LTO=true.
+# USE_LTO=true   default: enables ThinLTO with memory-conserving options:
+#   -flto=thin              cross-module inlining at link time between QLever
+#                           and its dependencies (abseil, re2, s2geometry)
+#   -Wl,--thinlto-jobs=3    cap lld's parallel backend workers at 3 threads
+#                           to limit peak link-time RAM usage
+# Recommended minimum: 16 GB. Use --build-arg USE_LTO=false on machines
+# with ≤12 GB available to the Docker build (e.g. default Docker Desktop).
 #
 # SHOW_BUILD_STATS=false  default: no extra output.
 # SHOW_BUILD_STATS=true   adds -fproc-stat-report, which prints peak RSS to
@@ -114,6 +117,8 @@ RUN set -e && \
         MARCH_FLAG="-march=${MARCH}"; \
     elif [ "${ARCH}" = "x86_64" ]; then \
         MARCH_FLAG="-march=x86-64-v3"; \
+    elif [ "${ARCH}" = "aarch64" ]; then \
+        MARCH_FLAG="-march=armv8.2-a+dotprod+crypto"; \
     else \
         MARCH_FLAG=""; \
     fi && \
