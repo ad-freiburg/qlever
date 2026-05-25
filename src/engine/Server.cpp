@@ -1117,7 +1117,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         updateThreadPool_,
         [this, &plannedQuery, &cancellationHandle, &qec,
          targetGraph]() -> nlohmann::ordered_json {
-          return index_.deltaTriplesManager().modify<nlohmann::ordered_json>(
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
               [this, &plannedQuery, &cancellationHandle, &qec,
                &targetGraph](DeltaTriples& deltaTriples) {
                 qec.setLocatedTriplesForEvaluation(
@@ -1128,7 +1128,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     targetGraph, tracer);
                 tracer.endTrace("construct-insert");
                 return createResponseMetadataForConstructInsert(
-                    index_,
+                    *index_,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     plannedQuery.value(),
                     plannedQuery.value().queryExecutionTree(), metadata,
@@ -1329,7 +1329,7 @@ UpdateMetadata Server::processConstructInsert(
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata metadata = ExecuteUpdate::executeConstructInsert(
-      index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
+      *index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
       cancellationHandle, tracer);
   metadata.countBefore_ = countBefore;
   metadata.countAfter_ = deltaTriples.getCounts();

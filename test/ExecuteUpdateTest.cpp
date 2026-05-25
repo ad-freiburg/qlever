@@ -673,12 +673,14 @@ TEST(ExecuteUpdate, executeConstructInsert) {
         auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
         QueryResultCache cache;
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
-        QueryExecutionContext qec(index, &cache,
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
+        auto indexPtr = std::shared_ptr<Index>(&index, [](Index*) {});
+        QueryExecutionContext qec(indexPtr, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
+                                  materializedViewsManager);
         index.deltaTriplesManager().modify<void>(
             [&index, &pq, &qec, &sharedHandle,
              &targetGraph](DeltaTriples& deltaTriples) {
@@ -747,12 +749,14 @@ TEST(ExecuteUpdate, executeConstructInsert) {
     auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
     QueryResultCache cache;
     NamedResultCache namedResultCache;
-    MaterializedViewsManager materializedViewsManager;
-    QueryExecutionContext qec(index, &cache,
+    auto materializedViewsManager2 =
+        std::make_shared<MaterializedViewsManager>();
+    auto indexPtr2 = std::shared_ptr<Index>(&index, [](Index*) {});
+    QueryExecutionContext qec(indexPtr2, &cache,
                               ad_utility::testing::makeAllocator(
                                   ad_utility::MemorySize::megabytes(100)),
                               SortPerformanceEstimator{}, &namedResultCache,
-                              &materializedViewsManager);
+                              materializedViewsManager2);
     // First insertion.
     index.deltaTriplesManager().modify<void>(
         [&index, &pq, &qec, &sharedHandle,
