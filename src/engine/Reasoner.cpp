@@ -75,8 +75,7 @@ struct PreparedRule {
 // Reasoner::materialize
 // ─────────────────────────────────────────────────────────────────────────────
 Reasoner::MaterializationResult Reasoner::materialize(
-    const Index& index, DeltaTriples& deltaTriples,
-    QueryExecutionContext& qec,
+    const Index& index, DeltaTriples& deltaTriples, QueryExecutionContext& qec,
     const ad_utility::triple_component::Iri& targetGraph,
     const CancellationHandle& handle) {
   MaterializationResult result;
