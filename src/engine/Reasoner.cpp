@@ -224,6 +224,14 @@ Reasoner::MaterializationResult Reasoner::materialize(
         newTriplesThisRound += newFromRule;
         nextTracker.recordOutputs(pr.rule);
 
+        // Update augmented metadata immediately so that subsequent rules
+        // in the same round see correct `containsDuplicatesWithDifferentGraphs_`
+        // flags when reading index blocks.  Without this, the compressed-block
+        // reader fires an AD_EXPENSIVE_CHECK when it merges the freshly-inserted
+        // delta triples with a block that was not yet marked as containing
+        // graph-level duplicates.
+        deltaTriples.updateAugmentedMetadata();
+
         AD_LOG_DEBUG << "[Reasoner] Round " << round << ", rule ["
                      << pr.rule.name << "]: +" << newFromRule << " triples"
                      << std::endl;
