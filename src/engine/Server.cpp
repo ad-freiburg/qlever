@@ -507,7 +507,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
     requireValidAccessToken("dump-active-queries");
     logCommand(cmd, "dump active queries");
-    nlohmann::json json;
+    auto json = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       json[nlohmann::json(key)] = std::move(value);
     }
