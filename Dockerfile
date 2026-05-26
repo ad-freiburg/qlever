@@ -1,4 +1,8 @@
-FROM debian:trixie-slim AS base
+# Ubuntu 26.04 LTS (Resolute Raccoon) — same base the upstream adfreiburg CI uses.
+# Ubuntu 26.04 ships with Python 3.13+, common C++ stubs, and more pre-installed
+# packages, so the apt-get install layer in the runtime stage is smaller and
+# aligns better with upstream layer caching.
+FROM ubuntu:26.04 AS base
 LABEL maintainer="Hannah Bast <bast@cs.uni-freiburg.de>"
 
 ENV LANG=C.UTF-8
@@ -14,18 +18,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 FROM base AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Core build tools and C/C++ library headers.
+# Core build tools, C/C++ library headers, and Clang 22.
 # Notes:
 #   build-essential  — even with Clang, GCC's libc6-dev/libstdc++ headers
 #                      and the system linker are needed at compile time.
-#   cmake / ninja    — Debian Trixie ships CMake 3.28+ natively (no PPA needed).
+#   cmake / ninja    — Ubuntu 26.04 ships CMake 3.31+ natively (no PPA needed).
+#   clang-22 / lld-22 — Ubuntu 26.04 ships LLVM 22 natively; no external
+#                        apt repo is required (unlike older Ubuntu releases).
 #   git              — CMake FetchContent clones googletest, abseil, ctre, re2,
 #                      fsst, ANTLR, s2geometry, spatialjoin at configure time.
 #   libomp-dev       — OpenMP support for the parallel sort used in index building.
-#   ca-certificates + gnupg + wget — required to add the LLVM apt repository below.
 RUN apt-get update && apt-get install -y \
-    wget ca-certificates gnupg \
     build-essential cmake ninja-build git \
+    clang-22 lld-22 \
     libicu-dev pkg-config \
     uuid-runtime uuid-dev \
     libjemalloc-dev libzstd-dev libssl-dev \
@@ -34,16 +39,8 @@ RUN apt-get update && apt-get install -y \
     libboost-iostreams-dev \
     libboost-url-dev \
     libboost-container-dev \
-    libomp-dev
-
-# Add the LLVM 22 apt repository for Debian Trixie and install Clang 22.
-# Configured directly (without llvm.sh) because debian:trixie-slim does not
-# include lsb_release or other tools that llvm.sh requires.
-RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | \
-      gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] https://apt.llvm.org/trixie/ llvm-toolchain-trixie-22 main" \
-      > /etc/apt/sources.list.d/llvm.list && \
-    apt-get update && apt-get install -y clang-22 lld-22
+    libomp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy source. Deliberately explicit: avoids .dockerignore surprises and lets
 # docker-entrypoint.sh be updated without invalidating the full build cache.
@@ -61,7 +58,8 @@ COPY GitVersion.cmake /qlever/
 # Build arguments:
 #   RUN_TESTS (default: true)
 #     Pass --build-arg RUN_TESTS=false to skip ctest and build only the
-#     qlever-server and qlever-index binaries.
+#     production binaries (qlever-server, qlever-index, VocabularyMergerMain,
+#     PrintIndexVersionMain) without compiling or running the test suite.
 #
 #   MARCH (default: auto)
 #     Controls the CPU microarchitecture target. Leave empty (the default) for
@@ -92,13 +90,14 @@ COPY GitVersion.cmake /qlever/
 #
 # MARCH defaults to empty: the RUN step below auto-selects x86-64-v3 on amd64
 # and leaves the flag unset on all other architectures (e.g. arm64).
-# USE_LTO=true   default: enables ThinLTO with memory-conserving options:
-#   -flto=thin              cross-module inlining at link time between QLever
-#                           and its dependencies (abseil, re2, s2geometry)
-#   -Wl,--thinlto-jobs=3    cap lld's parallel backend workers at 3 threads
-#                           to limit peak link-time RAM usage
-# Recommended minimum: 16 GB. Use --build-arg USE_LTO=false on machines
-# with ≤12 GB available to the Docker build (e.g. default Docker Desktop).
+# USE_LTO=auto   default: LTO is enabled only when RUN_TESTS=false (i.e. the
+#                CI production build), and disabled when RUN_TESTS=true.
+#                Rationale: ThinLTO (-flto=thin) triggers an LLD vtable-ownership
+#                bug when CMake repeats the same archive in a test binary link
+#                command, causing linker failures. The main server binaries do not
+#                have this issue and benefit from ThinLTO's cross-module inlining.
+#                Override with --build-arg USE_LTO=true or --build-arg USE_LTO=false
+#                to force regardless of RUN_TESTS. Requires ≥16 GB for LTO builds.
 #
 # SHOW_BUILD_STATS=false  default: no extra output.
 # SHOW_BUILD_STATS=true   adds -fproc-stat-report, which prints peak RSS to
@@ -108,7 +107,7 @@ COPY GitVersion.cmake /qlever/
 #   Example: docker build --build-arg USE_LTO=true --build-arg SHOW_BUILD_STATS=true .
 ARG RUN_TESTS=true
 ARG MARCH=
-ARG USE_LTO=true
+ARG USE_LTO=auto
 ARG SHOW_BUILD_STATS=false
 WORKDIR /qlever/build/
 RUN set -e && \
@@ -122,7 +121,12 @@ RUN set -e && \
     else \
         MARCH_FLAG=""; \
     fi && \
-    if [ "${USE_LTO}" = "true" ]; then \
+    EFFECTIVE_LTO="${USE_LTO}" && \
+    if [ "${EFFECTIVE_LTO}" = "auto" ]; then \
+        if [ "${RUN_TESTS}" = "false" ]; then EFFECTIVE_LTO="true"; \
+        else EFFECTIVE_LTO="false"; fi; \
+    fi && \
+    if [ "${EFFECTIVE_LTO}" = "true" ]; then \
         LTO_CFLAGS="-flto=thin"; \
         LTO_LFLAGS="-flto=thin -Wl,--thinlto-jobs=3"; \
     else \
@@ -148,7 +152,7 @@ RUN set -e && \
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
-      cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
+      cmake --build . --target qlever-index qlever-server VocabularyMergerMain PrintIndexVersionMain && echo "Skipping tests"; \
     fi
 
 # Strip debug sections from the compiled binaries. CMake Release mode does not
@@ -162,7 +166,7 @@ RUN strip --strip-debug \
 
 # ╔═════════════════════════════════════════════════════════════════════╗
 # ║  STAGE 2 — RUNTIME                                                  ║
-# ║  Minimal deployment image (~30 MB base, debian:trixie-slim).        ║
+# ║  Deployment image built on ubuntu:26.04 (same base as upstream CI). ║
 # ║  Contains only the compiled binaries and their runtime deps.        ║
 # ╚═════════════════════════════════════════════════════════════════════╝
 FROM base AS runtime
@@ -175,7 +179,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV MALLOC_CONF=background_thread:true,metadata_thp:auto
 
 # Shared libraries linked by qlever-server and qlever-index:
-#   libicu76                    Unicode/ICU (text processing, collation)
+#   libicu78                    Unicode/ICU (text processing, collation)
 #   libssl3                     OpenSSL — TLS for the built-in HTTP server
 #   libjemalloc2                jemalloc allocator (reduces heap fragmentation)
 #   libzstd1                    Zstandard compression (index file storage)
@@ -193,25 +197,25 @@ ENV MALLOC_CONF=background_thread:true,metadata_thp:auto
 #   uuid-runtime                uuidgen for blank-node ID generation
 #   make                        runs the Qleverfile (dataset Makefile)
 #   lbzip2, bzip2               parallel + standard bzip2 for index archives
-#   wget, curl, unzip           downloading and unpacking dataset files
+#   curl, unzip                 downloading and unpacking dataset files
 #   pkg-config                  used by some qlever CLI build helpers
 #
 # Container UX:
-#   bash-completion, vim, sudo  interactive shell convenience inside the container
-RUN apt-get update && apt-get install -y \
-    libicu76 \
+#   bash-completion, vim-tiny, sudo  interactive shell convenience inside the container
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libicu78 \
     libssl3 \
     libjemalloc2 \
     libzstd1 \
     libgomp1 \
-    libboost-program-options1.83.0 \
-    libboost-iostreams1.83.0 \
-    libboost-url1.83.0 \
-    libboost-container1.83.0 \
+    libboost-program-options1.90.0 \
+    libboost-iostreams1.90.0 \
+    libboost-url1.90.0 \
+    libboost-container1.90.0 \
     python3-yaml python3-icu pipx \
     uuid-runtime make lbzip2 bzip2 \
-    wget curl unzip pkg-config \
-    bash-completion vim sudo \
+    curl unzip pkg-config \
+    bash-completion vim-tiny sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
@@ -235,7 +239,10 @@ RUN cp $QLEVER_PROFILE /qlever/.bashrc
 # source the profile script above. PATH is repeated to suppress a pipx warning.
 USER qlever
 ENV PATH=/qlever:/qlever/.local/bin:$PATH
-RUN pipx install qlever
+RUN pipx install qlever && \
+    find /qlever/.local -name '*.pyc' -delete 2>/dev/null || true && \
+    find /qlever/.local -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf /qlever/.local/pipx/.cache 2>/dev/null || true
 ENV QLEVER_ARGCOMPLETE_ENABLED=1
 ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
