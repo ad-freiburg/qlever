@@ -1,4 +1,4 @@
-add_subdirectory(sparqlExpressions)
+    add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator parser)
 add_library(engine
@@ -20,7 +20,8 @@ add_library(engine
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
-        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp)
+        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp
+        DistinctGraphs.cpp)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
