@@ -23,6 +23,10 @@ add_library(engine
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
         MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp)
 add_subdirectory(spatialJoinAlgorithms)
+=======
+        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp
+        DistinctGraphs.cpp)
+>>>>>>> 09a04bd6 (DistinctGraphs operation implemented)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
