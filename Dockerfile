@@ -202,7 +202,7 @@ ENV MALLOC_CONF=background_thread:true,metadata_thp:auto
 #
 # Container UX:
 #   bash-completion, vim-tiny, sudo  interactive shell convenience inside the container
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libicu78 \
     libssl3 \
     libjemalloc2 \
@@ -216,6 +216,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     uuid-runtime make lbzip2 bzip2 \
     curl unzip pkg-config \
     bash-completion vim-tiny sudo \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
