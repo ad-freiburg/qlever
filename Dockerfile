@@ -1,7 +1,3 @@
-# Ubuntu 26.04 LTS (Resolute Raccoon) — same base the upstream adfreiburg CI uses.
-# Ubuntu 26.04 ships with Python 3.13+, common C++ stubs, and more pre-installed
-# packages, so the apt-get install layer in the runtime stage is smaller and
-# aligns better with upstream layer caching.
 FROM ubuntu:26.04 AS base
 LABEL maintainer="Hannah Bast <bast@cs.uni-freiburg.de>"
 
