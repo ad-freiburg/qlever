@@ -3099,21 +3099,22 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     auto candidates = planner_.optimize(&arg._child);
 
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphPair = std::get_if<std::pair<Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(&arg.graphSpec_)){
+      if (const auto* graphPair = std::get_if<std::pair<
+              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+              &arg.graphSpec_)) {
         const Variable& graphVar = graphPair->first;
         auto graphsCand = makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
-        
+
         std::vector<SubtreePlan> joined;
         for (auto& innerCand : candidates) {
-          bool isGraphVarBound = innerCand._qet->getVariableColumns().contains(graphVar);
-          if (!isGraphVarBound){
+          bool isGraphVarBound =
+              innerCand._qet->getVariableColumns().contains(graphVar);
+          if (!isGraphVarBound) {
             auto joinedPlan = makeSubtreePlan<CartesianProductJoin>(
-              planner_._qec,
-              std::vector<std::shared_ptr<QueryExecutionTree>>{ graphsCand._qet, innerCand._qet }
-            );
+                planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
+                                   graphsCand._qet, innerCand._qet});
             joined.push_back(std::move(joinedPlan));
-          }
-          else {
+          } else {
             joined.push_back(std::move(innerCand));
           }
         }
