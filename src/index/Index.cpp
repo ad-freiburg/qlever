@@ -47,13 +47,6 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getCardinality(
-    Id id, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
 RdfsVocabulary::AccessReturnType Index::indexToString(VocabIndex id) const {
   return pimpl_->indexToString(id);
 }

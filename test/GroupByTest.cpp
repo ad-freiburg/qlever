@@ -16,6 +16,8 @@
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoinAlgorithms.h"
@@ -29,6 +31,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
@@ -2072,6 +2075,216 @@ TEST(GroupByOptimizationsRegression,
   // predicate `<p>` must be `1`, not the size of the whole block.
   EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
               optionalHasTable({{getId("<p>"), I(1)}}));
+}
+
+// Helper struct to create a modifiable `Index` + `QueryExecutionContext`.
+struct QecWrapper {
+  std::shared_ptr<Index> index_;
+  QueryResultCache cache_{};
+  NamedResultCache namedCache_{};
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
+
+  QueryExecutionContext makeQec() {
+    return QueryExecutionContext{
+        index_,
+        &cache_,
+        makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{},
+        &namedCache_,
+        materializedViewsManager_};
+  }
+};
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, singleIndexScanTotalCountAfterInsert) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("GroupByOptimizationsDeltaTriples."
+                    "singleIndexScanTotalCountAfterInsert",
+                    "<a> <p1> <b> . <b> <p1> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto b = getId("<b>");
+  auto p1 = getId("<p1>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{b, p1, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(?x) AS ?count) WHERE { ?x ?y ?z }
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // The full computation must reflect the insertion (count = 3, not 2).
+  // We use computeResultOnlyForTesting because the optimization shortcut now
+  // falls back to the general algorithm when delta triples are present, so
+  // testing the end-to-end result is the right regression check.
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples,
+     singleIndexScanDistinctCountAfterDelete) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("GroupByOptimizationsDeltaTriples."
+                    "singleIndexScanDistinctCountAfterDelete",
+                    "<a> <p2> <b> . <b> <p2> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto a = getId("<a>");
+  auto p2 = getId("<p2>");
+  auto b = getId("<b>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.deleteTriples(cancellationHandle, {IdTriple<0>{{a, p2, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(DISTINCT ?x) AS ?count) WHERE { ?x ?y ?z }
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countDistinctXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          true, std::make_unique<VariableExpression>(varX)),
+      "COUNT(DISTINCT ?x)"};
+  std::vector<Alias> aliases{
+      Alias{std::move(countDistinctXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // After deleting <a> <p2> <b>, only <b> remains as a subject -> count = 1.
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{I(1)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, objectWithCountInsertInUniformBlock) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("GroupByOptimizationsDeltaTriples."
+                    "objectWithCountInsertInUniformBlock",
+                    "<x> <label3> <a> . <x> <label3> <b> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto x = getId("<x>");
+  auto label3 = getId("<label3>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, label3, x, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <label3> ?y } GROUP BY ?x
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{Variable{"?x"}, iri("<label3>"), Variable{"?y"}});
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, scan};
+
+  // After the insert, <x> has 3 triples with predicate <label3>, not 2.
+  EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
+              optionalHasTable({{getId("<x>"), I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples,
+     fullIndexScanCountAfterInsertInUniformBlock) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("GroupByOptimizationsDeltaTriples."
+                    "fullIndexScanCountAfterInsertInUniformBlock",
+                    "<x> <p4> <a> . <x> <p4> <b> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto x = getId("<x>");
+  auto p4 = getId("<p4>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, p4, x, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x ?y ?z } GROUP BY ?x
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, scan};
+
+  // After the insert, <x> has 3 triples, not 2.
+  EXPECT_THAT(groupBy.computeGroupByForFullIndexScan(),
+              optionalHasTable({{getId("<x>"), I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
+  // Index with 3 triples, all with subject <a>. SPO cardinality of <a> = 3.
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("GroupByOptimizationsDeltaTriples."
+                    "joinWithFullScanCardinalityAfterInsert",
+                    "<a> <p5> <b> . <a> <p5> <c> . <a> <p6> <d> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string{DEFAULT_GRAPH_IRI});
+  auto a = getId("<a>");
+  auto p6 = getId("<p6>");
+  auto b = getId("<b>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  // Insert a 4th triple with subject <a>; SPO cardinality goes from 3 to 4.
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{a, p6, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // Build VALUES (?x) { (<a>) } as the non-full-scan child of the join.
+  Variable varX{"?x"};
+  parsedQuery::SparqlValues sparqlValues;
+  sparqlValues._variables.push_back(varX);
+  sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<a>")}});
+  auto values = makeExecutionTree<Values>(&qec, sparqlValues);
+
+  // Full scan ?x ?y ?z in SPO order (sorted by subject = ?x).
+  auto xyzScan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::SPO,
+      SparqlTripleSimple{varX, Variable{"?y"}, Variable{"?z"}});
+
+  // Join on ?x (column 0 of both).
+  auto join = makeExecutionTree<Join>(&qec, values, xyzScan, 0, 0);
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { VALUES ... . ?x ?y ?z } GROUP BY ?x
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, join};
+
+  // 1 VALUES row for <a>, SPO cardinality of <a> = 4 (not 3) → count = 4.
+  EXPECT_THAT(groupBy.computeGroupByForJoinWithFullScan(),
+              optionalHasTable({{getId("<a>"), I(4)}}));
 }
 
 // _____________________________________________________________________________

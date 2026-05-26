@@ -779,11 +779,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
   } else if (indexScan->numVariables() == 3) {
-    // TODO<RobinTF> This currently doesn't work correctly with UPDATE. It
-    // queries the statistics which are never updated. Consider calling
-    // `IndexImpl::recomputeStatistics` and storing the result somewhere in this
-    // case. It also doesn't return the correct result for internal
-    // permutations.
+    // The statistics used below are precomputed at index build time and do not
+    // reflect delta triples from SPARQL updates. Fall back to the general
+    // computation when there are any delta triples triples.
+    const auto& spo = getIndex().getImpl().getPermutation(Permutation::SPO);
+    if (spo.getLocatedTriplesForPermutation(locatedTriplesState())
+            .numTriples() > 0) {
+      return std::nullopt;
+    }
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
@@ -1004,7 +1007,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   if (!optimizedAggregateData.has_value()) {
     return std::nullopt;
   }
-  const auto& [threeVarSubtree, subtree, permutation, columnIndex] =
+  const auto& [threeVarSubtree, subtree, permutationEnum, columnIndex] =
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
@@ -1020,7 +1023,16 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   }
 
   auto idTable = std::move(result).toStatic<2>();
-  const auto& index = getExecutionContext()->getIndex();
+
+  const auto& permutation =
+      getIndex().getImpl().getPermutation(permutationEnum);
+  auto getExactCardinality = [this, &permutation](Id id) -> size_t {
+    return permutation.getResultSizeOfScan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{id, std::nullopt, std::nullopt},
+            locatedTriplesState()),
+        locatedTriplesState());
+  };
 
   // TODO<joka921, C++23> Simplify the following pattern by using
   // `ql::views::chunk_by` and implement a lazy version of this view for
@@ -1029,8 +1041,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   // Take care of duplicate values in the input.
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
-  size_t currentCardinality =
-      index.getCardinality(currentId, permutation, locatedTriplesState());
+  size_t currentCardinality = getExactCardinality(currentId);
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -1049,11 +1060,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       pushRow();
       currentId = id;
       currentCount = 0;
-      // TODO<joka921> This is also not quite correct, we want the cardinality
-      // without the internally added triples, but that is not easy to
-      // retrieve right now.
-      currentCardinality =
-          index.getCardinality(id, permutation, locatedTriplesState());
+      currentCardinality = getExactCardinality(id);
     }
     currentCount += currentCardinality;
   }
