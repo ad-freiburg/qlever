@@ -3,7 +3,6 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
-#include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
@@ -97,7 +96,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
     auto defaultGraph =
         TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
-            .toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
+            .toValueId(getIndex());
     graphIds.erase(*defaultGraph);
   }
 
