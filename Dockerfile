@@ -187,6 +187,8 @@ ENV MALLOC_CONF=background_thread:true,metadata_thp:auto
 #   libboost-program-options    command-line argument parsing
 #   libboost-iostreams          stream compression / decompression
 #   libboost-url                URL parsing in SPARQL endpoint requests
+#   libboost-random             random number generation (used by s2geometry via qlever-index)
+#   libboost-regex              regular expressions (used by Boost.URL and SPARQL parsing)
 #   libboost-container          Boost container data structures
 #
 # QLever Python CLI and its dependencies:
@@ -211,6 +213,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libboost-program-options1.90.0 \
     libboost-iostreams1.90.0 \
     libboost-url1.90.0 \
+    libboost-random1.90.0 \
+    libboost-regex1.90.0 \
     libboost-container1.90.0 \
     python3-yaml python3-icu pipx \
     uuid-runtime make lbzip2 bzip2 \
@@ -252,5 +256,13 @@ COPY --from=builder /qlever/build/qlever-* /qlever/
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/
+
+# Verify all shared library dependencies are satisfied. Fails the build
+# immediately if any .so is missing, rather than discovering it at runtime.
+USER root
+RUN ! ldd /qlever/qlever-server /qlever/qlever-index \
+          /qlever/VocabularyMergerMain /qlever/PrintIndexVersionMain \
+    | grep -q "not found"
+USER qlever
 
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]
