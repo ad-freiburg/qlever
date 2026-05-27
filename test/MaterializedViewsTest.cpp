@@ -1721,3 +1721,6 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
             "more than one column in common."));
   }
 }
+
+// TODO<ullingerc> Test that group by optimizations don't produce wrong results
+// for views.

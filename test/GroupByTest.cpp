@@ -576,26 +576,37 @@ struct GroupByOptimizations : ::testing::Test {
 TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
   using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
+  GroupByImpl groupBy{
+      ad_utility::testing::getQec(), {Variable{"?x"}}, {}, xyzScanSortedByX};
 
   // Valid inputs.
-  ASSERT_EQ(SPO, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varX, varX));
-  ASSERT_EQ(POS, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varY, varZ));
-  ASSERT_EQ(OSP, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varZ, varY));
+  auto normalPermutation = [](Permutation::Enum permutationEnum) {
+    return ::testing::AllOf(
+        AD_PROPERTY(Permutation, permutation, ::testing::Eq(permutationEnum)),
+        AD_PROPERTY(Permutation, permutationType,
+                    ::testing::Eq(Permutation::Type::NORMAL)));
+  };
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varX).value(),
+      normalPermutation(SPO));
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varY, varZ).value(),
+      normalPermutation(POS));
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varZ, varY).value(),
+      normalPermutation(OSP));
 
   // First variable not contained in triple.
-  AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
+  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(xyzScan, varA, varX)
+                   .has_value());
 
   // Second variable not contained in triple.
-  AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
+  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varA)
+                   .has_value());
 
   // Not a three variable triple.
-  AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(*xScan, varX, varX));
+  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(*xScan, varX, varX)
+                   .has_value());
 }
 
 // _____________________________________________________________________________
@@ -1716,7 +1727,8 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getOperation(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_.permutation(),
+            Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 

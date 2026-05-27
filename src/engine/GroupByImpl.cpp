@@ -29,6 +29,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "parser/Alias.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
@@ -431,7 +432,7 @@ void GroupByImpl::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isStrongId) {
@@ -790,27 +791,35 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
         indexScan->permutation().getLocatedTriplesForPermutation(
             locatedTriplesState());
     bool hasLocatedTriples = locTriples.numTriples() > 0;
+    bool isMaterializedView = indexScan->permutation().permutationType() ==
+                              Permutation::Type::MATERIALIZED_VIEW;
     if (countIsDistinct) {
-      if (hasLocatedTriples) {
+      if (hasLocatedTriples || isMaterializedView) {
         return std::nullopt;
       }
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
       count = Id::makeFromInt(
-          getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
+          getIndex()
+              .getImpl()
+              .numDistinctCol0(permutation.value().permutation())
+              .normal);
     } else {
-      bool hasGraphVariable = ql::ranges::any_of(
-          indexScan->additionalColumns(),
-          [](ColumnIndex col) { return col == ADDITIONAL_COLUMN_GRAPH_ID; });
+      bool hasGraphVariable =
+          !isMaterializedView &&
+          ql::ranges::any_of(indexScan->additionalColumns(),
+                             [](ColumnIndex col) {
+                               return col == ADDITIONAL_COLUMN_GRAPH_ID;
+                             });
       bool hasCrossGraphDuplicates =
-          !hasGraphVariable &&
+          !isMaterializedView && !hasGraphVariable &&
           ql::ranges::any_of(
               locTriples.getAugmentedMetadata(),
               [](const CompressedBlockMetadata& block) {
                 return block.containsDuplicatesWithDifferentGraphs_;
               });
-      if (hasLocatedTriples || hasCrossGraphDuplicates) {
+      if (isMaterializedView || hasLocatedTriples || hasCrossGraphDuplicates) {
         setCountFromExactSize();
       } else {
         count = Id::makeFromInt(indexScan->getLimitOffset().actualSize(
@@ -920,13 +929,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  const auto& indexScan = _subtree->getRootOperation();
+  auto indexScan =
+      std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
+  if (!indexScan) {
+    return std::nullopt;
+  }
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
 
-  const auto& permutation =
-      getExecutionContext()->getIndex().getPimpl().getPermutation(
-          permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(
+  auto table = indexScan->permutation().getDistinctCol0IdsAndCounts(
       cancellationHandle_, locatedTriplesState(), indexScan->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
@@ -943,34 +953,43 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
 }
 
 // ____________________________________________________________________________
-std::optional<Permutation::Enum>
+boost::optional<const Permutation&>
 GroupByImpl::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-    const Variable& variableThatMustBeContained) {
+    const Variable& variableThatMustBeContained) const {
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 3) {
-    return std::nullopt;
+    return {};
   }
   {
     auto v = variableThatMustBeContained;
     if (v != indexScan->subject() && v != indexScan->predicate() &&
         v != indexScan->object()) {
-      return std::nullopt;
+      return {};
     }
   }
 
-  if (variableByWhichToSort == indexScan->subject()) {
-    return Permutation::SPO;
-  } else if (variableByWhichToSort == indexScan->predicate()) {
-    return Permutation::POS;
-  } else if (variableByWhichToSort == indexScan->object()) {
-    return Permutation::OSP;
-  } else {
-    return std::nullopt;
+  // For normal permutations we can just select a differently sorted one, but
+  // for materialized views this is not possible. The view is either sorted
+  // correctly or we can't use it.
+
+  if (indexScan->permutation().permutationType() == Permutation::Type::NORMAL) {
+    if (variableByWhichToSort == indexScan->subject()) {
+      return getIndex().getImpl().getPermutation(Permutation::SPO);
+    } else if (variableByWhichToSort == indexScan->predicate()) {
+      return getIndex().getImpl().getPermutation(Permutation::POS);
+    } else if (variableByWhichToSort == indexScan->object()) {
+      return getIndex().getImpl().getPermutation(Permutation::OSP);
+    }
+  } else if (indexScan->permutation().permutationType() ==
+                 Permutation::Type::MATERIALIZED_VIEW &&
+             variableByWhichToSort == indexScan->subject()) {
+    return indexScan->permutation();
   }
+  return {};
 };
 
 // ____________________________________________________________________________
@@ -1028,7 +1047,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   if (!optimizedAggregateData.has_value()) {
     return std::nullopt;
   }
-  const auto& [threeVarSubtree, subtree, permutationEnum, columnIndex] =
+  const auto& [threeVarSubtree, subtree, permutation, columnIndex] =
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
@@ -1045,8 +1064,6 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 
   auto idTable = std::move(result).toStatic<2>();
 
-  const auto& permutation =
-      getIndex().getImpl().getPermutation(permutationEnum);
   auto getExactCardinality = [this, &permutation](Id id) {
     return permutation.getResultSizeOfScan(
         permutation.getScanSpecAndBlocks(
