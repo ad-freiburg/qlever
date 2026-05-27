@@ -580,7 +580,7 @@ TEST(VectorIncrementalSerializer, Serialize) {
   std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
   std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
                                    "kartoffelsalat"};
-  std::string filename = "vectorIncrementalTest.Serialize.tmp";
+  std::string filename = gtestCurrentTestName();
 
   auto testIncrementalSerialization = [filename](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
@@ -604,7 +604,7 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
   std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
   std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
                                    "kartoffelsalat"};
-  std::string filename = "vectorIncrementalTest.SerializeInTheMiddle.tmp";
+  std::string filename = gtestCurrentTestName();
 
   auto testIncrementalSerialization = [filename](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
