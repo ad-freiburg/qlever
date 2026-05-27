@@ -170,27 +170,16 @@ class LocaleManager {
   }
 
   /**
-   * @brief Transform a UTF-8 string into a SortKey that can be compared using
-   * std::strcmp.
+   * @brief Transform a UTF-8 string into a `SortKey`.
    *
    * We need this wrapper because ICU internally only works on utf16 and does
    * not create c++ strings in large parts of the API
    * @param s A UTF-8 encoded string.
    * @param level The Collation Level for which we want to create the SortKey
-   * @param resultFunction Will be called with a c-string (pointer and size) of
-   * the result.
-   * @return A weight string s.t. compare(s, t, level) ==
-   * std::strcmp(getSortKey(s, level), getSortKey(t, level)
+   * @return A `SortKey` s.t. compare(s, t, level) ==
+   * compare(getSortKey(s, level), getSortKey(t, level))
    */
-  // clang-format off
-  CPP_template(typename F)(
-    requires ranges::invocable<F, const uint8_t*, size_t>)
-      // clang-format on
-      void getSortKey(std::string_view s, const Level level,
-                      F resultFunction) const {
-    // TODO<joka921> This function is one of the bottlenecks of the first pass
-    // of the IndexBuilder One possible improvement is to reuse the memory
-    // allocations for the `sortKeyBuffer`.
+  SortKey getSortKey(std::string_view s, const Level level) const {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
     auto& col = *_collator[static_cast<uint8_t>(level)];
     std::vector<uint8_t> sortKeyBuffer;
@@ -220,18 +209,10 @@ class LocaleManager {
     // necessary for the prefix range to work correct.
     AD_CORRECTNESS_CHECK(sz > 0);
     --sz;
-    resultFunction(sortKeyBuffer.data(), sz);
-  }
-
-  // Overload of `getSortKey` that returns a `SortKey` directly.
-  [[nodiscard]] SortKey getSortKey(std::string_view s,
-                                   const Level level) const {
     SortKey result;
-    auto writeSortKey = [&result](const uint8_t* begin, size_t sz) {
-      U8String& s = result.get();
-      s.insert(s.end(), begin, begin + sz);
-    };
-    getSortKey(s, level, writeSortKey);
+    U8String& resultView = result.get();
+    resultView.insert(resultView.end(), sortKeyBuffer.data(),
+                      sortKeyBuffer.data() + sz);
     return result;
   }
 

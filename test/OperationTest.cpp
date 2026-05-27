@@ -177,21 +177,23 @@ class OperationTestFixture : public testing::Test {
  protected:
   std::vector<std::string> jsonHistory;
 
-  Index index = []() {
+  std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
     indexConfig.blocksizePermutations = 32_B;
-    return makeTestIndex("OperationTest", std::move(indexConfig));
+    return std::make_shared<Index>(
+        makeTestIndex("OperationTest", std::move(indexConfig)));
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager =
+      std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -483,17 +485,19 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
 // _____________________________________________________________________________
 TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
-  const Index& index = ad_utility::testing::getQec()->getIndex();
+  auto index = std::make_shared<Index>(
+      makeTestIndex("ensureFailedStatusIsSetWhenGeneratorThrowsException",
+                    TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -512,17 +516,18 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
 // _____________________________________________________________________________
 TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
   bool signaledUpdate = false;
-  const Index& index = ad_utility::testing::getQec()->getIndex();
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "ensureFailedStatusIsSetWhenGeneratorIsCancelled", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{
       &context, []() -> Result::Generator {
@@ -549,17 +554,18 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 #endif
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
-  const Index& index = getQec()->getIndex();
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -597,17 +603,19 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
-  const Index& index = getQec()->getIndex();
+  auto index = std::make_shared<Index>(
+      makeTestIndex("ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption",
+                    TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
