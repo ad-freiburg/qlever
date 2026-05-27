@@ -1938,6 +1938,46 @@ TEST_F(GroupByOptimizations,
 }
 
 // _____________________________________________________________________________
+TEST_F(GroupByOptimizations,
+       computeGroupByForSingleIndexScanWithNamedGraphDuplicates) {
+  TestIndexConfig config;
+  config.indexType = qlever::Filetype::NQuad;
+  config.turtleInput =
+      "<s> <p> <o> <g1> . <s> <p> <o> <g2> . <s> <p> <o> <g3> .";
+  auto* qecNquad = getQec(config);
+
+  {
+    SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"},
+                                 Variable{"?z"}};
+
+    // The full GROUP BY (via the general computation path) must return the
+    // correct count of 1.
+    auto xyzScanNquad = makeExecutionTree<IndexScan>(
+        qecNquad, Permutation::Enum::SPO, xyzTriple);
+    GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
+    auto result = groupBy.getResult();
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_THAT(result->idTable(), matchesIdTableFromVector({{I(1)}}));
+  }
+
+  {
+    SparqlTripleSimple xyzgTriple{
+        Variable{"?x"},
+        Variable{"?y"},
+        Variable{"?z"},
+        {std::pair<ColumnIndex, Variable>{3, Variable{"?g"}}}};
+
+    // With graph column this should return 3.
+    auto xyzScanNquad = makeExecutionTree<IndexScan>(
+        qecNquad, Permutation::Enum::SPO, xyzgTriple);
+    GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
+    auto result = groupBy.getResult();
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_THAT(result->idTable(), matchesIdTableFromVector({{I(3)}}));
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   // Construct a GROUP BY operation from the given GROUP BY variables, aliases,
   // and index scan. Return `true` if and only if the optimization from
