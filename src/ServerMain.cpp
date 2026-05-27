@@ -223,9 +223,9 @@ int main(int argc, char** argv) {
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
 
-  // Per-query metrics log lives next to the index files.
+  // Per-query jsonl metrics log
   ad_utility::QueryEventLog::instance().setOutputFile(
-      std::filesystem::path{indexBasename + ".query_metrics.log"});
+      std::filesystem::path{indexBasename + ".metrics-log.jsonl"});
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
