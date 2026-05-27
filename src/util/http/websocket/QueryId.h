@@ -59,10 +59,7 @@ class QueryId {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryId, id_)
 };
 
-// Terminal status of a query, as observed at the moment its
-// `OwningQueryId` is destroyed. `Unknown` is the default and indicates
-// that no caller invoked `OwningQueryId::setStatus` before destruction;
-// see `OwningQueryId::status_` for the rationale.
+// Terminal status of a query, observed at `OwningQueryId` destruction.
 enum class QueryStatus { Unknown, Ok, Failed, Cancelled, Timeout };
 
 inline std::string_view toString(QueryStatus s) noexcept {
@@ -86,18 +83,13 @@ inline std::string_view toString(QueryStatus s) noexcept {
 // Therefore it is not copyable and removes itself from said registry
 // on destruction.
 class OwningQueryId {
-  // Shared with the unregister lambda owned by `id_`. Indirection is
-  // required because the lambda is built before this object exists and
-  // `OwningQueryId` is movable, so a captured `&status_` would dangle
-  // after a move
+  // Shared with the unregister lambda in `id_`. `shared_ptr` because
+  // `OwningQueryId` is movable; a captured `&status_` would dangle.
   std::shared_ptr<std::atomic<QueryStatus>> status_;
   unique_cleanup::UniqueCleanup<QueryId> id_;
 
   friend class QueryRegistry;
 
-  // `status` is supplied by the registry so the unregister lambda can
-  // hold its own `shared_ptr` to the same atomic and read the final
-  // status when this object is destroyed.
   OwningQueryId(QueryId id, std::shared_ptr<std::atomic<QueryStatus>> status,
                 std::function<void(const QueryId&)> unregister)
       : status_{std::move(status)}, id_{std::move(id), std::move(unregister)} {
@@ -108,18 +100,15 @@ class OwningQueryId {
  public:
   [[nodiscard]] const QueryId& toQueryId() const& noexcept { return *id_; }
 
-  // Record the terminal status of this query. Intended to be called
-  // once on the success path or in a catch block before this object is
-  // destroyed; the unregister lambda reads the final value
-  // during `~OwningQueryId`. Safe to call from any thread.
+  // Record the terminal status. Read by the unregister lambda during
+  // `~OwningQueryId`; safe to call from any thread.
   void setStatus(QueryStatus s) noexcept { status_->store(s); }
 
-  // Current value of the terminal-status field. Returns
-  // `QueryStatus::Unknown` until `setStatus` is invoked.
+  // Returns `QueryStatus::Unknown` until `setStatus` is invoked.
   [[nodiscard]] QueryStatus status() const noexcept { return status_->load(); }
 
-  // Shared handle to the underlying atomic. Lets a caller that no longer
-  // owns this object publish the terminal status.
+  // Shared handle to the atomic; lets a caller publish the status
+  // without holding this object.
   [[nodiscard]] std::shared_ptr<std::atomic<QueryStatus>> sharedStatus()
       const noexcept {
     return status_;
@@ -205,10 +194,8 @@ class QueryRegistry {
     auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                            startedAt.time_since_epoch())
                            .count();
-    // `ordered_json` preserves insertion order (default `nlohmann::json`
-    // sorts keys); field order is part of the on-disk contract.
-    // `to_json(QueryId)` is defined only for the default flavour, so
-    // we convert `queryId` through it.
+    // `ordered_json` so field order matches the on-disk contract
+    // (default `nlohmann::json` sorts keys).
     nlohmann::ordered_json startLine = {
         {"ts-ms", startedAtMs},
         {"event", "start"},
@@ -220,14 +207,12 @@ class QueryRegistry {
     startPayload.push_back('\n');
     eventLog_->push(std::move(startPayload));
 
-    // Status pointer shared between this `OwningQueryId` and the
-    // unregister lambda. Created here so the lambda (built next) can
-    // capture it before the `OwningQueryId` exists.
+    // Created before the lambda so the lambda can capture it.
     auto status =
         std::make_shared<std::atomic<QueryStatus>>(QueryStatus::Unknown);
-    // The unregister lambda outlives the registry on the owning side, so
-    // capture a `weak_ptr` to deduplicate erase. The end-event push must
-    // always run — the contract is exactly one `end` per `start`.
+    // `weak_ptr` so the lambda doesn't keep the registry alive. The
+    // end-event push runs unconditionally (one `end` per `start`); the
+    // erase is best-effort.
     std::weak_ptr<SynchronizedType> weakRegistry = registry_;
     auto unregister = [weakRegistry = std::move(weakRegistry), status,
                        eventLog = eventLog_](const QueryId& qid) {

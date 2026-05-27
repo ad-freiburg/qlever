@@ -659,14 +659,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       // sent to the client already. We can stop here.
       co_return;
     }
-    // Extract the originating client IP *before* `createMessageSender` so
-    // it can be threaded into the registry entry created there. Empty string
-    // when the header is absent.
+    // Empty when the header is absent.
     std::string_view clientIp = request.base()["X-Real-IP"];
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString, clientIp);
-    // Publish the terminal status into the `OwningQueryId`'s shared atomic
-    // *here*, while `messageSender` (and with it the query id) is still alive
+    // Grab the shared handle before `messageSender` is moved below.
     using ad_utility::websocket::QueryStatus;
     auto queryStatus = messageSender.sharedStatus();
     try {
@@ -700,9 +697,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                              : QueryStatus::Cancelled);
       throw;
     } catch (...) {
-      // Every other exception type maps to `Failed` in
-      // `processOperation`'s handlers; mirror that single outcome here and
-      // rethrow so the existing response-building logic stays untouched.
       queryStatus->store(QueryStatus::Failed);
       throw;
     }

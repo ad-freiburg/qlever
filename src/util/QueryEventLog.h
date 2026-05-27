@@ -16,15 +16,10 @@
 
 namespace ad_utility {
 
-// Process-wide append-only sink for per-query start/end events. Producers
-// enqueue a fully-formatted JSONL line (including the trailing newline) via
-// `push`; one background thread drains the bounded queue and writes to the
-// configured file, flushing after each line so live consumers see new
-// events promptly.
-//
-// Until `setOutputFile` has been called the sink is inactive and `push` is
-// a silent no-op, so test binaries and code paths that never configure a
-// file keep working unchanged.
+// Process-wide append-only sink for per-query start/end events.
+// Producers enqueue fully-formatted JSONL lines via `push`; one
+// background thread drains the queue and flushes after each line.
+// `push` is a silent no-op until `setOutputFile` has been called.
 class QueryEventLog {
  public:
   // Bound on the internal queue. `push` blocks when the queue is full.
@@ -49,11 +44,9 @@ class QueryEventLog {
   void push(std::string line);
 
  private:
-  // Declaration order matters: on destruction members are torn down in
-  // reverse, so `writer_` joins first, then the queue is destroyed,
-  // then the file stream closes. The explicit destructor first calls
-  // `queue_->finish()` so the writer wakes on `nullopt` and exits
-  // cleanly before its `JThread` is joined.
+  // Declaration order is load-bearing: on teardown the writer must
+  // join (after `~QueryEventLog` calls `queue_->finish()`) before the
+  // queue and stream are destroyed.
   std::ofstream stream_;
   std::atomic<bool> configured_{false};
   std::unique_ptr<data_structures::ThreadSafeQueue<std::string>> queue_;
