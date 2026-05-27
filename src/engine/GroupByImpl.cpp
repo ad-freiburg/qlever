@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -772,35 +773,57 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  IdTable table{1, getExecutionContext()->getAllocator()};
-  table.emplace_back();
+  Id count = Id::makeUndefined();
   const auto& var = varAndDistinctness.value().variable_;
+  auto setCountFromExactSize = [&count, &indexScan] {
+    count = Id::makeFromInt(
+        indexScan->getLimitOffset().actualSize(indexScan->getExactSize()));
+  };
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
-    table(0, 0) = Id::makeFromInt(0);
+    count = Id::makeFromInt(0);
     // The statistics used below are precomputed at index build time and do not
     // reflect delta triples from SPARQL updates. Fall back to the general
     // computation when there are any delta triples.
-  } else if (indexScan->numVariables() == 3 &&
-             indexScan->permutation()
-                     .getLocatedTriplesForPermutation(locatedTriplesState())
-                     .numTriples() == 0) {
+  } else if (indexScan->numVariables() == 3) {
+    const auto& locTriples =
+        indexScan->permutation().getLocatedTriplesForPermutation(
+            locatedTriplesState());
+    bool hasLocatedTriples = locTriples.numTriples() > 0;
     if (countIsDistinct) {
+      if (hasLocatedTriples) {
+        return std::nullopt;
+      }
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
-      table(0, 0) = Id::makeFromInt(
+      count = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
     } else {
-      const auto& limitOffset = indexScan->getLimitOffset();
-      table(0, 0) = Id::makeFromInt(
-          limitOffset.actualSize(getIndex().numTriples().normal));
+      bool hasGraphVariable = ql::ranges::any_of(
+          indexScan->additionalColumns(),
+          [](ColumnIndex col) { return col == ADDITIONAL_COLUMN_GRAPH_ID; });
+      bool hasCrossGraphDuplicates =
+          !hasGraphVariable &&
+          ql::ranges::any_of(
+              locTriples.getAugmentedMetadata(),
+              [](const CompressedBlockMetadata& block) {
+                return block.containsDuplicatesWithDifferentGraphs_;
+              });
+      if (hasLocatedTriples || hasCrossGraphDuplicates) {
+        setCountFromExactSize();
+      } else {
+        count = Id::makeFromInt(indexScan->getLimitOffset().actualSize(
+            getIndex().numTriples().normal));
+      }
     }
   } else {
-    const auto& limitOffset = indexScan->getLimitOffset();
-    table(0, 0) =
-        Id::makeFromInt(limitOffset.actualSize(indexScan->getExactSize()));
+    setCountFromExactSize();
   }
+
+  IdTable table{1, getExecutionContext()->getAllocator()};
+  table.emplace_back();
+  table(0, 0) = count;
   return table;
 }
 
