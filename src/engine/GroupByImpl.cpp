@@ -894,10 +894,10 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
 
   // The child must be an `IndexScan` with three variables that contains
   // the grouped variable.
-  auto permutationEnum = getPermutationForThreeVariableTriple(
+  auto permutation = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
 
-  if (!permutationEnum.has_value()) {
+  if (!permutation.has_value()) {
     return std::nullopt;
   }
 
@@ -929,15 +929,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  auto indexScan =
-      std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
-  if (!indexScan) {
-    return std::nullopt;
-  }
-  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  auto operation = _subtree->getRootOperation();
+  operation->updateRuntimeInformationWhenOptimizedOut();
 
-  auto table = indexScan->permutation().getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(), indexScan->getLimitOffset());
+  auto table = permutation.value().getDistinctCol0IdsAndCounts(
+      cancellationHandle_, locatedTriplesState(), operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
