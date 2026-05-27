@@ -778,15 +778,13 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
-  } else if (indexScan->numVariables() == 3) {
     // The statistics used below are precomputed at index build time and do not
     // reflect delta triples from SPARQL updates. Fall back to the general
-    // computation when there are any delta triples triples.
-    const auto& spo = getIndex().getImpl().getPermutation(Permutation::SPO);
-    if (spo.getLocatedTriplesForPermutation(locatedTriplesState())
-            .numTriples() > 0) {
-      return std::nullopt;
-    }
+    // computation when there are any delta triples.
+  } else if (indexScan->numVariables() == 3 &&
+             indexScan->permutation()
+                     .getLocatedTriplesForPermutation(locatedTriplesState())
+                     .numTriples() == 0) {
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
@@ -1026,7 +1024,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 
   const auto& permutation =
       getIndex().getImpl().getPermutation(permutationEnum);
-  auto getExactCardinality = [this, &permutation](Id id) -> size_t {
+  auto getExactCardinality = [this, &permutation](Id id) {
     return permutation.getResultSizeOfScan(
         permutation.getScanSpecAndBlocks(
             ScanSpecification{id, std::nullopt, std::nullopt},
