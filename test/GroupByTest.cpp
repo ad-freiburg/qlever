@@ -2036,6 +2036,45 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 }
 
 // _____________________________________________________________________________
+// Regression test for a bug where `getDistinctColIdsAndCounts` would
+// shortcut a block using only the metadata when `firstTriple_.col1Id_ ==
+// lastTriple_.col1Id_`.
+// This would sometimes occur for queries of the form:
+//   `SELECT ?p (COUNT(?p) AS ?count) WHERE { ?s ?p <o2> } GROUP BY ?p`
+TEST(GroupByOptimizationsRegression,
+     computeGroupByObjectWithCountWithNonUniformCol0) {
+  // All triples share the same predicate `<p>` but have different objects.
+  // Use a non-default `blocksizePermutations` so that multiple triples land in
+  // the same block.
+  TestIndexConfig config{
+      "<s1> <p> <o1> . "
+      "<s2> <p> <o2> . "
+      "<s3> <p> <o3> . "
+      "<s4> <p> <o4> . "
+      "<s5> <p> <o5> ."};
+  config.blocksizePermutations = 1_kB;
+  auto* qec = getQec(std::move(config));
+
+  auto scan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::OPS,
+      SparqlTripleSimple{Variable{"?s"}, Variable{"?p"}, iri("<o2>")});
+
+  Variable varP{"?p"};
+  auto countPPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varP)),
+      "COUNT(?p)"};
+  std::vector<Alias> aliases{Alias{std::move(countPPimpl), Variable{"?count"}}};
+
+  GroupByImpl groupBy{qec, {varP}, aliases, scan};
+  auto getId = makeGetId(qec->getIndex());
+  // Exactly one triple (`<s2> <p> <o2>`) matches `?s ?p <o2>`, so the count for
+  // predicate `<p>` must be `1`, not the size of the whole block.
+  EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
+              optionalHasTable({{getId("<p>"), I(1)}}));
+}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // Assert that a GROUP BY which is constructed from the given arguments
   // can not perform the `GroupByForSingleIndexScan2` optimization.
