@@ -47,7 +47,7 @@ TEST(IriTest, emptyIri) {
 TEST(IriTest, fromIrirefConsiderBase) {
   // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
   // IRI and returns the results as a string (including the angle brackets).
-  ParsedUri baseUri{"http://example.com/uniprot"};
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
   Iri baseForAbsoluteIris;
   auto fromIrirefConsiderBase =
       [&baseUri](std::string_view iriStringWithBrackets) {

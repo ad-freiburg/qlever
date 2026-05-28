@@ -1539,7 +1539,7 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
   }
   auto iri =
       TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
-  baseIri_ = ParsedUri{asStringViewUnsafe(iri.getContent())};
+  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________

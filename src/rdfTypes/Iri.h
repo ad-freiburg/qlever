@@ -112,10 +112,10 @@ class Iri : public BasicIri<true> {
   // without a scheme, prepend the base prefix for relative IRIs (like
   // `<UPI001AF4585D>`) or for absolute IRIs (like `</prosite/PS51927>`).
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const ParsedUri& baseUri);
+                                    const qlever::util::ParsedUri& baseUri);
 
   // Create an `Iri` object given from the given `ParsedUri` object.
-  static Iri fromUri(const ParsedUri& uri);
+  static Iri fromUri(const qlever::util::ParsedUri& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).

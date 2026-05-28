@@ -79,7 +79,7 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                const ParsedUri& baseUri) {
+                                const qlever::util::ParsedUri& baseUri) {
   auto iriSv = iriStringWithBrackets;
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
@@ -89,7 +89,7 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
 }
 
 // ____________________________________________________________________________
-Iri Iri::fromUri(const ParsedUri& uri) {
+Iri Iri::fromUri(const qlever::util::ParsedUri& uri) {
   return fromStringRepresentation(uri.toIriString());
 }
 

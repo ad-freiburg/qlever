@@ -4,6 +4,9 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #ifndef QLEVER_UTIL_URIPARSERURI_H
 #define QLEVER_UTIL_URIPARSERURI_H
 
@@ -11,6 +14,8 @@
 #include <uriparser/Uri.h>
 
 #include <string_view>
+
+namespace qlever::util {
 
 // Wrapper class for the `UriUriA` struct from uriparser. This is needed to
 // ensure that the memory allocated for the members of the struct is properly
@@ -24,21 +29,16 @@ class UriParserUri {
   bool isValid_ = true;
 
   // Compare if two `UriTextRangeA` objects are equal.
-  static int rangeEqual(const UriTextRangeA* a, const UriTextRangeA* b) {
-    size_t lenA = a->afterLast - a->first;
-    size_t lenB = b->afterLast - b->first;
-
-    if (lenA != lenB) return 0;
-
-    if (lenA == 0) return 1;
-
-    return memcmp(a->first, b->first, lenA) == 0;
+  static bool rangeEqual(const UriTextRangeA& a, const UriTextRangeA& b) {
+    return toStringView(a) == toStringView(b);
   }
 
   // Compare if two `UriPathSegmentA` objects are equal.
-  static int pathEqual(const UriPathSegmentA* a, const UriPathSegmentA* b) {
+  static bool pathEqual(const UriPathSegmentA* a, const UriPathSegmentA* b) {
     while (a && b) {
-      if (!rangeEqual(&a->text, &b->text)) return 0;
+      if (!rangeEqual(a->text, b->text)) {
+        return false;
+      }
 
       a = a->next;
       b = b->next;
@@ -68,6 +68,7 @@ class UriParserUri {
     }
   }
 
+  // Resolve the (relative) `uriString` to this URL and return the result.
   UriParserUri resolveUri(std::string_view uriString) const {
     UriUriA relativeIri;
     auto parseResult =
@@ -75,13 +76,16 @@ class UriParserUri {
                              uriString.data() + uriString.size(), nullptr);
     absl::Cleanup cleanupRelativeIri{
         [&relativeIri]() { uriFreeUriMembersA(&relativeIri); }};
-    AD_CONTRACT_CHECK(parseResult == URI_SUCCESS);
+    AD_CONTRACT_CHECK(parseResult == URI_SUCCESS,
+                      "The passed relative URL is invalid: ", uriString);
     UriUriA resolvedIri;
     auto resolveResult = uriAddBaseUriExA(&resolvedIri, &relativeIri, &uri_,
                                           URI_RESOLVE_STRICTLY);
     absl::Cleanup cleanupResolvedIri{
         [&resolvedIri]() { uriFreeUriMembersA(&resolvedIri); }};
-    AD_CONTRACT_CHECK(resolveResult == URI_SUCCESS);
+    AD_CONTRACT_CHECK(
+        resolveResult == URI_SUCCESS,
+        "Could not resolve relative URI. Is the base URI absolute?");
     std::move(cleanupResolvedIri).Cancel();
     return UriParserUri{std::move(resolvedIri)};
   }
@@ -116,17 +120,22 @@ class UriParserUri {
     return *this;
   }
 
+  // Compare `this` and `other` for equality.
   bool operator==(const UriParserUri& other) const {
     const auto& a = this->uri_;
     const auto& b = other.uri_;
-    return rangeEqual(&a.scheme, &b.scheme) &&
-           rangeEqual(&a.userInfo, &b.userInfo) &&
-           rangeEqual(&a.hostText, &b.hostText) &&
-           rangeEqual(&a.portText, &b.portText) &&
-           pathEqual(a.pathHead, b.pathHead) &&
-           rangeEqual(&a.query, &b.query) &&
-           rangeEqual(&a.fragment, &b.fragment) &&
+    return rangeEqual(a.scheme, b.scheme) &&
+           rangeEqual(a.userInfo, b.userInfo) &&
+           rangeEqual(a.hostText, b.hostText) &&
+           rangeEqual(a.portText, b.portText) &&
+           pathEqual(a.pathHead, b.pathHead) && rangeEqual(a.query, b.query) &&
+           rangeEqual(a.fragment, b.fragment) &&
            a.absolutePath == b.absolutePath;
+  }
+
+  // Convert a `UriTextRangeA` to a regular `std::string_view`.
+  static std::string_view toStringView(const UriTextRangeA& range) {
+    return std::string_view(range.first, range.afterLast - range.first);
   }
 
   ~UriParserUri() {
@@ -135,5 +144,6 @@ class UriParserUri {
     }
   }
 };
+}  // namespace qlever::util
 
 #endif  // QLEVER_UTIL_URIPARSERURI_H

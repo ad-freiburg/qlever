@@ -104,7 +104,7 @@ class SparqlQleverVisitor {
   PrefixMap prefixMap_{};
 
   // The `BASE` IRI of the query if any.
-  std::optional<ParsedUri> baseIri_{};
+  std::optional<qlever::util::ParsedUri> baseIri_{};
 
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no

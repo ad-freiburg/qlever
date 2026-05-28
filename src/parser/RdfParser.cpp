@@ -627,7 +627,7 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
     const ad_utility::triple_component::Iri& iri) {
-  ParsedUri uri{asStringViewUnsafe(iri.getContent())};
+  qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
   if (useSimplifiedGrammar_ &&
       (!baseIri_.has_value() || baseIri_.value() != uri)) {
     raiseDisallowedPrefixOrBaseError();
@@ -1128,8 +1128,7 @@ template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-    parser.prefixMap_ = this->prefixMap_;
-    parser.baseIri_ = this->baseIri_;
+    this->assignParsingHeader(*this, parser);
     parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     // Ensure that all sub-parsers use the same file-level blank node prefix
@@ -1220,8 +1219,7 @@ void RdfParallelParser<T>::initialize(
       break;
     }
   }
-  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-  this->baseIri_ = std::move(declarationParser.baseIri_);
+  this->assignParsingHeader(std::move(declarationParser), *this);
   remainingBatchFromInitialization.reserve(remainder.size());
   ql::ranges::copy(remainder,
                    std::back_inserter(remainingBatchFromInitialization));

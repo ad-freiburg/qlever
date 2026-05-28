@@ -123,13 +123,13 @@ struct ApplyBaseIfPresent {
     }
     const auto& baseIri = extractIri(base);
     if (baseIri.empty()) {
-      return std::get<LocalVocabEntry>(iri);
+      return std::get<LocalVocabEntry>(std::move(iri));
     }
 
     // It's unfortunate that we have to parse the base IRI for every single IRI
     // that we want to resolve against it, but this interface only allows
     // passing `IdOrLiteralOrIri` or similar objects.
-    ParsedUri uri{asStringViewUnsafe(baseIri.getContent())};
+    qlever::util::ParsedUri uri{asStringViewUnsafe(baseIri.getContent())};
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
         extractIri(iri).toStringRepresentation(), uri)};
   }

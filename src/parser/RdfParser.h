@@ -199,7 +199,7 @@ class TurtleParser : public RdfParserBase {
   TripleComponent lastParseResult_;
 
   ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
-  std::optional<ParsedUri> baseIri_;
+  std::optional<qlever::util::ParsedUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -225,6 +225,14 @@ class TurtleParser : public RdfParserBase {
   // grammar that can be parsed in parallel. This disallows re-definitions of
   // @base and @prefix as well as usage of multiline literals.
   bool useSimplifiedGrammar_ = false;
+
+  // Unified interface to copy/move data that has been collected by the parallel
+  // parser before sharding out to parallel worker threads.
+  template <typename Source, typename Target>
+  static void assignParsingHeader(Source&& source, Target& target) {
+    target.prefixMap_ = std::forward<Source>(source).prefixMap_;
+    target.baseIri_ = std::forward<Source>(source).baseIri_;
+  }
 
  public:
   explicit TurtleParser(const EncodedIriManager* encodedIriManager)
