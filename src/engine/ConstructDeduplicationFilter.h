@@ -80,13 +80,6 @@ class LruDeduplicationCache {
     return true;
   }
 
-  // Removes all entries. Used by `BatchWise` mode to reset at window
-  // boundaries.
-  void clear() {
-    list_.clear();
-    map_.clear();
-  }
-
  private:
   size_t capacity_;
   std::list<DeduplicationKey> list_;
@@ -110,13 +103,6 @@ class PerTripleFilter {
   // construction time.
   bool insert(const DeduplicationKey& key) {
     return isGlobal_ ? insertGlobal(key) : insertLru(key);
-  }
-
-  // Removes all entries. Used by `BatchWise` mode to reset at window
-  // boundaries.
-  void clear() {
-    lru_.clear();
-    globalSet_.clear();
   }
 
  private:
