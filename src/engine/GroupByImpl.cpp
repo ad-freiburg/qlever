@@ -31,6 +31,7 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "parser/Alias.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
@@ -819,11 +820,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
               [](const CompressedBlockMetadata& block) {
                 return block.containsDuplicatesWithDifferentGraphs_;
               });
-      if (isMaterializedView || hasLocatedTriples || hasCrossGraphDuplicates) {
+      // Materialized views cannot have located triples, therefore the number of
+      // triples in the permutation is always safe for them.
+      AD_CONTRACT_CHECK(!isMaterializedView || !hasLocatedTriples);
+      if (hasLocatedTriples || hasCrossGraphDuplicates) {
         setCountFromExactSize();
       } else {
         count = Id::makeFromInt(indexScan->getLimitOffset().actualSize(
-            getIndex().numTriples().normal));
+            indexScan->permutation().numTriples()));
       }
     }
   } else {
