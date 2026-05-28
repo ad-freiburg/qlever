@@ -1725,7 +1725,7 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, GroupByOptimizations) {
   // Test that the optimizations for `GROUP BY` do not return wrong results when
-  // grouping on materialized views. Regression test for #2913.
+  // grouping on materialized views. Regression test for #2918.
   auto plan = qlv().parseAndPlanQuery(
       // The test view contains only the first triple from the index.
       R"(
