@@ -44,7 +44,7 @@ class ParsedUriImpl {
   }
 
   // In C++17 mode we need to explicitly define this.
-#ifdef REDUCED_FEATURE_SET_FOR_CPP17
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   bool operator!=(const ParsedUriImpl& other) const {
     return !(*this == other);
   }
