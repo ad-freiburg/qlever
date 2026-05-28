@@ -64,7 +64,7 @@ class Row {
   // default constructor, we also keep the constructor that has a `numCols`
   // argument (which is ignored), in order to facilitate generic code that works
   // for both cases.
-  CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
+  CPP_template_2(typename = void)(requires(!isDynamic())) Row() {}
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
       size_t numCols)

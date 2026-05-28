@@ -88,8 +88,8 @@ struct ConstexprSwitch {
               CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
                   CPP_and(InvocableWithCase<FuncType, Cases,
                                             Args...>&&...)) constexpr auto
-  operator()(FuncType&& function, const ValueType& value, Args&&... args) const
-      -> decltype(auto) {
+  operator()(FuncType&& function, const ValueType& value,
+             Args&&... args) const -> decltype(auto) {
     if (value == FirstCase) {
       return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
     } else if constexpr (sizeof...(Cases) > 0) {
