@@ -1722,5 +1722,61 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   }
 }
 
-// TODO<ullingerc> Test that group by optimizations don't produce wrong results
-// for views.
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, GroupByOptimizations) {
+  // Test that the optimizations for `GROUP BY` do not return wrong results when
+  // grouping on materialized views. Regression test for #2913.
+  auto plan = qlv().parseAndPlanQuery(
+      // The test view contains only the first triple from the index.
+      R"(
+    SELECT ?s ?p ?o {
+      SELECT * {
+        ?s ?p ?o
+      } INTERNAL SORT BY ?s ?p ?o LIMIT 1
+    }
+  )");
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("groupByTestView", plan);
+
+  // Matcher for an `IdTable` containing a single integer.
+  auto expectCount = [](size_t count) {
+    IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable.emplace_back();
+    idTable.at(0, 0) = Id::makeFromInt(count);
+    return matchesIdTable(idTable);
+  };
+
+  // Helpers to abbreviate redundant queries.
+  auto queryOnMainIndex = [this](std::string aggregate) {
+    return getQueryResultAsIdTable(
+        absl::StrCat("SELECT (", aggregate, " AS ?c) { ?s ?p ?o }"));
+  };
+  auto queryOnView = [this](std::string aggregate) {
+    return getQueryResultAsIdTable(absl::StrCat(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ()",
+                                                aggregate, R"( AS ?c)  WHERE {
+        SERVICE view:groupByTestView {
+          [
+            view:column-s ?s ;
+            view:column-p ?p ;
+            view:column-o ?o
+          ]
+        }
+      })"));
+  };
+
+  // Test that the optimization does not return the values from the main index
+  // for the `IndexScan` on the materialized view.
+  EXPECT_THAT(queryOnMainIndex("COUNT(?s)"), expectCount(4));
+  EXPECT_THAT(queryOnView("COUNT(?s)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?s)"), expectCount(2));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?s)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?p)"), expectCount(3));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?p)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?o)"), expectCount(4));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
+}
