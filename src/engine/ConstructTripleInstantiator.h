@@ -10,23 +10,20 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 
+#include <array>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
-#include "util/HashSet.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
 
 using StringTriple = QueryExecutionTree::StringTriple;
-using DeduplicationMode = ad_utility::DeduplicationMode;
 
 // Instantiates a single preprocessed term for a specific row.
 // For constants: returns the precomputed string.
@@ -37,24 +34,26 @@ std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
     size_t rowIdxInBatch, size_t rowIdxTotal);
 
-using SeenTriples =
-    ad_utility::HashSet<std::pair<size_t, std::vector<ValueId>>>;
+// Instantiates all template triples for all rows in a batch without
+// deduplication. For each row, every triple in `tmpl.preprocessedTriples_`
+// is instantiated; triples with any unbound term are silently dropped.
+// `batchOffset` is the absolute row ID of the first row in the batch (used
+// to generate unique blank node IDs).
+std::vector<EvaluatedTriple> instantiateBatch(
+    const PreprocessedConstructTemplate& tmpl,
+    const BatchEvaluationResult& batchResult, size_t batchOffset);
 
-// Instantiates all template triples for all rows in a batch. For each row,
-// every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
-// any unbound term are silently dropped. `batchOffset` is the absolute
-// row ID of the first row in the batch (used to generate unique blank node
-// IDs). `ctx` and `seenTriples` are used to deduplicate: for each
-// (tripleIdx, row), the raw `ValueId`s at the variable columns of that triple
-// are checked against `seenTriples`; the triple is skipped if already seen.
+// Instantiates all template triples for all rows in a batch with
+// deduplication. For each (row, tripleIdx) pair, a masked deduplication key
+// is constructed from the variable-position ValueIds and checked against
+// `deduplicationState[tripleIdx]`. Triples whose key is already present are
+// skipped; all others are instantiated and their key inserted into the filter.
+// `ctx` provides access to the raw IdTable for key construction.
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const DeduplicationMode& mode,
-    std::optional<std::reference_wrapper<SeenTriples>> seenTriples =
-        std::nullopt,
-    std::optional<std::reference_wrapper<const BatchEvaluationContext>> ctx =
-        std::nullopt);
+    ConstructDeduplicationState& deduplicationState,
+    const BatchEvaluationContext& ctx);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

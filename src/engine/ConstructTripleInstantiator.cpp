@@ -12,13 +12,12 @@
 #include <absl/strings/str_cat.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 
 namespace qlever::constructExport {
-using ad_utility::DeduplicationMode;
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> instantiateTerm(
@@ -42,34 +41,52 @@ std::optional<EvaluatedTerm> instantiateTerm(
       term);
 }
 
-// Returns true if the triple at `tripleIdx` for `absoluteRow` has already
-// been seen and should be skipped, inserting it into `seenTriples` as a side
-// effect if not.
-static bool isDuplicate(size_t tripleIdx, size_t absoluteRow,
-                        const std::vector<size_t>& tripleColumns,
-                        const BatchEvaluationContext& ctx,
-                        SeenTriples& seenTriples) {
-  std::vector<ValueId> ids;
-  ids.reserve(tripleColumns.size());
-  for (size_t col : tripleColumns) {
-    ids.push_back(ctx.idTable_[absoluteRow][col]);
+// _____________________________________________________________________________
+std::vector<EvaluatedTriple> instantiateBatch(
+    const PreprocessedConstructTemplate& tmpl,
+    const BatchEvaluationResult& batchResult, size_t batchOffset) {
+  std::vector<EvaluatedTriple> triples;
+  triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
+
+  for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
+    const size_t blankNodeRowId = batchOffset + rowInBatch;
+    for (const auto& triple : tmpl.preprocessedTriples_) {
+      auto instantiate = [&triple, &batchResult, rowInBatch,
+                          blankNodeRowId](size_t pos) {
+        return instantiateTerm(triple[pos], batchResult, rowInBatch,
+                               blankNodeRowId);
+      };
+      auto subject = instantiate(0);
+      auto predicate = instantiate(1);
+      auto object = instantiate(2);
+      if (subject && predicate && object) {
+        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
+      }
+    }
   }
-  return !seenTriples.insert({tripleIdx, std::move(ids)}).second;
+  return triples;
+}
+
+// Returns true if the triple at `tripleIdx` for `rowInBatch` is a duplicate
+// and should be skipped. Constructs the masked deduplication key from the
+// variable-position ValueIds and checks it against the per-triple filter,
+// inserting it as a side effect if it is new.
+static bool isDuplicate(size_t tripleIdx, size_t rowInBatch,
+                        const PreprocessedConstructTemplate& tmpl,
+                        const BatchEvaluationContext& ctx,
+                        ConstructDeduplicationState& deduplicationState) {
+  const auto key =
+      makeDeduplicationKey(tmpl.variableColumnsPerTriple_[tripleIdx],
+                           ctx.firstRow_ + rowInBatch, ctx);
+  return !deduplicationState[tripleIdx].insert(key);
 }
 
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    const DeduplicationMode& mode,
-    std::optional<std::reference_wrapper<SeenTriples>> seenTriples,
-    std::optional<std::reference_wrapper<const BatchEvaluationContext>> ctx) {
-  // `seenTriples` and `ctx` must be provided when deduplication is active,
-  // since they are accessed during the dedup check.
-  AD_CONTRACT_CHECK(
-      std::holds_alternative<DeduplicationMode::None>(mode.value) ||
-      (seenTriples.has_value() && ctx.has_value()));
-
+    ConstructDeduplicationState& deduplicationState,
+    const BatchEvaluationContext& ctx) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
@@ -77,19 +94,10 @@ std::vector<EvaluatedTriple> instantiateBatch(
     const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (size_t tripleIdx :
          ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
+      if (isDuplicate(tripleIdx, rowInBatch, tmpl, ctx, deduplicationState))
+        continue;
+
       const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
-
-      // triples containing blank nodes are always distinct across rows because
-      // blank node IDs are generated per-row. Skip the dedup check for them.
-      // For `None` mode, skip deduplication entirely.
-      if (!std::holds_alternative<DeduplicationMode::None>(mode.value) &&
-          !tmpl.tripleContainsBlankNode_[tripleIdx] &&
-          isDuplicate(tripleIdx, ctx->get().firstRow_ + rowInBatch,
-                      tmpl.variableColumnsPerTriple_[tripleIdx], ctx->get(),
-                      seenTriples->get())) {
-        continue;  // do not instantiate triple
-      }
-
       auto instantiate = [&triple, &batchResult, rowInBatch,
                           blankNodeRowId](size_t pos) {
         return instantiateTerm(triple[pos], batchResult, rowInBatch,

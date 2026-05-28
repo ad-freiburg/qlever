@@ -11,6 +11,7 @@
 #include <gtest/gtest_prod.h>
 
 #include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
@@ -18,7 +19,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
 #include "util/CancellationHandle.h"
-#include "util/ConstructDeduplicationMode.h"
 #include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
 
