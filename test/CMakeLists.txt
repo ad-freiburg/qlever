@@ -236,6 +236,8 @@ addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(UriParserUriTest)
 
+addLinkAndDiscoverTest(ParsedUriImplTest)
+
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)

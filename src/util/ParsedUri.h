@@ -43,9 +43,12 @@ class ParsedUriImpl {
     }
   }
 
+  // In C++17 mode we need to explicitly define this.
+#ifdef REDUCED_FEATURE_SET_FOR_CPP17
   bool operator!=(const ParsedUriImpl& other) const {
     return !(*this == other);
   }
+#endif
 
   // Resolve this as a base URI against `uriString` and return the result.
   ParsedUriImpl resolveUri(std::string_view uriString) const {
