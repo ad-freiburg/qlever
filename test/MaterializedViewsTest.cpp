@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include <functional>
+#include <string_view>
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
@@ -1740,18 +1741,15 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 
   // Matcher for an `IdTable` containing a single integer.
   auto expectCount = [](size_t count) {
-    IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable.emplace_back();
-    idTable.at(0, 0) = Id::makeFromInt(count);
-    return matchesIdTable(idTable);
+    return matchesIdTableFromVector({{Id::makeFromInt(count)}});
   };
 
   // Helpers to abbreviate redundant queries.
-  auto queryOnMainIndex = [this](std::string aggregate) {
+  auto queryOnMainIndex = [this](std::string_view aggregate) {
     return getQueryResultAsIdTable(
         absl::StrCat("SELECT (", aggregate, " AS ?c) { ?s ?p ?o }"));
   };
-  auto queryOnView = [this](std::string aggregate) {
+  auto queryOnView = [this](std::string_view aggregate) {
     return getQueryResultAsIdTable(absl::StrCat(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT ()",
