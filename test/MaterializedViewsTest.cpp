@@ -18,6 +18,7 @@
 #include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -1803,4 +1804,41 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
     GROUP BY ?s
   )"),
               expectCount(1));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest,
+       GetPermutationForThreeVariableTripletMaterializedView) {
+  // Write and load a three-variable view.
+  auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("threeVarPermTestView", plan);
+  manager.loadView("threeVarPermTestView");
+
+  // Create a three-variable scan on the view binding all three columns.
+  using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
+  parsedQuery::MaterializedViewQuery viewQuery{
+      "threeVarPermTestView", RCols{{V{"?s"}, TripleComponent{V{"?s"}}},
+                                    {V{"?p"}, TripleComponent{V{"?p"}}},
+                                    {V{"?o"}, TripleComponent{V{"?o"}}}}};
+  auto* qec = std::get<1>(plan).get();
+  auto indexScanPtr = manager.makeIndexScan(qec, viewQuery);
+  auto scanTree = std::make_shared<QueryExecutionTree>(qec, indexScanPtr);
+
+  // Use a GroupByImpl as the holder for getPermutationForThreeVariableTriple.
+  GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
+
+  // Sort by subject: the materialized view case succeeds.
+  EXPECT_TRUE(
+      groupBy.getPermutationForThreeVariableTriple(*scanTree, V{"?s"}, V{"?s"})
+          .has_value());
+
+  // Sort by predicate: materialized view type but variableByWhichToSort is not
+  // the subject, so there's no matching permutation.
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *scanTree, V{"?p"}, V{"?s"}));
+
+  // Sort by object: same reasoning as predicate.
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *scanTree, V{"?o"}, V{"?s"}));
 }

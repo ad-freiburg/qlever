@@ -32,6 +32,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
@@ -607,6 +608,24 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
   // Not a three variable triple.
   AD_EXPECT_NULLOPT(
       groupBy.getPermutationForThreeVariableTriple(*xScan, varX, varX));
+
+  // Three variable triple but with a graph filter (not all graphs allowed).
+  Tree xyzScanWithGraphFilter = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::SOP, xyzTriple,
+      IndexScan::Graphs::Whitelist({TripleComponent{iri("<someGraph>")}}));
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *xyzScanWithGraphFilter, varX, varX));
+
+  // Three variable triple with INTERNAL permutation type.
+  auto psoPtr =
+      qec->getIndex().getImpl().getPermutationPtr(Permutation::Enum::PSO);
+  Tree internalScan =
+      makeExecutionTree<IndexScan>(qec,
+                                   std::shared_ptr<const Permutation>(
+                                       psoPtr, &psoPtr->internalPermutation()),
+                                   qec->locatedTriplesSharedState(), xyzTriple);
+  AD_EXPECT_NULLOPT(
+      groupBy.getPermutationForThreeVariableTriple(*internalScan, varX, varX));
 }
 
 // _____________________________________________________________________________
