@@ -1777,4 +1777,29 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 
   EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?o)"), expectCount(4));
   EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
+
+  // Test the optimization of a join with an `IndexScan` on a materialized view.
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
+    SELECT (COUNT(?s) AS ?c) WHERE {
+      ?s <p1> ?p1 .
+      ?s ?p ?o
+    } GROUP BY ?s
+  )"),
+              expectCount(2));
+  EXPECT_THAT(getQueryResultAsIdTable(
+                  R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?s) AS ?c) WHERE {
+      ?s <p1> ?p1 .
+      SERVICE view:groupByTestView {
+        [
+          view:column-s ?s ;
+          view:column-p ?p ;
+          view:column-o ?o
+        ]
+      }
+    }
+    GROUP BY ?s
+  )"),
+              expectCount(1));
 }
