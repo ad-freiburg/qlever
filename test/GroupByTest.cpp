@@ -597,16 +597,16 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
       normalPermutation(OSP));
 
   // First variable not contained in triple.
-  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(xyzScan, varA, varX)
-                   .has_value());
+  AD_EXPECT_NULLOPT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varA, varX));
 
   // Second variable not contained in triple.
-  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varA)
-                   .has_value());
+  AD_EXPECT_NULLOPT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varA));
 
   // Not a three variable triple.
-  EXPECT_FALSE(groupBy.getPermutationForThreeVariableTriple(*xScan, varX, varX)
-                   .has_value());
+  AD_EXPECT_NULLOPT(
+      groupBy.getPermutationForThreeVariableTriple(*xScan, varX, varX));
 }
 
 // _____________________________________________________________________________
@@ -1729,6 +1729,8 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
   ASSERT_EQ(optimizedAggregateData->permutation_.permutation(),
             Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_.permutationType(),
+            Permutation::Type::NORMAL);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
