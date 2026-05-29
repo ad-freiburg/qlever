@@ -775,69 +775,75 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  Id count = Id::makeUndefined();
   const auto& var = varAndDistinctness.value().variable_;
-  auto setCountFromExactSize = [&count, &indexScan] {
-    count = Id::makeFromInt(
+
+  // Helpers for exporting the result as an `IdTable`.
+  auto idTableFromInt = [this](size_t count) {
+    IdTable table{1, getExecutionContext()->getAllocator()};
+    table.emplace_back();
+    table(0, 0) = Id::makeFromInt(count);
+    return table;
+  };
+  auto countFromExactSize = [&indexScan, &idTableFromInt] {
+    return idTableFromInt(
         indexScan->getLimitOffset().actualSize(indexScan->getExactSize()));
   };
+
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
-    count = Id::makeFromInt(0);
-    // The statistics used below are precomputed at index build time and do not
-    // reflect delta triples from SPARQL updates. Fall back to the general
-    // computation when there are any delta triples.
-  } else if (indexScan->numVariables() == 3) {
-    const auto& locTriples =
-        indexScan->permutation().getLocatedTriplesForPermutation(
-            locatedTriplesState());
-    bool hasLocatedTriples = locTriples.numTriples() > 0;
-    bool isMaterializedView = indexScan->permutation().permutationType() ==
-                              Permutation::Type::MATERIALIZED_VIEW;
-    if (countIsDistinct) {
-      if (hasLocatedTriples || isMaterializedView) {
-        return std::nullopt;
-      }
-      auto permutation =
-          getPermutationForThreeVariableTriple(*_subtree, var, var);
-      AD_CONTRACT_CHECK(permutation.has_value());
-      count = Id::makeFromInt(
-          getIndex()
-              .getImpl()
-              .numDistinctCol0(permutation.value().permutation())
-              .normal);
-    } else {
-      bool hasGraphVariable =
-          !isMaterializedView &&
-          ql::ranges::any_of(indexScan->additionalColumns(),
-                             [](ColumnIndex col) {
-                               return col == ADDITIONAL_COLUMN_GRAPH_ID;
-                             });
-      bool hasCrossGraphDuplicates =
-          !isMaterializedView && !hasGraphVariable &&
-          ql::ranges::any_of(
-              locTriples.getAugmentedMetadata(),
-              [](const CompressedBlockMetadata& block) {
-                return block.containsDuplicatesWithDifferentGraphs_;
-              });
-      // Materialized views cannot have located triples, therefore the number of
-      // triples in the permutation is always safe for them.
-      AD_CONTRACT_CHECK(!isMaterializedView || !hasLocatedTriples);
-      if (hasLocatedTriples || hasCrossGraphDuplicates) {
-        setCountFromExactSize();
-      } else {
-        count = Id::makeFromInt(indexScan->getLimitOffset().actualSize(
-            indexScan->permutation().numTriples()));
-      }
-    }
-  } else {
-    setCountFromExactSize();
+    return idTableFromInt(0);
   }
 
-  IdTable table{1, getExecutionContext()->getAllocator()};
-  table.emplace_back();
-  table(0, 0) = count;
-  return table;
+  if (indexScan->numVariables() != 3) {
+    return countFromExactSize();
+  }
+
+  // The statistics used below are precomputed at index build time and do not
+  // reflect delta triples from SPARQL updates. Fall back to the general
+  // computation when there are any delta triples.
+
+  const auto& locTriples =
+      indexScan->permutation().getLocatedTriplesForPermutation(
+          locatedTriplesState());
+  bool hasLocatedTriples = locTriples.numTriples() > 0;
+  bool isMaterializedView = indexScan->permutation().permutationType() ==
+                            Permutation::Type::MATERIALIZED_VIEW;
+
+  // For `COUNT(DISTINCT)` on a normal permutation without updates, we use
+  // `numDistinctCol0`. Otherwise we need to compute the result regularly.
+  if (countIsDistinct) {
+    if (hasLocatedTriples || isMaterializedView) {
+      return std::nullopt;
+    }
+    auto permutation =
+        getPermutationForThreeVariableTriple(*_subtree, var, var);
+    AD_CONTRACT_CHECK(permutation.has_value());
+    return idTableFromInt(
+        getIndex()
+            .getImpl()
+            .numDistinctCol0(permutation.value().permutation())
+            .normal);
+  }
+
+  // For a regular, non-distinct `COUNT` we can use the number of triples in the
+  // permutation if there are no updates or duplicates from different graphs.
+  bool hasGraphVariable =
+      !isMaterializedView &&
+      ql::ranges::any_of(indexScan->additionalColumns(), [](ColumnIndex col) {
+        return col == ADDITIONAL_COLUMN_GRAPH_ID;
+      });
+  bool hasCrossGraphDuplicates =
+      !isMaterializedView && !hasGraphVariable &&
+      ql::ranges::any_of(locTriples.getAugmentedMetadata(),
+                         [](const CompressedBlockMetadata& block) {
+                           return block.containsDuplicatesWithDifferentGraphs_;
+                         });
+
+  if (hasLocatedTriples || hasCrossGraphDuplicates) {
+    return countFromExactSize();
+  }
+  return idTableFromInt(indexScan->getLimitOffset().actualSize(
+      indexScan->permutation().numTriples()));
 }
 
 // ____________________________________________________________________________
@@ -933,7 +939,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  auto operation = _subtree->getRootOperation();
+  const auto& operation = _subtree->getRootOperation();
   operation->updateRuntimeInformationWhenOptimizedOut();
 
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
