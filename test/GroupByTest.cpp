@@ -611,14 +611,13 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
 
   // Three variable triple but with a graph filter (not all graphs allowed).
   Tree xyzScanWithGraphFilter = makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::SOP, xyzTriple,
+      qec, SOP, xyzTriple,
       IndexScan::Graphs::Whitelist({TripleComponent{iri("<someGraph>")}}));
   AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
       *xyzScanWithGraphFilter, varX, varX));
 
   // Three variable triple with INTERNAL permutation type.
-  auto psoPtr =
-      qec->getIndex().getImpl().getPermutationPtr(Permutation::Enum::PSO);
+  auto psoPtr = qec->getIndex().getImpl().getPermutationPtr(PSO);
   Tree internalScan =
       makeExecutionTree<IndexScan>(qec,
                                    std::shared_ptr<const Permutation>(
