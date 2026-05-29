@@ -114,6 +114,17 @@ TEST(UriParserUri, EqualityOperatorAbsolutePath) {
   // URIs with and without authority differ in how absolutePath is set.
   EXPECT_NE(UriParserUri("/absolute/path"), UriParserUri("relative/path"));
   EXPECT_EQ(UriParserUri("/absolute/path"), UriParserUri("/absolute/path"));
+  EXPECT_NE(UriParserUri("/path"), UriParserUri("path"));
+}
+
+// _____________________________________________________________________________
+TEST(UriParserUri, EqualityOperatorMultiSegmentPath) {
+  EXPECT_EQ(UriParserUri("https://example.com/a/b/c"),
+            UriParserUri("https://example.com/a/b/c"));
+  EXPECT_NE(UriParserUri("https://example.com/a/b"),
+            UriParserUri("https://example.com/a"));
+  EXPECT_NE(UriParserUri("https://example.com/a"),
+            UriParserUri("https://example.com/a/b"));
 }
 
 // _____________________________________________________________________________
@@ -123,6 +134,14 @@ TEST(UriParserUri, CopyConstructor) {
 
   EXPECT_EQ(original, copy);
   EXPECT_EQ(uriToString(copy), "https://example.com/path?q=1#frag");
+}
+
+// _____________________________________________________________________________
+TEST(UriParserUri, CopyConstructorFromMovedFrom) {
+  UriParserUri original("https://example.com/path");
+  UriParserUri moved(std::move(original));
+  UriParserUri copy(original);
+  // The destructors of all three should run without double frees.
 }
 
 // _____________________________________________________________________________
@@ -144,6 +163,26 @@ TEST(UriParserUri, CopyAssignment) {
   b = a;
   EXPECT_EQ(a, b);
   EXPECT_EQ(uriToString(b), "https://example.com/path");
+}
+
+// _____________________________________________________________________________
+TEST(UriParserUri, CopyAssignmentToMovedFrom) {
+  UriParserUri source("https://example.com/path");
+  UriParserUri dest("https://other.com");
+  UriParserUri moved(std::move(dest));
+  // Assigning to it must not attempt to free uninitialized memory.
+  dest = source;
+  EXPECT_EQ(uriToString(dest), "https://example.com/path");
+}
+
+// _____________________________________________________________________________
+TEST(UriParserUri, CopyAssignmentFromMovedFrom) {
+  UriParserUri dest("https://example.com/path");
+  UriParserUri source("https://other.com");
+  UriParserUri moved(std::move(source));
+  // After the assignment, `dest` should also be invalid and its destructor must
+  // not double-free.
+  dest = source;
 }
 
 // _____________________________________________________________________________
@@ -175,6 +214,16 @@ TEST(UriParserUri, MoveAssignment) {
   EXPECT_EQ(b, expected);
   EXPECT_EQ(uriToString(b), "https://example.com/path");
   // The destructors should run without double frees here.
+}
+
+// _____________________________________________________________________________
+TEST(UriParserUri, MoveAssignmentToInvalid) {
+  UriParserUri source("https://example.com/path");
+  UriParserUri dest("https://other.com");
+  UriParserUri moved(std::move(dest));
+  // Move-assigning to it must not attempt to free uninitialized memory.
+  dest = std::move(source);
+  EXPECT_EQ(uriToString(dest), "https://example.com/path");
 }
 
 // _____________________________________________________________________________

@@ -551,8 +551,11 @@ static std::optional<qlever::util::ParsedUri> parsedUriFromEntry(
 
 //______________________________________________________________________________
 std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
-  return parsedUriFromEntry(IriOrUriValueGetter{}(id, context));
+    ValueId, const EvaluationContext*) const {
+  // The base IRI argument of `IriOrUriExpression` is always an `IriExpression`
+  // which evaluates to a `LocalVocabEntry`, never a `ValueId`. This overload
+  // is required by the `Mixin` interface but is logically unreachable.
+  AD_FAIL();
 }
 
 //______________________________________________________________________________

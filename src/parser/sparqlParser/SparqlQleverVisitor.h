@@ -182,6 +182,10 @@ class SparqlQleverVisitor {
     treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
   }
 
+  void setBaseIriForTesting(std::string_view uri) {
+    baseIri_ = qlever::util::ParsedUri{uri};
+  }
+
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryContext* ctx);
 
