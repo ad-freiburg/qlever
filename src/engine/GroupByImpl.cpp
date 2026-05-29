@@ -119,13 +119,13 @@ class LazyGroupByRange
                      sparqlExpression::EvaluationContext& evaluationContext) {
     if (groupSplitAcrossTables_) {
       lazyGroupBy_->processBlock(evaluationContext, blockStart, blockEnd);
-      IdTable dynamicResultTable = std::move(resultTable_).toDynamic();
-      lazyGroupBy_->commitRow(dynamicResultTable, evaluationContext,
+      IdTable resultTable = std::move(resultTable_).toDynamic();
+      lazyGroupBy_->commitRow(resultTable, evaluationContext,
                               currentGroupBlock_);
-      resultTable_ =
-          std::move(dynamicResultTable).template toStatic<OUT_WIDTH>();
+      resultTable_ = std::move(resultTable).template toStatic<OUT_WIDTH>();
       groupSplitAcrossTables_ = false;
     } else {
+      // This processes the whole block in batches if possible.
       parent_->template processBlock<OUT_WIDTH>(
           resultTable_, aggregates_, evaluationContext, blockStart, blockEnd,
           &currentLocalVocab_, groupByCols_);
@@ -187,10 +187,10 @@ class LazyGroupByRange
       if (groupByCols_.empty()) {
         // If we have an implicit GROUP BY, where the entire input is a
         // single group, we need to produce one result row.
-        IdTable dynamicResultTable = std::move(resultTable_).toDynamic();
-        parent_->processEmptyImplicitGroup<OUT_WIDTH>(
-            dynamicResultTable, aggregates_, &currentLocalVocab_);
-        return IdTableVocabPair{std::move(dynamicResultTable),
+        IdTable resultTable = std::move(resultTable_).toDynamic();
+        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
+                                                      &currentLocalVocab_);
+        return IdTableVocabPair{std::move(resultTable),
                                 std::move(currentLocalVocab_)};
       }
       if (singleIdTable_) {
@@ -216,11 +216,10 @@ class LazyGroupByRange
     sparqlExpression::EvaluationContext evaluationContext =
         parent_->createEvaluationContext(currentLocalVocab_, idTable);
 
-    IdTable dynamicResultTable = std::move(resultTable_).toDynamic();
-    lazyGroupBy_->commitRow(dynamicResultTable, evaluationContext,
-                            currentGroupBlock_);
+    IdTable resultTable = std::move(resultTable_).toDynamic();
+    lazyGroupBy_->commitRow(resultTable, evaluationContext, currentGroupBlock_);
     currentLocalVocab_.mergeWith(storedLocalVocabs_);
-    return IdTableVocabPair{std::move(dynamicResultTable),
+    return IdTableVocabPair{std::move(resultTable),
                             std::move(currentLocalVocab_)};
   }
 };
