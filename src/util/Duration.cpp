@@ -97,8 +97,10 @@ DayTimeDuration DayTimeDuration::operator+(const DayTimeDuration& rhs) const {
                                            ? DayTimeDuration::Type::Negative
                                            : DayTimeDuration::Type::Positive;
   sum = std::abs(sum);
-  // Only passing seconds to `DayTimeDuration`. The object itself will convert
-  // the input to days, hours, minutes and seconds.
+  // A `DayTimeDuration` can be constructed with the total amount of seconds.
+  // Therefore convert from milliseconds to seconds. The constructor itself will
+  // break down the total seconds into days, hours, minutes and seconds
+  // internally.
   return DayTimeDuration{durationType, 0, 0, 0,
                          static_cast<double>(sum) / 1000.0};
 }
