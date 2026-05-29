@@ -433,7 +433,7 @@ void GroupByImpl::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isStrongId) {
@@ -1069,13 +1069,16 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   }
 
   auto idTable = std::move(result).toStatic<2>();
+  auto indexScan = std::dynamic_pointer_cast<const IndexScan>(
+      threeVarSubtree.getRootOperation());
+  AD_CORRECTNESS_CHECK(indexScan != nullptr);
 
-  auto getExactCardinality = [this, &permutation](Id id) {
+  auto getExactCardinality = [&indexScan, &permutation](Id id) {
     return permutation.getResultSizeOfScan(
         permutation.getScanSpecAndBlocks(
             ScanSpecification{id, std::nullopt, std::nullopt},
-            locatedTriplesState()),
-        locatedTriplesState());
+            indexScan->locatedTriplesState()),
+        indexScan->locatedTriplesState());
   };
 
   // TODO<joka921, C++23> Simplify the following pattern by using

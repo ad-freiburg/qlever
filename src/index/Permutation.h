@@ -211,7 +211,10 @@ class Permutation {
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
 
-  // From the given snapshot, get the located triples for this permutation.
+  // From the given snapshot, get the located triples for this permutation. Note
+  // that for materialized views, this must not be the global
+  // `LocatedTriplesState`, instead they must use their own
+  // `LocatedTriplesState` provided by the `MaterializedView` object.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
 
