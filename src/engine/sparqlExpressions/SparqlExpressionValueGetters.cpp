@@ -17,6 +17,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;
 
@@ -536,6 +537,31 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
+static std::optional<qlever::util::ParsedUri> parsedUriFromEntry(
+    const sparqlExpression::IdOrLocalVocabEntry& entry) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(entry));
+  const auto& lve = std::get<LocalVocabEntry>(entry);
+  AD_CORRECTNESS_CHECK(lve.isIri());
+  const auto& iri = lve.getIri();
+  if (iri.empty()) {
+    return std::nullopt;
+  }
+  return qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+}
+
+//______________________________________________________________________________
+std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  return parsedUriFromEntry(IriOrUriValueGetter{}(id, context));
+}
+
+//______________________________________________________________________________
+std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext* context) const {
+  return parsedUriFromEntry(IriOrUriValueGetter{}(litOrIri, context));
+}
+
+//______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter<
@@ -676,6 +702,7 @@ template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
+template struct TypeErasedValueGetter<ParsedUriGetter>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::GeometryInfo>>;
 template struct TypeErasedValueGetter<

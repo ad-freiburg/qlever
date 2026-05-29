@@ -115,26 +115,22 @@ const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
 }
 
 struct ApplyBaseIfPresent {
-  IdOrLiteralOrIri operator()(IdOrLocalVocabEntry iri,
-                              const IdOrLocalVocabEntry& base) const {
+  IdOrLiteralOrIri operator()(
+      IdOrLocalVocabEntry iri,
+      const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
-    const auto& baseIri = extractIri(base);
-    if (baseIri.empty()) {
+    if (!base.has_value()) {
       return std::get<LocalVocabEntry>(std::move(iri));
     }
-
-    // It's unfortunate that we have to parse the base IRI for every single IRI
-    // that we want to resolve against it, but this interface only allows
-    // passing `IdOrLiteralOrIri` or similar objects.
-    qlever::util::ParsedUri uri{asStringViewUnsafe(baseIri.getContent())};
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), uri)};
+        extractIri(iri).toStringRepresentation(), base.value())};
   }
 };
-using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
+using IriOrUriExpression =
+    NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter, ParsedUriGetter>>;
 
 // STRLEN
 struct Strlen {

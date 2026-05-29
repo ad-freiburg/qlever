@@ -21,6 +21,7 @@
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
 #include "util/LruCache.h"
+#include "util/ParsedUri.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
@@ -456,6 +457,18 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                                  const EvaluationContext* context) const;
   IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
                                  const EvaluationContext* context) const;
+};
+
+// Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
+// that the parsing cost is not repeated for every row when the base is a
+// constant expression.
+struct ParsedUriGetter : Mixin<ParsedUriGetter> {
+  using Value = std::optional<qlever::util::ParsedUri>;
+  using Mixin<ParsedUriGetter>::operator();
+  std::optional<qlever::util::ParsedUri> operator()(
+      ValueId id, const EvaluationContext* context) const;
+  std::optional<qlever::util::ParsedUri> operator()(
+      const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
 };
 
 // Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
