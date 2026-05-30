@@ -29,8 +29,6 @@ const DeduplicationKey kUndef = {ValueId::makeUndefined(),
                                  ValueId::makeUndefined(),
                                  ValueId::makeUndefined()};
 
-// _____________________________________________________________________________
-
 TEST(LruDeduplicationCache, NewKeyReturnsTrue) {
   // we expect, if we initialize a `LruDeduplicationCache` with capacity > 0,
   // and add a single item that a new key can be added.
