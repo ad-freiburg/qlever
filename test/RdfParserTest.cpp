@@ -1136,6 +1136,14 @@ TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
         "<subject> <predicate> <object> . \n "
         "PREFIX ex1: <http://example.org/> \n";
     forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+    std::string_view inputWithFirstBase =
+        "<subject> <predicate> <object> . \n "
+        "@base <http://example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithFirstBase);
+    std::string_view inputWithFirstSparqlBase =
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithFirstSparqlBase);
   }
   // Same root, different relative base
   {
