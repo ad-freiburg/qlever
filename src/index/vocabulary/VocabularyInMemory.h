@@ -56,7 +56,7 @@ class VocabularyInMemory
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
-  /// Look up multiple words by index in a single batch call.
+  /// Look up multiple words by their indices in a single batch call.
   /// The returned string_views point directly into the in-memory word storage.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     auto data = std::make_shared<VocabBatchLookupData>();
