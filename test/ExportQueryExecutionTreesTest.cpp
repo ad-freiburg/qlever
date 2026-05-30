@@ -417,6 +417,77 @@ TEST(ExportQueryExecutionTrees, Integers) {
 }
 
 // ____________________________________________________________________________
+// End-to-end tests for the `construct-deduplicate` runtime parameter. These run
+// a full CONSTRUCT query (parse -> plan -> export) and assert that the
+// serialized Turtle reflects the active deduplication mode. The constant
+// template `<x> <p> <o>` makes every WHERE-clause row instantiate the identical
+// triple, so the three KG rows produce three identical triples before dedup.
+namespace {
+const std::string kConstructDedupKg =
+    "<a> <p> <o> . <b> <p> <o> . <c> <p> <o> .";
+const std::string kConstructDedupQuery =
+    "CONSTRUCT { <x> <p> <o> } WHERE { ?s ?p ?o }";
+}  // namespace
+
+TEST(ExportQueryExecutionTrees, constructDeduplicateNoneEmitsAllDuplicates) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::none());
+  EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
+                                     ad_utility::MediaType::turtle),
+            "<x> <p> <o> .\n<x> <p> <o> .\n<x> <p> <o> .\n");
+}
+
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCollapsesDuplicates) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
+                                     ad_utility::MediaType::turtle),
+            "<x> <p> <o> .\n");
+}
+
+// Distinct variable bindings must not be merged: each subject yields its own
+// triple even under global dedup.
+TEST(ExportQueryExecutionTrees,
+     constructDeduplicateGlobalKeepsDistinctTriples) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(runQueryStreamableResult(
+                "<a> <p> <o> . <b> <p> <o> .",
+                "CONSTRUCT { ?s <p> <o> } WHERE { ?s <p> <o> } ORDER BY ?s",
+                ad_utility::MediaType::turtle),
+            "<a> <p> <o> .\n<b> <p> <o> .\n");
+}
+
+// BatchWise dedup keeps only the last N unique keys. With capacity 1 the
+// binding `<k1>` is evicted when `<k2>` arrives, so the recurring `<k1>` row is
+// treated as new and re-emitted; under global dedup it would be suppressed.
+TEST(ExportQueryExecutionTrees,
+     constructDeduplicateBatchWiseReemitsAfterEviction) {
+  const std::string kg = "<a> <p> <k1> . <b> <p> <k2> . <c> <p> <k1> .";
+  const std::string query =
+      "CONSTRUCT { ?o <p> <x> } WHERE { ?s <p> ?o } ORDER BY ?s";
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::batchWise(1));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        "<k1> <p> <x> .\n<k2> <p> <x> .\n<k1> <p> <x> .\n");
+  }
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::global());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        "<k1> <p> <x> .\n<k2> <p> <x> .\n");
+  }
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg =
       "<s> <p> true . <s> <p> false ."

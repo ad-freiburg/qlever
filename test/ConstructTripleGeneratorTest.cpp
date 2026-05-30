@@ -99,10 +99,11 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
   // `TableWithRange` and collect `EvaluatedTriple`s.
   std::vector<EvaluatedTriple> run(
       Triples triples, VariableToColumnMap varMap, TableWithRange table,
+      DeduplicationMode mode = DeduplicationMode::none(),
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
     auto stringTriples = ConstructTripleGenerator::evaluateTables(
         triples, varMap, index_, handle, singleTableRange(std::move(table)), 0,
-        DeduplicationMode::none());
+        mode);
 
     return ::ranges::to_vector(stringTriples);
   }
@@ -376,6 +377,142 @@ TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
   const EvaluatedTerm& fromBatch0 = collected.front().subject_;
   const EvaluatedTerm& fromBatch1 = collected.back().subject_;
   EXPECT_EQ(fromBatch0.get(), fromBatch1.get());
+}
+
+// =============================================================================
+// Tests for deduplication (the dedup overload of `instantiateBatch`, reached
+// via `evaluateTables` when the mode is not `None`).
+//
+// "Deduplication" suppresses duplicate CONSTRUCT triples in the result set: two
+// result rows that instantiate a template triple to the same term combination
+// yield only one output triple. The dedup key is built from the triple's
+// *variable* columns only (see `makeDeduplicationKey`), so constants never
+// distinguish rows and a fully-constant (ground) triple collapses to a single
+// emission.
+// =============================================================================
+
+// Baseline: `None` mode emits every duplicate (the contrast for the tests
+// below).
+TEST_F(ConstructTripleGeneratorTest, noneEmitsDuplicates) {
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {idS_}, {idO_}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(run(templateTriples, varMap, table, DeduplicationMode::none()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<o>", "<p>", "<o>")));
+}
+
+// Global mode suppresses a triple whose variable binding was already emitted.
+TEST_F(ConstructTripleGeneratorTest, globalDeduplicatesRepeatedBinding) {
+  // Bindings in order: <s>, <s> (duplicate), <o>.
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {idS_}, {idO_}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(run(templateTriples, varMap, table, DeduplicationMode::global()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<o>", "<p>", "<o>")));
+}
+
+// Distinct bindings are all kept under global dedup.
+TEST_F(ConstructTripleGeneratorTest, globalKeepsDistinctBindings) {
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}, {idP_}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(run(templateTriples, varMap, table, DeduplicationMode::global()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<o>", "<p>", "<o>"),
+                          matchTriple("<p>", "<p>", "<o>")));
+}
+
+// A fully-constant (ground) template triple has an empty dedup key, so all rows
+// collapse to a single emitted triple under dedup.
+TEST_F(ConstructTripleGeneratorTest, globalGroundTripleEmittedOnce) {
+  auto result = makeResult(makeIdTableFromVector({{U}, {U}, {U}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+
+  EXPECT_THAT(run(templateTriples, {}, table, DeduplicationMode::global()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>")));
+}
+
+// Each template triple has its own filter: two template triples that produce
+// the *same* dedup key (the same variable in the same column) must not dedup
+// against each other. Both bind ?sub=<s> for the single row, so both are
+// emitted.
+TEST_F(ConstructTripleGeneratorTest, globalDeduplicatesPerTemplateTriple) {
+  auto result = makeResult(makeIdTableFromVector({{idS_}}));
+  auto table = makeTableWithRange(*result, 0, 1);
+  Triples templateTriples{
+      std::array<GraphTerm, 3>{Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"}},
+      std::array<GraphTerm, 3>{Variable{"?sub"}, Iri{"<q>"}, Iri{"<o>"}},
+  };
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(run(templateTriples, varMap, table, DeduplicationMode::global()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                          matchTriple("<s>", "<q>", "<o>")));
+}
+
+// Dedup state persists across the internal batch boundary: more than
+// `BATCH_SIZE` rows that all share the same binding collapse to a single
+// triple.
+TEST_F(ConstructTripleGeneratorTest, globalDeduplicatesAcrossBatchBoundary) {
+  constexpr size_t N = ConstructTripleGenerator::BATCH_SIZE + 1;
+  std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
+  auto result = makeResult(makeIdTableFromVector(rows));
+  auto table = makeTableWithRange(*result, 0, N);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(run(templateTriples, varMap, table, DeduplicationMode::global()),
+              ElementsAre(matchTriple("<s>", "<p>", "<o>")));
+}
+
+// `DeduplicationMode::BatchWise` keeps only the last N unique keys.
+// With capacity 1, a binding that recurs after a different binding was seen has
+// been evicted, so it is treated as new and re-emitted (unlike global, which
+// would suppress it).
+TEST_F(ConstructTripleGeneratorTest, batchWiseReemitsAfterEviction) {
+  // Bindings <s>, <o>, <s>: the capacity-1 LRU evicts <s> when <o> arrives, so
+  // the final <s> is no longer remembered and is emitted again.
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}, {idS_}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(
+      run(templateTriples, varMap, table, DeduplicationMode::batchWise(1)),
+      ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                  matchTriple("<o>", "<p>", "<o>"),
+                  matchTriple("<s>", "<p>", "<o>")));
+}
+
+// With a capacity large enough to remember both keys, BatchWise suppresses the
+// recurring binding just like global.
+TEST_F(ConstructTripleGeneratorTest, batchWiseDeduplicatesWithinCapacity) {
+  auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}, {idS_}}));
+  auto table = makeTableWithRange(*result, 0, 3);
+  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  EXPECT_THAT(
+      run(templateTriples, varMap, table, DeduplicationMode::batchWise(10)),
+      ElementsAre(matchTriple("<s>", "<p>", "<o>"),
+                  matchTriple("<o>", "<p>", "<o>")));
 }
 
 // =============================================================================
