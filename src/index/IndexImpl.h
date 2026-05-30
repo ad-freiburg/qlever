@@ -126,7 +126,6 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   std::vector<WordIndex> blockBoundaries_;
-  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
@@ -554,7 +553,7 @@ class IndexImpl {
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, Func isQLeverInternalTriple);
+      Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,
