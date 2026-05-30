@@ -69,7 +69,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
 // Returns true if the triple at `tripleIdx` for `rowInBatch` is a duplicate
 // and should be skipped. Constructs the masked deduplication key from the
-// variable-position ValueIds and checks it against the per-triple filter,
+// variable-position `ValueId`s and checks it against the per-triple filter,
 // inserting it as a side effect if it is new.
 static bool isDuplicate(size_t tripleIdx, size_t rowInBatch,
                         const PreprocessedConstructTemplate& tmpl,

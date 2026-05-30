@@ -143,7 +143,7 @@ class PerTripleFilter {
               return ad_utility::HashSet<DeduplicationKey>{};
             },
             [](const ad_utility::DeduplicationMode::BatchWise& bw) -> Filter {
-              return LruDeduplicationCache{bw.batchSize};
+              return LruDeduplicationCache{bw.batchSize_};
             }},
         mode.value);
   }

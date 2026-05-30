@@ -35,20 +35,18 @@ namespace ad_utility {
 // `Global` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
 // prohibitive for large result sets.
-// `BatchWise` reduces duplicates in practice with bounded memory usage, at the
-// cost of not guaranteeing a fully deduplicated result.
-//
-// TODO<ms2144>: a future improvement could be to spill the deduplication hash
-// set to disk when memory usage grows too large, allowing `Global`
-// deduplication with bounded memory usage while retaining streaming. The hash
-// set is used to track already yielded triples, and spilling it to disk would
-// introduce disk I/O overhead.
+// `BatchWise` keeps, per template triple, an LRU cache of the `batchSize_` most
+// recently seen unique triple keys, and suppresses a triple only if its key is
+// still in that cache. Memory is bounded (O(number of template triples *
+// batchSize_)). Because the cache evicts its least recently used key once full,
+// a duplicate that recurs after more than `batchSize_` other unique keys have
+// been seen is no longer remembered and is emitted again.
 struct DeduplicationMode {
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Global {
   };  // A triple is emitted at most once across the entire result.
-  struct BatchWise {   // Deduplicates against the `batchSize` most recently
-    size_t batchSize;  // seen unique triples (per template triple).
+  struct BatchWise {    // Deduplicates against the `batchSize_` most recently
+    size_t batchSize_;  // seen unique triples (per template triple).
   };
   std::variant<None, Global, BatchWise> value;
 
@@ -89,7 +87,7 @@ struct DeduplicationModeToString {
                             return "global";
                           },
                           [](const DeduplicationMode::BatchWise& bw) {
-                            return std::to_string(bw.batchSize);
+                            return std::to_string(bw.batchSize_);
                           }},
                       m.value);
   }
