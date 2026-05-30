@@ -235,40 +235,90 @@ class CompressedExternalIdTableWriter {
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
-  // Decompresses the block at the given `blockIdx`. The
-  // individual columns are decompressed concurrently.
+  // Read and decompress column `columnIdx` of the block at `blockIdx` into
+  // `block`. This is the shared per-column kernel used by both `readBlock` and
+  // `readBlockSequential`.
   template <size_t NumCols = 0>
-  IdTableStatic<NumCols> readBlock(size_t blockIdx) {
+  void decompressColumnIntoBlock(size_t blockIdx, size_t columnIdx,
+                                 IdTableStatic<NumCols>& block) {
+    decltype(auto) col = block.getColumn(columnIdx);
+    const auto& metaData = blocksPerColumn_.at(columnIdx).at(blockIdx);
+    std::vector<char> compressed(metaData.compressedSize_);
+    auto numBytesRead = file_.wlock()->read(
+        compressed.data(), metaData.compressedSize_, metaData.offsetInFile_);
+    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                         static_cast<size_t>(numBytesRead) ==
+                             metaData.compressedSize_);
+    auto numBytesDecompressed =
+        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
+                                        col.data(), metaData.uncompressedSize_);
+    AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
+  }
+
+  // Allocate and size an IdTableStatic for the block at `blockIdx`.
+  template <size_t NumCols = 0>
+  IdTableStatic<NumCols> makeBlock(size_t blockIdx) {
     IdTableStatic<NumCols> block{numColumns(), allocator_};
-    block.reserve(blockSizeUncompressed_.getBytes() / sizeof(Id));
     size_t blockSize =
         blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
     block.resize(blockSize);
+    return block;
+  }
+
+  // Decompresses the block at the given `blockIdx`. The individual columns are
+  // decompressed concurrently.
+  template <size_t NumCols = 0>
+  IdTableStatic<NumCols> readBlock(size_t blockIdx) {
+    auto block = makeBlock<NumCols>(blockIdx);
     std::vector<std::future<void>> readColumnFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
       readColumnFutures.push_back(
-          std::async(std::launch::async, [&block, this, i, blockIdx]() {
-            decltype(auto) col = block.getColumn(i);
-            const auto& metaData = blocksPerColumn_.at(i).at(blockIdx);
-            std::vector<char> compressed;
-            compressed.resize(metaData.compressedSize_);
-            auto numBytesRead =
-                file_.wlock()->read(compressed.data(), metaData.compressedSize_,
-                                    metaData.offsetInFile_);
-            AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                                 static_cast<size_t>(numBytesRead) ==
-                                     metaData.compressedSize_);
-            auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
-                compressed.data(), compressed.size(), col.data(),
-                metaData.uncompressedSize_);
-            AD_CORRECTNESS_CHECK(numBytesDecompressed ==
-                                 metaData.uncompressedSize_);
+          std::async(std::launch::async, [this, i, blockIdx, &block]() {
+            this->template decompressColumnIntoBlock<NumCols>(blockIdx, i,
+                                                              block);
           }));
     }
     for (auto& fut : readColumnFutures) {
       fut.get();
     }
     return block;
+  }
+
+  // Like `readBlock`, but decompresses columns sequentially rather than in
+  // parallel. This avoids per-block thread creation, making it suitable for
+  // use inside a single persistent background thread (e.g. `runStreamAsync`).
+  template <size_t NumCols = 0>
+  IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) {
+    auto block = makeBlock<NumCols>(blockIdx);
+    for (auto i : ql::views::iota(0u, numColumns())) {
+      decompressColumnIntoBlock<NumCols>(blockIdx, i, block);
+    }
+    return block;
+  }
+
+ public:
+  // Read all blocks as a single `InputRangeTypeErased<IdTableStatic<N>>` via
+  // one background thread. Unlike `getGeneratorForAllRows()`, this creates
+  // O(1) threads regardless of the number of stored blocks. The trade-off is
+  // that column decompression within each block is sequential rather than
+  // parallel; the background thread itself already provides the necessary
+  // concurrency with the consumer.
+  template <size_t N = 0>
+  InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
+    file_.wlock()->flush();
+    size_t totalBlocks =
+        blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
+    auto readBlocks = ql::views::iota(size_t{0}, totalBlocks) |
+                      ql::views::transform([this](size_t blockIdx) {
+                        return this->template readBlockSequential<N>(blockIdx);
+                      });
+    // Wrap in InputRangeTypeErased before passing to runStreamAsync:
+    // std::ranges::transform_view does not expose ::value_type as a member,
+    // which AsyncStreamGenerator requires. InputRangeTypeErased does, and its
+    // iterator also yields lvalue references to cached values rather than
+    // prvalues, which avoids the non-const-lvalue-to-temporary binding error.
+    return ad_utility::streams::runStreamAsync(
+        InputRangeTypeErased<IdTableStatic<N>>{std::move(readBlocks)}, 2);
   }
 };
 
@@ -493,30 +543,26 @@ class CompressedExternalIdTable
 
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the elements of the
-  // `IdTable in the order that they were `push`ed. This function may be called
-  // exactly once.
+  // `IdTable` in the order that they were `push`ed. This function may be
+  // called exactly once.
   auto getRows() {
+    using namespace ad_utility;
+    using Block = IdTableStatic<NumStaticCols>;
+    // Both branches return the same type via this helper.
+    auto joinBlocks = [](InputRangeTypeErased<Block> stream) {
+      return ql::views::join(OwningViewNoConst{std::move(stream)});
+    };
     if (!this->transformAndPushLastBlock()) {
-      // For the case of only a single block we have to mimic the exact same
-      // return type as that of `writer_.getGeneratorForAllRows()`, that's why
-      // there are the seemingly redundant multiple calls to
-      // join(OwningView(vector(...))).
-      using namespace ad_utility;
-      auto blockGenerator = InputRangeTypeErased{lazySingleValueRange(
-          [this]() { return std::move(this->currentBlock_); })};
-
-      auto rowView =
-          ql::views::join(ad_utility::OwningView{std::move(blockGenerator)});
-
-      std::vector<decltype(rowView)> vec;
-      vec.push_back(std::move(rowView));
-
-      return ql::views::join(OwningViewNoConst{std::move(vec)});
+      // Single block: wrap currentBlock_ as a one-element block stream.
+      return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
+          [this]() { return std::move(this->currentBlock_); })});
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
     this->waitForFuture();
-    return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
+    // Stream all blocks through a single background thread (O(1) threads total
+    // regardless of block count) with sequential column decompression.
+    return joinBlocks(this->writer_.template getBlockStream<NumStaticCols>());
   }
 };
 
