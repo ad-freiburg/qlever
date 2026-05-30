@@ -53,10 +53,7 @@ TEST(LruDeduplicationCache, EvictsLruOnOverFlow) {
   EXPECT_TRUE(cache.insert(kB));
   EXPECT_TRUE(cache.insert(kC));  // evicts `kA`
   // `kA` is no longer in cache, reinserting it should return true.
-  EXPECT_TRUE(cache.insert(kA));
-  // reinserting `kB`, or `kC` should return false instead.
-  EXPECT_FALSE(cache.insert(kB));
-  EXPECT_FALSE(cache.insert(kC));
+  EXPECT_TRUE(cache.insert(kA));  // evicts `kB`
 }
 
 TEST(LruDeduplicationCache, RecentlyAccesedNotEvicted) {
@@ -69,8 +66,8 @@ TEST(LruDeduplicationCache, RecentlyAccesedNotEvicted) {
   cache.insert(kC);  // evicts `kB`.
   // since `kB` is evicted, re-inserting it returns true.
   EXPECT_TRUE(cache.insert(kB));
-  // `kA` still in cache, re-inserting returns false.
-  EXPECT_FALSE(cache.insert(kA));
+  // `kC` still in cache, re-inserting returns false.
+  EXPECT_FALSE(cache.insert(kC));
 }
 
 TEST(PerTripleFilterLru, NewKeyReturnsTrue) {
