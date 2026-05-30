@@ -54,7 +54,16 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
       preprocessedTemplate.uniqueVariableColumns_, ctx,
       tableWithVocab.localVocab(), index, cache);
 
+  // The absolute (query-global) row index of the batch's first row, used to
+  // generate blank node IDs that stay unique across batches and tables.
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
+
+  // Here "deduplication" means suppressing duplicate CONSTRUCT triples in the
+  // result set (the same instantiated triple produced by multiple result rows).
+  // `None` mode emits every instantiated triple and ignores duplicates.
+  // the other modes use the deduplicating overload, which consults
+  // `deduplicationState` (one filter per template triple) and drops duplicate
+  // triples.
   if (std::holds_alternative<DeduplicationMode::None>(mode.value)) {
     return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
   }

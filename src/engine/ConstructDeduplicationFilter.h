@@ -20,6 +20,7 @@
 #include "engine/ConstructTypes.h"
 #include "global/ValueId.h"
 #include "util/ConstructDeduplicationMode.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/OverloadCallOperator.h"
 
@@ -102,8 +103,9 @@ class LruDeduplicationCache {
 
 // Per-template-triple dedup filter. `BatchWise` mode keeps only the last N
 // unique keys in a bounded LRU cache; `global` mode keeps every unique key in
-// an unbounded hash set. The active structure is chosen once from the mode at
-// construction time.
+// an unbounded hash set; `none` mode holds no structure at all (it is routed to
+// the non-dedup code path and never deduplicates). The active alternative is
+// chosen once from the mode at construction time.
 class PerTripleFilter {
  public:
   explicit PerTripleFilter(const ad_utility::DeduplicationMode& mode)
@@ -113,6 +115,11 @@ class PerTripleFilter {
   bool insert(const DeduplicationKey& key) {
     return std::visit(
         ad_utility::OverloadCallOperator{
+            [](NoFilter) -> bool {
+              // `none` mode is routed to the non-dedup code path, so its filter
+              // must never receive a key.
+              AD_FAIL();
+            },
             [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
             [&key](ad_utility::HashSet<DeduplicationKey>& set) {
               return set.insert(key).second;
@@ -121,20 +128,21 @@ class PerTripleFilter {
   }
 
  private:
-  using Filter = std::variant<LruDeduplicationCache,
+  // `NoFilter` represents `none` mode (no dedup structure).
+  struct NoFilter {};
+  using Filter = std::variant<NoFilter, LruDeduplicationCache,
                               ad_utility::HashSet<DeduplicationKey>>;
 
   Filter filter_;
 
-  // Builds the dedup structure for `mode`: a bounded LRU cache for `BatchWise`
-  // (capacity = batch size) and an unbounded hash set for `global`. `none` mode
-  // is routed to the non-dedup code path and never calls `insert`, so its
-  // filter is an arbitrary minimal (unused) LRU cache.
+  // Builds the dedup structure for `mode`: an empty `NoFilter` for `none`, a
+  // bounded LRU cache for `BatchWise` (capacity = batch size), and an unbounded
+  // hash set for `global`.
   static Filter makeFilter(const ad_utility::DeduplicationMode& mode) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ad_utility::DeduplicationMode::None&) -> Filter {
-              return LruDeduplicationCache{1};
+              return NoFilter{};
             },
             [](const ad_utility::DeduplicationMode::Global&) -> Filter {
               return ad_utility::HashSet<DeduplicationKey>{};
