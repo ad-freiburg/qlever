@@ -465,7 +465,7 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 struct ParsedUriGetter : Mixin<ParsedUriGetter> {
   using Value = std::optional<qlever::util::ParsedUri>;
   using Mixin<ParsedUriGetter>::operator();
-  std::optional<qlever::util::ParsedUri> operator()(
+  [[noreturn]] std::optional<qlever::util::ParsedUri> operator()(
       ValueId id, const EvaluationContext* context) const;
   std::optional<qlever::util::ParsedUri> operator()(
       const LiteralOrIri& litOrIri, const EvaluationContext* context) const;

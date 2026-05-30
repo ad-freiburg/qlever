@@ -550,7 +550,7 @@ static std::optional<qlever::util::ParsedUri> parsedUriFromEntry(
 }
 
 //______________________________________________________________________________
-std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+[[noreturn]] std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
     ValueId, const EvaluationContext*) const {
   // The base IRI argument of `IriOrUriExpression` is always an `IriExpression`
   // which evaluates to a `LocalVocabEntry`, never a `ValueId`. This overload
