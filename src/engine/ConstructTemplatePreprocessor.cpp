@@ -25,6 +25,25 @@ static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
   });
 }
 
+// A template triple is "ground" if all three positions are constants (no
+// variables and no blank nodes). Such a triple instantiates to the same output
+// triple for every result row.
+static bool isGroundTriple(const PreprocessedTriple& triple) {
+  return ql::ranges::all_of(triple, [](const PreprocessedTerm& term) {
+    return std::holds_alternative<PrecomputedConstant>(term);
+  });
+}
+
+// Builds the single `EvaluatedTriple` for a ground triple. Each position is a
+// `PrecomputedConstant` whose `EvaluatedTerm` is already resolved, so no result
+// row or `Index` is needed.
+static EvaluatedTriple makeGroundTriple(const PreprocessedTriple& triple) {
+  return EvaluatedTriple{
+      std::get<PrecomputedConstant>(triple[0]).evaluatedTerm_,
+      std::get<PrecomputedConstant>(triple[1]).evaluatedTerm_,
+      std::get<PrecomputedConstant>(triple[2]).evaluatedTerm_};
+}
+
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
@@ -108,6 +127,13 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
   for (const auto& triple : templateTriples) {
     auto preprocessedTriple = preprocessTriple(triple, variableColumns);
     if (!preprocessedTriple) continue;
+
+    // Ground triples are handled separately (emitted once, never deduplicated)
+    // and excluded from the per-row instantiation and dedup structures.
+    if (isGroundTriple(*preprocessedTriple)) {
+      result.groundTriples_.push_back(makeGroundTriple(*preprocessedTriple));
+      continue;
+    }
 
     // Collect each unique `IdTable` column index.
     // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`

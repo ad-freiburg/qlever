@@ -53,11 +53,6 @@ inline DeduplicationKey makeDeduplicationKey(
 
 // A set-like LRU cache for `DeduplicationKey`s. Tracks the N most recently
 // inserted unique keys.
-//
-// Internal structure: a doubly-linked list maintains insertion/access order
-// (front = most recently used, back = least recently used); an
-// `absl::flat_hash_map` maps each key to its list iterator for O(1) lookup,
-// insertion, and eviction.
 class LruDeduplicationCache {
  public:
   explicit LruDeduplicationCache(size_t capacity) : capacity_{capacity} {}

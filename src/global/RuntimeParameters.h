@@ -171,9 +171,10 @@ struct RuntimeParameters {
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
   // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
   // "global": a triple is emitted at most once across the entire result.
-  // "false": no deduplication, every triple is emitted.
-  // N (positive integer): deduplication with non-overlapping windows of N rows.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  //   triples (per template triple); bounded memory, partial deduplication.
   DeduplicationModeParameter constructDeduplicate_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplicate"};
 

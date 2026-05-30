@@ -66,6 +66,24 @@ static constexpr auto matchSingleTriple = [](const auto& s, const auto& p,
   return ElementsAre(ElementsAre(s, p, o));
 };
 
+// Matches a ground `EvaluatedTriple` by the raw `rdfTermString_` of each of its
+// three (constant) terms. Ground triples are pre-instantiated at preprocessing
+// time, so each term is a resolved `EvaluatedTerm` rather than a
+// `PreprocessedTerm` variant.
+static constexpr auto matchGroundTriple = [](const auto& s, const auto& p,
+                                             const auto& o) {
+  return ::testing::AllOf(
+      AD_FIELD(EvaluatedTriple, subject_,
+               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString_,
+                                           std::string(s)))),
+      AD_FIELD(EvaluatedTriple, predicate_,
+               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString_,
+                                           std::string(p)))),
+      AD_FIELD(EvaluatedTriple, object_,
+               ::testing::Pointee(AD_FIELD(EvaluatedTermData, rdfTermString_,
+                                           std::string(o)))));
+};
+
 auto Const = matchesPrecomputedConstant;
 auto Var = matchesPrecomputedVariable;
 auto Bnode = matchesPrecomputedBlankNode;
@@ -78,9 +96,12 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
-  EXPECT_THAT(result.preprocessedTriples_,
-              matchSingleTriple(Const("<http://s>"), Const("<http://p>"),
-                                Const("<http://o>")));
+  // A fully-constant triple is classified as ground: it is pre-instantiated
+  // into `groundTriples_` and excluded from `preprocessedTriples_`.
+  EXPECT_TRUE(result.preprocessedTriples_.empty());
+  EXPECT_THAT(
+      result.groundTriples_,
+      ElementsAre(matchGroundTriple("<http://s>", "<http://p>", "<http://o>")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 }
@@ -93,9 +114,10 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
-  EXPECT_THAT(result.preprocessedTriples_,
-              matchSingleTriple(Const("<http://s>"), Const("<http://p>"),
-                                Const("hello")));
+  // Constant subject/predicate and a constant literal object -> ground triple.
+  EXPECT_TRUE(result.preprocessedTriples_.empty());
+  EXPECT_THAT(result.groundTriples_, ElementsAre(matchGroundTriple(
+                                         "<http://s>", "<http://p>", "hello")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 }
@@ -326,14 +348,67 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
+  // Both triples are fully constant, so both become ground triples (in template
+  // order) and `preprocessedTriples_` stays empty.
+  EXPECT_TRUE(result.preprocessedTriples_.empty());
   EXPECT_THAT(
-      result.preprocessedTriples_,
-      ElementsAre(ElementsAre(Const("<http://s1>"), Const("<http://p1>"),
-                              Const("<http://o1>")),
-                  ElementsAre(Const("<http://s2>"), Const("<http://p2>"),
-                              Const("<http://o2>"))));
+      result.groundTriples_,
+      ElementsAre(
+          matchGroundTriple("<http://s1>", "<http://p1>", "<http://o1>"),
+          matchGroundTriple("<http://s2>", "<http://p2>", "<http://o2>")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
+}
+
+// A ground triple and a non-ground triple are partitioned: the ground triple
+// goes to `groundTriples_`, the non-ground triple to `preprocessedTriples_`,
+// and the parallel per-triple arrays cover only the non-ground triple (and stay
+// aligned with it).
+TEST(ConstructTemplatePreprocessorTest, groundAndNonGroundTriplesPartitioned) {
+  Triples triples;
+  triples.push_back({GraphTerm{Iri{"<http://gs>"}},
+                     GraphTerm{Iri{"<http://gp>"}},
+                     GraphTerm{Iri{"<http://go>"}}});
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri{"<http://p>"}},
+                     GraphTerm{Iri{"<http://o>"}}});
+
+  VariableToColumnMap varMap;
+  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
+
+  EXPECT_THAT(result.groundTriples_,
+              ElementsAre(matchGroundTriple("<http://gs>", "<http://gp>",
+                                            "<http://go>")));
+  EXPECT_THAT(
+      result.preprocessedTriples_,
+      matchSingleTriple(Var(0), Const("<http://p>"), Const("<http://o>")));
+
+  // Parallel arrays describe only the single non-ground triple.
+  ASSERT_EQ(result.variableColumnsPerTriple_.size(), 1);
+  EXPECT_THAT(result.variableColumnsPerTriple_[0], ElementsAre(0));
+  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_FALSE(result.tripleContainsBlankNode_[0]);
+  EXPECT_THAT(result.uniqueVariableColumns_, ElementsAre(0));
+}
+
+// A triple whose only non-constant term is a blank node is NOT ground: blank
+// node IDs are minted per row, so the triple must be instantiated per row and
+// therefore stays in `preprocessedTriples_`.
+TEST(ConstructTemplatePreprocessorTest, blankNodeTripleIsNotGround) {
+  Triples triples;
+  triples.push_back({GraphTerm{BlankNode{false, "b"}},
+                     GraphTerm{Iri{"<http://p>"}},
+                     GraphTerm{Iri{"<http://o>"}}});
+
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
+
+  EXPECT_TRUE(result.groundTriples_.empty());
+  EXPECT_THAT(result.preprocessedTriples_,
+              matchSingleTriple(Bnode("_:u", "_b"), Const("<http://p>"),
+                                Const("<http://o>")));
+  ASSERT_EQ(result.tripleContainsBlankNode_.size(), 1);
+  EXPECT_TRUE(result.tripleContainsBlankNode_[0]);
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {

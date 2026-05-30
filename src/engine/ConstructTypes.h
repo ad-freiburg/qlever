@@ -79,6 +79,14 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 // A single preprocessed CONSTRUCT template triple.
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
+// Result of instantiating a single template triple for a specific result table
+// row.
+struct EvaluatedTriple {
+  EvaluatedTerm subject_;
+  EvaluatedTerm predicate_;
+  EvaluatedTerm object_;
+};
+
 // Result of preprocessing all CONSTRUCT template triples. Contains the
 // preprocessed triples and the unique variable column indices (indices into the
 // `IdTable` that the variables in the construct template correspond to).
@@ -97,14 +105,14 @@ struct PreprocessedConstructTemplate {
   // from deduplication because blank node IDs are generated per-row, making
   // every instantiation distinct across result rows.
   std::vector<bool> tripleContainsBlankNode_;
-};
-
-// Result of instantiating a single template triple for a specific result table
-// row.
-struct EvaluatedTriple {
-  EvaluatedTerm subject_;
-  EvaluatedTerm predicate_;
-  EvaluatedTerm object_;
+  // Ground (fully constant) template triples, pre-instantiated once at
+  // preprocessing time. A ground triple produces the identical output triple
+  // for every solution, so it is emitted exactly once before the first
+  // non-ground triple and only if the WHERE clause yields at least one solution
+  // regardless of the deduplication mode. Ground triples are therefore
+  // excluded from `preprocessedTriples_` and from the per-triple dedup
+  // structures above.
+  std::vector<EvaluatedTriple> groundTriples_;
 };
 
 }  // namespace qlever::constructExport

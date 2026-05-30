@@ -419,14 +419,16 @@ TEST(ExportQueryExecutionTrees, Integers) {
 // ____________________________________________________________________________
 // End-to-end tests for the `construct-deduplicate` runtime parameter. These run
 // a full CONSTRUCT query (parse -> plan -> export) and assert that the
-// serialized Turtle reflects the active deduplication mode. The constant
-// template `<x> <p> <o>` makes every WHERE-clause row instantiate the identical
-// triple, so the three KG rows produce three identical triples before dedup.
+// serialized Turtle reflects the active deduplication mode. The template
+// `?s <p> <o>` projects away the object, so the three KG rows (all with the
+// same `?s`) instantiate the identical triple `<s> <p> <o>` three times before
+// dedup. It has a variable subject, so it is non-ground and exercises the dedup
+// filter itself (rather than the constant-triple optimization).
 namespace {
 const std::string kConstructDedupKg =
-    "<a> <p> <o> . <b> <p> <o> . <c> <p> <o> .";
+    "<s> <p> <o1> . <s> <p> <o2> . <s> <p> <o3> .";
 const std::string kConstructDedupQuery =
-    "CONSTRUCT { <x> <p> <o> } WHERE { ?s ?p ?o }";
+    "CONSTRUCT { ?s <p> <o> } WHERE { ?s ?p ?o }";
 }  // namespace
 
 TEST(ExportQueryExecutionTrees, constructDeduplicateNoneEmitsAllDuplicates) {
@@ -435,7 +437,7 @@ TEST(ExportQueryExecutionTrees, constructDeduplicateNoneEmitsAllDuplicates) {
           ad_utility::DeduplicationMode::none());
   EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
                                      ad_utility::MediaType::turtle),
-            "<x> <p> <o> .\n<x> <p> <o> .\n<x> <p> <o> .\n");
+            "<s> <p> <o> .\n<s> <p> <o> .\n<s> <p> <o> .\n");
 }
 
 TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCollapsesDuplicates) {
@@ -444,7 +446,7 @@ TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCollapsesDuplicates) {
           ad_utility::DeduplicationMode::global());
   EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
                                      ad_utility::MediaType::turtle),
-            "<x> <p> <o> .\n");
+            "<s> <p> <o> .\n");
 }
 
 // Distinct variable bindings must not be merged: each subject yields its own
@@ -484,6 +486,22 @@ TEST(ExportQueryExecutionTrees,
     EXPECT_EQ(
         runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
         "<k1> <p> <x> .\n<k2> <p> <x> .\n");
+  }
+}
+
+// The constant-triple optimization emits a ground template triple exactly once
+// for every mode (including `none`), given at least one solution.
+TEST(ExportQueryExecutionTrees, constructGroundTripleEmittedOnceInAllModes) {
+  const std::string query = "CONSTRUCT { <x> <p> <o> } WHERE { ?s ?p ?o }";
+  for (auto mode : {ad_utility::DeduplicationMode::none(),
+                    ad_utility::DeduplicationMode::global(),
+                    ad_utility::DeduplicationMode::batchWise(1)}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            mode);
+    EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, query,
+                                       ad_utility::MediaType::turtle),
+              "<x> <p> <o> .\n");
   }
 }
 

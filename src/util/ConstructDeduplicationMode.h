@@ -29,14 +29,14 @@ namespace ad_utility {
 // However, it is unclear whether a SPARQL engine is required to enforce this.
 // See also: https://github.com/w3c-cg/sparql-dev/issues/86
 //
+// `None` is the default: it preserves the original QLever behaviour (no
+// deduplication, constant-memory streaming) for users who need minimal memory
+// overhead and no deduplication cost.
 // `Global` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
 // prohibitive for large result sets.
-// `BatchWise` is the recommended default: it significantly reduces duplicates
-// in practice with bounded memory usage, at the cost of not guaranteeing a
-// fully deduplicated result.
-// `None` preserves the original QLever behaviour (no deduplication) for users
-// who need minimal memory overhead and no deduplication cost.
+// `BatchWise` reduces duplicates in practice with bounded memory usage, at the
+// cost of not guaranteeing a fully deduplicated result.
 //
 // TODO<ms2144>: a future improvement could be to spill the deduplication hash
 // set to disk when memory usage grows too large, allowing `Global`
@@ -47,8 +47,8 @@ struct DeduplicationMode {
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Global {
   };  // A triple is emitted at most once across the entire result.
-  struct BatchWise {   // Deduplication within non-overlapping windows of
-    size_t batchSize;  // `batchSize` consecutive rows.
+  struct BatchWise {   // Deduplicates against the `batchSize` most recently
+    size_t batchSize;  // seen unique triples (per template triple).
   };
   std::variant<None, Global, BatchWise> value;
 

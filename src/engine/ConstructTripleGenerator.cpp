@@ -9,6 +9,8 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include <iterator>
+
 #include "backports/concepts.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructDeduplicationFilter.h"
@@ -40,7 +42,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
         const Index& index, IdCache& cache, size_t tableRowOffset,
         CancellationHandle cancellationHandle,
         ConstructDeduplicationState& deduplicationState,
-        const DeduplicationMode& mode) {
+        bool& groundTriplesEmitted, const DeduplicationMode& mode) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -60,15 +62,27 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
 
   // Here "deduplication" means suppressing duplicate CONSTRUCT triples in the
   // result set (the same instantiated triple produced by multiple result rows).
-  // `None` mode emits every instantiated triple and ignores duplicates.
-  // the other modes use the deduplicating overload, which consults
-  // `deduplicationState` (one filter per template triple) and drops duplicate
-  // triples.
-  if (std::holds_alternative<DeduplicationMode::None>(mode.value)) {
-    return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
+  // `None` mode emits every instantiated triple and ignores duplicates; the
+  // other modes use the deduplicating overload, which consults
+  // `deduplicationState` (one filter per template triple) and drops duplicates.
+  std::vector<EvaluatedTriple> instantiated =
+      std::holds_alternative<DeduplicationMode::None>(mode.value)
+          ? instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId)
+          : instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
+                             deduplicationState, ctx);
+
+  // Ground triples produce the identical triple for every solution, so they are
+  // emitted exactly once, before the first non-ground triple, on the first
+  // non-empty batch (`computeBatch` is only called for non-empty batches).
+  // This holds for every mode, including `None`.
+  if (groundTriplesEmitted || preprocessedTemplate.groundTriples_.empty()) {
+    return instantiated;
   }
-  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
-                          deduplicationState, ctx);
+  groundTriplesEmitted = true;
+  std::vector<EvaluatedTriple> triples = preprocessedTemplate.groundTriples_;
+  triples.insert(triples.end(), std::make_move_iterator(instantiated.begin()),
+                 std::make_move_iterator(instantiated.end()));
+  return triples;
 }
 
 //______________________________________________________________________________
@@ -93,10 +107,15 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   // blocks. Starts at `queryOffset`.
   // `batchBegin`: the row index of the first row of the current evaluation
   // chunk within the current `IdTable` block.
+  // `groundTriplesEmitted`: Whether the ground template triples have already
+  // been emitted. They are emitted once for the whole query, so this flag
+  // persists across all batches and tables (the lambda owning it outlives every
+  // call).
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
                        &index, cancellationHandle, cache = std::move(cache),
                        deduplicationState = std::move(deduplicationState),
                        accumulatedRowOffset = queryOffset,
+                       groundTriplesEmitted = false,
                        mode](const TableWithRange& table) mutable {
     const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
@@ -107,11 +126,12 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     return ranges::views::chunk(table.view_, BATCH_SIZE) |
            ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
                                  cancellationHandle, &deduplicationState,
-                                 tableRowOffset, mode](auto chunkView) {
-             return computeBatch(table.tableWithVocab_, chunkView,
-                                 preprocessedTemplate, index, cache,
-                                 tableRowOffset, cancellationHandle,
-                                 deduplicationState, mode);
+                                 &groundTriplesEmitted, tableRowOffset,
+                                 mode](auto chunkView) {
+             return computeBatch(
+                 table.tableWithVocab_, chunkView, preprocessedTemplate, index,
+                 cache, tableRowOffset, cancellationHandle, deduplicationState,
+                 groundTriplesEmitted, mode);
            }) |
            ql::views::join;
   };
