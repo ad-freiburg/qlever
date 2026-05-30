@@ -101,13 +101,9 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Streaming variant of lookupBatch.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    auto gen = [](const CompressedVocabulary* self, VocabLookupInput input)
-        -> cppcoro::generator<VocabBatchLookupResult> {
-      for (auto& batch : input) {
-        co_yield self->lookupBatch(batch);
-      }
-    }(this, std::move(input));
-    return VocabLookupOutput{std::move(gen)};
+    return VocabLookupOutput{ql::views::transform(
+        ad_utility::allView(std::move(input)),
+        [this](std::vector<size_t>& batch) { return lookupBatch(batch); })};
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
