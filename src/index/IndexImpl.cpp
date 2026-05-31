@@ -481,9 +481,21 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
+  // Size the in-memory buffer of `idTriples` so that one block holds roughly
+  // one partial vocabulary's worth of rows. The factors mirror the internal
+  // formula `blocksize_ = memory / (numColumns * sizeof(Id) * 2)` (the `* 2`
+  // is for double-buffering); inverting it makes `blocksize_` equal to
+  // `numTriplesPerBatch_`.
+  //
+  // NOTE: The size of this buffer was previously hard-coded, and much reduced
+  // in commit e864818. This caused `EGAIN``failures for `pthread_create` for
+  // large datasets like osm-planet.
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
-                                  2_MB * NumColumnsIndexBuilding, allocator_));
+      std::make_unique<TripleVec>(
+          onDiskBase_ + ".unsorted-triples.dat",
+          ad_utility::MemorySize::bytes(
+              numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id) * 2),
+          allocator_));
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
@@ -1429,9 +1441,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
