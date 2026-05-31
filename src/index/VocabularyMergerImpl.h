@@ -49,7 +49,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+    return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
+                      t2.isExternal_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
@@ -116,11 +117,11 @@ CPP_template_def(typename C, typename L)(
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
+      if (lastTripleComponent_.has_value()) {
+        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
+                             "Total vocabulary order violated for ",
+                             lastTripleComponent_->iriOrLiteral(), " and ",
+                             top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
@@ -163,19 +164,19 @@ CPP_template_def(typename C, typename L)(
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;
   res.reserve(els.size());
-  bool first = true;
-  std::string_view lastWord;
-  size_t nextWordId = 0;
-  for (auto& [word, idAndSplitVal] : els) {
-    auto& id = idAndSplitVal.id_;
-    if (!first && lastWord != word) {
+  std::optional<std::string_view> lastWord;
+  // This value will overflow on the first entry.
+  size_t nextWordId = -1;
+  for (auto& [word, idAndExternal] : els) {
+    auto id = idAndExternal.id();
+    if (lastWord != word) {
       nextWordId++;
       lastWord = word;
     }
     auto inserted = res.try_emplace(id, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    id = nextWordId;
-    first = false;
+    idAndExternal = PartialVocabIndexWithExternalFlag{
+        nextWordId, idAndExternal.isExternal()};
   }
   return res;
 }
@@ -237,14 +238,13 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& [word, idAndSplitVal] : els) {
+  for (const auto& [word, idAndExternal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    const auto& [id, splitVal] = idAndSplitVal;
     byteBuffer << word;
-    byteBuffer << splitVal.isExternalized_;
-    byteBuffer << id;
+    byteBuffer << idAndExternal.isExternal();
+    byteBuffer << idAndExternal.id();
 
     if (byteBuffer.data().size() >= flushThreshold) {
       flush();
@@ -278,10 +278,9 @@ inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
     futures.at(i) =
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, el.second}; });
         });
     ++i;
   }

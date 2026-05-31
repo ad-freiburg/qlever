@@ -512,7 +512,7 @@ class IdTable {
   // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
   // (which `IdTable` is not.).
   CPP_member auto moveOrClone() const& -> CPP_ret(IdTable)(
-      requires isCloneable) {
+                                           requires isCloneable) {
     return clone();
   }
 
