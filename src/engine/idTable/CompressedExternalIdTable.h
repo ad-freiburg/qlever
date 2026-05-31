@@ -312,13 +312,12 @@ class CompressedExternalIdTableWriter {
                       ql::views::transform([this](size_t blockIdx) {
                         return this->template readBlockSequential<N>(blockIdx);
                       });
-    // Wrap in InputRangeTypeErased before passing to runStreamAsync:
-    // std::ranges::transform_view does not expose ::value_type as a member,
-    // which AsyncStreamGenerator requires. InputRangeTypeErased does, and its
-    // iterator also yields lvalue references to cached values rather than
-    // prvalues, which avoids the non-const-lvalue-to-temporary binding error.
-    return ad_utility::streams::runStreamAsync(
-        InputRangeTypeErased<IdTableStatic<N>>{std::move(readBlocks)}, 2);
+    ++numActiveGenerators_;
+    auto callback = [this]() noexcept { --numActiveGenerators_; };
+    return InputRangeTypeErased<IdTableStatic<N>>{CallbackOnEndView(
+        OwningViewNoConst{ad_utility::streams::runStreamAsync(
+            InputRangeTypeErased<IdTableStatic<N>>{std::move(readBlocks)}, 2)},
+        std::move(callback))};
   }
 };
 
