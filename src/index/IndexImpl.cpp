@@ -488,7 +488,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // `numTriplesPerBatch_`.
   //
   // NOTE: The size of this buffer was previously hard-coded, and much reduced
-  // in commit e864818. This caused `EGAIN``failures for `pthread_create` for
+  // in commit e864818. This caused `EAGAIN` failures for `pthread_create` for
   // large datasets like osm-planet.
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(
