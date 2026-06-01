@@ -308,16 +308,14 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     size_t totalBlocks =
         blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
-    auto readBlocks = ql::views::iota(size_t{0}, totalBlocks) |
-                      ql::views::transform([this](size_t blockIdx) {
-                        return this->template readBlockSequential<N>(blockIdx);
-                      });
+    CachingTransformInputRange readBlocks{
+        ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
+          return this->template readBlockSequential<N>(blockIdx);
+        }};
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
-    return InputRangeTypeErased<IdTableStatic<N>>{CallbackOnEndView(
-        OwningViewNoConst{ad_utility::streams::runStreamAsync(
-            InputRangeTypeErased<IdTableStatic<N>>{std::move(readBlocks)}, 2)},
-        std::move(callback))};
+    return ad_utility::streams::runStreamAsync(
+        CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
   }
 };
 
