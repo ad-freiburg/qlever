@@ -780,8 +780,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   // Helpers for exporting the result as an `IdTable`.
   auto idTableFromInt = [this](size_t count) {
     IdTable table{1, getExecutionContext()->getAllocator()};
-    table.emplace_back();
-    table(0, 0) = Id::makeFromInt(count);
+    table.push_back({Id::makeFromInt(count)});
     return table;
   };
   auto countFromExactSize = [&indexScan, &idTableFromInt] {
