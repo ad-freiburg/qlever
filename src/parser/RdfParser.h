@@ -230,8 +230,8 @@ class TurtleParser : public RdfParserBase {
   // parser before sharding out to parallel worker threads.
   template <typename Source, typename Target>
   static void assignParsingHeader(Source&& source, Target& target) {
-    target.prefixMap_ = std::forward<Source>(source).prefixMap_;
-    target.baseIri_ = std::forward<Source>(source).baseIri_;
+    target.prefixMap_ = AD_FWD(source).prefixMap_;
+    target.baseIri_ = AD_FWD(source).baseIri_;
   }
 
  public:

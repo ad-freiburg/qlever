@@ -537,19 +537,6 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-static std::optional<qlever::util::ParsedUri> parsedUriFromEntry(
-    const sparqlExpression::IdOrLocalVocabEntry& entry) {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(entry));
-  const auto& lve = std::get<LocalVocabEntry>(entry);
-  AD_CORRECTNESS_CHECK(lve.isIri());
-  const auto& iri = lve.getIri();
-  if (iri.empty()) {
-    return std::nullopt;
-  }
-  return qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
-}
-
-//______________________________________________________________________________
 [[noreturn]] std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
     ValueId, const EvaluationContext*) const {
   // The base IRI argument of `IriOrUriExpression` is always an `IriExpression`
@@ -560,8 +547,13 @@ static std::optional<qlever::util::ParsedUri> parsedUriFromEntry(
 
 //______________________________________________________________________________
 std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
-    const LiteralOrIri& litOrIri, const EvaluationContext* context) const {
-  return parsedUriFromEntry(IriOrUriValueGetter{}(litOrIri, context));
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  AD_CORRECTNESS_CHECK(litOrIri.isIri());
+  const auto& iri = litOrIri.getIri();
+  if (iri.empty()) {
+    return std::nullopt;
+  }
+  return qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 //______________________________________________________________________________
