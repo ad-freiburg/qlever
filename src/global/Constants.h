@@ -280,7 +280,7 @@ constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
 // Under QLEVER_CHEAPER_COMPILATION the value is lowered to reduce the number
 // of template instantiations and thereby speed up debug builds.
 #ifdef QLEVER_CHEAPER_COMPILATION
-constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 2;
+constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 1;
 #else
 constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 #endif

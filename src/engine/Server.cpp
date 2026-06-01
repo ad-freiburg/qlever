@@ -1,4 +1,4 @@
-// Copyright 2015 - 2026 The QLever Authors, in particular:
+/// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
@@ -1255,14 +1255,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
-                // Explicit json{} cast required: nlohmann/json.hpp is in the
-                // PCH, so clang's -fpch-instantiate-templates pre-bakes the
-                // ordered_json→json implicit conversion. This makes push_back
-                // ambiguous (multiple viable overloads). The cast selects the
-                // push_back(json&&) overload unambiguously. To avoid this at
-                // new call sites: either cast the value or declare the
-                // container as ordered_json so no cross-type conversion is
-                // needed.
                 results.push_back(json{createResponseMetadataForUpdate(
                     index_,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),

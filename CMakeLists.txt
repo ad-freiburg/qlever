@@ -506,16 +506,6 @@ add_subdirectory(src/libqlever)
 #
 # PRECOMPILED_HEADER_FILES_EXTERNAL: stable third-party headers that never change
 # and are expensive to parse. Applied to every library target.
-# NOTE: nlohmann/json.hpp is included here because it is pulled in by many TUs.
-# However, clang's -fpch-instantiate-templates (added automatically by CMake for
-# PCH builds) eagerly instantiates cross-type conversions between nlohmann::json
-# (basic_json<std::map>) and nlohmann::ordered_json
-# (basic_json<nlohmann::ordered_map>). If a TU mixes both types and calls
-# push_back/emplace_back on a json container with an ordered_json value (or vice
-# versa), the compiler finds multiple viable overloads — the implicit conversion
-# chain is already baked into the PCH — causing an ambiguity error. The fix at
-# each such site is to insert an explicit json{...} or ordered_json{...} cast
-# around the value being pushed. See Server.cpp for an example.
 set(PRECOMPILED_HEADER_FILES_EXTERNAL
     <absl/strings/str_cat.h>
     <absl/container/flat_hash_map.h>

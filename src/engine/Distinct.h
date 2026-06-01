@@ -20,10 +20,6 @@ class Distinct : public Operation {
  public:
   static constexpr int64_t CHUNK_SIZE = 100'000;
 
-  // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
-  // Dispatches to the right WIDTH via `callFixedSizeVi`.
-  IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
-
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            const std::vector<ColumnIndex>& keepIndices);
@@ -40,6 +36,10 @@ class Distinct : public Operation {
   const std::vector<ColumnIndex>& getDistinctColumns() const {
     return keepIndices_;
   }
+
+  // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
+  // Dispatches to the right WIDTH via `callFixedSizeVi`.
+  IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
