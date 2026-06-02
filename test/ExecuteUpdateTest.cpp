@@ -768,11 +768,10 @@ TEST(ExecuteUpdate, executeConstructInsert) {
           ExecuteUpdate::executeConstructInsert(index, pq, qet, deltaTriples,
                                                 inferredGraph, sharedHandle);
         });
-    // Second insertion of the same triples — duplicates are deduplicated within
-    // a single `executeConstructInsert` call, but applying it twice WILL add
-    // duplicate located triples (since DeltaTriples.insertTriples does not
-    // deduplicate across calls). The important property here is that the count
-    // does not go below 2 (the triples are still present).
+    // Second insertion of the same triples — `DeltaTriples::modifyTriplesImpl`
+    // filters out triples that are already present in `triplesInserted_` (a
+    // triple-keyed map), so re-running the identical CONSTRUCT INSERT is a
+    // true no-op: the inserted count stays exactly 2 and nothing is deleted.
     index.deltaTriplesManager().modify<void>(
         [&index, &pq, &qec, &sharedHandle,
          &inferredGraph](DeltaTriples& deltaTriples) {
@@ -783,9 +782,9 @@ TEST(ExecuteUpdate, executeConstructInsert) {
           ExecuteUpdate::executeConstructInsert(index, pq, qet, deltaTriples,
                                                 inferredGraph, sharedHandle);
         });
-    // After two identical insertions, we still have at least 2 triples.
+    // After two identical insertions the count is still exactly 2 — idempotent.
     index.deltaTriplesManager().modify<void>([](DeltaTriples& deltaTriples) {
-      EXPECT_GE(deltaTriples.numInserted(), 2);
+      EXPECT_EQ(deltaTriples.numInserted(), 2);
       EXPECT_EQ(deltaTriples.numDeleted(), 0);
     });
   }
