@@ -724,28 +724,48 @@ CompressedRelationReader::getBlocksForJoin(
   auto blocksWithFirstAndLastId2 =
       getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
-  // Find the matching blocks on each side by performing binary search on the
-  // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
-  // routine, but this doesn't work because the implicit equality defined by
-  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
-                                                  const auto& otherBlocks) {
-    std::vector<CompressedBlockMetadata> result;
-    for (const auto& block : blocks) {
-      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
-               .empty()) {
-        result.push_back(block.block_);
+  // Find the matching blocks on each side using a linear-time merge zipper.
+  // Both sequences are sorted by `first_` with non-overlapping intervals
+  // (invariant enforced above by AD_CORRECTNESS_CHECK). Two sweeps — one per
+  // side — each maintain a single forward pointer into the opposite sequence
+  // that never moves backward, giving O(n + m) total. Note: it is tempting to
+  // reuse the `zipperJoinWithUndef` routine, but this doesn't work because the
+  // implicit equality defined by `!lessThan(a,b) && !lessThan(b, a)` is not
+  // transitive.
+  auto findMatchingBlocksPair = [](const auto& blocks1, const auto& blocks2) {
+    std::vector<CompressedBlockMetadata> result1, result2;
+    // Sweep 1: for each block a in blocks1, advance a pointer into blocks2
+    // past all blocks whose last_ < a.first_ (they can't overlap with a or any
+    // later block in blocks1). Block a and the current blocks2 element overlap
+    // iff the blocks2 element also starts at or before a.last_.
+    {
+      auto [jt, end2] = getBeginAndEnd(blocks2);
+      for (const auto& a : blocks1) {
+        while (jt != end2 && (*jt).last_ < a.first_) {
+          ++jt;
+        }
+        if (jt != end2 && (*jt).first_ <= a.last_) {
+          result1.push_back(a.block_);
+        }
       }
     }
-    // The following check isn't expensive as there are only few blocks.
-    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
-                         result.end());
-    return result;
+    // Sweep 2: same logic with roles swapped.
+    {
+      auto [jt, end1] = getBeginAndEnd(blocks1);
+      for (const auto& b : blocks2) {
+        while (jt != end1 && (*jt).last_ < b.first_) {
+          ++jt;
+        }
+        if (jt != end1 && (*jt).first_ <= b.last_) {
+          result2.push_back(b.block_);
+        }
+      }
+    }
+    return std::array{std::move(result1), std::move(result2)};
   };
 
-  return {
-      findMatchingBlocks(blocksWithFirstAndLastId1, blocksWithFirstAndLastId2),
-      findMatchingBlocks(blocksWithFirstAndLastId2, blocksWithFirstAndLastId1)};
+  return findMatchingBlocksPair(blocksWithFirstAndLastId1,
+                                blocksWithFirstAndLastId2);
 }
 
 // _____________________________________________________________________________
