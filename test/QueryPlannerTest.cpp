@@ -1049,22 +1049,28 @@ TEST(QueryPlanner, maxDepth) {
                                  std::nullopt,
                                  2};
   h::expect(
-      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-      "SELECT ?start ?end ?path ?edge WHERE {"
-      "SERVICE pathSearch: {"
-      "_:path pathSearch:algorithm pathSearch:allPaths ;"
-      "pathSearch:source <x1> ;"
-      "pathSearch:source <x2> ;"
-      "pathSearch:target <y> ;"
-      "pathSearch:target <z> ;"
-      "pathSearch:pathColumn ?path ;"
-      "pathSearch:edgeColumn ?edge ;"
-      "pathSearch:start ?start;"
-      "pathSearch:end ?end;"
-      "pathSearch:maxDepth 2;"
-      "{SELECT * WHERE {"
-      "?start <p> ?end."
-      "}}}}",
+      R"(
+PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+SELECT ?start ?end ?path ?edge WHERE {
+  SERVICE pathSearch: {
+    _:path pathSearch:algorithm pathSearch:allPaths ;
+           pathSearch:source <x1> ;
+           pathSearch:source <x2> ;
+           pathSearch:target <y> ;
+           pathSearch:target <z> ;
+           pathSearch:pathColumn ?path ;
+           pathSearch:edgeColumn ?edge ;
+           pathSearch:start ?start ;
+           pathSearch:end ?end ;
+           pathSearch:maxDepth 2 ;
+    {
+      SELECT * WHERE {
+        ?start <p> ?end .
+      }
+    }
+  }
+}
+)",
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
