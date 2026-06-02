@@ -1980,12 +1980,10 @@ std::packaged_task<void()> computeStatistics(
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-    auto scanSpecAndBlocks =
-        permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState);
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     auto [reader, tables] = permutation.lazyScanWithIndependentReader(
-        scanSpecAndBlocks, additionalColumns, cancellationHandle,
-        *locatedTriplesSharedState);
+        permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
