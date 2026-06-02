@@ -92,11 +92,13 @@ namespace detail {
 // Global mutex to ensure log messages from different threads are not
 // interleaved (acquired via the comma-operator trick in the AD_LOG macro).
 inline std::mutex logMutex;
+
+static constexpr LogLevel::Enum defaultLogLevel =
+    std::min(LOGLEVEL, LogLevel::Enum::INFO);
 // Runtime log level; messages with a higher level than this are suppressed.
 // Defaults to the less verbose of INFO and the compile-time LOGLEVEL so that
 // the runtime level is never set to something the binary cannot log.
-inline std::atomic<LogLevel::Enum> runtimeLogLevel =
-    std::min(LOGLEVEL, LogLevel::Enum::INFO);
+inline std::atomic<LogLevel::Enum> runtimeLogLevel = defaultLogLevel;
 // Non-[[nodiscard]] wrapper so the comma-operator pattern doesn't trigger
 // -Wunused-value warnings (std::lock_guard itself is [[nodiscard]] in libc++).
 struct LogLock {

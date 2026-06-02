@@ -50,6 +50,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Disable nlohmann implicit conversions (e.g. json → std::string) globally so
+# all TUs, including those compiled via PCH, see the same flag value.
+add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
