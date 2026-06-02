@@ -10,10 +10,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include "./util/GTestHelpers.h"
 #include "util/Log.h"
+#include "util/jthread.h"
 
 // _____________________________________________________________________________
 TEST(LogTest, TypeName) { EXPECT_EQ(LogLevel::typeName(), "log level"); }
@@ -78,4 +81,74 @@ TEST(LogTest, StreamFiltering) {
   ss.str({});
   AD_LOG_ERROR << "hello-error";
   EXPECT_THAT(ss.str(), ::testing::Not(::testing::HasSubstr("hello-error")));
+}
+
+// _____________________________________________________________________________
+TEST(LogTest, ThreadSafety) {
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t msgsPerThread = 200;
+
+  // Redirect all logging to a local stringstream for the duration of the test.
+  std::stringstream ss;
+  ad_utility::setGlobalLoggingStream(&ss);
+  auto streamCleanup =
+      absl::MakeCleanup([] { ad_utility::setGlobalLoggingStream(&std::cout); });
+
+  // Spawn N threads; each logs M lines using multiple `<<` operators. The
+  // multi-part write is intentional: if the mutex were absent, partial writes
+  // from different threads could interleave within a single line.
+  {
+    std::vector<ad_utility::JThread> threads;
+    threads.reserve(numThreads);
+    for (size_t t = 0; t < numThreads; ++t) {
+      threads.emplace_back([t] {
+        for (size_t m = 0; m < msgsPerThread; ++m) {
+          AD_LOG_FATAL << "Thread " << t << " message " << m << " end\n";
+        }
+      });
+    }
+  }  // All `JThread`s join here on destruction.
+
+  // Split the captured output into individual lines.
+  std::vector<std::string> lines;
+  {
+    std::istringstream iss(ss.str());
+    std::string line;
+    while (std::getline(iss, line)) {
+      if (!line.empty()) {
+        lines.push_back(std::move(line));
+      }
+    }
+  }
+
+  // Count check: no lines were lost or merged.
+  EXPECT_EQ(lines.size(), numThreads * msgsPerThread);
+
+  // Format check: every line must start with the expected log-line prefix. Any
+  // interleaving without mutex protection would produce lines that contain a
+  // second timestamp in the middle, breaking this pattern.
+  static const std::string kLineRegex =
+      "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}"
+      " - FATAL: .+";
+  for (const auto& line : lines) {
+    EXPECT_THAT(line, ::testing::MatchesRegex(kLineRegex));
+  }
+
+  // Content check: every (threadId, msgIdx) combination appears exactly once.
+  std::set<std::string> expectedBodies;
+  for (size_t t = 0; t < numThreads; ++t) {
+    for (size_t m = 0; m < msgsPerThread; ++m) {
+      expectedBodies.insert("Thread " + std::to_string(t) + " message " +
+                            std::to_string(m) + " end");
+    }
+  }
+  static constexpr std::string_view kSep = " - FATAL: ";
+  for (const auto& line : lines) {
+    auto pos = line.find(kSep);
+    ASSERT_NE(pos, std::string::npos);
+    std::string body = line.substr(pos + kSep.size());
+    EXPECT_EQ(expectedBodies.erase(body), 1u)
+        << "Unexpected or duplicate log body: " << body;
+  }
+  EXPECT_TRUE(expectedBodies.empty());
 }
