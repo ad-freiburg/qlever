@@ -742,7 +742,7 @@ CompressedRelationReader::getBlocksForJoin(
                                      return blockLessThanBlock(b, a);
                                    });
       if (it == end) {
-	break;
+        break;
       }
       if (!blockLessThanBlock(a, *it)) {
         result.push_back(a.block_);
