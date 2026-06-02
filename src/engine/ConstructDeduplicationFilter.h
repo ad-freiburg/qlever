@@ -13,6 +13,7 @@
 #include <absl/container/inlined_vector.h>
 
 #include <list>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -149,16 +150,92 @@ class PerTripleFilter {
   }
 };
 
-// One `PerTripleFilter` per template triple.
-using ConstructDeduplicationState = std::vector<PerTripleFilter>;
-
-// Constructs the initial `ConstructDeduplicationState` for a given mode and
-// number of template triples. Each `PerTripleFilter` is initialized with the
-// mode so it can derive its LRU capacity and dispatch strategy internally.
-inline ConstructDeduplicationState makeDeduplicationState(
-    const ad_utility::DeduplicationMode& mode, size_t numTriples) {
-  return ConstructDeduplicationState(numTriples, PerTripleFilter{mode});
+// Constructs the *full-triple* deduplication key for the instantiation of
+// `triple` at `absoluteRow`: the `ValueId` at each of the three positions
+// (subject, predicate, object), taken from the constant's `dedupId_` or the
+// variable's bound `ValueId` in the row. Unlike `makeDeduplicationKey` (which
+// only includes variable positions and is per-template-triple), this key
+// identifies the whole instantiated triple, so it can be compared across all
+// template triples in a single shared filter. Must not be called for a triple
+// that contains a blank node (those bypass deduplication entirely).
+inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
+                                          size_t absoluteRow,
+                                          const BatchEvaluationContext& ctx) {
+  DeduplicationKey key;
+  key.reserve(NUM_TRIPLE_POSITIONS);
+  for (const PreprocessedTerm& term : triple) {
+    key.push_back(std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const PrecomputedConstant& c) -> ValueId { return c.dedupId_; },
+            [&](const PrecomputedVariable& v) -> ValueId {
+              return ctx.idTable_[absoluteRow][v.columnIndex_];
+            },
+            [](const PrecomputedBlankNode&) -> ValueId {
+              // Blank-node triples bypass deduplication, so their key is never
+              // built.
+              AD_FAIL();
+            }},
+        term));
+  }
+  return key;
 }
+
+// Deduplication state for a whole CONSTRUCT clause. In every deduplicating mode
+// there is exactly *one* filter, shared by all template triples and keyed on
+// the *full* instantiated triple. This is what makes cross-template duplicates
+// collapse (the same output triple produced by two different template triples
+// is emitted once). The modes differ only in the backing structure of that
+// single filter:
+//   - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
+//   - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
+//     approximation that only remembers the most recent keys).
+//   - `DeduplicationMode::None`: no filter at all; the dedup code path is never
+//     entered.
+// In all modes, a triple that contains a blank node is never deduplicated (its
+// per-row blank-node id makes every instantiation distinct).
+class ConstructDeduplicationState {
+ public:
+  ConstructDeduplicationState(const ad_utility::DeduplicationMode& mode,
+                              [[maybe_unused]] size_t numTriples)
+      : filter_{makeFilter(mode)} {}
+
+  // Returns true if the instantiation of template triple `tripleIdx` at
+  // `absoluteRow` is new (should be emitted), false if it is a duplicate
+  // (skip). Triples containing a blank node are always "new". `none` mode must
+  // never reach here.
+  bool isNew(size_t tripleIdx, size_t absoluteRow,
+             const PreprocessedConstructTemplate& tmpl,
+             const BatchEvaluationContext& ctx) {
+    AD_CORRECTNESS_CHECK(filter_.has_value());
+    if (tmpl.tripleContainsBlankNode_[tripleIdx]) {
+      return true;
+    }
+    return filter_->insert(makeFullTripleKey(
+        tmpl.preprocessedTriples_[tripleIdx], absoluteRow, ctx));
+  }
+
+  // Inserts a ground triple's full-triple `key` into the shared filter, so that
+  // a later non-ground instantiation of the same triple is suppressed. No-op
+  // for `none` mode.
+  void seedGroundTriple(const DeduplicationKey& key) {
+    if (filter_.has_value()) {
+      filter_->insert(key);
+    }
+  }
+
+ private:
+  // The single shared filter, or `nullopt` for `none` mode (never consulted).
+  std::optional<PerTripleFilter> filter_;
+
+  static std::optional<PerTripleFilter> makeFilter(
+      const ad_utility::DeduplicationMode& mode) {
+    if (std::holds_alternative<ad_utility::DeduplicationMode::None>(
+            mode.value)) {
+      return std::nullopt;
+    }
+    return PerTripleFilter{mode};
+  }
+};
 
 }  // namespace qlever::constructExport
 

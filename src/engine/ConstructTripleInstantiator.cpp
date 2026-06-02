@@ -67,20 +67,6 @@ std::vector<EvaluatedTriple> instantiateBatch(
   return triples;
 }
 
-// Returns true if the triple at `tripleIdx` for `rowInBatch` is a duplicate
-// and should be skipped. Constructs the masked deduplication key from the
-// variable-position `ValueId`s and checks it against the per-triple filter,
-// inserting it as a side effect if it is new.
-static bool isDuplicate(size_t tripleIdx, size_t rowInBatch,
-                        const PreprocessedConstructTemplate& tmpl,
-                        const BatchEvaluationContext& ctx,
-                        ConstructDeduplicationState& deduplicationState) {
-  const auto key =
-      makeDeduplicationKey(tmpl.variableColumnsPerTriple_[tripleIdx],
-                           ctx.firstRow_ + rowInBatch, ctx);
-  return !deduplicationState[tripleIdx].insert(key);
-}
-
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
@@ -92,10 +78,12 @@ std::vector<EvaluatedTriple> instantiateBatch(
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
+    const size_t absoluteRow = ctx.firstRow_ + rowInBatch;
     for (size_t tripleIdx :
          ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
-      if (isDuplicate(tripleIdx, rowInBatch, tmpl, ctx, deduplicationState))
+      if (!deduplicationState.isNew(tripleIdx, absoluteRow, tmpl, ctx)) {
         continue;
+      }
 
       const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
       auto instantiate = [&triple, &batchResult, rowInBatch,

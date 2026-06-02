@@ -970,6 +970,21 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     STREAMABLE_YIELD(b);
     ++numBindingsExported;
   }
+
+  // For a CONSTRUCT query with active deduplication, the lazily-computed
+  // `resultSize` is the *pre-deduplication* estimate
+  // (`numRows * numTemplateTriples`), which overcounts the triples that the
+  // streaming dedup filter actually produces. The number of bindings yielded
+  // (`numBindingsExported`) is the true deduplicated count, so report it as the
+  // total. (Without deduplication the estimate is kept, because it also
+  // accounts for counted-but-not-exported triples beyond the export limit.)
+  if (query.hasConstructClause() &&
+      !std::holds_alternative<DeduplicationMode::None>(
+          getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>()
+              .value)) {
+    resultSize = numBindingsExported;
+  }
+
   if (numBindingsExported < resultSize) {
     AD_LOG_INFO << "Number of bindings exported: " << numBindingsExported
                 << " of " << resultSize << std::endl;

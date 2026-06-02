@@ -91,13 +91,20 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Index& index, CancellationHandle cancellationHandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t queryOffset,
     DeduplicationMode mode) {
-  auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns, index);
-  IdCache cache = makeIdCache(preprocessedTemplate);
+  // Held by `shared_ptr` so the `processTable` lambda below stays copyable
+  // (required by `ql::views::transform`): `PreprocessedConstructTemplate` owns
+  // a move-only `LocalVocab` (`constantLocalVocab_`) and is therefore not
+  // copyable itself.
+  auto preprocessedTemplate =
+      std::make_shared<const PreprocessedConstructTemplate>(
+          ConstructTemplatePreprocessor::preprocess(templateTriples,
+                                                    variableColumns, index));
+  IdCache cache = makeIdCache(*preprocessedTemplate);
 
-  // One per-triple filter per template triple, initialized for the given mode.
-  ConstructDeduplicationState deduplicationState = makeDeduplicationState(
-      mode, preprocessedTemplate.preprocessedTriples_.size());
+  // Deduplication state for the whole CONSTRUCT clause: a single shared filter
+  // in `global` mode, one filter per template triple in `batchWise` mode.
+  ConstructDeduplicationState deduplicationState{
+      mode, preprocessedTemplate->preprocessedTriples_.size()};
 
   // `queryOffset`: the value of the SPARQL OFFSET clause, used to initialize
   // `accumulatedRowOffset` so that blank node IDs are globally unique across
@@ -129,7 +136,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                                  &groundTriplesEmitted, tableRowOffset,
                                  mode](auto chunkView) {
              return computeBatch(
-                 table.tableWithVocab_, chunkView, preprocessedTemplate, index,
+                 table.tableWithVocab_, chunkView, *preprocessedTemplate, index,
                  cache, tableRowOffset, cancellationHandle, deduplicationState,
                  groundTriplesEmitted, mode);
            }) |

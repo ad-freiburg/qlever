@@ -7,12 +7,14 @@
 
 #include <gtest/gtest.h>
 
+#include "../util/IdTableHelpers.h"
 #include "engine/ConstructDeduplicationFilter.h"
 #include "global/ValueId.h"
 
 namespace {
 using namespace qlever::constructExport;
 using ad_utility::DeduplicationMode;
+using ad_utility::testing::makeAllocator;
 
 // Helper to build a DeduplicationKey from three raw bit patterns.
 // `ValueId::fromBits` constructs a ValueId directly from its underlying
@@ -110,22 +112,90 @@ TEST(PerTripleFilterGlobal, EvictedFromLruStillDeduplicated) {
   EXPECT_FALSE(f.insert(makeKey(0, 0, 0)));
 }
 
-TEST(MakeDeduplicationState, CorrectNumberOfFilters) {
-  auto state = makeDeduplicationState(DeduplicationMode::global(), 3);
-  EXPECT_EQ(state.size(), 3u);
+// Builds a `PrecomputedConstant` term whose `dedupId_` is `ValueId::fromBits`.
+// The `evaluatedTerm_` (string form) is left null:
+// `ConstructDeduplicationState` only ever reads `dedupId_`.
+PreprocessedTerm constTerm(uint64_t bits) {
+  return PrecomputedConstant{EvaluatedTerm{}, ValueId::fromBits(bits)};
 }
 
-TEST(MakeDeduplicationState, FiltersAreIndependent) {
-  // Inserting kA into filter 0 must not affect filter 1.
-  auto state = makeDeduplicationState(DeduplicationMode::global(), 2);
-  EXPECT_TRUE(state[0].insert(kA));
-  EXPECT_TRUE(state[1].insert(kA));   // filter 1 has not seen kA
-  EXPECT_FALSE(state[0].insert(kA));  // filter 0 has seen kA
+// Builds a `PrecomputedVariable` term referring to `column` of the `IdTable`.
+PreprocessedTerm varTerm(size_t column) { return PrecomputedVariable{column}; }
+
+PreprocessedTriple makeTriple(PreprocessedTerm s, PreprocessedTerm p,
+                              PreprocessedTerm o) {
+  return {std::move(s), std::move(p), std::move(o)};
 }
 
-TEST(MakeDeduplicationState, ZeroTriplesProducesEmptyState) {
-  auto state = makeDeduplicationState(DeduplicationMode::none(), 0);
-  EXPECT_TRUE(state.empty());
+TEST(ConstructDeduplicationState, GlobalDeduplicatesAcrossTemplateTriples) {
+  // Two distinct template triples that instantiate to the *same* full triple.
+  // In `global` mode the single shared filter must collapse them: the first is
+  // new, the second (from a different template triple) is a duplicate.
+  PreprocessedConstructTemplate tmpl;
+  tmpl.preprocessedTriples_ = {
+      makeTriple(constTerm(1), constTerm(2), constTerm(3)),
+      makeTriple(constTerm(1), constTerm(2), constTerm(3))};
+  tmpl.tripleContainsBlankNode_ = {false, false};
+
+  // All positions are constants, so the `IdTable` is never indexed; a single
+  // empty row suffices to satisfy the `BatchEvaluationContext` invariants.
+  IdTable idTable = makeIdTableFromVector({{0}});
+  BatchEvaluationContext ctx{idTable, 0, 1};
+
+  ConstructDeduplicationState state{DeduplicationMode::global(), 2};
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
+  EXPECT_FALSE(state.isNew(1, 0, tmpl, ctx));
+}
+
+TEST(ConstructDeduplicationState, GlobalNeverDeduplicatesBlankNodeTriples) {
+  PreprocessedConstructTemplate tmpl;
+  tmpl.preprocessedTriples_ = {
+      makeTriple(constTerm(1), constTerm(2), constTerm(3))};
+  tmpl.tripleContainsBlankNode_ = {true};
+
+  IdTable idTable = makeIdTableFromVector({{0}});
+  BatchEvaluationContext ctx{idTable, 0, 1};
+
+  ConstructDeduplicationState state{DeduplicationMode::global(), 1};
+  // Even the identical instantiation is always emitted.
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
+}
+
+TEST(ConstructDeduplicationState, BatchWiseDeduplicatesAcrossTemplateTriples) {
+  // Two distinct template triples that instantiate to the same full triple.
+  // `batchWise` also uses a single shared filter (a bounded LRU), so the second
+  // instantiation is a duplicate even though it comes from a different template
+  // triple.
+  PreprocessedConstructTemplate tmpl;
+  tmpl.preprocessedTriples_ = {
+      makeTriple(varTerm(0), constTerm(2), constTerm(3)),
+      makeTriple(varTerm(0), constTerm(2), constTerm(3))};
+  tmpl.variableColumnsPerTriple_ = {{0}, {0}};
+  tmpl.tripleContainsBlankNode_ = {false, false};
+
+  IdTable idTable = makeIdTableFromVector({{5}});
+  BatchEvaluationContext ctx{idTable, 0, 1};
+
+  ConstructDeduplicationState state{DeduplicationMode::batchWise(10), 2};
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));   // triple 0, first time
+  EXPECT_FALSE(state.isNew(1, 0, tmpl, ctx));  // same full triple -> duplicate
+}
+
+TEST(ConstructDeduplicationState, SeedGroundTripleSuppressesLaterMatch) {
+  // Seeding a ground triple's full key into the shared global filter makes a
+  // later non-ground instantiation of the same triple a duplicate.
+  PreprocessedConstructTemplate tmpl;
+  tmpl.preprocessedTriples_ = {
+      makeTriple(constTerm(1), constTerm(2), constTerm(3))};
+  tmpl.tripleContainsBlankNode_ = {false};
+
+  IdTable idTable = makeIdTableFromVector({{0}});
+  BatchEvaluationContext ctx{idTable, 0, 1};
+
+  ConstructDeduplicationState state{DeduplicationMode::global(), 1};
+  state.seedGroundTriple(makeKey(1, 2, 3));
+  EXPECT_FALSE(state.isNew(0, 0, tmpl, ctx));
 }
 
 }  // namespace
