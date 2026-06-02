@@ -726,46 +726,31 @@ CompressedRelationReader::getBlocksForJoin(
 
   // Find the matching blocks on each side using a linear-time merge zipper.
   // Both sequences are sorted by `first_` with non-overlapping intervals
-  // (invariant enforced above by AD_CORRECTNESS_CHECK). Two sweeps — one per
-  // side — each maintain a single forward pointer into the opposite sequence
-  // that never moves backward, giving O(n + m) total. Note: it is tempting to
-  // reuse the `zipperJoinWithUndef` routine, but this doesn't work because the
-  // implicit equality defined by `!lessThan(a,b) && !lessThan(b, a)` is not
+  // (invariant enforced above by AD_CORRECTNESS_CHECK). The stateful pointer
+  // into `otherBlocks` never moves backward because a.first_ is
+  // non-decreasing, giving O(n + m) total. Note: it is tempting to reuse the
+  // `zipperJoinWithUndef` routine, but this doesn't work because the implicit
+  // equality defined by `!lessThan(a,b) && !lessThan(b, a)` is not
   // transitive.
-  auto findMatchingBlocksPair = [](const auto& blocks1, const auto& blocks2) {
-    std::vector<CompressedBlockMetadata> result1, result2;
-    // Sweep 1: for each block a in blocks1, advance a pointer into blocks2
-    // past all blocks whose last_ < a.first_ (they can't overlap with a or any
-    // later block in blocks1). Block a and the current blocks2 element overlap
-    // iff the blocks2 element also starts at or before a.last_.
-    {
-      auto [jt, end2] = getBeginAndEnd(blocks2);
-      for (const auto& a : blocks1) {
-        while (jt != end2 && (*jt).last_ < a.first_) {
-          ++jt;
-        }
-        if (jt != end2 && (*jt).first_ <= a.last_) {
-          result1.push_back(a.block_);
-        }
+  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
+                                                  const auto& otherBlocks) {
+    std::vector<CompressedBlockMetadata> result;
+    auto [it, end] = getBeginAndEnd(otherBlocks);
+    for (const auto& a : blocks) {
+      it = ql::ranges::find_if_not(
+          it, end, [&blockLessThanBlock, &a](const auto& b) {
+            return blockLessThanBlock(b, a);
+          });
+      if (it != end && !blockLessThanBlock(a, *it)) {
+        result.push_back(a.block_);
       }
     }
-    // Sweep 2: same logic with roles swapped.
-    {
-      auto [jt, end1] = getBeginAndEnd(blocks1);
-      for (const auto& b : blocks2) {
-        while (jt != end1 && (*jt).last_ < b.first_) {
-          ++jt;
-        }
-        if (jt != end1 && (*jt).first_ <= b.last_) {
-          result2.push_back(b.block_);
-        }
-      }
-    }
-    return std::array{std::move(result1), std::move(result2)};
+    return result;
   };
 
-  return findMatchingBlocksPair(blocksWithFirstAndLastId1,
-                                blocksWithFirstAndLastId2);
+  return {
+      findMatchingBlocks(blocksWithFirstAndLastId1, blocksWithFirstAndLastId2),
+      findMatchingBlocks(blocksWithFirstAndLastId2, blocksWithFirstAndLastId1)};
 }
 
 // _____________________________________________________________________________
