@@ -15,7 +15,6 @@
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
-
 // ___________________________________________________________________________
 namespace ad_utility {
 
@@ -132,3 +131,5 @@ template class ad_utility::ParseableDuration<std::chrono::seconds>;
 template class ad_utility::ParseableDuration<std::chrono::milliseconds>;
 template class ad_utility::ParseableDuration<std::chrono::microseconds>;
 template class ad_utility::ParseableDuration<std::chrono::nanoseconds>;
+template class ad_utility::ParseableDuration<std::chrono::minutes>;
+template class ad_utility::ParseableDuration<std::chrono::hours>;
