@@ -741,7 +741,10 @@ CompressedRelationReader::getBlocksForJoin(
                                    [&blockLessThanBlock, &a](const auto& b) {
                                      return blockLessThanBlock(b, a);
                                    });
-      if (it != end && !blockLessThanBlock(a, *it)) {
+      if (it == end) {
+	break;
+      }
+      if (!blockLessThanBlock(a, *it)) {
         result.push_back(a.block_);
       }
     }
