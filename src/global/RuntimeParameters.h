@@ -177,9 +177,6 @@ struct RuntimeParameters {
   // (the reasoner stops only when no new triples are produced).
   SizeT reasonerMaxRounds_{100, "reasoner-max-rounds"};
 
-  // Maximum number of unique triples that a single `construct-insert` operation
-  // may produce after deduplication. Guards against accidental materialization
-  // of very large result sets. 0 means unlimited.
   // Per-call upper bound on the number of unique triples that one
   // `executeConstructInsert` invocation may produce (checked after
   // deduplication). Guards against accidental materialisation of very large
