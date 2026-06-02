@@ -1371,9 +1371,11 @@ UpdateMetadata Server::processConstructInsert(
   AD_CORRECTNESS_CHECK(plannedQuery.parsedQuery().hasConstructClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  const size_t maxTriples =
+      getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
   UpdateMetadata metadata = ExecuteUpdate::executeConstructInsert(
       *index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
-      cancellationHandle, tracer);
+      cancellationHandle, maxTriples, tracer);
   metadata.countBefore_ = countBefore;
   metadata.countAfter_ = deltaTriples.getCounts();
 

@@ -180,6 +180,15 @@ struct RuntimeParameters {
   // Maximum number of unique triples that a single `construct-insert` operation
   // may produce after deduplication. Guards against accidental materialization
   // of very large result sets. 0 means unlimited.
+  // Per-call upper bound on the number of unique triples that one
+  // `executeConstructInsert` invocation may produce (checked after
+  // deduplication). Guards against accidental materialisation of very large
+  // result sets. 0 means unlimited.
+  //
+  // Callers that need a *cumulative* budget across multiple calls (e.g. the
+  // reasoner's fixpoint loop) should track the remaining allowance themselves
+  // and pass it as the `maxTriplesToInsert` argument on each call, rather than
+  // relying on a separate cap check elsewhere.
   SizeT constructInsertMaxTriples_{1'000'000, "construct-insert-max-triples"};
 
   // ___________________________________________________________________________

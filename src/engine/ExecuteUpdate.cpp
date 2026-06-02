@@ -7,7 +7,6 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/UpdateMetadata.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "parser/SparqlTriple.h"
 #include "util/Log.h"
@@ -303,10 +302,10 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeConstructInsert(
-    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    DeltaTriples& deltaTriples,
+    const Index& index, const ParsedQuery& query,
+    const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
     const ad_utility::triple_component::Iri& targetGraph,
-    const CancellationHandle& cancellationHandle,
+    const CancellationHandle& cancellationHandle, size_t maxTriplesToInsert,
     ad_utility::timer::TimeTracer& tracer) {
   AD_CONTRACT_CHECK(query.hasConstructClause(),
                     "executeConstructInsert requires a CONSTRUCT query.");
@@ -336,18 +335,15 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
   auto [transformedTripleTemplates, localVocab] = transformTriplesTemplate(
       index.getPimpl(), qet.getVariableColumns(), tripleTemplates);
 
-  // Read the safety cap (0 = unlimited).
-  const size_t maxTriples =
-      getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
-
-  // Reserve space for the worst case, but never more than the safety cap to
+  // Reserve space for the worst case, but never more than the cap (if set) to
   // avoid over-allocation on very large result sets.
   std::vector<IdTriple<>> toInsert;
   const size_t numTemplates = transformedTripleTemplates.size();
   if (numTemplates > 0) {
     const size_t worstCase = result->idTable().numRows() * numTemplates;
-    toInsert.reserve(maxTriples > 0 ? std::min(worstCase, maxTriples)
-                                    : worstCase);
+    toInsert.reserve(maxTriplesToInsert > 0
+                         ? std::min(worstCase, maxTriplesToInsert)
+                         : worstCase);
   }
   tracer.endTrace("vocabLookup");
 
@@ -368,14 +364,14 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
 
   tracer.beginTrace("deduplication");
   sortAndRemoveDuplicates(toInsert);
-  // Enforce the safety cap AFTER deduplication so that the actual number of
-  // unique triples is compared against the limit, not the pre-dedup count.
-  if (maxTriples > 0 && toInsert.size() > maxTriples) {
+  // Enforce the cap AFTER deduplication so that the actual number of unique
+  // triples is compared against the limit, not the pre-dedup count.
+  if (maxTriplesToInsert > 0 && toInsert.size() > maxTriplesToInsert) {
     throw std::runtime_error(absl::StrCat(
         "CONSTRUCT INSERT produced ", toInsert.size(),
         " unique triple(s), which exceeds the 'construct-insert-max-triples' "
         "safety limit of ",
-        maxTriples,
+        maxTriplesToInsert,
         ". Raise the limit via the runtime parameter if this is intentional."));
   }
   metadata.inUpdate_ =
