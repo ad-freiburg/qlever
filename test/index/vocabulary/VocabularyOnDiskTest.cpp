@@ -32,44 +32,31 @@ class VocabularyCreator {
 
   // Create and return a `VocabularyOnDisk` from words and ids. `words` and
   // `ids` must have the same size.
-  auto createVocabularyImpl(
-      const std::vector<std::string>& words,
-      std::optional<std::vector<uint64_t>> ids = std::nullopt) {
-    VocabularyOnDisk vocabulary;
-    if (!ids.has_value()) {
-      {
-        auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
-        for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-          EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
-        }
-        writer.readableName() = "blubb";
-        EXPECT_EQ(writer.readableName(), "blubb");
-        static std::atomic<unsigned> doFinish = 0;
-        // In some tests, call `finish` expclitly, in others let the destructor
-        // handle this.
-        if (doFinish.fetch_add(1) % 2 == 0) {
-          writer.finish();
-        }
+  auto createVocabularyImpl(const std::vector<std::string>& words) {
+    {
+      auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
+      for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+        EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
       }
-      vocabulary.open(vocabFilename_);
-    } else {
-      AD_CONTRACT_CHECK(words.size() == ids.value().size());
-      std::vector<std::pair<std::string, uint64_t>> wordsAndIds;
-      for (size_t i = 0; i < words.size(); ++i) {
-        wordsAndIds.emplace_back(words[i], ids.value()[i]);
+      writer.readableName() = "blubb";
+      EXPECT_EQ(writer.readableName(), "blubb");
+      static std::atomic<unsigned> doFinish = 0;
+      // In some tests, call `finish` expclitly, in others let the destructor
+      // handle this.
+      if (doFinish.fetch_add(1) % 2 == 0) {
+        writer.finish();
       }
-      vocabulary.buildFromStringsAndIds(wordsAndIds, vocabFilename_);
     }
+    VocabularyOnDisk vocabulary;
+    vocabulary.open(vocabFilename_);
     return vocabulary;
   }
 
   // Create and return a `VocabularyOnDisk` from words and ids. `words` and
   // `ids` must have the same size. Note: The resulting vocabulary will be
   // destroyed and re-initialized from disk before it is returned.
-  auto createVocabularyFromDiskImpl(
-      const std::vector<std::string>& words,
-      std::optional<std::vector<uint64_t>> ids = std::nullopt) {
-    { createVocabularyImpl(words, std::move(ids)); }
+  auto createVocabularyFromDiskImpl(const std::vector<std::string>& words) {
+    { createVocabularyImpl(words); }
     VocabularyOnDisk vocabulary;
     vocabulary.open(vocabFilename_);
     return vocabulary;
@@ -130,17 +117,6 @@ TEST(VocabularyOnDisk, AccessOperatorWithNonContiguousIds) {
       createVocabulary("AccessOperatorWithNonContiguousIds1"));
   testAccessOperatorForUnorderedVocabulary(
       createVocabularyFromDisk("AccessOperatorWithNonContiguousIds2"));
-}
-
-TEST(VocabularyOnDisk, ErrorOnNonAscendingIds) {
-  std::vector<std::string> words{"game", "4", "nobody"};
-  std::vector<uint64_t> ids{2, 4, 3};
-  VocabularyCreator creator1{"ErrorOnNonAscendingIds1"};
-  ASSERT_THROW(creator1.createVocabularyImpl(words, ids),
-               ad_utility::Exception);
-  VocabularyCreator creator2{"ErrorOnNonAscendingIds2"};
-  ASSERT_THROW(creator2.createVocabularyFromDiskImpl(words, ids),
-               ad_utility::Exception);
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {
