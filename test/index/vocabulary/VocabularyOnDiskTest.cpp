@@ -12,10 +12,6 @@
 namespace {
 using namespace vocabulary_test;
 
-// A common suffix for all files to reduce the probability of colliding file
-// names, when other tests are run in parallel.
-std::string suffix = ".vocabularyOnDiskTest.dat";
-
 // Store a VocabularyOnDisk and read it back from file. For each instance of
 // `VocabularyCreator` that exists at the same time, a different filename has to
 // be chosen.
@@ -30,49 +26,29 @@ class VocabularyCreator {
   }
   ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
 
-  // Create and return a `VocabularyOnDisk` from words and ids. `words` and
-  // `ids` must have the same size.
-  auto createVocabularyImpl(const std::vector<std::string>& words) {
-    {
-      auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
-      for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-        EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
-      }
-      writer.readableName() = "blubb";
-      EXPECT_EQ(writer.readableName(), "blubb");
-      static std::atomic<unsigned> doFinish = 0;
-      // In some tests, call `finish` expclitly, in others let the destructor
-      // handle this.
-      if (doFinish.fetch_add(1) % 2 == 0) {
-        writer.finish();
-      }
+  // Create and return a `VocabularyOnDisk` from words.
+  void createVocabularyImpl(const std::vector<std::string>& words) {
+    auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
     }
-    VocabularyOnDisk vocabulary;
-    vocabulary.open(vocabFilename_);
-    return vocabulary;
-  }
-
-  // Create and return a `VocabularyOnDisk` from words and ids. `words` and
-  // `ids` must have the same size. Note: The resulting vocabulary will be
-  // destroyed and re-initialized from disk before it is returned.
-  auto createVocabularyFromDiskImpl(const std::vector<std::string>& words) {
-    { createVocabularyImpl(words); }
-    VocabularyOnDisk vocabulary;
-    vocabulary.open(vocabFilename_);
-    return vocabulary;
+    writer.readableName() = "blubb";
+    EXPECT_EQ(writer.readableName(), "blubb");
+    static std::atomic<unsigned> doFinish = 0;
+    // In some tests, call `finish` explicitly, in others let the destructor
+    // handle this.
+    if (doFinish.fetch_add(1) % 2 == 0) {
+      writer.finish();
+    }
   }
 
   // Create and return a `VocabularyOnDisk` from words. The ids will be [0, ..
   // words.size()).
   auto createVocabulary(const std::vector<std::string>& words) {
-    return createVocabularyImpl(words);
-  }
-
-  // Create and return a `VocabularyOnDisk` from words. The ids will be [0, ..
-  // words.size()). Note: The resulting vocabulary will be destroyed and
-  // re-initialized from disk before it is returned.
-  auto createVocabularyFromDisk(const std::vector<std::string>& words) {
-    return createVocabularyFromDiskImpl(words);
+    createVocabularyImpl(words);
+    VocabularyOnDisk vocabulary;
+    vocabulary.open(vocabFilename_);
+    return vocabulary;
   }
 };
 
@@ -81,32 +57,19 @@ auto createVocabulary(std::string filename) {
     return c.createVocabulary(AD_FWD(args)...);
   };
 }
-
-auto createVocabularyFromDisk(std::string filename) {
-  return [c = VocabularyCreator{std::move(filename)}](auto&&... args) mutable {
-    return c.createVocabularyFromDisk(AD_FWD(args)...);
-  };
-}
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
-  testUpperAndLowerBoundWithStdLess(
-      createVocabulary("lowerUpperBoundStdLess1"));
-  testUpperAndLowerBoundWithStdLess(
-      createVocabularyFromDisk("lowerUpperBoundStdLess2"));
+  testUpperAndLowerBoundWithStdLess(createVocabulary("lowerUpperBoundStdLess"));
 }
 
 TEST(VocabularyOnDisk, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      createVocabulary("lowerUpperBoundNumeric1"));
-  testUpperAndLowerBoundWithNumericComparator(
-      createVocabularyFromDisk("lowerUpperBoundNumeric2"));
+      createVocabulary("lowerUpperBoundNumeric"));
 }
 
 TEST(VocabularyOnDisk, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(createVocabulary("AccessOperator1"));
-  testAccessOperatorForUnorderedVocabulary(
-      createVocabularyFromDisk("AccessOperator2"));
+  testAccessOperatorForUnorderedVocabulary(createVocabulary("AccessOperator"));
 }
 
 TEST(VocabularyOnDisk, AccessOperatorWithNonContiguousIds) {
@@ -114,9 +77,7 @@ TEST(VocabularyOnDisk, AccessOperatorWithNonContiguousIds) {
                                  "alpha", "\n\1\t", "222",    "1111"};
   std::vector<uint64_t> ids{2, 4, 8, 16, 17, 19, 42, 42 * 42 + 7};
   testAccessOperatorForUnorderedVocabulary(
-      createVocabulary("AccessOperatorWithNonContiguousIds1"));
-  testAccessOperatorForUnorderedVocabulary(
-      createVocabularyFromDisk("AccessOperatorWithNonContiguousIds2"));
+      createVocabulary("AccessOperatorWithNonContiguousIds"));
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {
