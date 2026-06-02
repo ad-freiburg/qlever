@@ -1982,7 +1982,7 @@ std::packaged_task<void()> computeStatistics(
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     auto scanSpecAndBlocks =
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState);
-    std::array additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     auto [reader, tables] = permutation.lazyScanWithIndependentReader(
         scanSpecAndBlocks, additionalColumns, cancellationHandle,
         *locatedTriplesSharedState);
