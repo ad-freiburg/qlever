@@ -389,7 +389,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
       diff_count = -diff_count;
     }
     return DateYearOrDuration{
-        DayTimeDuration{durationType, diff_count, 0, 0, 0}};
+        DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
   }
 
   // The following will not be implemented (not viable):
