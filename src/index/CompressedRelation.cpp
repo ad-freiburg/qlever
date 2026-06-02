@@ -737,10 +737,10 @@ CompressedRelationReader::getBlocksForJoin(
     std::vector<CompressedBlockMetadata> result;
     auto [it, end] = getBeginAndEnd(otherBlocks);
     for (const auto& a : blocks) {
-      it = ql::ranges::find_if_not(
-          it, end, [&blockLessThanBlock, &a](const auto& b) {
-            return blockLessThanBlock(b, a);
-          });
+      it = ql::ranges::find_if_not(it, end,
+                                   [&blockLessThanBlock, &a](const auto& b) {
+                                     return blockLessThanBlock(b, a);
+                                   });
       if (it != end && !blockLessThanBlock(a, *it)) {
         result.push_back(a.block_);
       }
