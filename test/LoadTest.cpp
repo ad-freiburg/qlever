@@ -146,7 +146,7 @@ TEST_F(LoadTest, computeResult) {
                 responseBody, boost::beast::http::status::ok, contentType)};
         auto res = load.computeResultOnlyForTesting();
 
-        auto& idTable = res.idTable();
+        const auto idTable = res.idTable();
         auto& lv = res.localVocab();
 
         std::vector<std::vector<IntOrId>> idVector;

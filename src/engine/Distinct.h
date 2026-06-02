@@ -92,7 +92,7 @@ class Distinct : public Operation {
   // Out-of-place implementation of the unique algorithm. Does only copy values
   // if they're actually unique.
   template <size_t WIDTH>
-  IdTable outOfPlaceDistinct(const IdTable& dynInput) const;
+  IdTable outOfPlaceDistinct(IdTableView<0> dynInput) const;
 
   FRIEND_TEST(Distinct, distinct);
   FRIEND_TEST(Distinct, distinctWithEmptyInput);

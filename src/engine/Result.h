@@ -158,6 +158,8 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
+  using MaterializedTable = IdTableView<0>;
+
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
   // generator and passed this new `IdTableVocabPair` along with microsecond
@@ -191,9 +193,9 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw if this result is not fully
-  // materialized.
-  const IdTable& idTable() const;
+  // Const access to the underlying `IdTable` as a view. Throw if this result is
+  // not fully materialized.
+  IdTableView<0> idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
@@ -276,7 +278,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const MaterializedTable&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

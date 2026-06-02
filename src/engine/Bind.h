@@ -50,7 +50,7 @@ class Bind : public Operation {
  private:
   Result computeResult(bool requestLaziness) override;
 
-  static IdTable cloneSubView(const IdTable& idTable,
+  static IdTable cloneSubView(const IdTableView<0>& idTable,
                               const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.

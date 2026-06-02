@@ -80,13 +80,14 @@ Result Sort::computeResult(bool requestLaziness) {
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    const IdTable& inputTable = input->idTable();
+    const auto inputTable = input->idTable();
     if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(inputTable.clone(),
+      return computeResultInMemory(IdTable{inputTable.clone()},
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
+      const IdTable clonedTable{inputTable.clone()};
+      ql::span<const IdTable> inputTableSpan{&clonedTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),
                                    std::move(input), requestLaziness);

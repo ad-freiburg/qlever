@@ -162,7 +162,7 @@ class OptionalJoinRange
   std::shared_ptr<const Result> leftResult_;
   std::shared_ptr<const Result> rightResult_;
   const LocalVocab& leftVocab_;
-  const IdTable& leftTable_;
+  IdTableView<0> leftTable_;
   Result::LazyResult rightTables_;
   Adder matchTracker_;
   size_t resultWidth_;
@@ -173,7 +173,7 @@ class OptionalJoinRange
  public:
   OptionalJoinRange(std::shared_ptr<const Result> leftResult,
                     std::shared_ptr<const Result> rightResult,
-                    const LocalVocab& leftVocab, const IdTable& leftTable,
+                    const LocalVocab& leftVocab, IdTableView<0> leftTable,
                     Result::LazyResult rightTables, Adder matchTracker,
                     size_t resultWidth,
                     ad_utility::JoinColumnMapping joinColumnData,
@@ -220,10 +220,11 @@ class OptionalJoinRange
 };
 
 // Helper function for common pattern.
-template <size_t JOIN_COLUMNS>
+template <size_t JOIN_COLUMNS, typename IdTableT>
 IdTableView<JOIN_COLUMNS> toStaticView(
-    const IdTable& idTable, const std::vector<ColumnIndex>& joinColumns) {
-  return idTable.asColumnSubsetView(joinColumns).asStaticView<JOIN_COLUMNS>();
+    const IdTableT& idTable, const std::vector<ColumnIndex>& joinColumns) {
+  return idTable.asColumnSubsetView(joinColumns)
+      .template asStaticView<JOIN_COLUMNS>();
 }
 }  // namespace detail
 
@@ -309,8 +310,9 @@ class IndexNestedLoopJoin {
                                       matchTracker.matchTracker_);
           };
           if (leftResult_->isFullyMaterialized()) {
-            return Result::LazyResult{std::array{matchHelper(
-                leftResult_->idTable(), leftResult_->getCopyOfLocalVocab())}};
+            return Result::LazyResult{
+                std::array{matchHelper(IdTable{leftResult_->idTable().clone()},
+                                       leftResult_->getCopyOfLocalVocab())}};
           }
           return Result::LazyResult{ad_utility::CachingTransformInputRange{
               leftResult_->idTables(),
@@ -344,7 +346,7 @@ class IndexNestedLoopJoin {
           auto leftTable = detail::toStaticView<JOIN_COLUMNS>(
               leftResult_->idTable(), leftColumns);
           auto matchHelper = [&matchTracker, &leftTable,
-                              &rightColumns](const IdTable& idTable) {
+                              &rightColumns](const auto& idTable) {
             matchLeft(
                 matchTracker, leftTable,
                 detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
@@ -377,19 +379,19 @@ class IndexNestedLoopJoin {
          keepJoinColumns](auto JOIN_COLUMNS_PAR) -> Result::LazyResult {
           static constexpr auto JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          const IdTable& leftTable = leftResult_->idTable();
+          const auto leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
               joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
           auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
               leftTable, joinColumnData.jcsLeft());
-          auto matchHelper = [&matchTracker, &leftTableView,
-                              rightColumns = joinColumnData.jcsRight()](
-                                 const IdTable& idTable) {
-            matchLeft(
-                matchTracker, leftTableView,
-                detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
-          };
+          auto matchHelper =
+              [&matchTracker, &leftTableView,
+               rightColumns = joinColumnData.jcsRight()](const auto& idTable) {
+                matchLeft(
+                    matchTracker, leftTableView,
+                    detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
+              };
           IdTable resultTable{resultWidth, leftTable.getAllocator()};
           LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
           if (rightResult_->isFullyMaterialized()) {

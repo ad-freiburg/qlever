@@ -56,7 +56,8 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
 namespace {
 // _____________________________________________________________________________
 // Check if sort order promised by `sortedBy` is kept within `idTable`.
-void assertSortOrderIsRespected(const IdTable& idTable,
+template <typename IdTableT>
+void assertSortOrderIsRespected(const IdTableT& idTable,
                                 const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
@@ -164,7 +165,7 @@ IdTable makeResizedClone(const IdTable& idTable,
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds, const IdTable&)>
+    std::function<void(std::chrono::microseconds, const MaterializedTable&)>
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
@@ -208,7 +209,7 @@ void Result::applyLimitOffset(
             limitOffset._limit.value() -=
                 limitOffset.actualSize(originalSize - offsetDelta);
           }
-          limitTimeCallback(limitTimer.value(), idTable);
+          limitTimeCallback(limitTimer.value(), idTable.asStaticView<0>());
           if (limitOffset._offset == 0) {
             return IdTableLoopControl::yieldValue(std::move(pair));
           } else {
@@ -240,7 +241,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, const IdTable& idTable) {
+  auto performCheck = [](const auto& map, const auto& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -315,16 +316,16 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const {
+IdTableView<0> Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::visit(
-      [](const auto& arg) -> const IdTable& {
+      [](const auto& arg) -> IdTableView<0> {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, IdTable>) {
-          return arg;
+          return arg.template asStaticView<0>();
         } else {
           static_assert(std::is_same_v<T, IdTablePtr>);
-          return *arg;
+          return arg->template asStaticView<0>();
         }
       },
       std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);

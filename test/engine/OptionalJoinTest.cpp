@@ -44,7 +44,8 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     // a have to equal those of column 2 of b and vice versa).
     OptionalJoin{qec, idTableToExecutionTree(qec, inputA),
                  idTableToExecutionTree(qec, inputB)}
-        .optionalJoin(inputA, inputB, jcls, &result);
+        .optionalJoin(inputA.asStaticView<0>(), inputB.asStaticView<0>(), jcls,
+                      &result);
     ASSERT_EQ(expectedResult, result);
   }
 

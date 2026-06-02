@@ -336,9 +336,9 @@ inline void runParsingAndSweeper(
     }
 
     const auto [sjType, leftIdx, rightIdx] = results.at(0).at(row);
-    auto valIdLeft = prepared.idTableLeft_->at(leftIdx, prepared.leftJoinCol_);
+    auto valIdLeft = prepared.idTableLeft_.at(leftIdx, prepared.leftJoinCol_);
     auto valIdRight =
-        prepared.idTableRight_->at(rightIdx, prepared.rightJoinCol_);
+        prepared.idTableRight_.at(rightIdx, prepared.rightJoinCol_);
 
     resultMatched.emplace_back(sjType, valIdLeft, valIdRight, dist);
   }

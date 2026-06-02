@@ -180,7 +180,7 @@ ExecuteUpdate::transformTriplesTemplate(
 }
 
 // _____________________________________________________________________________
-std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
+std::optional<Id> ExecuteUpdate::resolveVariable(IdTableView<0> idTable,
                                                  const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
   auto visitId = [](const Id& id) {
@@ -198,7 +198,7 @@ std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
     const std::vector<TransformedTriple>& templates,
-    std::vector<IdTriple<>>& result, const IdTable& idTable,
+    std::vector<IdTriple<>>& result, IdTableView<0> idTable,
     const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
     auto subject = resolveVariable(idTable, rowIdx, s);
@@ -258,10 +258,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
            query._limitOffset, result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (const uint64_t i : range) {
-      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);
+      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
 
-      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i);
+      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
     }
   }

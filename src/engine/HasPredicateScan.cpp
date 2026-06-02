@@ -270,7 +270,8 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // Because of caching we can potentially get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
-      return std::invoke(callback, ql::span{&result->idTable(), 1});
+      auto table = result->idTable();
+      return std::invoke(callback, ql::span{&table, 1});
     }
     auto idTables = result->idTables();
     return std::invoke(

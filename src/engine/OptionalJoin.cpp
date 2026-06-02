@@ -308,7 +308,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
-    const IdTable& left, const IdTable& right,
+    IdTableView<0> left, IdTableView<0> right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
     -> Implementation {
   auto implementation = Implementation::NoUndef;
@@ -352,7 +352,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
-    const IdTable& left, const IdTable& right,
+    IdTableView<0> left, IdTableView<0> right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases

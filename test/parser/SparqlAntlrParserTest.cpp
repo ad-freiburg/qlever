@@ -119,7 +119,7 @@ TEST(SparqlExpressionParser, First) {
   sparqlExpression::EvaluationContext input{
       *ad_utility::testing::getQec(),
       map,
-      table,
+      table.asStaticView<0>(),
       alloc,
       localVocab,
       std::make_shared<ad_utility::CancellationHandle<>>(),

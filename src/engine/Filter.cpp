@@ -70,7 +70,8 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
+    IdTable result =
+        filterIdTable(subRes->sortedBy(), IdTable{subRes->idTable().clone()});
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -138,7 +139,8 @@ CPP_template_def(int WIDTH, typename Table)(
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
       cancellationHandle_, deadline_);
 

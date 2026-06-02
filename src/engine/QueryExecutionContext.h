@@ -50,7 +50,8 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  template <typename IdTableT>
+  static ad_utility::MemorySize getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }

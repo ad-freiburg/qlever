@@ -178,7 +178,7 @@ IdTable Distinct::distinct(
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
+IdTable Distinct::outOfPlaceDistinct(IdTableView<0> dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();

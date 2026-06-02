@@ -263,7 +263,7 @@ Result Union::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 IdTable Union::computeUnion(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) const {
   IdTable res{getResultWidth(), getExecutionContext()->getAllocator()};
   res.resize(left.size() + right.size());
