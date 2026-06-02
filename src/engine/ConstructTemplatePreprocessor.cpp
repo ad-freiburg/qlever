@@ -11,6 +11,9 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "parser/RdfParser.h"
+#include "parser/TokenizerCtre.h"
+#include "parser/TripleComponent.h"
 #include "util/Algorithm.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -18,6 +21,17 @@
 #include "util/VariantRangeFilter.h"
 
 namespace qlever::constructExport {
+
+// Resolve `tripleComponent` (a constant IRI or literal from the CONSTRUCT
+// template) to its stable `ValueId`: encoded values and vocabulary terms become
+// `ValueId`s directly; a literal/IRI not present in the vocabulary is assigned
+// a fresh `LocalVocabIndex` in `constantLocalVocab`. This `ValueId` is the
+// constant's component of the full-triple deduplication key.
+static ValueId resolveConstantDedupId(TripleComponent tripleComponent,
+                                      const Index& index,
+                                      LocalVocab& constantLocalVocab) {
+  return std::move(tripleComponent).toValueId(index, constantLocalVocab);
+}
 
 static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
   return ql::ranges::any_of(triple, [](const PreprocessedTerm& term) {
@@ -46,18 +60,31 @@ static EvaluatedTriple makeGroundTriple(const PreprocessedTriple& triple) {
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
-    const Iri& iri) {
+    const Iri& iri, const Index& index, LocalVocab& constantLocalVocab) {
+  ValueId dedupId = resolveConstantDedupId(
+      TripleComponent{
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              iri.toSparql())},
+      index, constantLocalVocab);
   return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
-      EvaluatedTermData{iri.iri(), nullptr})};
+                                 EvaluatedTermData{iri.iri(), nullptr}),
+                             dedupId};
 }
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
-ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
-                                                 PositionInTriple role) {
+ConstructTemplatePreprocessor::preprocessLiteral(
+    const Literal& literal, PositionInTriple role, const Index& index,
+    LocalVocab& constantLocalVocab) {
   if (role == PositionInTriple::OBJECT) {
-    return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
-        EvaluatedTermData{literal.literal(), nullptr})};
+    ValueId dedupId = resolveConstantDedupId(
+        RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            literal.toSparql()),
+        index, constantLocalVocab);
+    return PrecomputedConstant{
+        std::make_shared<const EvaluatedTermData>(
+            EvaluatedTermData{literal.literal(), nullptr}),
+        dedupId};
   }
   return std::nullopt;
 }
@@ -82,14 +109,15 @@ ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
-    const VariableToColumnMap& variableColumns) {
-  return term.visit([&role, &variableColumns](
+    const VariableToColumnMap& variableColumns, const Index& index,
+    LocalVocab& constantLocalVocab) {
+  return term.visit([&role, &variableColumns, &index, &constantLocalVocab](
                         const auto& t) -> std::optional<PreprocessedTerm> {
     using T = std::decay_t<decltype(t)>;
     if constexpr (std::is_same_v<T, Iri>) {
-      return preprocessIri(t);
+      return preprocessIri(t, index, constantLocalVocab);
     } else if constexpr (std::is_same_v<T, Literal>) {
-      return preprocessLiteral(t, role);
+      return preprocessLiteral(t, role, index, constantLocalVocab);
     } else if constexpr (std::is_same_v<T, Variable>) {
       return preprocessVariable(t, variableColumns);
     } else if constexpr (std::is_same_v<T, BlankNode>) {
@@ -104,11 +132,13 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
 std::optional<PreprocessedTriple>
 ConstructTemplatePreprocessor::preprocessTriple(
     const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple,
-    const VariableToColumnMap& variableColumns) {
+    const VariableToColumnMap& variableColumns, const Index& index,
+    LocalVocab& constantLocalVocab) {
   PreprocessedTriple preprocessedTriple;
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
     auto role = static_cast<PositionInTriple>(pos);
-    auto preprocessed = preprocessTerm(triple[pos], role, variableColumns);
+    auto preprocessed = preprocessTerm(triple[pos], role, variableColumns,
+                                       index, constantLocalVocab);
     if (!preprocessed) return std::nullopt;
     preprocessedTriple[pos] = std::move(*preprocessed);
   }
@@ -117,15 +147,16 @@ ConstructTemplatePreprocessor::preprocessTriple(
 
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
-    const Triples& templateTriples,
-    const VariableToColumnMap& variableColumns) {
+    const Triples& templateTriples, const VariableToColumnMap& variableColumns,
+    const Index& index) {
   PreprocessedConstructTemplate result;
   // Tracks which `IdTable` column indices have already been added to
   // `result.uniqueVariableColumns_` to avoid duplicates.
   ad_utility::HashSet<size_t> seenColumns;
 
   for (const auto& triple : templateTriples) {
-    auto preprocessedTriple = preprocessTriple(triple, variableColumns);
+    auto preprocessedTriple = preprocessTriple(triple, variableColumns, index,
+                                               result.constantLocalVocab_);
     if (!preprocessedTriple) continue;
 
     // Ground triples are handled separately (emitted once, never deduplicated)

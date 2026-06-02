@@ -92,7 +92,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     InputRangeTypeErased<TableWithRange> rowIndices, size_t queryOffset,
     DeduplicationMode mode) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns);
+      templateTriples, variableColumns, index);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   // One per-triple filter per template triple, initialized for the given mode.
