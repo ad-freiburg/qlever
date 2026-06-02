@@ -505,6 +505,132 @@ TEST(ExportQueryExecutionTrees, constructGroundTripleEmittedOnceInAllModes) {
   }
 }
 
+// Counts the triples in a Turtle serialization. Every triple is emitted on its
+// own line terminated by "\n", so the number of newlines is the triple count.
+// Used by the deduplication tests below, where the output order is not fixed
+// but the multiset of emitted triples is what we want to assert on.
+namespace {
+size_t countTurtleTriples(const std::string& turtle) {
+  return static_cast<size_t>(ql::ranges::count(turtle, '\n'));
+}
+}  // namespace
+
+// A single film has 2 labels, 2 genres, 3 cast members and 1 release date, so
+// the WHERE clause has 2*2*3*1 = 12 solutions. Every one of the five template
+// triples is instantiated once per solution, so `DeduplicationMode::None` mode
+// emits 12*5 = 60 triples, even though only 9 distinct triples exist (1 type +
+// 2 labels + 2 genres + 3 cast + 1 date). `DeduplicationMode::Global` mode must
+// collapse to exactly those 9.
+TEST(ExportQueryExecutionTrees, constructDeduplicateFilmMultiplicityExample) {
+  const std::string kg =
+      "<film> <type> <Film> ."
+      "<film> <label> \"l1\" . <film> <label> \"l2\" ."
+      "<film> <genre> <g1> . <film> <genre> <g2> ."
+      "<film> <cast> <c1> . <film> <cast> <c2> . <film> <cast> <c3> ."
+      "<film> <date> \"2020\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "} WHERE {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "}";
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::none());
+    EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                  kg, query, ad_utility::MediaType::turtle)),
+              60u);
+  }
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::global());
+    EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                  kg, query, ad_utility::MediaType::turtle)),
+              9u);
+  }
+}
+
+// Cross-template duplicate: the scaled-down analogue of issue #2877 (the 83 vs
+// 77 discrepancy). A parent-child chain binds the same node to both `?s` and
+// `?o`: with `<a> <p40> <b>` and `<b> <p40> <c>`, the WHERE solutions are
+// (s=a,o=b) and (s=b,o=c), so `<b>` is bound to `?o` in the first and to `?s`
+// in the second. The two label template triples `?s <label> ?sl` and
+// `?o <label> ?ol` therefore both emit `<b> <label> "lb"`. The full result is
+// the set {a-la, b-lb, c-lc}, i.e. 3 triples.
+//
+// This currently FAILS under `global`: because each template triple has its own
+// per-template filter, the duplicate `<b> <label> "lb"` produced by the two
+// different template triples is not detected, and 4 triples are emitted. It is
+// the regression guard for the planned full-triple global key.
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCrossTemplate) {
+  const std::string kg =
+      "<a> <p40> <b> . <b> <p40> <c> ."
+      "<a> <label> \"la\" . <b> <label> \"lb\" . <c> <label> \"lc\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?s <label> ?sl ."
+      "  ?o <label> ?ol ."
+      "} WHERE {"
+      "  ?s <p40> ?o ."
+      "  ?s <label> ?sl ."
+      "  ?o <label> ?ol ."
+      "}";
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                kg, query, ad_utility::MediaType::turtle)),
+            3u);
+}
+
+// The QLever JSON `resultsize` (used by the QLever UI) must reflect the number
+// of triples actually emitted after deduplication, not the pre-deduplication
+// estimate `numRows * numTemplateTriples`. Using the film example above,
+// `global` mode emits 9 triples, so `resultsize` must be 9.
+// This currently FAILS: `resultsize`/`resultSizeTotal` are set to the inflated
+// estimate (60) computed before the streaming dedup filter runs, while only
+// `resultSizeExported` (counted from the yielded bindings) is correct.
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalReportsResultSize) {
+  const std::string kg =
+      "<film> <type> <Film> ."
+      "<film> <label> \"l1\" . <film> <label> \"l2\" ."
+      "<film> <genre> <g1> . <film> <genre> <g2> ."
+      "<film> <cast> <c1> . <film> <cast> <c2> . <film> <cast> <c3> ."
+      "<film> <date> \"2020\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "} WHERE {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "}";
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  auto json = runJSONQuery(kg, query, ad_utility::MediaType::qleverJson);
+  EXPECT_EQ(json["res"].size(), 9u);
+  EXPECT_EQ(json["resultSizeExported"], 9u);
+  EXPECT_EQ(json["resultsize"], 9u);
+  EXPECT_EQ(json["resultSizeTotal"], 9u);
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg =
