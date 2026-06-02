@@ -58,8 +58,12 @@ uint64_t readNumOffsets(ad_utility::File& file) {
   file.read(&version, sizeof(version),
             trailerStart + 3 * static_cast<off_t>(sizeof(uint64_t)) +
                 static_cast<off_t>(sizeof(uint32_t)));
-  AD_CORRECTNESS_CHECK(magicNumber == mmapMagicNumber &&
-                       version == mmapVersion);
+  AD_CORRECTNESS_CHECK(
+      magicNumber == mmapMagicNumber,
+      "Vocabulary offsets file did not contain the correct magic number.");
+  AD_CORRECTNESS_CHECK(
+      version == mmapVersion,
+      "Vocabulary offsets file did not contain the correct version number.");
   return numOffsets;
 }
 }  // namespace
