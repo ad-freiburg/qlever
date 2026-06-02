@@ -165,8 +165,8 @@ class LazyGroupByRange
                                idTable.size());
     if (!singleIdTable_ && !resultTable_.empty()) {
       currentLocalVocab_.mergeWith(storedLocalVocabs_);
-      auto result = Result::IdTableVocabPair{
-          std::move(resultTable_).toDynamic(), std::move(currentLocalVocab_)};
+      auto result = Result::IdTableVocabPair{std::move(resultTable_),
+                                             std::move(currentLocalVocab_)};
       // Keep last local vocab for next commit, since we might write to
       // `currentLocalVocab_`, we need to clone it.
       currentLocalVocab_ = storedLocalVocabs_.back().clone();
@@ -195,7 +195,7 @@ class LazyGroupByRange
       }
       if (singleIdTable_) {
         // Yield at least a single empty table if requested.
-        return IdTableVocabPair{std::move(resultTable_).toDynamic(),
+        return IdTableVocabPair{std::move(resultTable_),
                                 std::move(currentLocalVocab_)};
       }
       return std::nullopt;
