@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-// Explicit instantiation definitions for the CompressedExternalIdTableSorter
-// specialisations declared in
-// CompressedExternalIdTableSorterExternTemplates.h. Each specialisation is
+// Explicit instantiation definitions for the `CompressedExternalIdTableSorter`
+// specializations declared in
+// `ExternalSortFunctors.h`. Each specialization is
 // instantiated exactly once here (in the index library), rather than once per
 // translation unit that uses it.
 

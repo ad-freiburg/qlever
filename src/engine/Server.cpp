@@ -1,4 +1,4 @@
-/// Copyright 2015 - 2026 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR

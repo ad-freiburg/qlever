@@ -568,8 +568,8 @@ if (USE_PRECOMPILED_HEADERS)
     target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
     target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
     target_precompile_headers(sparqlExpressions PRIVATE ${PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS})
-    # Use HEAVY: index TUs that include Operation.h transitively pull in beast.h
-    # and boost::iostreams via ResponseMiddleware.h / CompressorStream.h.
+    # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
+    # and `boost::iostreams` via `ResponseMiddleware.h` / `CompressorStream.h`.
     target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
     target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
     target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
