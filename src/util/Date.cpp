@@ -124,7 +124,11 @@ std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
 // _____________________________________________________________________________
 std::optional<Date::Nanoseconds> Date::toEpoch() const {
   using namespace std::chrono;
-  auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
+  // For `xsd:gYear`s `getMonth/getDay`will return -1.
+  // In this case just assume Jan 1st of the respective year.
+  auto month = std::max(getMonth(), 1);
+  auto day = std::max(getDay(), 1);
+  auto date = year_month_day{year(getYear()) / month / day};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};

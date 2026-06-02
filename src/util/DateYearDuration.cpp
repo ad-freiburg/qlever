@@ -375,17 +375,21 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
       return DateYearOrDuration{difference.value()};
     }
   } else if (isLongYear() && rhs.isLongYear()) {
-    //  `LargeYear` - `LargeYear` => `LargeYear` or `Date`.
-    int64_t year1 = getYear();
-    int64_t year2 = rhs.getYear();
-    int64_t result = year1 - year2;
-    if (result >= Date::minYear && result <= Date::maxYear) {
-      // The result year can be constructed as a `Date`.
-      return DateYearOrDuration{Date(result, 1, 1)};
-    } else {
-      // The result year will also be a `LargeYear`.
-      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
+    //  `LargeYear` - `LargeYear` => `DayTimeDuration`.
+    using namespace std::chrono;
+    // Assuming Jan 1st of respective year because only year is stored.
+    auto year1 = year_month_day{year(getYear()) / 1 / 1};
+    auto year2 = year_month_day{year(rhs.getYear()) / 1 / 1};
+
+    auto difference = sys_days(year1) - sys_days(year2);
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+    auto diff_count = difference.count();
+    if (diff_count < 0) {
+      durationType = DayTimeDuration::Type::Negative;
+      diff_count = -diff_count;
     }
+    return DateYearOrDuration{
+        DayTimeDuration{durationType, diff_count, 0, 0, 0}};
   }
 
   // The following will not be implemented (not viable):
@@ -415,24 +419,13 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     } else {
       return DateYearOrDuration{sum.value()};
     }
-  } else if (isLongYear() && rhs.isLongYear()) {
-    //  `LargeYear` + `LargeYear` => `LargeYear` or `Date`.
-    int64_t year1 = getYear();
-    int64_t year2 = rhs.getYear();
-    int64_t result = year1 + year2;
-    if (result >= Date::minYear && result <= Date::maxYear) {
-      // The result year can be constructed as a `Date`.
-      return DateYearOrDuration{Date(result, 1, 1)};
-    } else {
-      // The result year will also be a `LargeYear`.
-      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
-    }
   }
 
   // The following will not be implemented (not viable):
   //  `Date` + `Date`,
   //  `DayTimeDuration` + `Date`,
-  //  `DayTimeDuration` + `LargeYear`.
+  //  `DayTimeDuration` + `LargeYear`,
+  //  `LargeYear` + `LargeYear` .
 
   // No viable addition.
   return std::nullopt;

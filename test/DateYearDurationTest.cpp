@@ -943,34 +943,24 @@ TEST(DateYearOrDuration, Subtraction) {
     // Test for `LargeYear` - `LargeYear`.
     using namespace testing;
     DateYearOrDuration year1 =
-        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
+        DateYearOrDuration(12'000, DateYearOrDuration::Type::Year);
     DateYearOrDuration year2 =
-        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
+        DateYearOrDuration(11'999, DateYearOrDuration::Type::Year);
 
-    EXPECT_THAT(
-        year1 - year2,
-        Optional(AllOf(
-            AD_PROPERTY(DateYearOrDuration, isLongYear, IsTrue()),
-            Eq(DateYearOrDuration(11'000, DateYearOrDuration::Type::Year)))));
+    EXPECT_THAT(year1 - year2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 365, 0, 0, 0))));
+    EXPECT_THAT(year2 - year1,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Negative, 365, 0, 0, 0))));
 
-    year2 = DateYearOrDuration(42'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 - year2,
-        Optional(AllOf(
-            AD_PROPERTY(DateYearOrDuration, isLongYear, IsTrue()),
-            Eq(DateYearOrDuration(-20'000, DateYearOrDuration::Type::Year)))));
-
-    year2 = DateYearOrDuration(20'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 - year2,
-        Optional(AllOf(AD_PROPERTY(DateYearOrDuration, isLongYear, IsFalse()),
-                       Eq(DateYearOrDuration(Date(2000, 1, 1))))));
-
-    year2 = DateYearOrDuration(24'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 - year2,
-        Optional(AllOf(AD_PROPERTY(DateYearOrDuration, isLongYear, IsFalse()),
-                       Eq(DateYearOrDuration(Date(-2000, 1, 1))))));
+    year2 = DateYearOrDuration(11'996, DateYearOrDuration::Type::Year);
+    EXPECT_THAT(year1 - year2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 1461, 0, 0, 0))));
+    EXPECT_THAT(year2 - year1,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Negative, 1461, 0, 0, 0))));
   }
   {
     // Test invalid subtractions.
@@ -1062,38 +1052,6 @@ TEST(DateYearOrDuration, Addition) {
         Optional(Eq(DateYearOrDuration(Date(2000, 4, 19, 6, 20, 0, -4)))));
   }
   {
-    // Test for `LargeYear` addition.
-    using namespace testing;
-    DateYearOrDuration year1 =
-        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
-    DateYearOrDuration year2 =
-        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 + year2,
-        Optional(AllOf(
-            AD_PROPERTY(DateYearOrDuration, isLongYear, IsTrue()),
-            Eq(DateYearOrDuration(33'000, DateYearOrDuration::Type::Year)))));
-
-    year1 = DateYearOrDuration(-30'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 + year2,
-        Optional(AllOf(
-            AD_PROPERTY(DateYearOrDuration, isLongYear, IsTrue()),
-            Eq(DateYearOrDuration(-19'000, DateYearOrDuration::Type::Year)))));
-
-    year1 = DateYearOrDuration(-15'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 + year2,
-        Optional(AllOf(AD_PROPERTY(DateYearOrDuration, isLongYear, IsFalse()),
-                       Eq(DateYearOrDuration(Date(-4000, 1, 1))))));
-
-    year2 = DateYearOrDuration(20'000, DateYearOrDuration::Type::Year);
-    EXPECT_THAT(
-        year1 + year2,
-        Optional(AllOf(AD_PROPERTY(DateYearOrDuration, isLongYear, IsFalse()),
-                       Eq(DateYearOrDuration(Date(5000, 1, 1))))));
-  }
-  {
     // Test invalid subtractions.
     // Invalid `Date`.
     DateYearOrDuration date =
@@ -1108,6 +1066,13 @@ TEST(DateYearOrDuration, Addition) {
     DateYearOrDuration date2 =
         DateYearOrDuration(Date(2012, 12, 20, 15, 15, 59));
     EXPECT_EQ(date1 + date2, std::nullopt);
+
+    // `LargeYear` + `Large Year`
+    DateYearOrDuration year1 =
+        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
+    DateYearOrDuration year2 =
+        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
+    EXPECT_EQ(year1 + year2, std::nullopt);
   }
 }
 #endif
