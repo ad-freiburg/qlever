@@ -190,22 +190,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const std::vector<ColumnIndex>& additionalColumns) {
+    ql::span<const ColumnIndex> additionalColumns) {
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  auto reader = std::make_unique<CompressedRelationReader>(
-      permutation.reader().withAllocator(
-          ad_utility::makeUnlimitedAllocator<Id>()));
-  auto fullScan = reader->lazyScan(
-      scanSpecAndBlocks.scanSpec_,
-      CompressedRelationReader::convertBlockMetadataRangesToVector(
-          scanSpecAndBlocks.blockMetadata_),
-      additionalColumns, cancellationHandle,
-      permutation.getLocatedTriplesForPermutation(*locatedTriplesSharedState),
-      LimitOffsetClause{});
+  auto [reader, fullScan] = permutation.lazyScanWithIndependentReader(
+      scanSpecAndBlocks, additionalColumns, cancellationHandle,
+      *locatedTriplesSharedState);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),

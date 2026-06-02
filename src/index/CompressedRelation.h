@@ -872,7 +872,8 @@ class CompressedRelationReader {
 
   // Allow to construct a `CompressedRelationReader` using a different
   // allocator.
-  CompressedRelationReader withAllocator(Allocator allocator) const {
+  CompressedRelationReader makeReaderWithReboundAllocator(
+      Allocator allocator) const {
     return CompressedRelationReader{std::move(allocator),
                                     ad_utility::File{file_.name(), "r"},
                                     useGraphPostProcessing_};
