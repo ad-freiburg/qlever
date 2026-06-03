@@ -6,67 +6,10 @@
 
 #include <array>
 
+#include "util/MmapVector.h"
 #include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
-
-namespace {
-// The offsets file uses the same on-disk format that
-// `ad_utility::MmapVector<uint64_t>` produces, so that vocabularies that were
-// built by older versions of QLever (which stored the offsets in an
-// `MmapVector`) can still be read. The file consists of the array of offsets
-// (one `uint64_t` per word, plus a final offset), optionally followed by unused
-// capacity, followed by a metadata trailer at the very end of the file with the
-// following layout (see `MmapVector::writeMetaDataToEnd`):
-//   size      (uint64_t)  number of offsets stored in the array
-//   capacity  (uint64_t)  number of offsets the array region can hold
-//   bytesize  (uint64_t)  size of the array region in bytes
-//   magic     (uint32_t)  magic number identifying the format
-//   version   (uint32_t)  format version
-// Note that reading only requires the `size` and the magic number and version
-// (for validation); the offsets themselves are always stored at the very
-// beginning of the file and are read via `pread`, so any unused capacity is
-// simply ignored.
-constexpr uint32_t mmapMagicNumber = 7601577;
-constexpr uint32_t mmapVersion = 0;
-constexpr off_t mmapTrailerSize = 3 * sizeof(uint64_t) + 2 * sizeof(uint32_t);
-
-// Append the metadata trailer for `numOffsets` offsets to the current position
-// of `file` (which must be at the end of the offsets array).
-void writeOffsetsTrailer(ad_utility::File& file, uint64_t numOffsets) {
-  const uint64_t capacity = numOffsets;
-  const uint64_t bytesize = numOffsets * sizeof(uint64_t);
-  file.write(&numOffsets, sizeof(numOffsets));
-  file.write(&capacity, sizeof(capacity));
-  file.write(&bytesize, sizeof(bytesize));
-  file.write(&mmapMagicNumber, sizeof(mmapMagicNumber));
-  file.write(&mmapVersion, sizeof(mmapVersion));
-}
-
-// Read the number of offsets stored in `file` from its metadata trailer and
-// validate the magic number and the format version.
-uint64_t readNumOffsets(ad_utility::File& file) {
-  const off_t fileSize = file.sizeOfFile();
-  AD_CORRECTNESS_CHECK(fileSize >= mmapTrailerSize);
-  const off_t trailerStart = fileSize - mmapTrailerSize;
-  uint64_t numOffsets = 0;
-  uint32_t magicNumber = 0;
-  uint32_t version = 0;
-  file.read(&numOffsets, sizeof(numOffsets), trailerStart);
-  file.read(&magicNumber, sizeof(magicNumber),
-            trailerStart + 3 * static_cast<off_t>(sizeof(uint64_t)));
-  file.read(&version, sizeof(version),
-            trailerStart + 3 * static_cast<off_t>(sizeof(uint64_t)) +
-                static_cast<off_t>(sizeof(uint32_t)));
-  AD_CORRECTNESS_CHECK(
-      magicNumber == mmapMagicNumber,
-      "Vocabulary offsets file did not contain the correct magic number.");
-  AD_CORRECTNESS_CHECK(
-      version == mmapVersion,
-      "Vocabulary offsets file did not contain the correct version number.");
-  return numOffsets;
-}
-}  // namespace
 
 // ____________________________________________________________________________
 OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
@@ -110,7 +53,11 @@ void VocabularyOnDisk::WordWriter::finishImpl() {
   // vocabulary.
   offsetsFile_.write(&currentOffset_, sizeof(currentOffset_));
   ++numWords_;
-  writeOffsetsTrailer(offsetsFile_, numWords_);
+  // For backwards compatibility we still have to write the same redundant
+  // trailer that MmapVector used to write.
+  ad_utility::MmapVectorMetaData{numWords_, numWords_,
+                                 numWords_ * sizeof(uint64_t)}
+      .writeToFile(offsetsFile_);
   file_.close();
   offsetsFile_.close();
 }
@@ -128,7 +75,10 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename, "r");
   offsetsFile_.open(filename + offsetSuffix_, "r");
-  const uint64_t numOffsets = readNumOffsets(offsetsFile_);
+  // For backwards compatibility we have to check the trailer of the file for
+  // the actual size.
+  uint64_t numOffsets =
+      ad_utility::MmapVectorMetaData::readFromFile(offsetsFile_).size_;
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
 }
