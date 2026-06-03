@@ -82,6 +82,49 @@ class LRUCache {
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;
   }
+
+  // Insert the key-value pair into the cache.
+  //
+  // If `key` is already present, update the stored value, mark the entry as
+  // most recently used and return `true`. Otherwise insert the new key-value
+  // pair (evicting the last recently used entry if the cache is at capacity)
+  // and return `false`.
+  bool insert(K&& key, V&& v) {
+    auto it = cache_.find();
+
+    if (it != cache_.end()) {
+      // Move to MRU position.
+      keys_.splice(keys_.begin(), keys_, it->second.second);
+
+      // Replace the old cached value with the newly provided value.
+      it->second.first = std::forward<V>(v);
+
+      return true;  // return true since the value was already present.
+    }
+
+    // Evict LRU if necessary.
+    if (cache_.size() >= capacity_) {
+      K& lruKey = keys_.back();
+      cache_.erase(lruKey);
+
+      keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
+      lruKey = std::forward<K>(key);
+
+      auto result =
+          cache_.try_emplace(keys_.front(), std::forward<V>(v), keys_.begin());
+
+      AD_CORRECTNESS_CHECK(result.second);
+    } else {
+      keys_.push_front(std::forward<K>(key));
+
+      auto result =
+          cache_.try_emplace(keys_.front(), std::forward<V>(v), keys_.begin());
+
+      AD_CORRECTNESS_CHECK(result.second);
+    }
+
+    return false;  // newly inserted.
+  }
 };
 
 }  // namespace ad_utility::util
