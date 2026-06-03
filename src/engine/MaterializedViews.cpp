@@ -695,9 +695,8 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   TripleComponent o{dummyObject()};
   AdditionalScanColumns additionalCols;
   for (const auto& [v, i] : varToCol) {
-    // TODO this is not correct! the plan will have a different col order than
-    // the cache key  ---> does INTERNAL SORT BY when generating the cache key
-    // fix this??
+    // This is only correct if the `QueryExecutionTree` uses the cache key and
+    // `VariableToColumnMap` of the new `IndexScan`.
     auto col = colMap.at(i.columnIndex_);
     if (col == 0) {
       s = v;
