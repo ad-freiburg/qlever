@@ -44,6 +44,9 @@ namespace ad_utility {
 // `batchSize_` other unique keys have been seen is no longer remembered and is
 // emitted again.
 struct DeduplicationMode {
+  static constexpr std::string_view false_ = "false";
+  static constexpr std::string_view global_ = "global";
+
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Global {
   };  // A triple is emitted at most once across the entire result.
@@ -62,8 +65,8 @@ struct DeduplicationMode {
 // Serializers for use with ad_utility::Parameter<DeduplicationMode, ...>.
 struct DeduplicationModeFromString {
   DeduplicationMode operator()(const std::string& s) const {
-    if (s == "false") return {DeduplicationMode::None{}};
-    if (s == "global") return {DeduplicationMode::Global{}};
+    if (s == DeduplicationMode::false_) return {DeduplicationMode::None{}};
+    if (s == DeduplicationMode::global_) return {DeduplicationMode::Global{}};
 
     size_t batchSize = 0;
     const char* begin = s.data();
@@ -73,25 +76,28 @@ struct DeduplicationModeFromString {
     if (ec == std::errc{} && ptr == end && batchSize != 0) {
       return {DeduplicationMode::BatchWise{batchSize}};
     }
-    throw std::runtime_error(absl::StrCat(
-        "Invalid value for construct-deduplicate: \"", s,
-        R"(" Expected "false", "global", or a positive integer.)"));
+    throw std::runtime_error(absl::StrFormat(
+        R"(Invalid value for construct-deduplicate: "%s" Expected "%s", "%s", or a positive integer.)",
+        s, DeduplicationMode::false_, DeduplicationMode::global_));
   }
 };
 
 struct DeduplicationModeToString {
-  std::string operator()(const DeduplicationMode& m) const {
-    return std::visit(ad_utility::OverloadCallOperator{
-                          [](const DeduplicationMode::None&) -> std::string {
-                            return "false";
-                          },
-                          [](const DeduplicationMode::Global&) -> std::string {
-                            return "global";
-                          },
-                          [](const DeduplicationMode::BatchWise& bw) {
-                            return std::to_string(bw.batchSize_);
-                          }},
-                      m.value_);
+  const std::basic_string_view<char> operator()(
+      const DeduplicationMode& m) const {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const DeduplicationMode::None&) -> const std::string_view {
+              return DeduplicationMode::false_;
+            },
+            [](const DeduplicationMode::Global&) -> const std::string_view {
+              return DeduplicationMode::global_;
+            },
+            [](const DeduplicationMode::BatchWise& bw)
+                -> const std::string_view {
+              return std::to_string(bw.batchSize_);
+            }},
+        m.value_);
   }
 };
 
