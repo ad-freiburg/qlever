@@ -981,7 +981,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   if (query.hasConstructClause() &&
       !std::holds_alternative<DeduplicationMode::None>(
           getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>()
-              .value)) {
+              .value_)) {
     resultSize = numBindingsExported;
   }
 

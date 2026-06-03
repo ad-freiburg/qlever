@@ -48,7 +48,7 @@ struct DeduplicationMode {
   struct BatchWise {    // Deduplicates against the `batchSize_` most recently
     size_t batchSize_;  // seen unique triples (per template triple).
   };
-  std::variant<None, Global, BatchWise> value;
+  std::variant<None, Global, BatchWise> value_;
 
   static DeduplicationMode none() { return {None{}}; }
   static DeduplicationMode global() { return {Global{}}; }
@@ -89,7 +89,7 @@ struct DeduplicationModeToString {
                           [](const DeduplicationMode::BatchWise& bw) {
                             return std::to_string(bw.batchSize_);
                           }},
-                      m.value);
+                      m.value_);
   }
 };
 

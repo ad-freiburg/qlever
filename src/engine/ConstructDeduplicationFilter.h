@@ -123,7 +123,7 @@ class PerTripleFilter {
             [](const ad_utility::DeduplicationMode::BatchWise& bw) -> Filter {
               return LruDeduplicationCache{bw.batchSize_};
             }},
-        mode.value);
+        mode.value_);
   }
 };
 
@@ -201,7 +201,7 @@ class ConstructDeduplicationState {
   static std::optional<PerTripleFilter> makeFilter(
       const ad_utility::DeduplicationMode& mode) {
     if (std::holds_alternative<ad_utility::DeduplicationMode::None>(
-            mode.value)) {
+            mode.value_)) {
       return std::nullopt;
     }
     return PerTripleFilter{mode};
