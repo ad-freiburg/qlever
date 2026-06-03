@@ -513,4 +513,23 @@ TEST(ConstructTemplatePreprocessorTest, dedupIdIsStableAndDistinct) {
   // Distinct IRIs `<http://a>` vs `<http://b>` must differ.
   EXPECT_NE(dedupIdAt(result, 0, 0), dedupIdAt(result, 1, 0));
 }
+
+// `tripleContainsBlankNode_` is parallel to `preprocessedTriples_` and flags
+// exactly the triples that contain a blank node in any position.
+TEST(ConstructTemplatePreprocessorTest, tripleContainsBlankNodeFlag) {
+  Triples triples;
+  // Triple 0: all constants -> no blank node.
+  triples.push_back({GraphTerm{Iri{"<http://s>"}}, GraphTerm{Iri{"<http://p>"}},
+                     GraphTerm{Iri{"<http://o>"}}});
+  // Triple 1: subject is a blank node -> flagged.
+  triples.push_back({GraphTerm{BlankNode{false, "b"}},
+                     GraphTerm{Iri{"<http://p>"}},
+                     GraphTerm{Iri{"<http://o>"}}});
+
+  VariableToColumnMap varMap;
+  auto result =
+      ConstructTemplatePreprocessor::preprocess(triples, varMap, testIndex());
+
+  EXPECT_THAT(result.tripleContainsBlankNode_, ElementsAre(false, true));
+}
 }  // namespace

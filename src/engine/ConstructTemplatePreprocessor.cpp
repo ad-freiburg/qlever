@@ -33,6 +33,15 @@ static ValueId resolveConstantDedupId(TripleComponent tripleComponent,
   return std::move(tripleComponent).toValueId(index, constantLocalVocab);
 }
 
+// True if any of the triple's three positions is a blank node. Such triples are
+// excluded from deduplication: their per-row blank node ids make every
+// instantiation distinct.
+static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
+  return ql::ranges::any_of(triple, [](const PreprocessedTerm& term) {
+    return std::holds_alternative<PrecomputedBlankNode>(term);
+  });
+}
+
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri, const Index& index, LocalVocab& constantLocalVocab) {
@@ -145,6 +154,8 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
         result.uniqueVariableColumns_.push_back(var.columnIndex_);
       }
     }
+    result.tripleContainsBlankNode_.push_back(
+        tripleContainsBlankNode(*preprocessedTriple));
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 

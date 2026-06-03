@@ -57,8 +57,8 @@ struct PrecomputedConstant {
   // once at preprocessing time (see
   // `ConstructTemplatePreprocessor::preprocessIri`/`preprocessLiteral`).
   // Defaults to `makeUndefined()` so `PrecomputedConstant` can be aggregate
-  // initialized from just an `EvaluatedTerm` on the instantiation path, where
-  // the deduplication key is irrelevant.
+  // initialized from just an `EvaluatedTerm` on code paths where the
+  // deduplication key is irrelevant.
   ValueId dedupId_ = ValueId::makeUndefined();
 };
 
@@ -100,6 +100,14 @@ struct PreprocessedConstructTemplate {
   // The dedupicated set of `IdTable` column indices that appear in the template
   // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
+  // For each template triple at index i (parallel to `preprocessedTriples_`),
+  // this flag is true if the triple contains at least one blank node term
+  // (either a user-defined blank-node term like `_:a` or an anonymous blank
+  // node `[]`). Used during deduplication of CONSTRUCT query results: triples
+  // that contain blank nodes are excluded from deduplication because blank node
+  // IDs are generated per-row, making every instantiation distinct across
+  // result rows.
+  std::vector<bool> tripleContainsBlankNode_;
   // Owns the `LocalVocabEntry`s created while resolving literal (and
   // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
   // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
