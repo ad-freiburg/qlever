@@ -60,7 +60,10 @@ struct PrecomputedConstant {
   // assigned a fresh `LocalVocabIndex` in the template's `constantLocalVocab_`.
   // Resolved once at preprocessing time (see
   // `ConstructTemplatePreprocessor::preprocessIri`/`preprocessLiteral`).
-  ValueId dedupId_;
+  // Defaults to `makeUndefined()` so `PrecomputedConstant` can be aggregate
+  // initialized from just an `EvaluatedTerm` on the instantiation path, where
+  // the deduplication key is irrelevant.
+  ValueId dedupId_ = ValueId::makeUndefined();
 };
 
 // After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
