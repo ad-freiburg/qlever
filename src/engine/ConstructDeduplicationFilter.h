@@ -140,7 +140,7 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
     key[pos] =
         std::visit(ad_utility::OverloadCallOperator{
                        [](const PrecomputedConstant& c) { return c.dedupId_; },
-                       [&](const PrecomputedVariable& v) {
+                       [&ctx, absoluteRow](const PrecomputedVariable& v) {
                          return ctx.idTable_[absoluteRow][v.columnIndex_];
                        },
                        [](const PrecomputedBlankNode&) -> ValueId {
