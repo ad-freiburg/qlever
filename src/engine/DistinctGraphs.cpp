@@ -60,22 +60,11 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   ScanSpecAndBlocks scanSpecAndBlocks = permutation.getScanSpecAndBlocks(ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, locatedTriplesState());
   
   for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()){
-    if (metadata.graphInfo_) {
-      bool hasNewGraphId = ql::ranges::any_of(metadata.graphInfo_.value(), 
-        [&graphIds](Id id){return !graphIds.contains(id.getBits()); }
-      );
-      if (hasNewGraphId) {
-        auto lazyScanResult = permutation.lazyScan(
-            scanSpecAndBlocks, std::vector<CompressedBlockMetadata>{metadata},
-            std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
-            cancellationHandle_, locatedTriplesState());
-        for (auto& idTable : lazyScanResult) {
-          for (Id id : idTable.getColumn(3)) {
-            graphIds.insert(id.getBits());
-          }
-        }
-      }
-    } else {
+    bool hasNewGraphId = ql::ranges::any_of(metadata.graphInfo_.value(), 
+      [&graphIds](Id id){return !graphIds.contains(id.getBits()); }
+    );
+    bool shouldScan = !metadata.graphInfo_ || hasNewGraphId;
+    if (shouldScan) {
       auto lazyScanResult = permutation.lazyScan(
           scanSpecAndBlocks, std::vector<CompressedBlockMetadata>{metadata},
           std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
@@ -85,7 +74,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
           graphIds.insert(id.getBits());
         }
       }
-    }
+    }   
   }
 
   auto treatDefaultGraphAsNamedGraph =
