@@ -58,7 +58,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Index& index, CancellationHandle cancellationHandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns);
+      templateTriples, variableColumns, index);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
