@@ -59,7 +59,7 @@ struct SubtractImpl {
   ValueId operator()(double lhs, int64_t rhs) const {
     return Id::makeFromDouble(lhs - static_cast<double>(rhs));
   }
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
     // Using `operator-` implementation in `DateYearOrDuration`.
     auto difference = lhs - rhs;
@@ -374,11 +374,13 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override {
+      const LocalVocabContext& context, bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
-    auto leftChild = children[0]->getPrefilterExpressionForMetadata(isNegated);
-    auto rightChild = children[1]->getPrefilterExpressionForMetadata(isNegated);
+    auto leftChild =
+        children[0]->getPrefilterExpressionForMetadata(context, isNegated);
+    auto rightChild =
+        children[1]->getPrefilterExpressionForMetadata(context, isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
   }

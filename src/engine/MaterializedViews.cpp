@@ -656,8 +656,8 @@ MaterializedView::makeEmptyLocatedTriplesState() const {
   LocalVocab emptyVocab;
 
   return std::make_shared<LocatedTriplesState>(
-      emptyLocatedTriples, emptyInternalLocatedTriples,
-      emptyVocab.getLifetimeExtender(), 0);
+      LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
+                          emptyVocab.getLifetimeExtender(), 0});
 }
 
 // _____________________________________________________________________________

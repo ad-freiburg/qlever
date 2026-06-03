@@ -199,6 +199,12 @@ class DayTimeDuration {
   }
 
   //____________________________________________________________________________
+  [[nodiscard]] constexpr long long getTotalMilliseconds() const {
+    return static_cast<long long>(totalMilliseconds_) -
+           static_cast<long long>(boundTotalMilliseconds);
+  }
+
+  //____________________________________________________________________________
   // Converts the underlying `dayTimeDuration` representation to a compact
   // bit representation (necessary for the == and <=> implementation).
   [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
@@ -222,6 +228,10 @@ class DayTimeDuration {
     return ql::compareThreeWay(toBits(), rhs.toBits());
   }
   [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(DayTimeDuration);
+
+  //____________________________________________________________________________
+  // Subtraction of two `DayTimeDuration` objects.
+  [[nodiscard]] DayTimeDuration operator-(const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   template <typename H>

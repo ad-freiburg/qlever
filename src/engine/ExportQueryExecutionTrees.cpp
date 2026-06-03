@@ -14,7 +14,6 @@
 #include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
@@ -40,6 +39,7 @@ using ad_utility::InputRangeTypeErased;
 namespace {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -261,52 +261,23 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 }
 
 // _____________________________________________________________________________
-auto ExportQueryExecutionTrees::constructQueryResultToTriples(
+auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return qlever::constructExport::ConstructTripleGenerator::
-      generateStringTriples(qet, constructTriples, limitAndOffset,
-                            std::move(result), resultSize,
-                            std::move(cancellationHandle));
-}
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  // TODO<joka921> check the complete semantics of LIMIT/OFFSET
+  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
+                                  constructTriples.size());
 
-// _____________________________________________________________________________
-template <>
-STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
-    constructQueryResultToStream<ad_utility::MediaType::turtle>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples,
-        LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-        CancellationHandle cancellationHandle,
-        [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  result->logResultSize();
-  [[maybe_unused]] uint64_t resultSize = 0;
-  auto generator = constructQueryResultToTriples(
-      qet, constructTriples, limitAndOffset, result, resultSize,
-      std::move(cancellationHandle));
-  for (const auto& triple : generator) {
-    STREAMABLE_YIELD(triple.subject_);
-    STREAMABLE_YIELD(' ');
-    STREAMABLE_YIELD(triple.predicate_);
-    STREAMABLE_YIELD(' ');
-    // NOTE: It's tempting to STREAMABLE_YIELD an expression using a ternary
-    // operator: STREAMABLE_YIELD triple._object.starts_with('"')
-    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
-    //     : triple._object;
-    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
-    // to unnecessary copies of `triple._object` in the `else` case because
-    // the ternary always has to create a new prvalue.
-    if (ql::starts_with(triple.object_, '"')) {
-      std::string objectAsValidRdfLiteral =
-          RdfEscaping::validRDFLiteralFromNormalized(triple.object_);
-      STREAMABLE_YIELD(objectAsValidRdfLiteral);
-    } else {
-      STREAMABLE_YIELD(triple.object_);
-    }
-    STREAMABLE_YIELD(" .\n");
-  }
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(constructTriples, qet.getVariableColumns(),
+                            qet.getQec()->getIndex(), cancellationHandle,
+                            std::move(rowIndices), limitAndOffset._offset);
 }
 
 // _____________________________________________________________________________
@@ -317,7 +288,7 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(
+  auto generator = constructQueryResultToStringTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
 
@@ -481,9 +452,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::turtle ||
-                format == MediaType::qleverJson);
+  using enum ad_utility::MediaType;
+  static constexpr std::array supportedFormats{octetStream, csv, tsv, turtle,
+                                               qleverJson};
+  static_assert(ad_utility::contains(supportedFormats, format));
 
   // TODO<joka921> Use a proper error message, or check that we get a more
   // reasonable error from upstream.
@@ -501,7 +473,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    std::erase(selectedColumnIndices, std::nullopt);
+    ql::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -788,37 +760,39 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::sparqlXml ||
-                format == MediaType::sparqlJson ||
-                format == MediaType::qleverJson ||
-                format == MediaType::binaryQleverExport);
-  if constexpr (format == MediaType::octetStream ||
-                format == MediaType::binaryQleverExport) {
+  using enum MediaType;
+  static constexpr std::array supportedFormats{
+      octetStream, csv,        tsv,    sparqlXml,
+      sparqlJson,  qleverJson, turtle, binaryQleverExport};
+  static_assert(ad_utility::contains(supportedFormats, format));
+
+  if constexpr (format == octetStream || format == binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
-  } else if constexpr (format == MediaType::sparqlXml) {
+  } else if constexpr (format == sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
-  } else if constexpr (format == MediaType::sparqlJson) {
+  } else if constexpr (format == sparqlJson) {
     AD_THROW("SparqlJSON export is not supported for CONSTRUCT queries");
   }
-  AD_CONTRACT_CHECK(format != MediaType::qleverJson);
+  AD_CONTRACT_CHECK(format != qleverJson);
 
   result->logResultSize();
-  constexpr auto& escapeFunction = format == MediaType::tsv
-                                       ? RdfEscaping::escapeForTsv
-                                       : RdfEscaping::escapeForCsv;
-  constexpr char sep = format == MediaType::tsv ? '\t' : ',';
-  [[maybe_unused]] uint64_t resultSize = 0;
-  auto generator = constructQueryResultToTriples(
-      qet, constructTriples, limitAndOffset, result, resultSize,
-      std::move(cancellationHandle));
-  for (auto& triple : generator) {
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.subject_)));
-    STREAMABLE_YIELD(sep);
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.predicate_)));
-    STREAMABLE_YIELD(sep);
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.object_)));
-    STREAMABLE_YIELD("\n");
+  uint64_t resultSize = 0;
+
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
+      limitAndOffset, *result, resultSize, constructTriples.size());
+
+  auto triples = qlever::constructExport::ConstructTripleGenerator::
+      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
+                               qet.getQec()->getIndex(), cancellationHandle,
+                               std::move(rowIndices), limitAndOffset._offset,
+                               format);
+
+  for (const std::string& triple : triples) {
+    STREAMABLE_YIELD(triple);
   }
 }
 

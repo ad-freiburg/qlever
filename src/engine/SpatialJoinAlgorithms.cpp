@@ -220,6 +220,9 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 
 std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
     const IdTable* idtable, size_t row, size_t col) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  throw std::runtime_error("not supported in C++17 mode currently");
+#else
   auto printWarning = [this, &spatialJoin = spatialJoin_]() {
     if (this->numFailedParsedGeometries_ == 0) {
       std::string warning =
@@ -255,6 +258,7 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
     return std::nullopt;
   }
   return geometries_.size() - 1;  // index of the last element
+#endif
 }
 
 // ____________________________________________________________________________
@@ -348,6 +352,9 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  throw std::runtime_error("not supported in C++17 mode currently");
+#else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
               joinType, rightCacheName, bbLeft, bbRight] = params_;
@@ -419,6 +426,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   }
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
+#endif
 }
 
 // ____________________________________________________________________________
@@ -952,6 +960,9 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 // ____________________________________________________________________________
 std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
     const IdTable* idTable, const size_t row, const ColumnIndex col) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  throw std::runtime_error("getRtreeEntry is not supported in this build");
+#else
   RtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
   entry.geoPoint_ = getPoint(idTable, row, col);
 
@@ -970,6 +981,7 @@ std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
                   entry.geoPoint_.value().getLat() + 0.00000001));
   }
   return entry;
+#endif
 }
 
 // ____________________________________________________________________________
@@ -988,6 +1000,10 @@ std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  throw std::runtime_error(
+      "BoundingBoxAlgorithm is not supported in this build");
+#else
   // helper struct to avoid duplicate entries for areas
   struct AddedPair {
     size_t rowLeft_;
@@ -1089,6 +1105,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       Result(std::move(result), std::vector<ColumnIndex>{},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
+#endif
 }
 
 // ____________________________________________________________________________

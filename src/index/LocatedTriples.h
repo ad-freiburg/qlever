@@ -267,6 +267,12 @@ class LocatedTriplesPerBlock {
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
 
+  // Compute the located triples that are present in this
+  // `LocatedTriplesPerBlock` instance but not in `oldBlocks`. The result is a
+  // pair of vectors (insertions, deletions), each sorted in SPO order.
+  std::array<std::vector<IdTriple<0>>, 2> computeDiff(
+      const LocatedTriplesPerBlock& oldBlocks) const;
+
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,

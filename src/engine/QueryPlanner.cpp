@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -67,6 +68,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -775,8 +777,8 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<SubtreePlan>>& children, TextLimitMap& textLimits)
-    -> PlansAndFilters {
+    const vector<vector<SubtreePlan>>& children,
+    TextLimitMap& textLimits) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -839,10 +841,13 @@ auto QueryPlanner::seedWithScansAndText(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
-          "necessary also rebuild the index.");
+          "necessary also rebuild the index");
     }
 
-    // Backward compatibility with spatial search predicates
+    // Backward compatibility with spatial search predicates.
+    // GCC's `-Wdangling-reference` cannot trace through `std::visit` to see
+    // that the returned reference points into the variant, not the visitor.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
@@ -853,6 +858,7 @@ auto QueryPlanner::seedWithScansAndText(
               return var.name();
             }},
         node.triple_.p_);
+    GCC_REENABLE_WARNINGS
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         ql::ends_with(input, '>')) {
@@ -2434,10 +2440,9 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs) const
-    -> std::vector<SubtreePlan> {
+auto QueryPlanner::applyJoinDistributivelyToUnion(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
@@ -2546,10 +2551,9 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 }
 
 // __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
-                                                const SubtreePlan& b,
-                                                const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithTransitivePath(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
@@ -2638,10 +2642,9 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithHasPredicateScan(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2677,10 +2680,9 @@ auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
-                                            const SubtreePlan& b,
-                                            const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithPathSearch(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
   auto bRootOp =
@@ -3134,6 +3136,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3257,10 +3261,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& index = planner_._qec->getIndex();
-  const auto& vocab = index.getVocab();
-  auto config =
-      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
+  auto config = pathQuery.toPathSearchConfiguration(planner_._qec->getIndex());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
@@ -3352,6 +3353,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  auto externalValues =
+      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+  auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _____________________________________________________________________________

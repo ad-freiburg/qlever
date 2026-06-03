@@ -58,7 +58,9 @@ class ExplicitIdTableOperationTest : public ::testing::Test {
     qec_ = getTestQec();
     testTable_ = createTestIdTable(3, 2);
     testVariables_ = createTestVariableMap(2);
-    testSortedColumns_ = {ColumnIndex{0}};
+    // Avoid initializer_list assignment to sidestep a GCC 12 false positive
+    // (-Werror=array-bounds).
+    testSortedColumns_ = std::vector<ColumnIndex>(1, ColumnIndex{0});
     testCacheKey_ = "[dummy cache key]";
   }
 
@@ -160,9 +162,8 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 // _____________________________________________________________________________
 TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"test_word\"")};
+  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+      "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
@@ -180,9 +181,8 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 // Test cloneImpl functionality
 TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"clone_test\"")};
+  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+      "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation original(qec_, testTable_, testVariables_,

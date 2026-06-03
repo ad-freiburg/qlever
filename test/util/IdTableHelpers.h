@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
-#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>

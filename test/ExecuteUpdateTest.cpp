@@ -75,18 +75,19 @@ TEST(ExecuteUpdate, executeUpdate) {
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        Index index = ad_utility::testing::makeTestIndex(
-            "ExecuteUpdate_executeUpdate", indexConfig);
+        auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate", indexConfig));
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
-        expectExecuteUpdateHelper(update, qec, index);
-        index.deltaTriplesManager().modify<void>(
+                                  materializedViewsManager);
+        expectExecuteUpdateHelper(update, qec, *index);
+        index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
               EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
             });
@@ -94,20 +95,21 @@ TEST(ExecuteUpdate, executeUpdate) {
   // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails_ =
       [&expectExecuteUpdateHelper](
-          Index& index, const std::string& update,
+          std::shared_ptr<Index> index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
+                                  materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            expectExecuteUpdateHelper(update, qec, index), messageMatcher);
+            expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
   {
     auto expectExecuteUpdateFails =
@@ -115,9 +117,10 @@ TEST(ExecuteUpdate, executeUpdate) {
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
             source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
+          auto index =
+              std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+                  "ExecuteUpdate_executeUpdate",
+                  ad_utility::testing::TestIndexConfig()));
           expectExecuteUpdateFails_(index, update, messageMatcher,
                                     sourceLocation);
         };
@@ -299,10 +302,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
-    auto LVI = [&localVocab](const std::string& iri) {
+    auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri))));
+          localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -410,17 +413,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
-  // Create an index for testing.
-  EncodedIriManager encodedIriManager({"http://example.org/"});
   // <http://example.org/123> is an encoded IRI
   ad_utility::testing::TestIndexConfig indexConfig{
       "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
       "\"baz\" ."};
-  indexConfig.encodedIriManager = encodedIriManager;
+  indexConfig.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   Index index = ad_utility::testing::makeTestIndex(
       "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
-  // We need a non-const vocab for the test.
-  auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
+  auto& encodedIriManager = index.encodedIriManager();
 
   // Helpers
   using namespace ::testing;
@@ -437,8 +437,9 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
-  auto TripleComponentMatcher = [](const ::LocalVocab& localVocab,
-                                   TripleComponentT component) -> MatcherType {
+  auto TripleComponentMatcher = [&index](
+                                    const ::LocalVocab& localVocab,
+                                    TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ::Id& id) -> MatcherType {
@@ -447,10 +448,11 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab](
+            [&localVocab, &index](
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
-              const auto lviOpt = localVocab.getIndexOrNullopt(literalOrIri);
+              const auto lviOpt = localVocab.getIndexOrNullopt(
+                  LocalVocabEntry{literalOrIri, index});
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),
@@ -463,7 +465,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         component);
   };
   auto expectTransformTriplesTemplate =
-      [&vocab, &TripleComponentMatcher, &encodedIriManager](
+      [&index, &TripleComponentMatcher](
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
@@ -472,8 +474,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(encodedIriManager, vocab,
-                                                    variableColumns, triples);
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -487,16 +489,15 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
-      [&vocab, &encodedIriManager](
-          const VariableToColumnMap& variableColumns,
-          std::vector<SparqlTripleSimpleWithGraph>&& triples,
-          const Matcher<const std::string&>& messageMatcher,
-          ad_utility::source_location sourceLocation =
-              AD_CURRENT_SOURCE_LOC()) {
+      [&index](const VariableToColumnMap& variableColumns,
+               std::vector<SparqlTripleSimpleWithGraph>&& triples,
+               const Matcher<const std::string&>& messageMatcher,
+               ad_utility::source_location sourceLocation =
+                   AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(
-                encodedIriManager, vocab, variableColumns, std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s

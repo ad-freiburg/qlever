@@ -62,6 +62,11 @@ struct CommonConfig {
   // TODO: We have not tested this mode in a while. In particular, it is
   // unlikely to work when updates are involved.
   bool onlyPsoAndPos_ = false;
+
+  // Option to add `ql:has-word` triples for each word in each literal. For
+  // each literal, a triple `<literal> ql:has-word "word"` is added for each
+  // word in the literal. This is useful for keyword search in literals.
+  bool addHasWordTriples_ = false;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -195,9 +200,10 @@ class Qlever {
   mutable QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  std::shared_ptr<Index> index_;
   mutable NamedResultCache namedResultCache_;
-  mutable MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
 
@@ -279,12 +285,11 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         *index_.getBlankNodeManager());
+    namedResultCache_.readFromSerializer(serializer, allocator_, index());
   }
 
   // Low-level access to the QLever API, use with care.
-  Index& index() { return index_; }
+  Index& index() { return *index_; }
 };
 }  // namespace qlever
 

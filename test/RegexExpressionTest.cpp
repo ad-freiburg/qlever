@@ -116,8 +116,8 @@ void testValuesInVariables(
   auto toLiteralId = [&ctx](const std::string& value) {
     return Id::makeFromLocalVocabIndex(
         ctx.localVocab.getIndexAndAddIfNotContained(
-            ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                value)));
+            LocalVocabEntry::literalWithoutQuotes(
+                value, ctx.qec->getLocalVocabContext())));
   };
   for (const auto& value : inputValues) {
     ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),
@@ -163,6 +163,11 @@ TEST(RegexExpression, nonPrefixRegex) {
   // A prefix regex, but not a fixed string.
   test("?vocab", "^a.*", {F, T, F});
 
+  // Regression test for issue #2920: a regex starting with `^` that uses `\d`
+  // (or any other RE2-supported character class escape) must not throw but
+  // simply be routed to the code for processing general regexes.
+  test("?vocab", R"(^\\d+)", {F, F, F});
+
   test("?mixed", "x", {U, U, U});
   test("?mixed", "x", {F, F, T}, true);
   test("?mixed", "1$", {U, U, U});
@@ -199,10 +204,11 @@ TEST(RegexExpression, nonPrefixRegex) {
 
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   // Our expression is a fixed string literal: "hallo".
-  VectorWithMemoryLimit<IdOrLiteralOrIri> input{
-      ad_utility::testing::getQec()->getAllocator()};
-  input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> input{qec->getAllocator()};
+  input.push_back(LocalVocabEntry{lit("\"hallo\""), localVocabContext});
 
   {
     auto child =
@@ -314,9 +320,10 @@ TEST(RegexExpression, getPrefixRegex) {
   ASSERT_EQ("alpha", PrefixRegexExpression::getPrefixRegex("^alpha"));
   ASSERT_EQ(R"(\al*ph.a()",
             PrefixRegexExpression::getPrefixRegex(R"(^\\al\*ph\.a\()"));
-  // Invalid escaping of `"` (no need to escape it).
-  ASSERT_THROW(PrefixRegexExpression::getPrefixRegex(R"(^\")"),
-               std::runtime_error);
+  // Escapes of non-special characters (e.g. `\"`) are valid regex features
+  // handled by RE2 in the general regex path, so the prefix check declines
+  // (returns `std::nullopt`) rather than throwing.
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex(R"(^\")"));
 }
 
 // _____________________________________________________________________________
