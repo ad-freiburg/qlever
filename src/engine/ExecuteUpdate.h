@@ -30,18 +30,11 @@ class ExecuteUpdate {
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Execute a CONSTRUCT query and insert the resulting triples into the index
-  // as new delta triples. This is the foundation for rule-based reasoning in
-  // QLever. All generated triples are placed into `targetGraph`. Triples with
-  // any undefined (unbound) component are silently skipped, and duplicate
-  // triples are removed before insertion.
-  //
-  // `maxTriplesToInsert` is an upper bound on the number of unique triples this
-  // single call may produce (checked after deduplication). 0 means unlimited.
-  // Callers that want to enforce a cumulative budget across multiple calls
-  // (e.g. the reasoner) should pass the *remaining* budget on each invocation
-  // rather than relying on a separate cap check elsewhere.
-  //
-  // Note: `query` must have a CONSTRUCT clause.
+  // as new delta triples in `targetGraph`. Triples with any unbound component
+  // are skipped, and duplicates are removed before insertion. `query` must have
+  // a CONSTRUCT clause. `maxTriplesToInsert` caps the number of unique triples
+  // this call may produce (checked after deduplication, 0 = unlimited); callers
+  // wanting a cumulative budget pass the remaining allowance on each call.
   static UpdateMetadata executeConstructInsert(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
