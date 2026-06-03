@@ -33,16 +33,27 @@ IdCache ConstructTripleGenerator::makeIdCache(
                  CACHE_ENTRIES_PER_VARIABLE};
 }
 
+// The per-query state that is invariant across all batches and tables: the
+// read-only inputs plus the mutable caches/flags that must persist across batch
+// and table boundaries. Held by the `processTable` lambda for the whole query.
+struct BatchComputeContext {
+  const PreprocessedConstructTemplate& preprocessedTemplate_;
+  const Index& index_;
+  IdCache& cache_;
+  CancellationHandle cancellationHandle_;
+  ConstructDeduplicationState& deduplicationState_;
+  bool& groundTriplesEmitted_;
+  const DeduplicationMode& mode_;
+};
+
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
 // the start.
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
     vector<EvaluatedTriple> computeBatch(
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
-        const PreprocessedConstructTemplate& preprocessedTemplate,
-        const Index& index, IdCache& cache, size_t tableRowOffset,
-        CancellationHandle cancellationHandle,
-        ConstructDeduplicationState& deduplicationState,
-        bool& groundTriplesEmitted, const DeduplicationMode& mode) {
+        size_t tableRowOffset, BatchComputeContext computeCtx) {
+  auto& [preprocessedTemplate, index, cache, cancellationHandle,
+         deduplicationState, groundTriplesEmitted, mode] = computeCtx;
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -66,7 +77,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>) static std::
   // other modes use the deduplicating overload, which consults
   // `deduplicationState` (one filter per template triple) and drops duplicates.
   std::vector<EvaluatedTriple> instantiated =
-      std::holds_alternative<DeduplicationMode::None>(mode.value)
+      std::holds_alternative<DeduplicationMode::None>(mode.value_)
           ? instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId)
           : instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
                              deduplicationState, ctx);
@@ -133,9 +144,10 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                                  &groundTriplesEmitted, tableRowOffset,
                                  mode](auto chunkView) {
              return computeBatch(
-                 table.tableWithVocab_, chunkView, *preprocessedTemplate, index,
-                 cache, tableRowOffset, cancellationHandle, deduplicationState,
-                 groundTriplesEmitted, mode);
+                 table.tableWithVocab_, chunkView, tableRowOffset,
+                 BatchComputeContext{*preprocessedTemplate, index, cache,
+                                     cancellationHandle, deduplicationState,
+                                     groundTriplesEmitted, mode});
            }) |
            ql::views::join;
   };
