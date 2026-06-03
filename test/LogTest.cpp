@@ -7,9 +7,11 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <ctre.hpp>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -109,46 +111,27 @@ TEST(LogTest, ThreadSafety) {
     }
   }  // All `JThread`s join here on destruction.
 
-  // Split the captured output into individual lines.
-  std::vector<std::string> lines;
-  {
-    std::istringstream iss(ss.str());
-    std::string line;
-    while (std::getline(iss, line)) {
-      if (!line.empty()) {
-        lines.push_back(std::move(line));
-      }
-    }
-  }
-
-  // Count check: no lines were lost or merged.
-  EXPECT_EQ(lines.size(), numThreads * msgsPerThread);
-
-  // Format check: every line must start with the expected log-line prefix. Any
-  // interleaving without mutex protection would produce lines that contain a
-  // second timestamp in the middle, breaking this pattern.
-  static const std::string kLineRegex =
-      "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}"
-      " - FATAL: .+";
-  for (const auto& line : lines) {
-    EXPECT_THAT(line, ::testing::MatchesRegex(kLineRegex));
-  }
-
-  // Content check: every (threadId, msgIdx) combination appears exactly once.
-  std::set<std::string> expectedBodies;
+  // Pre-populate every expected (thread, msg) pair. Each parsed line must match
+  // the log-line prefix pattern, and its pair must still be in the set (first
+  // occurrence); the pair is then removed. Any interleaved write would produce
+  // a line that fails the regex, and a duplicate would fail the contains check.
+  static constexpr ctll::fixed_string kPattern{
+      R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} - FATAL: Thread (?<thread>\d+) message (?<msg>\d+) end)"};
+  std::set<std::pair<size_t, size_t>> expected;
   for (size_t t = 0; t < numThreads; ++t) {
     for (size_t m = 0; m < msgsPerThread; ++m) {
-      expectedBodies.insert("Thread " + std::to_string(t) + " message " +
-                            std::to_string(m) + " end");
+      expected.emplace(t, m);
     }
   }
-  static constexpr std::string_view kSep = " - FATAL: ";
-  for (const auto& line : lines) {
-    auto pos = line.find(kSep);
-    ASSERT_NE(pos, std::string::npos);
-    std::string body = line.substr(pos + kSep.size());
-    EXPECT_EQ(expectedBodies.erase(body), 1u)
-        << "Unexpected or duplicate log body: " << body;
+  for (auto line : absl::StrSplit(ss.str(), '\n', absl::SkipEmpty())) {
+    auto match = ctre::match<kPattern>(line);
+    ASSERT_TRUE(match) << "Line does not match expected log format: " << line;
+    auto pair = std::pair{match.get<"thread">().to_number<size_t>(),
+                          match.get<"msg">().to_number<size_t>()};
+    ASSERT_TRUE(expected.contains(pair))
+        << "Unexpected or duplicate: thread=" << pair.first
+        << " msg=" << pair.second;
+    expected.erase(pair);
   }
-  EXPECT_TRUE(expectedBodies.empty());
+  EXPECT_TRUE(expected.empty());
 }
