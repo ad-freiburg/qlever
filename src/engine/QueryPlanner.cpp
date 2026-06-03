@@ -1,4 +1,4 @@
-
+// Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
@@ -12,7 +12,6 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
-#include <boost/beast/http/status.hpp>
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
@@ -20,7 +19,6 @@
 #include <utility>
 #include <variant>
 
-#include "DistinctGraphs.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
@@ -3112,20 +3110,16 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         const Variable& graphVar = graphPair->first;
         auto graphsCand = makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
 
-        std::vector<SubtreePlan> joined;
         for (auto& innerCand : candidates) {
           bool isGraphVarBound =
               innerCand._qet->getVariableColumns().contains(graphVar);
           if (!isGraphVarBound) {
-            auto joinedPlan = makeSubtreePlan<CartesianProductJoin>(
+            innerCand = makeSubtreePlan<CartesianProductJoin>(
                 planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
                                    graphsCand._qet, innerCand._qet});
-            joined.push_back(std::move(joinedPlan));
-          } else {
-            joined.push_back(std::move(innerCand));
-          }
+          } 
+          // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g { <doesnotexist> } } } are not correctly handled.
         }
-        candidates = std::move(joined);
       }
     }
 
