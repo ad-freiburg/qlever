@@ -244,7 +244,7 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
 }
 
 // _____________________________________________________________________________
-Permutation::LazyScanWithReader Permutation::lazyScanWithIndependentReader(
+Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,

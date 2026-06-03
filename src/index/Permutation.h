@@ -161,7 +161,7 @@ class Permutation {
   // `CompressedRelationReader` with an unlimited-memory allocator instead of
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
-  LazyScanWithReader lazyScanWithIndependentReader(
+  LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
