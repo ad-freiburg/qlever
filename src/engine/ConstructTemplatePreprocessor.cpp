@@ -66,9 +66,8 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
           ad_utility::triple_component::Iri::fromStringRepresentation(
               iri.toSparql())},
       index, constantLocalVocab);
-  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
-                                 EvaluatedTermData{iri.iri(), nullptr}),
-                             dedupId};
+  return PrecomputedConstant{
+      std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr), dedupId};
 }
 
 // _____________________________________________________________________________
@@ -82,8 +81,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(
             literal.toSparql()),
         index, constantLocalVocab);
     return PrecomputedConstant{
-        std::make_shared<const EvaluatedTermData>(
-            EvaluatedTermData{literal.literal(), nullptr}),
+        std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
         dedupId};
   }
   return std::nullopt;

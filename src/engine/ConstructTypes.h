@@ -39,6 +39,10 @@ namespace qlever::constructExport {
 struct EvaluatedTermData {
   std::string rdfTermString_;
   const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
+
+  EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
+      : rdfTermString_{std::move(rdfTermString)},
+        rdfTermDataType_{rdfTermDataType} {}
 };
 
 // Shared ownership of `EvaluatedTermData`. The shared_ptr allows cheap copying
