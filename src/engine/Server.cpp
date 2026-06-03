@@ -1115,77 +1115,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree();
 
-  // If `construct-insert=true` is set, execute the CONSTRUCT query and insert
-  // the resulting triples as new delta triples rather than streaming a result
-  // set to the client. This is the core primitive for rule-based reasoning in
-  // QLever. A valid access token is required, same as for SPARQL UPDATE.
-  if (ad_utility::url_parser::checkParameter(params, "construct-insert", "true")
-          .has_value()) {
-    // Check server-level permission first. The `allow-construct-insert`
-    // runtime parameter defaults to false; operators must opt in explicitly.
-    if (!getRuntimeParameter<&RuntimeParameters::allowConstructInsert_>()) {
-      throw std::runtime_error(
-          "CONSTRUCT INSERT is disabled on this server. Set the "
-          "'allow-construct-insert' runtime parameter to 'true' to enable "
-          "user-initiated CONSTRUCT→INSERT operations.");
-    }
-    if (!plannedQuery->parsedQuery().hasConstructClause()) {
-      throw std::runtime_error(
-          "The 'construct-insert' parameter requires a CONSTRUCT query, "
-          "but the current query has no CONSTRUCT clause.");
-    }
-    // Re-verify the access token here since processQuery is also called
-    // from the update handler.
-    if (!checkAccessToken(ad_utility::url_parser::getParameterCheckAtMostOnce(
-            params, "access-token"))) {
-      throw std::runtime_error(
-          "The 'construct-insert' parameter requires a valid access token. "
-          "Please provide one via the 'access-token' URL parameter.");
-    }
-    // Determine the target named graph.
-    // Default: QLEVER_INFERRED_GRAPH_IRI (<ql:inferred-graph>), a dedicated
-    // graph that keeps inferred triples separate from base data.
-    const auto targetGraphStr =
-        ad_utility::url_parser::getParameterCheckAtMostOnce(
-            params, "construct-insert-graph");
-    const ad_utility::triple_component::Iri targetGraph =
-        targetGraphStr.has_value()
-            ? ad_utility::triple_component::Iri::fromIriref(*targetGraphStr)
-            : ad_utility::triple_component::Iri::fromIriref(
-                  QLEVER_INFERRED_GRAPH_IRI);
-
-    // Execute on the single-threaded update pool so that this INSERT is
-    // atomic with respect to all other index-modifying operations.
-    auto insertCoroutine = computeInNewThread(
-        updateThreadPool_,
-        [this, &plannedQuery, &cancellationHandle, &qec,
-         targetGraph]() -> nlohmann::ordered_json {
-          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
-              [this, &plannedQuery, &cancellationHandle, &qec,
-               &targetGraph](DeltaTriples& deltaTriples) {
-                qec.setLocatedTriplesForEvaluation(
-                    deltaTriples.getLocatedTriplesSharedStateReference());
-                ad_utility::timer::TimeTracer tracer("construct-insert");
-                auto metadata = processConstructInsert(
-                    plannedQuery.value(), cancellationHandle, deltaTriples,
-                    targetGraph, tracer);
-                tracer.endTrace("construct-insert");
-                return createResponseMetadataForConstructInsert(
-                    *index_,
-                    *deltaTriples.getLocatedTriplesSharedStateReference(),
-                    plannedQuery.value(),
-                    plannedQuery.value().queryExecutionTree(), metadata,
-                    targetGraph, tracer);
-              });
-        },
-        cancellationHandle);
-    auto resultJson = co_await std::move(insertCoroutine);
-    AD_LOG_INFO << "Done processing CONSTRUCT INSERT, total time was "
-                << requestTimer.msecs().count() << " ms" << std::endl;
-    co_return co_await send(ad_utility::httpUtils::createJsonResponse(
-        std::move(resultJson), request));
-  }
-
   MediaType mediaType = chooseBestFittingMediaType(
       mediaTypes, plannedQuery.value().parsedQuery());
 
@@ -1304,136 +1233,6 @@ UpdateMetadata Server::processUpdateImpl(
   tracer.endTrace("clearCache");
 
   return updateMetadata;
-}
-
-// ____________________________________________________________________________
-nlohmann::ordered_json Server::createResponseMetadataForConstructInsert(
-    const Index& index, const LocatedTriplesState& locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-    const UpdateMetadata& metadata,
-    const ad_utility::triple_component::Iri& targetGraph,
-    const ad_utility::timer::TimeTracer& tracer) {
-  AD_CORRECTNESS_CHECK(metadata.countBefore_.has_value());
-  AD_CORRECTNESS_CHECK(metadata.inUpdate_.has_value());
-  AD_CORRECTNESS_CHECK(metadata.countAfter_.has_value());
-  auto warnings = qet.collectWarnings();
-  warnings.emplace(warnings.begin(),
-                   "CONSTRUCT INSERT for QLever is experimental.");
-  nlohmann::ordered_json response;
-  response["construct-insert-query"] = ad_utility::truncateOperationString(
-      plannedQuery.parsedQuery()._originalString);
-  response["target-graph"] = targetGraph.toStringRepresentation();
-  response["status"] = "OK";
-  response["warnings"] = warnings;
-  response["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
-  response["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(qet.getRootOperation()->runtimeInfo());
-  auto setIfHasValue = [&response, &metadata](auto field,
-                                              const std::string& fieldName) {
-    const auto& countOpt = std::invoke(field, metadata);
-    if (countOpt.has_value()) {
-      response["delta-triples"][fieldName] = nlohmann::json(countOpt.value());
-    }
-  };
-  setIfHasValue(&UpdateMetadata::countBefore_, "before");
-  setIfHasValue(&UpdateMetadata::countAfter_, "after");
-  setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
-  if (metadata.countAfter_.has_value() && metadata.countBefore_.has_value()) {
-    response["delta-triples"]["difference"] = nlohmann::json(
-        metadata.countAfter_.value() - metadata.countBefore_.value());
-  }
-  response["time"] = tracer.getJSONShort()["construct-insert"];
-  for (auto permutation : Permutation::ALL) {
-    response["located-triples"][Permutation::toString(
-        permutation)]["blocks-affected"] =
-        locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
-            .numBlocks();
-    auto numBlocks = index.getPimpl()
-                         .getPermutation(permutation)
-                         .metaData()
-                         .blockData()
-                         .size();
-    response["located-triples"][Permutation::toString(permutation)]
-            ["blocks-total"] = numBlocks;
-  }
-  return response;
-}
-
-// ____________________________________________________________________________
-UpdateMetadata Server::processConstructInsert(
-    const PlannedQuery& plannedQuery,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples,
-    const ad_utility::triple_component::Iri& targetGraph,
-    ad_utility::timer::TimeTracer& tracer) {
-  const auto& qet = plannedQuery.queryExecutionTree();
-  AD_CORRECTNESS_CHECK(plannedQuery.parsedQuery().hasConstructClause());
-
-  DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  const size_t maxTriples =
-      getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
-  UpdateMetadata metadata = ExecuteUpdate::executeConstructInsert(
-      *index_, plannedQuery.parsedQuery(), qet, deltaTriples, targetGraph,
-      cancellationHandle, maxTriples, tracer);
-  metadata.countBefore_ = countBefore;
-  metadata.countAfter_ = deltaTriples.getCounts();
-
-  tracer.beginTrace("clearCache");
-  // Clear the cache because all cache entries are invalidated by the change
-  // to the delta triples (the located-triples snapshot is part of cache keys).
-  cache_.clearAll();
-  namedResultCache_.clear();
-  tracer.endTrace("clearCache");
-
-  return metadata;
-}
-
-// ____________________________________________________________________________
-nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
-    const Reasoner::MaterializationResult& result,
-    const ad_utility::Timer& timer) {
-  nlohmann::ordered_json response;
-  response["status"] = "OK";
-  response["warnings"] = nlohmann::json::array(
-      {"OWL/RDFS materialisation for QLever is experimental."});
-  response["materialize"]["total-new-triples"] = result.totalNewTriples;
-  response["materialize"]["num-rounds"] = result.numRounds;
-  response["materialize"]["rules-fired"] = result.numRulesActivated;
-  nlohmann::ordered_json ruleStats = nlohmann::ordered_json::array();
-  for (const auto& [name, count] : result.triplesPerRule) {
-    nlohmann::ordered_json entry;
-    entry["rule"] = name;
-    entry["new-triples"] = count;
-    ruleStats.push_back(std::move(entry));
-  }
-  response["materialize"]["rules"] = std::move(ruleStats);
-  response["delta-triples"]["inserted-before"] = result.numInsertedBefore;
-  response["delta-triples"]["inserted-after"] = result.numInsertedAfter;
-  response["delta-triples"]["new"] =
-      result.numInsertedAfter - result.numInsertedBefore;
-  response["time"]["total"] = absl::StrCat(timer.msecs().count(), "ms");
-  return response;
-}
-
-// ____________________________________________________________________________
-nlohmann::ordered_json Server::processMaterialize(
-    DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, std::vector<std::string> seedPredicates) {
-  ad_utility::Timer timer(ad_utility::Timer::Started);
-
-  const auto targetGraph =
-      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
-
-  Reasoner::MaterializationResult result =
-      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle,
-                            std::move(seedPredicates));
-
-  // Cache invalidation: new delta triples invalidate all cached results.
-  cache_.clearAll();
-  namedResultCache_.clear();
-
-  return createResponseMetadataForMaterialize(result, timer);
 }
 
 // ____________________________________________________________________________
@@ -1777,6 +1576,52 @@ template ad_utility::websocket::MessageSender
 Server::createMessageSender<http::request<http::string_body>>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
     const http::request<http::string_body>&, std::string_view);
+
+// _____________________________________________________________________________
+nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
+    const Reasoner::MaterializationResult& result,
+    const ad_utility::Timer& timer) {
+  nlohmann::ordered_json response;
+  response["status"] = "OK";
+  response["warnings"] = nlohmann::json::array(
+      {"OWL/RDFS materialisation for QLever is experimental."});
+  response["materialize"]["total-new-triples"] = result.totalNewTriples;
+  response["materialize"]["num-rounds"] = result.numRounds;
+  response["materialize"]["rules-fired"] = result.numRulesActivated;
+  nlohmann::ordered_json ruleStats = nlohmann::ordered_json::array();
+  for (const auto& [name, count] : result.triplesPerRule) {
+    nlohmann::ordered_json entry;
+    entry["rule"] = name;
+    entry["new-triples"] = count;
+    ruleStats.push_back(std::move(entry));
+  }
+  response["materialize"]["rules"] = std::move(ruleStats);
+  response["delta-triples"]["inserted-before"] = result.numInsertedBefore;
+  response["delta-triples"]["inserted-after"] = result.numInsertedAfter;
+  response["delta-triples"]["new"] =
+      result.numInsertedAfter - result.numInsertedBefore;
+  response["time"]["total"] = absl::StrCat(timer.msecs().count(), "ms");
+  return response;
+}
+
+// _____________________________________________________________________________
+nlohmann::ordered_json Server::processMaterialize(
+    DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+    SharedCancellationHandle handle) {
+  ad_utility::Timer timer(ad_utility::Timer::Started);
+
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
+
+  Reasoner::MaterializationResult result =
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle);
+
+  // Cache invalidation: new delta triples invalidate all cached results.
+  cache_.clearAll();
+  namedResultCache_.clear();
+
+  return createResponseMetadataForMaterialize(result, timer);
+}
 
 // _____________________________________________________________________________
 void Server::writeMaterializedView(

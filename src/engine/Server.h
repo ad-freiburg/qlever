@@ -89,6 +89,13 @@ class Server {
       const Reasoner::MaterializationResult& result,
       const ad_utility::Timer& timer);
 
+  // Run OWL/RDFS forward-chaining materialisation to a fixpoint, inserting the
+  // inferred triples into `deltaTriples`, and return the JSON response
+  // metadata.
+  nlohmann::ordered_json processMaterialize(
+      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+      ad_utility::SharedCancellationHandle handle);
+
   // Helper struct bundling a parsed query with a query execution tree.
   // As the `QueryExecutionTree` stores a raw pointer to the
   // `QueryExecutionContext`, We additionally store the context as a
@@ -301,38 +308,6 @@ class Server {
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
-
-  // Build the JSON response returned after a successful `construct-insert`
-  // operation. This mirrors `createResponseMetadataForUpdate` but uses a
-  // "construct-insert" field and includes the target graph.
-  static nlohmann::ordered_json createResponseMetadataForConstructInsert(
-      const Index& index, const LocatedTriplesState& locatedTriples,
-      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-      const UpdateMetadata& metadata,
-      const ad_utility::triple_component::Iri& targetGraph,
-      const ad_utility::timer::TimeTracer& tracer);
-
-  // Execute the insertion phase of a `construct-insert` operation.
-  // The function must have exclusive access to the DeltaTriples object.
-  UpdateMetadata processConstructInsert(
-      const PlannedQuery& plannedQuery,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples,
-      const ad_utility::triple_component::Iri& targetGraph,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
-
-  // Execute the OWL/RDFS forward-chaining materialisation.
-  // The function must have exclusive access to the DeltaTriples object.
-  // Clears the query-result caches after inserting new triples.
-  // Run OWL/RDFS materialisation inside an already-locked DeltaTriples
-  // transaction. When `seedPredicates` is non-empty, incremental semi-naive
-  // evaluation is used (only rules whose input predicates overlap with the
-  // seeds fire in round 0). An empty vector triggers a full materialisation.
-  nlohmann::ordered_json processMaterialize(
-      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-      SharedCancellationHandle handle,
-      std::vector<std::string> seedPredicates = {});
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

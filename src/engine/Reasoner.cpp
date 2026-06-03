@@ -49,7 +49,7 @@ struct SemiNaiveTracker {
 
   // True if the given rule should run in the next round.
   [[nodiscard]] bool isActive(const ReasonerRule& rule) const {
-    return std::ranges::any_of(rule.inputPredicates, [this](const auto& p) {
+    return ql::ranges::any_of(rule.inputPredicates, [this](const auto& p) {
       if (p == reasoner_iris::WILDCARD) {
         return wildcardActive;
       }
@@ -139,22 +139,12 @@ Reasoner::MaterializationResult Reasoner::materialize(
     prepared.emplace_back(rule, std::move(pq), 0);
   }
 
-  // Total budget for this materialisation run (0 = unlimited). The budget is
-  // passed as the *remaining* allowance to each `executeConstructInsert` call
-  // so that the primitive enforces a cumulative cap rather than a per-call cap.
-  const size_t maxTriples =
-      getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
+  AD_LOG_INFO << "[Reasoner] Starting materialisation with " << rules.size()
+              << " rules, "
+              << (unlimitedRounds ? std::string{"unlimited"}
+                                  : absl::StrCat(maxRounds))
+              << " rounds." << std::endl;
 
-  // ── Seed the semi-naive tracker from caller-supplied predicates ───────────
-  // When seeds are non-empty, semi-naive evaluation applies from round 0:
-  // only rules whose inputPredicates overlap with the seeds will fire in the
-  // first round (incremental mode). Empty seeds give the default "full"
-  // behaviour where all rules fire in round 0.
-  //
-  // The string_views added here borrow from `seedPredicates`, which is owned
-  // by the caller and outlives this function.  After round 0 the tracker is
-  // replaced by `nextTracker` (whose views borrow from the static kRules),
-  // so there are no dangling references.
   SemiNaiveTracker tracker;
   const bool hasSeeds = !seedPredicates.empty();
   if (hasSeeds) {
@@ -217,18 +207,8 @@ Reasoner::MaterializationResult Reasoner::materialize(
       auto qet = planner.createExecutionTree(pqForPlanning);
 
       const int64_t before = deltaTriples.numInserted();
-      // Pass the remaining budget so the primitive enforces a cumulative cap.
-      // If maxTriples == 0 the budget is unlimited (passed as 0).
-      const size_t remaining =
-          maxTriples > 0
-              ? (maxTriples > result.totalNewTriples + newTriplesThisRound
-                     ? maxTriples -
-                           (result.totalNewTriples + newTriplesThisRound)
-                     : 0)
-              : 0;
       ExecuteUpdate::executeConstructInsert(index, pqForPlanning, qet,
-                                            deltaTriples, targetGraph, handle,
-                                            remaining);
+                                            deltaTriples, targetGraph, handle);
       const size_t newFromRule =
           static_cast<size_t>(deltaTriples.numInserted() - before);
 

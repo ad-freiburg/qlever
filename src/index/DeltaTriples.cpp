@@ -553,7 +553,8 @@ INSTANTIATE_MODIFY(void);
 INSTANTIATE_MODIFY(UpdateMetadata);
 INSTANTIATE_MODIFY(DeltaTriplesCount);
 INSTANTIATE_MODIFY(nlohmann::json);
-// Used by Server::processQuery when `construct-insert=true`.
+// Used by the reasoner's `cmd=materialize` handler, which builds an
+// ordered JSON response while holding exclusive access to the delta triples.
 INSTANTIATE_MODIFY(nlohmann::ordered_json);
 #undef INSTANTIATE_MODIFY
 

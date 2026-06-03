@@ -302,8 +302,8 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeConstructInsert(
-    const Index& index, const ParsedQuery& query,
-    const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
+    DeltaTriples& deltaTriples,
     const ad_utility::triple_component::Iri& targetGraph,
     const CancellationHandle& cancellationHandle, size_t maxTriplesToInsert,
     ad_utility::timer::TimeTracer& tracer) {
@@ -311,17 +311,15 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
                     "executeConstructInsert requires a CONSTRUCT query.");
   UpdateMetadata metadata{};
 
-  // Execute the WHERE clause of the CONSTRUCT query.
+  // Execute the WHERE clause.
   tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
   tracer.endTrace("evaluateWhere");
 
   tracer.beginTrace("computeIds");
 
-  // Convert CONSTRUCT template triples (std::array<GraphTerm, 3>) to the
-  // SparqlTripleSimpleWithGraph format used by the UPDATE pipeline.
-  // Each GraphTerm is converted to a TripleComponent via toTripleComponent(),
-  // and all triples are pinned to the user-supplied `targetGraph`.
+  // Convert CONSTRUCT template triples into the `SparqlTripleSimpleWithGraph`
+  // format used by the UPDATE pipeline, pinned to `targetGraph`.
   tracer.beginTrace("vocabLookup");
   const auto& constructTriples = query.constructClause().triples_;
   std::vector<SparqlTripleSimpleWithGraph> tripleTemplates;
@@ -335,8 +333,7 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
   auto [transformedTripleTemplates, localVocab] = transformTriplesTemplate(
       index.getPimpl(), qet.getVariableColumns(), tripleTemplates);
 
-  // Reserve space for the worst case, but never more than the cap (if set) to
-  // avoid over-allocation on very large result sets.
+  // Reserve for the worst case, capped to avoid over-allocation.
   std::vector<IdTriple<>> toInsert;
   const size_t numTemplates = transformedTripleTemplates.size();
   if (numTemplates > 0) {
@@ -347,8 +344,7 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
   }
   tracer.endTrace("vocabLookup");
 
-  // Instantiate the CONSTRUCT template for each result row, producing
-  // IdTriples. Rows where any template position is undefined are skipped.
+  // Instantiate template per row; undefined position rows are skipped
   tracer.beginTrace("resultInterpolation");
   uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
@@ -364,28 +360,26 @@ UpdateMetadata ExecuteUpdate::executeConstructInsert(
 
   tracer.beginTrace("deduplication");
   sortAndRemoveDuplicates(toInsert);
-  // Enforce the cap AFTER deduplication so that the actual number of unique
-  // triples is compared against the limit, not the pre-dedup count.
+  // Enforce the cap after deduplication, against the unique-triple count.
   if (maxTriplesToInsert > 0 && toInsert.size() > maxTriplesToInsert) {
-    throw std::runtime_error(absl::StrCat(
-        "CONSTRUCT INSERT produced ", toInsert.size(),
-        " unique triple(s), which exceeds the 'construct-insert-max-triples' "
-        "safety limit of ",
-        maxTriplesToInsert,
-        ". Raise the limit via the runtime parameter if this is intentional."));
+    throw std::runtime_error(
+        absl::StrCat("CONSTRUCT INSERT produced ", toInsert.size(),
+                     " unique triple(s), which exceeds the caller-supplied "
+                     "`maxTriplesToInsert` limit of ",
+                     maxTriplesToInsert, "."));
   }
   metadata.inUpdate_ =
       DeltaTriplesCount{static_cast<int64_t>(toInsert.size()), 0};
   tracer.endTrace("deduplication");
   tracer.endTrace("computeIds");
 
-  // Log a summary line so operators can observe reasoning progress.
+  // Log a summary line for observability.
   AD_LOG_INFO << "CONSTRUCT INSERT: " << toInsert.size()
               << " unique triple(s) to insert into graph <"
               << targetGraph.toStringRepresentation() << ">" << std::endl;
 
-  // Insert the deduplicated triples. We keep `localVocab` alive throughout
-  // so that LocalVocab IDs remain valid during insertion.
+  // Insert the deduplicated triples; `localVocab` stays alive so its IDs remain
+  // valid during insertion.
   tracer.beginTrace("insertTriples");
   if (!toInsert.empty()) {
     deltaTriples.insertTriples(cancellationHandle, std::move(toInsert), tracer);

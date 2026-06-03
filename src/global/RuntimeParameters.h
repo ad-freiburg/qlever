@@ -167,26 +167,8 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
-  // Controls whether external/user-initiated CONSTRUCT→INSERT operations are
-  // permitted. When false (the default), the `construct-insert=true` URL
-  // parameter is rejected with an error. Set to true to enable it.
-  Bool allowConstructInsert_{false, "allow-construct-insert"};
-
-  // Maximum number of fixpoint rounds the built-in OWL/RDFS reasoner
-  // (cmd=materialize) is allowed to execute. A value of 0 means unlimited
-  // (the reasoner stops only when no new triples are produced).
-  SizeT reasonerMaxRounds_{100, "reasoner-max-rounds"};
-
-  // Per-call upper bound on the number of unique triples that one
-  // `executeConstructInsert` invocation may produce (checked after
-  // deduplication). Guards against accidental materialisation of very large
-  // result sets. 0 means unlimited.
-  //
-  // Callers that need a *cumulative* budget across multiple calls (e.g. the
-  // reasoner's fixpoint loop) should track the remaining allowance themselves
-  // and pass it as the `maxTriplesToInsert` argument on each call, rather than
-  // relying on a separate cap check elsewhere.
-  SizeT constructInsertMaxTriples_{1'000'000, "construct-insert-max-triples"};
+  // Maximum number of semi-naive reasoning rounds (0 = run until fixpoint).
+  SizeT reasonerMaxRounds_{0, "reasoner-max-rounds"};
 
   // When true, each successful SPARQL UPDATE automatically triggers an
   // incremental OWL/RDFS materialisation seeded with the predicates that
