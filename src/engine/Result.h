@@ -195,6 +195,10 @@ class Result {
   // materialized.
   const IdTable& idTable() const;
 
+  // Returns a non-owning view of the materialized `idTable()`. Throw if not
+  // fully materialized.
+  IdTableView<0> idTableView() const;
+
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
   // has previously already been retrieved.

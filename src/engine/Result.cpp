@@ -56,7 +56,8 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
 namespace {
 // _____________________________________________________________________________
 // Check if sort order promised by `sortedBy` is kept within `idTable`.
-void assertSortOrderIsRespected(const IdTable& idTable,
+template <typename IdTableT>
+void assertSortOrderIsRespected(const IdTableT& idTable,
                                 const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
@@ -240,7 +241,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, const IdTable& idTable) {
+  auto performCheck = [](const auto& map, const auto& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -328,6 +329,11 @@ const IdTable& Result::idTable() const {
         }
       },
       std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);
+}
+
+// _____________________________________________________________________________
+IdTableView<0> Result::idTableView() const {
+  return idTable().asStaticView<0>();
 }
 
 // _____________________________________________________________________________
