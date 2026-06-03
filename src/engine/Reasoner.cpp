@@ -48,7 +48,7 @@ struct SemiNaiveTracker {
 
   // True if the given rule should run in the next round.
   [[nodiscard]] bool isActive(const ReasonerRule& rule) const {
-    return std::ranges::any_of(rule.inputPredicates, [this](const auto& p) {
+    return ql::ranges::any_of(rule.inputPredicates, [this](const auto& p) {
       if (p == reasoner_iris::WILDCARD) {
         return wildcardActive;
       }
@@ -100,7 +100,10 @@ Reasoner::MaterializationResult Reasoner::materialize(
   }
 
   AD_LOG_INFO << "[Reasoner] Starting materialisation with " << rules.size()
-              << " rules, max " << maxRounds << " rounds." << std::endl;
+              << " rules, "
+              << (unlimitedRounds ? std::string{"unlimited"}
+                                  : absl::StrCat(maxRounds))
+              << " rounds." << std::endl;
 
   SemiNaiveTracker tracker;
 
