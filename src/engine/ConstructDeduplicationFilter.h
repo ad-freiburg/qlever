@@ -137,18 +137,18 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                           const BatchEvaluationContext& ctx) {
   DeduplicationKey key;
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    key[pos] = std::visit(
-        ad_utility::OverloadCallOperator{
-            [](const PrecomputedConstant& c) -> ValueId { return c.dedupId_; },
-            [&](const PrecomputedVariable& v) -> ValueId {
-              return ctx.idTable_[absoluteRow][v.columnIndex_];
-            },
-            [](const PrecomputedBlankNode&) -> ValueId {
-              // Blank-node triples bypass deduplication, so their key is never
-              // built.
-              AD_FAIL();
-            }},
-        triple[pos]);
+    key[pos] =
+        std::visit(ad_utility::OverloadCallOperator{
+                       [](const PrecomputedConstant& c) { return c.dedupId_; },
+                       [&](const PrecomputedVariable& v) {
+                         return ctx.idTable_[absoluteRow][v.columnIndex_];
+                       },
+                       [](const PrecomputedBlankNode&) -> ValueId {
+                         // Blank-node triples bypass deduplication, so their
+                         // key is never built.
+                         AD_FAIL();
+                       }},
+                   triple[pos]);
   }
   return key;
 }

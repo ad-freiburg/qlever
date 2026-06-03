@@ -101,10 +101,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                                                     variableColumns, index));
   IdCache cache = makeIdCache(*preprocessedTemplate);
 
-  // Deduplication state for the whole CONSTRUCT clause: a single shared filter
-  // in `global` mode, one filter per template triple in `batchWise` mode.
-  ConstructDeduplicationState deduplicationState{
-      mode, preprocessedTemplate->preprocessedTriples_.size()};
+  ConstructDeduplicationState deduplicationState{mode};
 
   // `queryOffset`: the value of the SPARQL OFFSET clause, used to initialize
   // `accumulatedRowOffset` so that blank node IDs are globally unique across

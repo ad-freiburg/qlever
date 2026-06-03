@@ -200,12 +200,12 @@ int main(int argc, char** argv) {
   add("construct-deduplicate",
       optionFactory
           .getProgramOption<&RuntimeParameters::constructDeduplicate_>(),
-      "Controls deduplication of triples in CONSTRUCT query results. "
+      R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"false\" (default): no deduplication, every triple is emitted. "
       "\"global\": a triple is emitted at most once across the entire result. "
       "N (positive integer): deduplicate against the N most recently seen "
       "unique triples per template triple (bounded memory, partial "
-      "deduplication).");
+      "deduplication).")");
   po::variables_map optionsMap;
 
   try {
