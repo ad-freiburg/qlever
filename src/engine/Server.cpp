@@ -1345,7 +1345,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // so only rules whose input predicates overlap with the seeds fire in round
   // 0. Uses a fresh QueryExecutionContext with an up-to-date located-triples
   // snapshot. Only runs when seedPredicates is non-empty (i.e. when
-  // `reasoner-auto-materialize` is true and the UPDATE had at least one
+  // `auto-materialize-after-update` is true and the UPDATE had at least one
   // statically-known predicate in its INSERT/DELETE template).
   std::optional<nlohmann::ordered_json> materializeResultJson;
   if (!seedPredicates.empty()) {
@@ -1607,14 +1607,15 @@ nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
 // _____________________________________________________________________________
 nlohmann::ordered_json Server::processMaterialize(
     DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-    SharedCancellationHandle handle) {
+    SharedCancellationHandle handle, std::vector<std::string> seedPredicates) {
   ad_utility::Timer timer(ad_utility::Timer::Started);
 
   const auto targetGraph =
       ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
 
   Reasoner::MaterializationResult result =
-      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle);
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle,
+                            std::move(seedPredicates));
 
   // Cache invalidation: new delta triples invalidate all cached results.
   cache_.clearAll();

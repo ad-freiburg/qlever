@@ -59,6 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(reasonerMaxRounds_);
+  add(autoMaterializeAfterUpdate_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

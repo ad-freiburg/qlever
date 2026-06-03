@@ -92,9 +92,15 @@ class Server {
   // Run OWL/RDFS forward-chaining materialisation to a fixpoint, inserting the
   // inferred triples into `deltaTriples`, and return the JSON response
   // metadata.
+  //
+  // When `seedPredicates` is non-empty, the run is incremental: only rules
+  // whose input predicates overlap with the seeds fire in round 0 (semi-naive
+  // from the start). An empty vector gives the default "full" run where all
+  // rules fire in round 0.
   nlohmann::ordered_json processMaterialize(
       DeltaTriples& deltaTriples, QueryExecutionContext& qec,
-      ad_utility::SharedCancellationHandle handle);
+      ad_utility::SharedCancellationHandle handle,
+      std::vector<std::string> seedPredicates = {});
 
   // Helper struct bundling a parsed query with a query execution tree.
   // As the `QueryExecutionTree` stores a raw pointer to the

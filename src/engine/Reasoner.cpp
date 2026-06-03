@@ -56,11 +56,6 @@ struct SemiNaiveTracker {
       return ad_utility::contains(newPredicates, std::string_view{p});
     });
   }
-
-  void reset() {
-    newPredicates.clear();
-    wildcardActive = false;
-  }
 };
 
 // A rule that has been pre-parsed and is ready to be re-planned each round.
@@ -139,12 +134,6 @@ Reasoner::MaterializationResult Reasoner::materialize(
     prepared.emplace_back(rule, std::move(pq), 0);
   }
 
-  AD_LOG_INFO << "[Reasoner] Starting materialisation with " << rules.size()
-              << " rules, "
-              << (unlimitedRounds ? std::string{"unlimited"}
-                                  : absl::StrCat(maxRounds))
-              << " rounds." << std::endl;
-
   SemiNaiveTracker tracker;
   const bool hasSeeds = !seedPredicates.empty();
   if (hasSeeds) {
@@ -158,15 +147,19 @@ Reasoner::MaterializationResult Reasoner::materialize(
         }
       }
     }
-    AD_LOG_INFO << "[Reasoner] Incremental materialisation seeded with "
-                << tracker.newPredicates.size() << " predicate(s)"
-                << (tracker.wildcardActive ? " + wildcard" : "") << "."
-                << std::endl;
   }
 
   AD_LOG_INFO << "[Reasoner] Starting " << (hasSeeds ? "incremental " : "")
-              << "materialisation with " << rules.size() << " rules, max "
-              << maxRounds << " rounds." << std::endl;
+              << "materialisation with " << rules.size() << " rules, "
+              << (unlimitedRounds ? std::string{"unlimited"}
+                                  : absl::StrCat(maxRounds))
+              << " rounds.";
+  if (hasSeeds) {
+    AD_LOG_INFO << " Seeded with " << tracker.newPredicates.size()
+                << " predicate(s)"
+                << (tracker.wildcardActive ? " + wildcard" : "");
+  }
+  AD_LOG_INFO << std::endl;
 
   for (size_t round = 0; unlimitedRounds || round < maxRounds; ++round) {
     handle->throwIfCancelled();
