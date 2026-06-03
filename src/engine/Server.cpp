@@ -100,9 +100,15 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   // Preload materialized views as requested by the user. This is done in a
   // try-catch block to prevent an exception during loading of a view from
   // blocking the server start.
+  QueryExecutionContext qec{index_,
+                            &cache_,
+                            allocator_,
+                            sortPerformanceEstimator_,
+                            &namedResultCache_,
+                            materializedViewsManager_};
   for (const auto& viewName : preloadMaterializedViews) {
     try {
-      materializedViewsManager_->loadView(viewName);
+      materializedViewsManager_->loadView(viewName, &qec);
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -590,7 +596,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
-    materializedViewsManager_->loadView(name.value());
+    QueryExecutionContext qec(index_, &cache_, allocator_,
+                              sortPerformanceEstimator_, &namedResultCache_,
+                              materializedViewsManager_);
+    materializedViewsManager_->loadView(name.value(), &qec);
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};

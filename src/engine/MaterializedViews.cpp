@@ -23,6 +23,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -330,6 +331,11 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 }
 
 // _____________________________________________________________________________
+const Variable& MaterializedView::dummySubject() {
+  static const Variable var{"?_ql_materialized_view_s"};
+  return var;
+};
+// _____________________________________________________________________________
 const Variable& MaterializedView::dummyPredicate() {
   static const Variable var{"?_ql_materialized_view_p"};
   return var;
@@ -441,7 +447,8 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name) const {
+void MaterializedViewsManager::loadView(const std::string& name,
+                                        QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   if (lock->views_.contains(name)) {
     return;
@@ -452,7 +459,7 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
-  if (lock->queryPatternCache_.analyzeView(view)) {
+  if (lock->queryPatternCache_.analyzeView(view, qec)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
@@ -471,8 +478,8 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name) const {
-  loadView(name);
+    const std::string& name, QueryExecutionContext* qec) const {
+  loadView(name, qec);
   return loadedViews_.rlock()->views_.at(name);
 }
 
@@ -680,6 +687,41 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
+    QueryExecutionContext* qec, const VariableToColumnMap& varToCol,
+    const ColumnMapping& colMap) const {
+  TripleComponent s{dummySubject()};
+  TripleComponent p{dummyPredicate()};
+  TripleComponent o{dummyObject()};
+  AdditionalScanColumns additionalCols;
+  for (const auto& [v, i] : varToCol) {
+    // TODO this is not correct! the plan will have a different col order than
+    // the cache key  ---> does INTERNAL SORT BY when generating the cache key
+    // fix this??
+    auto col = colMap.at(i.columnIndex_);
+    if (col == 0) {
+      s = v;
+    } else if (col == 1) {
+      p = v;
+    } else if (col == 2) {
+      o = v;
+    } else {
+      additionalCols.push_back({col, v});
+    }
+  }
+  std::sort(additionalCols.begin(), additionalCols.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+  SparqlTripleSimple scanTriple{std::move(s), std::move(p), std::move(o),
+                                std::move(additionalCols)};
+  auto v = varToCol | ql::ranges::views::keys;
+  ad_utility::HashSet<Variable> varsToKeep{v.begin(), v.end()};
+  return std::make_shared<IndexScan>(
+      qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
+      std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
+      std::move(varsToKeep));
+}
+
+// _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
 MaterializedViewsManager::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
@@ -697,8 +739,24 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
-  auto view = getView(viewQuery.viewName_.value());
+  auto view = getView(viewQuery.viewName_.value(), qec);
   return view->makeIndexScan(qec, viewQuery);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
+    QueryExecutionContext* qec, const std::string& cacheKey,
+    const VariableToColumnMap& varToCol) const {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    return nullptr;
+  }
+  auto info =
+      loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
+  if (!info.has_value()) {
+    return nullptr;
+  }
+  return info->view_->makeIndexScan(qec, varToCol, info->colMapping_);
 }
 
 // _____________________________________________________________________________
@@ -707,4 +765,32 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
   auto opt = ad_utility::findOptional(coveredBinds_, bindCacheKey);
   // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
   return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
+}
+
+// _____________________________________________________________________________
+std::optional<MaterializedView::CacheKeyAndColumnMapping>
+MaterializedView::computeCacheKey(QueryExecutionContext* qec) const {
+  if (qec == nullptr || !originalQuery_.has_value()) {
+    return std::nullopt;
+  }
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, handle};
+  auto encodedIriManager = qec->getIndex().encodedIriManager();
+  // The query needs to be parsed again to take the `EncodedIriManager` into
+  // account.
+  auto parsedQuery =
+      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  // TODO fix this. Deadlock (this QP may not use mat views)...
+  AD_CONTRACT_CHECK(!getRuntimeParameter<
+                    &RuntimeParameters::enableMaterializedViewQueryRewrite_>());
+  auto executionTree = qp.createExecutionTree(parsedQuery);
+  // TODO<ullingec> What about the sorting problems?
+
+  ColumnMapping mapping;
+  const auto& viewCols = variableToColumnMap();
+  for (const auto& [var, col] : executionTree.getVariableColumns()) {
+    mapping.insert({col.columnIndex_, viewCols.at(var).columnIndex_});
+  }
+  return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+                                  std::move(mapping)};
 }

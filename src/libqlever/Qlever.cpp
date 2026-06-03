@@ -231,7 +231,17 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  materializedViewsManager_->loadView(name);
+  QueryExecutionContext qec{index_,
+                            &cache_,
+                            allocator_,
+                            sortPerformanceEstimator_,
+                            &namedResultCache_,
+                            materializedViewsManager_,
+                            [](std::string) {},
+                            false,
+                            false,
+                            disableCaching_};
+  materializedViewsManager_->loadView(name, &qec);
 }
 
 }  // namespace qlever

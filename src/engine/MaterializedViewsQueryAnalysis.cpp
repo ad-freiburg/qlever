@@ -341,7 +341,7 @@ bool QueryPatternCache::analyzeJoinStar(
 }
 
 // _____________________________________________________________________________
-bool QueryPatternCache::analyzeView(ViewPtr view) {
+bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for query "
@@ -354,6 +354,15 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     explainIgnore(
         "The view was built without remembering the original query string.");
     return false;
+  }
+
+  auto cacheKeyAndCols = view->computeCacheKey(qec);
+  if (cacheKeyAndCols.has_value()) {
+    byCacheKey_.insert({cacheKeyAndCols.value().cacheKey_,
+                        {view, cacheKeyAndCols.value().columnMapping_}});
+    // TODO save column mapping (-> columns in cache key / qet mapped to columns
+    // in view via colname from qet vartocol and views own vartocol, needs to be
+    // applied when using the view)!
   }
 
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
@@ -442,6 +451,11 @@ void QueryPatternCache::removeView(ViewPtr view) {
 
   // Remove `view` from star cache.
   starCache_.erase(view);
+
+  // Remove `view` from cache key hash map.
+  // TODO
+  // ql::erase_if(byCacheKey_, [&view](ViewPtr pView) { return pView == view;
+  // });
 }
 
 // _____________________________________________________________________________
@@ -473,6 +487,16 @@ BindExpressionAndTargetCol extractBindExpressions(
                 varToColMap.at(bind._target).columnIndex_});
   }
   return map;
+}
+
+// _____________________________________________________________________________
+std::optional<ByCacheKeyInfo> QueryPatternCache::lookupByCacheKey(
+    const std::string& cacheKey) const {
+  auto it = byCacheKey_.find(cacheKey);
+  if (it == byCacheKey_.end()) {
+    return std::nullopt;
+  }
+  return it->second;  // TODO dont copy
 }
 
 }  // namespace materializedViewsQueryAnalysis

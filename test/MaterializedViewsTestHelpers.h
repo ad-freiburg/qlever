@@ -222,8 +222,8 @@ inline void expectNotSuitableForRewrite(
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
-  auto view = manager.getView(viewName);
-  EXPECT_FALSE(qpc.analyzeView(view));
+  auto view = manager.getView(viewName, nullptr);
+  EXPECT_FALSE(qpc.analyzeView(view, nullptr));
   manager.unloadViewIfLoaded(viewName);
 };
 
