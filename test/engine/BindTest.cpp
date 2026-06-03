@@ -290,7 +290,6 @@ TEST(Bind, isDeterministicWithUuidExpression) {
 }
 
 // _____________________________________________________________________________
-// _____________________________________________________________________________
 // Cloning a non-deterministic Bind (e.g. with BNODE) must still succeed.
 // clone() is used internally for limit propagation and similar purposes.
 // Preventing the query planner from distributing such a Bind over a UNION is

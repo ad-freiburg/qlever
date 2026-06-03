@@ -23,9 +23,6 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  cacheKey_ = absl::StrCat(
-      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
-      "\n", _subtree->getCacheKey());
 }
 
 // BIND adds exactly one new column
@@ -80,7 +77,11 @@ std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::string Bind::getCacheKeyImpl() const { return cacheKey_; }
+std::string Bind::getCacheKeyImpl() const {
+  return absl::StrCat(
+      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
+      "\n", _subtree->getCacheKey());
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
@@ -245,7 +246,5 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  auto clone = std::make_unique<Bind>(*this);
-  clone->_subtree = _subtree->clone();
-  return clone;
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
 }
