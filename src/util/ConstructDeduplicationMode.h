@@ -35,18 +35,19 @@ namespace ad_utility {
 // `Global` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
 // prohibitive for large result sets.
-// `BatchWise` keeps, per template triple, an LRU cache of the `batchSize_` most
-// recently seen unique triple keys, and suppresses a triple only if its key is
-// still in that cache. Memory is bounded (O(number of template triples *
-// batchSize_)). Because the cache evicts its least recently used key once full,
-// a duplicate that recurs after more than `batchSize_` other unique keys have
-// been seen is no longer remembered and is emitted again.
+// `BatchWise` keeps a single LRU cache of the `batchSize_` most recently seen
+// unique triple keys (shared across all template triples and keyed on the full
+// instantiated triple), and suppresses a triple only if its key is still in
+// that cache. Memory is bounded (O(batchSize_)). Because the cache evicts its
+// least recently used key once full, a duplicate that recurs after more than
+// `batchSize_` other unique keys have been seen is no longer remembered and is
+// emitted again.
 struct DeduplicationMode {
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Global {
   };  // A triple is emitted at most once across the entire result.
   struct BatchWise {    // Deduplicates against the `batchSize_` most recently
-    size_t batchSize_;  // seen unique triples (per template triple).
+    size_t batchSize_;  // seen unique triples (one shared cache).
   };
   std::variant<None, Global, BatchWise> value_;
 

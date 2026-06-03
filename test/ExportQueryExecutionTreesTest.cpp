@@ -567,11 +567,6 @@ TEST(ExportQueryExecutionTrees, constructDeduplicateFilmMultiplicityExample) {
 // in the second. The two label template triples `?s <label> ?sl` and
 // `?o <label> ?ol` therefore both emit `<b> <label> "lb"`. The full result is
 // the set {a-la, b-lb, c-lc}, i.e. 3 triples.
-//
-// This currently FAILS under `global`: because each template triple has its own
-// per-template filter, the duplicate `<b> <label> "lb"` produced by the two
-// different template triples is not detected, and 4 triples are emitted. It is
-// the regression guard for the planned full-triple global key.
 TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCrossTemplate) {
   const std::string kg =
       "<a> <p40> <b> . <b> <p40> <c> ."
@@ -597,9 +592,6 @@ TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCrossTemplate) {
 // of triples actually emitted after deduplication, not the pre-deduplication
 // estimate `numRows * numTemplateTriples`. Using the film example above,
 // `global` mode emits 9 triples, so `resultsize` must be 9.
-// This currently FAILS: `resultsize`/`resultSizeTotal` are set to the inflated
-// estimate (60) computed before the streaming dedup filter runs, while only
-// `resultSizeExported` (counted from the yielded bindings) is correct.
 TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalReportsResultSize) {
   const std::string kg =
       "<film> <type> <Film> ."

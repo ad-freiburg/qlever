@@ -16,10 +16,10 @@ using namespace qlever::constructExport;
 using ad_utility::DeduplicationMode;
 using ad_utility::testing::makeAllocator;
 
-// Helper to build a DeduplicationKey from three raw bit patterns.
-// `ValueId::fromBits` constructs a ValueId directly from its underlying
-// bit representation — sufficient for tests that only need distinct,
-// comparable values without valid RDF semantics.
+// Helper to build a `DeduplicationKey` from three raw bit patterns.
+// `ValueId::fromBits` constructs a `ValueId` directly from its underlying bit
+// representation. Sufficient for tests that only need distinct, comparable
+// values without valid RDF semantics.
 DeduplicationKey makeKey(uint64_t s, uint64_t p, uint64_t o) {
   return {ValueId::fromBits(s), ValueId::fromBits(p), ValueId::fromBits(o)};
 }
@@ -27,9 +27,6 @@ DeduplicationKey makeKey(uint64_t s, uint64_t p, uint64_t o) {
 const DeduplicationKey kA = makeKey(1, 2, 3);
 const DeduplicationKey kB = makeKey(4, 5, 6);
 const DeduplicationKey kC = makeKey(7, 8, 9);
-const DeduplicationKey kUndef = {ValueId::makeUndefined(),
-                                 ValueId::makeUndefined(),
-                                 ValueId::makeUndefined()};
 
 TEST(LruDeduplicationCache, NewKeyReturnsTrue) {
   // we expect, if we initialize a `LruDeduplicationCache` with capacity > 0,
@@ -101,10 +98,11 @@ TEST(PerTripleFilterGlobal, DuplicateReturnsFalse) {
   EXPECT_FALSE(f.insert(kA));
 }
 
-TEST(PerTripleFilterGlobal, EvictedFromLruStillDeduplicated) {
-  // Insert 1001 distinct keys to overflow the default LRU capacity (1000).
-  // The first key should have been evicted from the LRU but lives in the
-  // global hash set, so re-inserting it must still return false.
+TEST(PerTripleFilterGlobal, DeduplicatesBeyondBatchWiseCapacity) {
+  // Global mode uses an unbounded hash set (no LRU, no eviction): every unique
+  // key is remembered forever. Insert 1001 distinct keys (more than the default
+  // `BatchWise` capacity of 1000, where the first key would have been evicted),
+  // then re-insert the first key; it must still be recognized as a duplicate.
   PerTripleFilter f{DeduplicationMode::global()};
   for (uint64_t i = 0; i < 1001; ++i) {
     f.insert(makeKey(i, 0, 0));
@@ -142,7 +140,7 @@ TEST(ConstructDeduplicationState, GlobalDeduplicatesAcrossTemplateTriples) {
   IdTable idTable = makeIdTableFromVector({{0}});
   BatchEvaluationContext ctx{idTable, 0, 1};
 
-  ConstructDeduplicationState state{DeduplicationMode::global(), 2};
+  ConstructDeduplicationState state{DeduplicationMode::global()};
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
   EXPECT_FALSE(state.isNew(1, 0, tmpl, ctx));
 }
@@ -156,7 +154,7 @@ TEST(ConstructDeduplicationState, GlobalNeverDeduplicatesBlankNodeTriples) {
   IdTable idTable = makeIdTableFromVector({{0}});
   BatchEvaluationContext ctx{idTable, 0, 1};
 
-  ConstructDeduplicationState state{DeduplicationMode::global(), 1};
+  ConstructDeduplicationState state{DeduplicationMode::global()};
   // Even the identical instantiation is always emitted.
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
@@ -177,7 +175,7 @@ TEST(ConstructDeduplicationState, BatchWiseDeduplicatesAcrossTemplateTriples) {
   IdTable idTable = makeIdTableFromVector({{5}});
   BatchEvaluationContext ctx{idTable, 0, 1};
 
-  ConstructDeduplicationState state{DeduplicationMode::batchWise(10), 2};
+  ConstructDeduplicationState state{DeduplicationMode::batchWise(10)};
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));   // triple 0, first time
   EXPECT_FALSE(state.isNew(1, 0, tmpl, ctx));  // same full triple -> duplicate
 }
@@ -193,7 +191,7 @@ TEST(ConstructDeduplicationState, SeedGroundTripleSuppressesLaterMatch) {
   IdTable idTable = makeIdTableFromVector({{0}});
   BatchEvaluationContext ctx{idTable, 0, 1};
 
-  ConstructDeduplicationState state{DeduplicationMode::global(), 1};
+  ConstructDeduplicationState state{DeduplicationMode::global()};
   state.seedGroundTriple(makeKey(1, 2, 3));
   EXPECT_FALSE(state.isNew(0, 0, tmpl, ctx));
 }
