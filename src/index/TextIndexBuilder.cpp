@@ -496,14 +496,14 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 // _____________________________________________________________________________
 void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   AD_LOG_INFO << "Building DocsDB...\n";
-  std::ifstream docsFile{docsFileName};
-  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
+  std::ifstream docsFile = ad_utility::makeIfstream(docsFileName);
+  std::ofstream ofs = ad_utility::makeOfstream(onDiskBase_ + ".text.docsDB");
   // To avoid excessive use of RAM, we stream the offsets into a temporary file
   // and append them to the end of the docsDB file once all text records have
   // been written.
   std::string offsetsFilename = onDiskBase_ + ".text.docsDB.tmp";
   absl::Cleanup deleteOffsetsFile{
-      [&offsetsFilename]() { ad_utility::deleteFile(offsetsFilename, false); }};
+      [&offsetsFilename]() { ad_utility::deleteFile(offsetsFilename); }};
   std::ofstream offsets{offsetsFilename, std::ios::binary};
   auto writeOffset = [&offsets](off_t offset) {
     offsets.write(reinterpret_cast<const char*>(&offset), sizeof(off_t));
@@ -534,7 +534,8 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   // always wrote at least one offset above, so the temporary file is never
   // empty (which would otherwise set the failbit on `rdbuf` insertion).
   offsets.close();
-  std::ifstream offsetsIn{offsetsFilename, std::ios::binary};
+  std::ifstream offsetsIn =
+      ad_utility::makeIfstream(offsetsFilename, std::ios::binary);
   ofs << offsetsIn.rdbuf();
   AD_LOG_INFO << "DocsDB done.\n";
 }
