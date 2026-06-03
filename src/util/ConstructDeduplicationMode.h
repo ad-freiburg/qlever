@@ -83,18 +83,16 @@ struct DeduplicationModeFromString {
 };
 
 struct DeduplicationModeToString {
-  const std::basic_string_view<char> operator()(
-      const DeduplicationMode& m) const {
+  std::string operator()(const DeduplicationMode& m) const {
     return std::visit(
         ad_utility::OverloadCallOperator{
-            [](const DeduplicationMode::None&) -> const std::string_view {
-              return DeduplicationMode::false_;
+            [](const DeduplicationMode::None&) -> std::string {
+              return std::string{DeduplicationMode::false_};
             },
-            [](const DeduplicationMode::Global&) -> const std::string_view {
-              return DeduplicationMode::global_;
+            [](const DeduplicationMode::Global&) -> std::string {
+              return std::string{DeduplicationMode::global_};
             },
-            [](const DeduplicationMode::BatchWise& bw)
-                -> const std::string_view {
+            [](const DeduplicationMode::BatchWise& bw) -> std::string {
               return std::to_string(bw.batchSize_);
             }},
         m.value_);
