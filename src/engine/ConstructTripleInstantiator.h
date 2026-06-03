@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 
-#include <array>
 #include <memory>
 #include <string>
 #include <vector>

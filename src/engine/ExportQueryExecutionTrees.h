@@ -16,7 +16,6 @@
 
 #include <functional>
 
-#include "ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"

@@ -35,7 +35,7 @@ namespace ad_utility {
  * `BlankNodeIndex`-Datatype as for blank nodes given at indexing time, by
  * setting their count as the minimum index for the ones added at runtime.
  * A `LocalVocab` can register new blank nodes (e.g. resulting from a `Service`
- * operation) by obtaining a `Block` of currently unused indices using its own
+ * operation) by obtaining a `Block` of currently unused indices using it's own
  * `LocalBlankNodeManager` from the `BlankNodeManager`.
  */
 class BlankNodeManager {

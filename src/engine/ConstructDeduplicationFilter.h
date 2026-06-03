@@ -27,30 +27,15 @@
 
 namespace qlever::constructExport {
 
-// The deduplication key for a single template triple instantiation: the bound
-// `ValueId`s at the triple's variable columns, in the order the variables
-// appear in the triple (subject, then predicate, then object). Only variables
-// are included; constants and blank nodes are deliberately excluded (constants
-// are identical for every variable binding set, so they do not contribute to
-// uniqueness; blank node identifiers are generated fresh per row, so including
-// them would make every key unique, defeating deduplication). The variable's
-// position within the triple is not encoded, because each template triple has
-// its own filter (see `ConstructDeduplicationState`) and keys from different
-// triples are never compared against each other.
-using DeduplicationKey = absl::InlinedVector<ValueId, NUM_TRIPLE_POSITIONS>;
-
-// Constructs the deduplication key for the result row at `absoluteRow` in
-// `ctx` by reading the `ValueId` at each of the triple's `variableColumns`.
-inline DeduplicationKey makeDeduplicationKey(
-    const std::vector<size_t>& variableColumns, size_t absoluteRow,
-    const BatchEvaluationContext& ctx) {
-  DeduplicationKey key;
-  key.reserve(variableColumns.size());
-  for (size_t column : variableColumns) {
-    key.push_back(ctx.idTable_[absoluteRow][column]);
-  }
-  return key;
-}
+// The deduplication key identifying one instantiated triple: the `ValueId`s at
+// its three positions (subject, predicate, object), in order. Constants
+// contribute their precomputed `dedupId_`, variables their bound `ValueId` from
+// the row (see `makeFullTripleKey`). A single shared filter can collapse
+// duplicates produced by different template triples (see
+// `ConstructDeduplicationState`). Triples containing a blank node are never
+//  keyed: their per-row blank-node ids would make every key unique, so such
+// triples bypass deduplication entirely.
+using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
 // A set-like LRU cache for `DeduplicationKey`s. Tracks the N most recently
 // inserted unique keys.
@@ -87,12 +72,11 @@ class LruDeduplicationCache {
   // its iterators stay valid as other nodes are inserted, moved, or erased.
   std::list<DeduplicationKey> list_;
 
-  // Maps each key to the iterator of its node in `list_`. The map answers
-  // "is this key present?" in O(1); the stored iterator then tells us where
-  // that key lives in `list_` so we can splice it to the front (on a hit)
-  // without an O(N) search. The key is therefore deliberately stored twice
-  // (once as a list element, once as a map key): that redundancy is what lets
-  // lookup, recency update, and eviction all be O(1).
+  // Maps each key to the iterator of its node in `list_`. The stored iterator
+  // then tells us where that key lives in `list_` so we can splice it to the
+  // front (on a hit) without an O(N) search. The key is therefore deliberately
+  // stored twice (once as a list element, once as a map key): that redundancy
+  // is what lets lookup, recency update, and eviction all be O(1).
   absl::flat_hash_map<DeduplicationKey, std::list<DeduplicationKey>::iterator>
       map_;
 };
@@ -112,8 +96,8 @@ class PerTripleFilter {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](NoFilter) -> bool {
-              // `none` mode is routed to the non-dedup code path, so its filter
-              // must never receive a key.
+              // `DeduplicationMode::None` mode is routed to the non-dedup code
+              // path, so its filter must never receive a key.
               AD_FAIL();
             },
             [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
@@ -124,7 +108,6 @@ class PerTripleFilter {
   }
 
  private:
-  // `NoFilter` represents `none` mode (no dedup structure).
   struct NoFilter {};
   using Filter = std::variant<NoFilter, LruDeduplicationCache,
                               ad_utility::HashSet<DeduplicationKey>>;
@@ -153,18 +136,14 @@ class PerTripleFilter {
 // Constructs the *full-triple* deduplication key for the instantiation of
 // `triple` at `absoluteRow`: the `ValueId` at each of the three positions
 // (subject, predicate, object), taken from the constant's `dedupId_` or the
-// variable's bound `ValueId` in the row. Unlike `makeDeduplicationKey` (which
-// only includes variable positions and is per-template-triple), this key
-// identifies the whole instantiated triple, so it can be compared across all
-// template triples in a single shared filter. Must not be called for a triple
+// variable's bound `ValueId` in the row. Must not be called for a triple
 // that contains a blank node (those bypass deduplication entirely).
 inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                           size_t absoluteRow,
                                           const BatchEvaluationContext& ctx) {
   DeduplicationKey key;
-  key.reserve(NUM_TRIPLE_POSITIONS);
-  for (const PreprocessedTerm& term : triple) {
-    key.push_back(std::visit(
+  for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
+    key[pos] = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PrecomputedConstant& c) -> ValueId { return c.dedupId_; },
             [&](const PrecomputedVariable& v) -> ValueId {
@@ -175,28 +154,26 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
               // built.
               AD_FAIL();
             }},
-        term));
+        triple[pos]);
   }
   return key;
 }
 
 // Deduplication state for a whole CONSTRUCT clause. In every deduplicating mode
-// there is exactly *one* filter, shared by all template triples and keyed on
-// the *full* instantiated triple. This is what makes cross-template duplicates
-// collapse (the same output triple produced by two different template triples
-// is emitted once). The modes differ only in the backing structure of that
-// single filter:
-//   - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
-//   - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
-//     approximation that only remembers the most recent keys).
-//   - `DeduplicationMode::None`: no filter at all; the dedup code path is never
-//     entered.
+// there is one filter, shared by all template triples and keyed on the
+// instantiated triple. This is what makes cross-template duplicates collapse
+// (the same output triple produced by two different template triples is emitted
+// once). The modes differ only in the backing structure of that single filter:
+// - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
+// - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
+// approximation that only remembers the most recent keys).
+// - `DeduplicationMode::None`: no filter at all; the dedup code path is never
+// entered.
 // In all modes, a triple that contains a blank node is never deduplicated (its
 // per-row blank-node id makes every instantiation distinct).
 class ConstructDeduplicationState {
  public:
-  ConstructDeduplicationState(const ad_utility::DeduplicationMode& mode,
-                              [[maybe_unused]] size_t numTriples)
+  ConstructDeduplicationState(const ad_utility::DeduplicationMode& mode)
       : filter_{makeFilter(mode)} {}
 
   // Returns true if the instantiation of template triple `tripleIdx` at
