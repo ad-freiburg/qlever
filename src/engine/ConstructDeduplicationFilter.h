@@ -33,7 +33,7 @@ namespace qlever::constructExport {
 // the row (see `makeFullTripleKey`). A single shared filter can collapse
 // duplicates produced by different template triples (see
 // `ConstructDeduplicationState`). Triples containing a blank node are never
-//  keyed: their per-row blank-node ids would make every key unique, so such
+// keyed: their per-row blank-node ids would make every key unique, so such
 // triples bypass deduplication entirely.
 using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
@@ -49,11 +49,11 @@ class LruDeduplicationCache {
   bool insert(const DeduplicationKey& key) {
     auto it = map_.find(key);
     if (it != map_.end()) {
-      // Key already present: move to front (most recently used).
+      // `key` already present: move to front (most recently used).
       list_.splice(list_.begin(), list_, it->second);
       return false;
     }
-    // Key is new: evict LRU entry if at capacity.
+    // `key` is new: evict LRU entry if at capacity.
     if (map_.size() >= capacity_) {
       map_.erase(list_.back());
       list_.pop_back();
@@ -67,23 +67,17 @@ class LruDeduplicationCache {
   size_t capacity_;
 
   // Recency order of the keys: front = most recently used, back = least
-  // recently used. A `std::list` is used because moving a node to the front
-  // (on a hit) and popping the back (on eviction) are both O(1), and because
-  // its iterators stay valid as other nodes are inserted, moved, or erased.
+  // recently used.
   std::list<DeduplicationKey> list_;
 
-  // Maps each key to the iterator of its node in `list_`. The stored iterator
-  // then tells us where that key lives in `list_` so we can splice it to the
-  // front (on a hit) without an O(N) search. The key is therefore deliberately
-  // stored twice (once as a list element, once as a map key): that redundancy
-  // is what lets lookup, recency update, and eviction all be O(1).
+  // Maps each key to the iterator of its node in `list_`.
   absl::flat_hash_map<DeduplicationKey, std::list<DeduplicationKey>::iterator>
       map_;
 };
 
 // Per-template-triple dedup filter. `BatchWise` mode keeps only the last N
-// unique keys in a bounded LRU cache; `global` mode keeps every unique key in
-// an unbounded hash set; `none` mode holds no structure at all (it is routed to
+// unique keys in a bounded LRU cache; `Global` mode keeps every unique key in
+// an unbounded hash set; `None` mode holds no structure at all (it is routed to
 // the non-dedup code path and never deduplicates). The active alternative is
 // chosen once from the mode at construction time.
 class PerTripleFilter {
@@ -136,8 +130,8 @@ class PerTripleFilter {
 // Constructs the *full-triple* deduplication key for the instantiation of
 // `triple` at `absoluteRow`: the `ValueId` at each of the three positions
 // (subject, predicate, object), taken from the constant's `dedupId_` or the
-// variable's bound `ValueId` in the row. Must not be called for a triple
-// that contains a blank node (those bypass deduplication entirely).
+// variable's bound `ValueId` in the row. Must not be called for a triple that
+// contains a blank node (those bypass deduplication entirely).
 inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                           size_t absoluteRow,
                                           const BatchEvaluationContext& ctx) {
