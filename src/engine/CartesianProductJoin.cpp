@@ -243,9 +243,8 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
     // The index of the next column in the output that hasn't been written so
     // far.
     size_t resultColIdx = 0;
-    size_t numTables = static_cast<size_t>(ql::ranges::distance(idTables));
-    size_t tableIdx = 0;
-    for (const auto& input : idTables) {
+    size_t numTables = ql::ranges::size(idTables);
+    for (const auto& [tableIdx, input] : ::ranges::views::enumerate(idTables)) {
       size_t extraOffset =
           (tableIdx + 1 == numTables) ? lastTableOffset * groupSize : 0;
       for (const auto& inputCol : input.getColumns()) {
@@ -254,7 +253,6 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
         ++resultColIdx;
       }
       groupSize *= input.numRows();
-      ++tableIdx;
     }
   }
   return result;
@@ -375,54 +373,66 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
     std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
-  std::vector<IdTableView<0>> idTables;
+  // For each subresult, create an alias `shared_ptr<const IdTableView<0>>` that
+  // shares ownership with the corresponding `shared_ptr<const Result>`. This
+  // keeps the `Result` alive as long as `idTables` is alive, making the view's
+  // lifetime explicit and self-contained without a separate `subresults`
+  // capture.
+  std::vector<std::shared_ptr<const IdTableView<0>>> idTables;
   idTables.reserve(subresults.size() + 1);
   for (auto& result : subresults) {
-    idTables.push_back(result->idTableView());
+    idTables.emplace_back(result, &result->idTableView());
   }
-  // Placeholder, will be replaced with the current `IdTable` from the lazy
-  // result. Kept as a separate owned table so we can update it and refresh
-  // the view at the back of `idTables`.
+  // Placeholder for the current `IdTable` from the lazy result. Kept as a
+  // separate owned table so we can update it and replace the view at the back
+  // of `idTables` on each iteration.
   auto placeholder = std::make_shared<IdTable>(IdTable{0, allocator()});
-  idTables.push_back(placeholder->asStaticView<0>());
+  idTables.push_back(
+      std::make_shared<const IdTableView<0>>(placeholder->asStaticView<0>()));
 
   auto generatedTables = lazyResult->idTables();
 
-  auto get =
-      [self = this, staticMergedVocab = std::move(staticMergedVocab),
-       limit = getLimitOffset().limitOrDefault(),
-       offset = getLimitOffset()._offset, idTables = std::move(idTables),
-       subresults = std::move(subresults), placeholder = std::move(placeholder),
-       lastTableOffset = size_t{0}, producedTableSize = size_t{0},
-       lazyResult = std::move(lazyResult)](auto& idTableVocabPair) mutable {
-        // These things have to be done after handling a single input, so we do
-        // them at the beginning of each but the last iteration.
-        lastTableOffset += idTables.back().size();
-        limit -= producedTableSize;
-        offset += producedTableSize;
-        producedTableSize = 0;
+  auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
+              limit = getLimitOffset().limitOrDefault(),
+              offset = getLimitOffset()._offset, idTables = std::move(idTables),
+              placeholder = std::move(placeholder), lastTableOffset = size_t{0},
+              producedTableSize = size_t{0},
+              lazyResult =
+                  std::move(lazyResult)](auto& idTableVocabPair) mutable {
+    // These things have to be done after handling a single input, so we do
+    // them at the beginning of each but the last iteration.
+    lastTableOffset += idTables.back()->size();
+    limit -= producedTableSize;
+    offset += producedTableSize;
+    producedTableSize = 0;
 
-        auto& [idTable, localVocab] = idTableVocabPair;
-        // Replace the placeholder table and refresh the view at the back of
-        // `idTables` so it reflects the new content.
-        *placeholder = std::move(idTable);
-        idTables.back() = placeholder->asStaticView<0>();
-        if (idTables.back().empty()) {
-          return Result::IdTableLoopControl::makeContinue();
-        }
+    auto& [idTable, localVocab] = idTableVocabPair;
+    // Replace the placeholder table and update the view at the back of
+    // `idTables` so it reflects the new content.
+    *placeholder = std::move(idTable);
+    idTables.back() =
+        std::make_shared<const IdTableView<0>>(placeholder->asStaticView<0>());
+    if (idTables.back()->empty()) {
+      return Result::IdTableLoopControl::makeContinue();
+    }
 
-        localVocab.mergeWith(staticMergedVocab);
+    localVocab.mergeWith(staticMergedVocab);
 
-        return Result::IdTableLoopControl::yieldAll(
-            ad_utility::InputRangeTypeErased{
-                ad_utility::OwningView{self->produceTablesLazily(
-                    std::move(localVocab), ql::ranges::ref_view(idTables),
-                    offset, limit, lastTableOffset)} |
-                ql::views::transform([&producedTableSize](auto& tableAndVocab) {
-                  producedTableSize += tableAndVocab.idTable_.size();
-                  return std::move(tableAndVocab);
-                })});
-      };
+    return Result::IdTableLoopControl::yieldAll(
+        ad_utility::InputRangeTypeErased{
+            ad_utility::OwningView{self->produceTablesLazily(
+                std::move(localVocab),
+                ql::ranges::ref_view(idTables) |
+                    ql::views::transform(
+                        [](const auto& p) -> const IdTableView<0>& {
+                          return *p;
+                        }),
+                offset, limit, lastTableOffset)} |
+            ql::views::transform([&producedTableSize](auto& tableAndVocab) {
+              producedTableSize += tableAndVocab.idTable_.size();
+              return std::move(tableAndVocab);
+            })});
+  };
   return Result::LazyResult(ad_utility::CachingContinuableTransformInputRange(
       std::move(generatedTables), std::move(get)));
 }

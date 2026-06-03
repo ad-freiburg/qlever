@@ -153,6 +153,8 @@ class LazyGroupByRange
       }
     }
 
+    // `process()` is called once per lazy block, so `createEvaluationContext`
+    // (and thus `asStaticView<0>()`) runs once per block, not once per group.
     sparqlExpression::EvaluationContext evaluationContext =
         parent_->createEvaluationContext(currentLocalVocab_,
                                          idTable.asStaticView<0>());
