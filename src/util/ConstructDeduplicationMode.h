@@ -10,6 +10,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <charconv>
 #include <stdexcept>
 #include <string>
 #include <variant>
