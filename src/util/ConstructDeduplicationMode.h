@@ -75,7 +75,7 @@ struct DeduplicationModeFromString {
     }
     throw std::runtime_error(absl::StrCat(
         "Invalid value for construct-deduplicate: \"", s,
-        "\" Expected \"false\", \"global\", or a positive integer."));
+        R"(" Expected "false", "global", or a positive integer.)"));
   }
 };
 
