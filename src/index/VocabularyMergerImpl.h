@@ -117,11 +117,11 @@ CPP_template_def(typename C, typename L)(
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
+      if (lastTripleComponent_.has_value()) {
+        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
+                             "Total vocabulary order violated for ",
+                             lastTripleComponent_->iriOrLiteral(), " and ",
+                             top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
