@@ -72,7 +72,7 @@ TEST(ConstructDeduplicationMode, ToString) {
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, RoundTrip) {
-  for (const std::string& s : {"false", "global", "1", "1000"}) {
+  for (const std::string s : {"false", "global", "1", "1000"}) {
     auto roundTripped =
         DeduplicationModeToString{}(DeduplicationModeFromString{}(s));
     EXPECT_EQ(roundTripped, s);
