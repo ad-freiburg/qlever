@@ -89,6 +89,13 @@ class Server {
       const Reasoner::MaterializationResult& result,
       const ad_utility::Timer& timer);
 
+  // Run OWL/RDFS forward-chaining materialisation to a fixpoint, inserting the
+  // inferred triples into `deltaTriples`, and return the JSON response
+  // metadata.
+  nlohmann::ordered_json processMaterialize(
+      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+      ad_utility::SharedCancellationHandle handle);
+
   // Helper struct bundling a parsed query with a query execution tree.
   // As the `QueryExecutionTree` stores a raw pointer to the
   // `QueryExecutionContext`, We additionally store the context as a

@@ -1522,6 +1522,52 @@ Server::createMessageSender<http::request<http::string_body>>(
     const http::request<http::string_body>&, std::string_view);
 
 // _____________________________________________________________________________
+nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
+    const Reasoner::MaterializationResult& result,
+    const ad_utility::Timer& timer) {
+  nlohmann::ordered_json response;
+  response["status"] = "OK";
+  response["warnings"] = nlohmann::json::array(
+      {"OWL/RDFS materialisation for QLever is experimental."});
+  response["materialize"]["total-new-triples"] = result.totalNewTriples;
+  response["materialize"]["num-rounds"] = result.numRounds;
+  response["materialize"]["rules-fired"] = result.numRulesActivated;
+  nlohmann::ordered_json ruleStats = nlohmann::ordered_json::array();
+  for (const auto& [name, count] : result.triplesPerRule) {
+    nlohmann::ordered_json entry;
+    entry["rule"] = name;
+    entry["new-triples"] = count;
+    ruleStats.push_back(std::move(entry));
+  }
+  response["materialize"]["rules"] = std::move(ruleStats);
+  response["delta-triples"]["inserted-before"] = result.numInsertedBefore;
+  response["delta-triples"]["inserted-after"] = result.numInsertedAfter;
+  response["delta-triples"]["new"] =
+      result.numInsertedAfter - result.numInsertedBefore;
+  response["time"]["total"] = absl::StrCat(timer.msecs().count(), "ms");
+  return response;
+}
+
+// _____________________________________________________________________________
+nlohmann::ordered_json Server::processMaterialize(
+    DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+    SharedCancellationHandle handle) {
+  ad_utility::Timer timer(ad_utility::Timer::Started);
+
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
+
+  Reasoner::MaterializationResult result =
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle);
+
+  // Cache invalidation: new delta triples invalidate all cached results.
+  cache_.clearAll();
+  namedResultCache_.clear();
+
+  return createResponseMetadataForMaterialize(result, timer);
+}
+
+// _____________________________________________________________________________
 void Server::writeMaterializedView(
     const std::string& name, const Query& query,
     const ad_utility::Timer& requestTimer,

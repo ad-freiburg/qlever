@@ -167,6 +167,9 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // Maximum number of semi-naive reasoning rounds (0 = run until fixpoint).
+  SizeT reasonerMaxRounds_{0, "reasoner-max-rounds"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

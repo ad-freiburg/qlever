@@ -99,12 +99,6 @@ Reasoner::MaterializationResult Reasoner::materialize(
     prepared.emplace_back(rule, std::move(pq), 0);
   }
 
-  // Total budget for this materialisation run (0 = unlimited). The budget is
-  // passed as the *remaining* allowance to each `executeConstructInsert` call
-  // so that the primitive enforces a cumulative cap rather than a per-call cap.
-  const size_t maxTriples =
-      getRuntimeParameter<&RuntimeParameters::constructInsertMaxTriples_>();
-
   AD_LOG_INFO << "[Reasoner] Starting materialisation with " << rules.size()
               << " rules, max " << maxRounds << " rounds." << std::endl;
 
@@ -146,18 +140,8 @@ Reasoner::MaterializationResult Reasoner::materialize(
       auto qet = planner.createExecutionTree(pqForPlanning);
 
       const int64_t before = deltaTriples.numInserted();
-      // Pass the remaining budget so the primitive enforces a cumulative cap.
-      // If maxTriples == 0 the budget is unlimited (passed as 0).
-      const size_t remaining =
-          maxTriples > 0
-              ? (maxTriples > result.totalNewTriples + newTriplesThisRound
-                     ? maxTriples -
-                           (result.totalNewTriples + newTriplesThisRound)
-                     : 0)
-              : 0;
       ExecuteUpdate::executeConstructInsert(index, pqForPlanning, qet,
-                                            deltaTriples, targetGraph, handle,
-                                            remaining);
+                                            deltaTriples, targetGraph, handle);
       const size_t newFromRule =
           static_cast<size_t>(deltaTriples.numInserted() - before);
 
