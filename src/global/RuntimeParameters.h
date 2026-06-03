@@ -174,7 +174,7 @@ struct RuntimeParameters {
   // "false" (default): no deduplication, every triple is emitted.
   // "global": a triple is emitted at most once across the entire result.
   // N (positive integer): deduplicate against the N most recently seen unique
-  //   triples (per template triple); bounded memory, partial deduplication.
+  // triples (per template triple); bounded memory, partial deduplication.
   DeduplicationModeParameter constructDeduplicate_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplicate"};
 
