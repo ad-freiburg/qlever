@@ -239,6 +239,11 @@ IdTable Bind::computeExpressionBind(
 }
 
 // _____________________________________________________________________________
+bool Bind::isDeterministicImpl() const {
+  return _bind._expression.isDeterministic();
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
   auto clone = std::make_unique<Bind>(*this);
   clone->_subtree = _subtree->clone();

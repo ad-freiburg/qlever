@@ -66,6 +66,10 @@ class Load final : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  // LOAD performs a network request and may return different results on
+  // successive invocations.
+  [[nodiscard]] bool isDeterministicImpl() const override { return false; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:

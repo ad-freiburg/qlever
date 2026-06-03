@@ -2400,6 +2400,8 @@ class SetOfIntervalsExpression : public SparqlExpression {
     return "SetOfIntervalsExpression";
   }
 
+  bool isDeterministic() const override { return true; }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };
@@ -2418,6 +2420,8 @@ class AggregationFunctionWithVector : public SparqlExpression {
   std::string getCacheKey(const VariableToColumnMap&) const override {
     return "AggregationFunctionWithVector";
   }
+
+  bool isDeterministic() const override { return true; }
 
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }

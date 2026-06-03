@@ -108,6 +108,10 @@ class Service : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // SERVICE queries a remote endpoint and may return different results on
+  // successive invocations.
+  [[nodiscard]] bool isDeterministicImpl() const override { return false; }
+
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 

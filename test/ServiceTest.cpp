@@ -959,6 +959,8 @@ TEST_F(ServiceTest, clone) {
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json")};
 
+  // SERVICE performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(service.isDeterministic());
   auto clone = service.clone();
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));

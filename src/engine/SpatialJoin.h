@@ -181,6 +181,8 @@ class SpatialJoin : public Operation {
       const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // helper function to generate a variable to column map from `childRight_`

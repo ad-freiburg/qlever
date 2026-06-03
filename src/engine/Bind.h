@@ -36,6 +36,7 @@ class Bind : public Operation {
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 

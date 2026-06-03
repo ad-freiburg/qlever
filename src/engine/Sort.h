@@ -81,6 +81,8 @@ class Sort : public Operation {
       const std::set<Variable>& variables) const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   virtual Result computeResult(bool requestLaziness) override;

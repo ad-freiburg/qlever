@@ -119,6 +119,8 @@ class Join : public Operation {
   virtual std::string getCacheKeyImpl() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;

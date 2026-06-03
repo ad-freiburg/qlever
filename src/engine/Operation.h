@@ -167,6 +167,13 @@ class Operation {
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
   virtual std::string getCacheKey() const final;
 
+  // Return true iff this operation and all of its children are guaranteed to
+  // produce the same result on every invocation (i.e. the tree contains no
+  // BNODE(), RAND(), UUID(), STRUUID(), SERVICE, or LOAD). Operations for
+  // which this returns false must not be cloned, as the clone would share the
+  // same cache key but might compute a different result.
+  [[nodiscard]] bool isDeterministic() const;
+
   // If this function returns `false`, then the result of this `Operation` will
   // never be stored in the cache. It might however be read from the cache.
   // This can be used, if the operation actually only returns a subset of the
@@ -186,6 +193,13 @@ class Operation {
   // still be disabled for other reason external to this operation with
   // `disableStoringInCache()`.
   virtual bool canResultBeCachedImpl() const { return true; }
+
+  // Per-class component of `isDeterministic()`. Return true iff this specific
+  // operation (ignoring children) is intrinsically deterministic. Override and
+  // return false for operations that perform network requests (SERVICE, LOAD)
+  // or evaluate non-deterministic expressions (BIND/FILTER with BNODE, RAND,
+  // UUID, or STRUUID).
+  [[nodiscard]] virtual bool isDeterministicImpl() const = 0;
 
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.

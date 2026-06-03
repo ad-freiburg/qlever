@@ -254,6 +254,8 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
