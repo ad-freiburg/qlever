@@ -23,13 +23,13 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The offset of a word in the underlying file.
   using Offset = uint64_t;
   // The file in which the words are stored.
-  mutable ad_utility::File file_;
+  ad_utility::File file_;
 
   // The file in which the offsets of the words are stored. It contains one
   // `Offset` per word, plus a final offset that marks the end of the last
   // word. The number of words is therefore the number of stored offsets minus
   // one.
-  mutable ad_utility::File offsetsFile_;
+  ad_utility::File offsetsFile_;
 
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
