@@ -63,18 +63,18 @@ struct DeduplicationModeFromString {
   DeduplicationMode operator()(const std::string& s) const {
     if (s == "false") return {DeduplicationMode::None{}};
     if (s == "global") return {DeduplicationMode::Global{}};
-    try {
-      size_t deduplicationBatchSize = std::stoull(s);
-      if (deduplicationBatchSize == 0) {
-        throw std::runtime_error(
-            "Deduplication batch size must be a positive integer.");
-      }
-      return {DeduplicationMode::BatchWise{deduplicationBatchSize}};
-    } catch (const std::exception&) {
-      throw std::runtime_error(absl::StrCat(
-          "Invalid value for construct-deduplicate: \"", s,
-          "\" Expected \"false\", \"global\", or a positive integer."));
+
+    size_t batchSize = 0;
+    const char* begin = s.data();
+    const char* end = s.data() + s.size();
+    auto [ptr, ec] = std::from_chars(begin, end, batchSize);
+    // require the entire string to be a valid, in-range unsigned integer.
+    if (ec == std::errc{} && ptr == end && batchSize != 0) {
+      return {DeduplicationMode::BatchWise{batchSize}};
     }
+    throw std::runtime_error(absl::StrCat(
+        "Invalid value for construct-deduplicate: \"", s,
+        "\" Expected \"false\", \"global\", or a positive integer."));
   }
 };
 
