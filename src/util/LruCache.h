@@ -13,9 +13,12 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <boost/optional.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <list>
+#include <type_traits>
+#include <utility>
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
@@ -85,21 +88,21 @@ class LRUCache {
 
   // Insert the key-value pair into the cache.
   //
-  // If `key` is already present, update the stored value, mark the entry as
-  // most recently used and return `true`. Otherwise insert the new key-value
-  // pair (evicting the last recently used entry if the cache is at capacity)
-  // and return `false`.
-  bool insert(K&& key, V&& v) {
-    auto it = cache_.find();
-
+  // Returns true if `key` was not previously present and inserts it. If `key`
+  // is already present, update the stored value, mark the entry as most
+  // recently used and return false. If the cache is full, evict the least
+  // recently used entry first.
+  template <typename Key, typename Value>
+  bool insert(Key&& key, Value&& v) {
+    auto it = cache_.find(key);
     if (it != cache_.end()) {
       // Move to MRU position.
       keys_.splice(keys_.begin(), keys_, it->second.second);
 
       // Replace the old cached value with the newly provided value.
-      it->second.first = std::forward<V>(v);
+      it->second.first = std::forward<Value>(v);
 
-      return true;  // return true since the value was already present.
+      return false;
     }
 
     // Evict LRU if necessary.
@@ -108,22 +111,30 @@ class LRUCache {
       cache_.erase(lruKey);
 
       keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
-      lruKey = std::forward<K>(key);
+      lruKey = K{std::forward<Key>(key)};
 
-      auto result =
-          cache_.try_emplace(keys_.front(), std::forward<V>(v), keys_.begin());
+      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
+                                       keys_.begin());
 
       AD_CORRECTNESS_CHECK(result.second);
     } else {
-      keys_.push_front(std::forward<K>(key));
+      keys_.push_front(K{std::forward<Key>(key)});
 
-      auto result =
-          cache_.try_emplace(keys_.front(), std::forward<V>(v), keys_.begin());
+      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
+                                       keys_.begin());
 
       AD_CORRECTNESS_CHECK(result.second);
     }
 
-    return false;  // newly inserted.
+    return true;
+  }
+
+  // Set-like insertion for empty value types. This stores a default-constructed
+  // empty value and returns true iff the key was not already present.
+  template <typename Key>
+  bool insert(Key&& key)
+      requires std::is_empty_v<V> && std::is_default_constructible_v<V> {
+    return insert(std::forward<Key>(key), V{});
   }
 };
 

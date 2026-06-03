@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 
+#include <variant>
+
 #include "util/LruCache.h"
 
 TEST(LRUCache, testLruCache) {
@@ -94,4 +96,46 @@ TEST(LRUCache, tryGetDoesNotInsert) {
     return k;
   });
   EXPECT_EQ(1, computeCount);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCache, insertReturnsWhetherKeyWasNewAndUpdatesValue) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+
+  EXPECT_TRUE(cache.insert(1, 10));
+  EXPECT_TRUE(cache.insert(2, 20));
+  EXPECT_FALSE(cache.insert(1, 100));
+
+  auto value = cache.tryGet(1);
+  ASSERT_TRUE(value);
+  EXPECT_EQ(100, *value);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCache, duplicateInsertPromotesToMostRecentlyUsed) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+
+  EXPECT_TRUE(cache.insert(1, 10));
+  EXPECT_TRUE(cache.insert(2, 20));
+  EXPECT_FALSE(cache.insert(1, 100));
+  EXPECT_TRUE(cache.insert(3, 30));
+
+  EXPECT_TRUE(cache.tryGet(1));
+  EXPECT_FALSE(cache.tryGet(2));
+  EXPECT_TRUE(cache.tryGet(3));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCache, insertWithoutValueWorksForEmptyValueTypes) {
+  ad_utility::util::LRUCache<int, std::monostate> cache{2};
+
+  EXPECT_TRUE(cache.insert(1));
+  EXPECT_FALSE(cache.insert(1));
+  EXPECT_TRUE(cache.insert(2));
+  EXPECT_FALSE(cache.insert(1));
+  EXPECT_TRUE(cache.insert(3));
+
+  EXPECT_TRUE(cache.tryGet(1));
+  EXPECT_FALSE(cache.tryGet(2));
+  EXPECT_TRUE(cache.tryGet(3));
 }

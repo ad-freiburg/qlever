@@ -9,10 +9,8 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
 
-#include <absl/container/flat_hash_map.h>
 #include <absl/container/inlined_vector.h>
 
-#include <list>
 #include <optional>
 #include <variant>
 #include <vector>
@@ -23,6 +21,7 @@
 #include "util/ConstructDeduplicationMode.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/LruCache.h"
 #include "util/OverloadCallOperator.h"
 
 namespace qlever::constructExport {
@@ -37,43 +36,8 @@ namespace qlever::constructExport {
 // triples bypass deduplication entirely.
 using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
-// A set-like LRU cache for `DeduplicationKey`s. Tracks the N most recently
-// inserted unique keys.
-class LruDeduplicationCache {
- public:
-  explicit LruDeduplicationCache(size_t capacity) : capacity_{capacity} {}
-
-  // Returns true if `key` was not previously present and inserts it.
-  // Returns false if `key` was already present (duplicate).
-  // If the cache is full, the least recently used entry is evicted first.
-  bool insert(const DeduplicationKey& key) {
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      // `key` already present: move to front (most recently used).
-      list_.splice(list_.begin(), list_, it->second);
-      return false;
-    }
-    // `key` is new: evict LRU entry if at capacity.
-    if (map_.size() >= capacity_) {
-      map_.erase(list_.back());
-      list_.pop_back();
-    }
-    list_.push_front(key);
-    map_.emplace(key, list_.begin());
-    return true;
-  }
-
- private:
-  size_t capacity_;
-
-  // Recency order of the keys: front = most recently used, back = least
-  // recently used.
-  std::list<DeduplicationKey> list_;
-
-  // Maps each key to the iterator of its node in `list_`.
-  absl::flat_hash_map<DeduplicationKey, std::list<DeduplicationKey>::iterator>
-      map_;
-};
+using LruDeduplicationCache =
+    ad_utility::util::LRUCache<DeduplicationKey, std::monostate>;
 
 // Per-template-triple dedup filter. `BatchWise` mode keeps only the last N
 // unique keys in a bounded LRU cache; `Global` mode keeps every unique key in
