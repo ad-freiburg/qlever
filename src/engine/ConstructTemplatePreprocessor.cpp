@@ -45,12 +45,19 @@ static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
-    const Iri& iri, const Index& index, LocalVocab& constantLocalVocab) {
+    const Iri& iri, const Index& index,
+    LocalVocab& localVocabForConstantsInTemplate) {
+  // `iri.toSparql()` yields the IRI in SPARQL `IRIREF` syntax, i.e. enclosed in
+  // angle brackets (`<...>`); see the SPARQL 1.1 grammar production [139]
+  // (https://www.w3.org/TR/sparql11-query/#rIRIREF). We use `fromIriref`
+  // (rather than `fromStringRepresentation`) because it actually parses that
+  // syntax: it normalizes/escapes the IRI content via
+  // `RdfEscaping::normalizeIriWithBrackets`, producing the same internal
+  // storage representation the vocabulary uses.
   ValueId dedupId = resolveConstantDedupId(
       TripleComponent{
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              iri.toSparql())},
-      index, constantLocalVocab);
+          ad_utility::triple_component::Iri::fromIriref(iri.toSparql())},
+      index, localVocabForConstantsInTemplate);
   return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
                                  EvaluatedTermData{iri.iri(), nullptr}),
                              dedupId};
@@ -60,12 +67,21 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessLiteral(
     const Literal& literal, PositionInTriple role, const Index& index,
-    LocalVocab& constantLocalVocab) {
+    LocalVocab& localVocabForConstantsInTemplate) {
+  // A literal is only legal in OBJECT position; per SPARQL 1.1 §16.2 a template
+  // instantiation yielding a literal in subject/predicate position produces no
+  // RDF triple, so we return `nullopt` to drop the triple. For the object we
+  // use the full Turtle object parser (not a string normalize like
+  // `preprocessIri`): the literal's datatype decides its `ValueId` encoding
+  // (e.g. `"1"^^xsd:integer` → encoded integer, not a vocab string), which
+  // `parseTripleObject` resolves the same way the index does at build time,
+  // keeping the dedup key consistent.
   if (role == PositionInTriple::OBJECT) {
-    ValueId dedupId = resolveConstantDedupId(
+    TripleComponent parsedObject =
         RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-            literal.toSparql()),
-        index, constantLocalVocab);
+            literal.toSparql());
+    ValueId dedupId = resolveConstantDedupId(std::move(parsedObject), index,
+                                             localVocabForConstantsInTemplate);
     return PrecomputedConstant{
         std::make_shared<const EvaluatedTermData>(
             EvaluatedTermData{literal.literal(), nullptr}),
