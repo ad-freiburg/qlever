@@ -8,7 +8,7 @@
 #ifndef QLEVER_SRC_UTIL_CONSTRUCTDEDUPLICATIONMODE_H
 #define QLEVER_SRC_UTIL_CONSTRUCTDEDUPLICATIONMODE_H
 
-#include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <charconv>
 #include <stdexcept>
