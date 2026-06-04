@@ -25,12 +25,13 @@ namespace qlever::constructExport {
 // Resolve `tripleComponent` (a constant IRI or literal from the CONSTRUCT
 // template) to its `ValueId`: encoded values and vocabulary terms become
 // `ValueId`s directly; a literal/IRI not present in the vocabulary is assigned
-// a fresh `LocalVocabIndex` in `constantLocalVocab`. This `ValueId` is the
-// constant's component of the full-triple deduplication key.
-static ValueId resolveConstantDedupId(TripleComponent tripleComponent,
-                                      const Index& index,
-                                      LocalVocab& constantLocalVocab) {
-  return std::move(tripleComponent).toValueId(index, constantLocalVocab);
+// a fresh `LocalVocabIndex` in `localvocabForConstructTemplateConstants`. This
+// `ValueId` is the constant's component of the full-triple deduplication key.
+static ValueId resolveConstantDedupId(
+    TripleComponent tripleComponent, const Index& index,
+    LocalVocab& localvocabForConstructTemplateConstants) {
+  return std::move(tripleComponent)
+      .toValueId(index, localvocabForConstructTemplateConstants);
 }
 
 // True if any of the triple's three positions is a blank node. Such triples are
