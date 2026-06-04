@@ -261,4 +261,9 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
   SparqlExpressionPimpl nonDetPimpl{std::make_shared<RandomExpression>(),
                                     "RAND()"};
   EXPECT_FALSE(nonDetPimpl.isDeterministic());
+
+  EXPECT_TRUE((PrefixRegexExpression{makeVar(), "prefix", Variable{"?x"}}
+                   .isDeterministic()));
+
+  EXPECT_TRUE((SingleUseExpression{Id::makeFromInt(1)}.isDeterministic()));
 }
