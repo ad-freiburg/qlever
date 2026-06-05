@@ -100,10 +100,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
 // Get the parameter value at the given index. If the vector is empty, return
 // the given `defaultValue`. If the vector has exactly one element, return that
 // element, no matter what the index is.
-CPP_template(typename T, typename TsList)(
-    requires ql::concepts::convertible_to<ql::ranges::range_value_t<TsList>, T>)
-    T
-    getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
+template <typename T, typename TsList>
+T getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
   if (values.empty()) {
     return defaultValue;
   }

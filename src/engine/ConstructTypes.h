@@ -54,15 +54,13 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
-  // The stable `ValueId` used as this constant's component of the full-triple
+  // The `ValueId` used as this constant's component of the full-triple
   // deduplication key (`global` mode). IRIs and encoded values resolve from the
   // index vocabulary / ID bits; literals not present in the vocabulary are
   // assigned a fresh `LocalVocabIndex` in the template's `constantLocalVocab_`.
   // Resolved once at preprocessing time (see
   // `ConstructTemplatePreprocessor::preprocessIri`/`preprocessLiteral`).
-  // Defaults to `makeUndefined()` so `PrecomputedConstant` can be aggregate
-  // initialized from just an `EvaluatedTerm` on the instantiation path, where
-  // the deduplication key is irrelevant.
+  // Defaults to `makeUndefined()`.
   ValueId dedupId_ = ValueId::makeUndefined();
 };
 

@@ -63,8 +63,11 @@ std::optional<std::string> evaluate(
   using namespace qlever::constructExport;
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
+  // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
+  LocalVocab constantLocalVocab;
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
-      term, position, exportCtx._variableColumns);
+      term, position, exportCtx._variableColumns, exportCtx._qecIndex,
+      constantLocalVocab);
   if (!preprocessed) return std::nullopt;
 
   BatchEvaluationResult batchResult;
