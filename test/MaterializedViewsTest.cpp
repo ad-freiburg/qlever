@@ -1721,3 +1721,6 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
             "more than one column in common."));
   }
 }
+
+// TODO test rewriting of patterns not covered by the hard coded cases, with and
+// without bind.
