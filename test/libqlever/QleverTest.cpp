@@ -7,7 +7,10 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "engine/ExternalValues.h"
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
@@ -286,5 +289,77 @@ TEST(LibQlever, disableCaching) {
       auto& qec = std::get<1>(plan);
       EXPECT_TRUE(qec->disableCaching());
     }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, externallySpecifiedValues) {
+  std::string filename = "libQleverExternalValues.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexForExternalValues";
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  EngineConfig ec{c};
+  // Caching must be disabled for externally specified values.
+  ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
+  Qlever engine{ec};
+
+  // Parse a query that uses externally specified values joined with the index.
+  // Use both syntaxes, the preferred one, and the deprecated one kept for
+  // BMW.
+  std::array<std::string, 2> queries = {
+      R"(
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
+        [] <name> "myValues" .
+        [] <variable> ?x .
+      }
+    } ORDER BY ?x
+  )",
+      R"(
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values-myValues> {
+        [] <variable> ?x .
+      }
+    } ORDER BY ?x
+  )"};
+
+  for (const auto& query : queries) {
+    auto plan = engine.parseAndPlanQuery(query);
+    auto& [qet, qec, parsedQuery] = plan;
+
+    // Collect the ExternalValues operations from the tree.
+    std::vector<ExternalValues*> externalValues;
+    qet->getRootOperation()->getExternalValues(externalValues);
+    ASSERT_EQ(externalValues.size(), 1u);
+    EXPECT_EQ(externalValues[0]->getName(), "myValues");
+    EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
+
+    // Supply values and execute the query.
+    using TC = TripleComponent;
+    parsedQuery::SparqlValues newValues;
+    newValues._variables = {Variable{"?x"}};
+    newValues._values = {{TC::Iri::fromIriref("<s1>")},
+                         {TC::Iri::fromIriref("<s3>")}};
+    externalValues[0]->updateValues(std::move(newValues));
+
+    auto res = qet->getResult();
+    auto i = &Id::makeFromInt;
+    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    // The order of the two columns `?x` and `?o` might not be deterministic.
+    auto expected =
+        makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});
+    if (qet->getVariableColumn(Variable{"?x"}) != 0) {
+      expected.swapColumns(0, 1);
+    }
+    EXPECT_THAT(res->idTable(), matchesIdTable(expected));
   }
 }

@@ -195,8 +195,11 @@ TEST(ExistsJoin, computeResult) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -219,7 +222,6 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   IdTable expected = makeIdTableFromVector(
       {{1, 1, 2, T}, {4, 2, 1, F}, {2, 8, 1, F}, {3, 8, 2, T}, {4, 8, 2, T}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{
@@ -250,8 +252,11 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -278,7 +283,6 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
                                             {10, 11, 12, 13, F},
                                             {14, 15, 16, 17, F}});
 
-  auto* qec = ad_utility::testing::getQec();
   for (bool requestLaziness : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{

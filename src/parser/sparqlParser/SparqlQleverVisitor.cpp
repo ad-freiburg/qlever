@@ -1288,6 +1288,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
+             ql::starts_with(serviceIri.toStringRepresentation(),
+                             EXTERNAL_VALUES_IRI_PREFIX)) {
+    return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
+                                                                    serviceIri);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
@@ -2154,6 +2159,10 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  if (ctx->pathSyntaxExtension()) {
+    return visit(ctx->pathSyntaxExtension());
+  }
+
   std::string mod = ctx->getText();
   if (mod == "*") {
     return {0, std::numeric_limits<size_t>::max()};
@@ -2163,6 +2172,38 @@ std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
     AD_CORRECTNESS_CHECK(mod == "?");
     return {0, 1};
   }
+}
+
+// ____________________________________________________________________________
+std::pair<size_t, size_t> Visitor::visit(
+    Parser::PathSyntaxExtensionContext* ctx) {
+  // Syntax extension from
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax:
+  //
+  //   path{n}    Exactly n repetitions of `path`.
+  //   path{n,m}  Between n and m repetitions of `path`.
+  //   path{n,}   At least n repetitions of `path`.
+  //   path{,n}   At most n repetitions of `path`.
+
+  if (ctx->minMax()) {
+    auto stepsMin = visit(ctx->minMax()->integer(0));
+    auto stepsMax = visit(ctx->minMax()->integer(1));
+    return {stepsMin, stepsMax};
+  }
+
+  if (ctx->exactLength()) {
+    auto stepsExact = visit(ctx->exactLength()->integer());
+    return {stepsExact, stepsExact};
+  }
+
+  if (ctx->onlyMin()) {
+    auto stepsMin = visit(ctx->onlyMin()->integer());
+    return {stepsMin, std::numeric_limits<size_t>::max()};
+  }
+
+  AD_CORRECTNESS_CHECK(ctx->onlyMax());
+  auto stepsMax = visit(ctx->onlyMax()->integer());
+  return {0, stepsMax};
 }
 
 // ____________________________________________________________________________________

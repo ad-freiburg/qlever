@@ -1,8 +1,9 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 #define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
@@ -334,6 +335,12 @@ CPP_class_template(size_t NumStaticCols,
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
+  // The destructor must wait for any pending async task before members are
+  // destroyed. Without this, `blockTransformation_` (declared after
+  // `compressAndWriteFuture_`) is destroyed first, and the still-running
+  // async thread accesses freed memory via `this->blockTransformation_`.
+  ~CompressedExternalIdTableBase() { waitForFuture(); }
+
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,

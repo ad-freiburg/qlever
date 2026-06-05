@@ -149,7 +149,7 @@ class WktEnvelope {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
@@ -202,7 +202,7 @@ class WktGeometryType {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
@@ -224,7 +224,7 @@ class WktGeometryN {
     }
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{lit}};
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 

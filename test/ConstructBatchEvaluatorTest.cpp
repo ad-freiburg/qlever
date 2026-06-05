@@ -18,14 +18,17 @@ using namespace qlever::constructExport;
 using ::testing::Each;
 using ::testing::ElementsAre;
 using ::testing::Eq;
+using ::testing::Field;
 using ::testing::Optional;
 using ::testing::Pointee;
 
-// Matcher for `std::optional<std::shared_ptr<const std::string>>`:
-// asserts the optional is non-empty and the pointed-to string equals
+// Matcher for `std::optional<EvaluatedTerm>` (i.e.
+// `std::optional<std::shared_ptr<const EvaluatedTermData>>`): asserts the
+// optional is non-empty and the pointed-to term's `rdfTermString_` field equals
 // `expected`.
 static constexpr auto evalTerm = [](const std::string& expected) {
-  return Optional(Pointee(Eq(expected)));
+  return Optional(
+      Pointee(Field(&EvaluatedTermData::rdfTermString_, Eq(expected))));
 };
 
 static const EvaluatedVariableValues& getColumn(
@@ -289,26 +292,4 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
       std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
   EXPECT_THAT(idOTerms, Each(Eq(firstO)));
 }
-
-// With a cache of size 1, accessing a different `Id` evicts the current entry.
-// Use idS_, idO_, idS_: the second access to idS_ (row 2) is a cache miss
-// because idO_ (row 1) evicted it, a new string is allocated.
-TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneEvictsAndRecomputesOnAccess) {
-  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}});
-  IdCache idCache{1};
-
-  auto result = evaluateIdTable({0}, idTable, idCache);
-
-  ASSERT_EQ(result.numRows_, 3);
-
-  // Correct string values despite eviction.
-  EXPECT_THAT(getColumn(result, 0),
-              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<s>")));
-
-  // The two idS_ accesses must yield different shared_ptrs: the first was
-  // evicted by idO_, forcing recomputation and a new allocation for row 2.
-  // (The string content is still correct, as verified above.)
-  EXPECT_NE(getColumn(result, 0).at(0), getColumn(result, 0).at(2));
-}
-
 }  // namespace

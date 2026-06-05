@@ -33,8 +33,7 @@ class ExecuteUpdate {
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
   transformTriplesTemplate(
-      const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
-      const VariableToColumnMap& variableColumns,
+      const IndexImpl& index, const VariableToColumnMap& variableColumns,
       const std::vector<SparqlTripleSimpleWithGraph>& triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 

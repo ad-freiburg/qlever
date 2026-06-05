@@ -13,7 +13,6 @@
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -34,6 +33,7 @@
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -147,8 +147,9 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
 }
 
 // _____________________________________________________________________________
-Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
-                    uint64_t minBlankNodeIndex) {
+std::optional<Id> tryRemapBlankNodeId(Id original,
+                                      const BlankNodeBlocks& blankNodeBlocks,
+                                      uint64_t minBlankNodeIndex) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::BlankNodeIndex,
       "Only ids resembling a blank node index can be remapped with this "
@@ -160,13 +161,24 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
   auto normalizedId = rawId - minBlankNodeIndex;
   auto blockIndex = normalizedId / ad_utility::BlankNodeManager::blockSize_;
   auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
-  AD_EXPENSIVE_CHECK(it != blankNodeBlocks.end() && *it == blockIndex,
-                     "Could not find block index of blank node.");
+  if (it == blankNodeBlocks.end() || *it != blockIndex) {
+    return std::nullopt;
+  }
   auto relativeId = normalizedId % ad_utility::BlankNodeManager::blockSize_;
   auto blockOffset = ql::ranges::distance(blankNodeBlocks.begin(), it) *
                      ad_utility::BlankNodeManager::blockSize_;
   return Id::makeFromBlankNodeIndex(
       BlankNodeIndex::make(relativeId + blockOffset + minBlankNodeIndex));
+}
+
+// _____________________________________________________________________________
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex) {
+  auto value =
+      tryRemapBlankNodeId(original, blankNodeBlocks, minBlankNodeIndex);
+  AD_CORRECTNESS_CHECK(value.has_value(),
+                       "Could not find block index of blank node.");
+  return value.value();
 }
 
 // _____________________________________________________________________________
@@ -331,7 +343,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 
 // _____________________________________________________________________________
 namespace qlever {
-void materializeToIndex(
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
@@ -353,7 +365,7 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  const auto& [insertionPositions, localVocabMapping] =
+  auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
@@ -367,7 +379,7 @@ void materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  IndexImpl newIndex{index.allocator(), false};
+  IndexImpl newIndex{index.allocator()};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
@@ -377,14 +389,23 @@ void materializeToIndex(
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
+  // Collect the first exception thrown by any worker so it can be rethrown to
+  // the caller after `threadPool.join()`. Without this, exceptions escaping a
+  // `net::post` handler call `std::terminate` and exceptions from a detached
+  // `co_spawn` are silently swallowed. NOTE: `exceptionCollector` must outlive
+  // `threadPool`, since the worker callables capture a pointer to it via
+  // `wrap()` / `std::ref`; the declaration order here guarantees that.
+  ad_utility::ExceptionCollector exceptionCollector;
+
   if (index.usePatterns()) {
-    net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
+    net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
+                                                   &insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
           [&insertionPositions](const Id& oldId) {
             return remapVocabId(oldId, insertionPositions);
           });
       newIndex.writePatternsToFile();
-    });
+    }));
   }
 
   using enum Permutation::Enum;
@@ -413,14 +434,17 @@ void materializeToIndex(
             newIndex, getPermutation(a), getPermutation(b), isInternal,
             locatedTriplesSharedState, localVocabMapping, insertionPositions,
             blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-        net::detached);
+        std::ref(exceptionCollector));
   }
 
   threadPool.join();
+  exceptionCollector.rethrowIfException();
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
 #undef REBUILD_LOG_INFO
+  return {std::move(insertionPositions), std::move(localVocabMapping),
+          std::move(blankNodeBlocks), minBlankNodeIndex};
 }
 
 }  // namespace qlever

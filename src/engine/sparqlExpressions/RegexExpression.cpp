@@ -118,13 +118,10 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
-      const std::string error =
-          "Escaping the character "s + c +
-          " is not allowed in QLever's regex filters. (Regex was " + regex +
-          ") Please note that "
-          "there are two levels of escaping in place here: One for SPARQL "
-          "and one for the regex engine";
-      throw std::runtime_error(error);
+      // The regex contains an escape of a non-special char (e.g. `\d`).
+      // This is a valid regex feature (handled by RE2 in the general path),
+      // but it is not expressible as a simple prefix filter, so bail out.
+      return std::nullopt;
     }
     escaped = false;
   }
@@ -288,6 +285,7 @@ void PrefixRegexExpression::checkCancellation(
 // _____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
 PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   // It is currently not possible to prefilter PREFIX expressions involving
   // STR(?var), since we not only have to match "Bob", but also "Bob"@en,

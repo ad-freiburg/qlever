@@ -199,30 +199,30 @@ TEST(TripleComponent, toValueIdIfNotString) {
 
 TEST(TripleComponent, toValueId) {
   auto qec = getQec("<x> <y> <z>. <x> <y> \"alpha\".");
-  const auto& vocab = qec->getIndex().getVocab();
+  const auto& index = qec->getIndex();
 
   TripleComponent tc = iri("<x>");
   auto getId = makeGetId(qec->getIndex());
   Id id = getId("<x>");
-  ASSERT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(), id);
+  ASSERT_EQ(tc.toValueId(index).value(), id);
 
   tc = lit("\"alpha\"");
   id = getId("\"alpha\"");
-  EXPECT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(), id);
+  EXPECT_EQ(tc.toValueId(index).value(), id);
 
   tc = iri("<notexisting>");
-  ASSERT_FALSE(tc.toValueId(vocab, *encodedIriManager()).has_value());
+  ASSERT_FALSE(tc.toValueId(index).has_value());
   tc = 42;
 
   ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
 
   tc = iri(HAS_PATTERN_PREDICATE);
-  ASSERT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(),
+  ASSERT_EQ(tc.toValueId(index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
   auto lv = LocalVocab();
-  auto expectLocalVocab = [&lv, &vocab](TripleComponent tc, size_t pos) {
-    auto id = std::move(tc).toValueId(vocab, lv, *encodedIriManager());
+  auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
+    auto id = std::move(tc).toValueId(index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);
     auto lve = lv.getWord(id.getLocalVocabIndex());
     // Check that the constructed LVEs have the correct position in vocab set
@@ -233,7 +233,7 @@ TEST(TripleComponent, toValueId) {
     EXPECT_THAT(lve.lowerBoundInVocab_, boundMatcher);
     EXPECT_THAT(lve.upperBoundInVocab_, boundMatcher);
   };
-  expectLocalVocab(iri("<notexisting>"), 6);
+  expectLocalVocab(iri("<notexisting>"), 5);
   expectLocalVocab(lit("\"a\""), 0);
   expectLocalVocab(lit("\"b\""), 1);
 }
@@ -243,12 +243,11 @@ TEST(TripleComponent, toValueIdOrBounds) {
   // ql:internal-graph ql:langtag <x> <y> <z>
   auto qec = getQec("<x> <y> <z>. <x> <y> \"alpha\".");
   const auto& index = qec->getIndex();
-  const auto& vocab = index.getVocab();
   auto getId = makeGetId(index);
 
-  auto expectIsInVocab = [&vocab, &getId](TripleComponent tc) {
+  auto expectIsInVocab = [&index, &getId](TripleComponent tc) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
-    auto idOrBounds = tc.toValueIdOrBounds(vocab, *encodedIriManager());
+    auto idOrBounds = tc.toValueIdOrBounds(index);
     auto expectedId =
         getId(tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
                              : tc.getIri().toStringRepresentation());
@@ -261,14 +260,14 @@ TEST(TripleComponent, toValueIdOrBounds) {
   auto makePos = [](VocabIndex vi) {
     return LocalVocabEntry::IdProxy::make(Id::makeFromVocabIndex(vi).getBits());
   };
-  auto expectBounds = [&vocab, &makePos](TripleComponent tc, BoundsT bounds) {
+  auto expectBounds = [&index, &makePos](TripleComponent tc, BoundsT bounds) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
     // Check that toValueIdOrBounds returns the expected bounds
-    auto idOrBounds = tc.toValueIdOrBounds(vocab, *encodedIriManager());
+    auto idOrBounds = tc.toValueIdOrBounds(index);
     EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
-    auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral())
-                              : LocalVocabEntry(tc.getIri());
+    auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral(), index)
+                              : LocalVocabEntry(tc.getIri(), index);
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);
@@ -279,9 +278,9 @@ TEST(TripleComponent, toValueIdOrBounds) {
   expectBounds(lit("\"a\""), bounds(0, 0));
   expectBounds(lit("\"b\""), bounds(1, 1));
   expectBounds(iri("<a>"), bounds(1, 1));
-  expectBounds(iri("<k>"), bounds(6, 6));
-  expectBounds(iri("<xx>"), bounds(7, 7));
-  expectBounds(iri("<yy>"), bounds(8, 8));
+  expectBounds(iri("<k>"), bounds(5, 5));
+  expectBounds(iri("<xx>"), bounds(6, 6));
+  expectBounds(iri("<yy>"), bounds(7, 7));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {

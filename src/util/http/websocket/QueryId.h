@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 #define QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 
+#include <chrono>
 #include <cstdint>
 #include <random>
 
@@ -19,7 +20,7 @@
 
 namespace ad_utility::websocket {
 
-/// Typed wrapper class for a query id represented as a string
+// Typed wrapper class for a query id represented as a string
 class QueryId {
   std::string id_;
 
@@ -32,12 +33,12 @@ class QueryId {
   }
 
  public:
-  /// Construct this object with the passed string
-  /// Note that this does *not* ensure uniqueness.
+  // Construct this object with the passed string
+  // Note that this does *not* ensure uniqueness.
   static QueryId idFromString(std::string id) { return QueryId{std::move(id)}; }
 
-  /// Checks if the id is empty. Because empty ids are not allowed,
-  /// this is usually a good indicator if the object has been moved out of
+  // Checks if the id is empty. Because empty ids are not allowed,
+  // this is usually a good indicator if the object has been moved out of
   [[nodiscard]] bool empty() const noexcept { return id_.empty(); }
 
   template <typename H>
@@ -49,10 +50,10 @@ class QueryId {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryId, id_)
 };
 
-/// This class is similar to QueryId, but it's instances are all unique within
-/// the registry it was created with. (It can not be created without a registry)
-/// Therefore it is not copyable and removes itself from said registry
-/// on destruction.
+// This class is similar to QueryId, but it's instances are all unique within
+// the registry it was created with. (It can not be created without a registry)
+// Therefore it is not copyable and removes itself from said registry
+// on destruction.
 class OwningQueryId {
   unique_cleanup::UniqueCleanup<QueryId> id_;
 
@@ -71,12 +72,15 @@ class OwningQueryId {
 static_assert(!std::is_copy_constructible_v<OwningQueryId>);
 static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
-/// A factory class to create unique query ids within each individual instance.
+// A factory class to create unique query ids within each individual instance.
 class QueryRegistry {
   struct CancellationHandleWithQuery {
     SharedCancellationHandle cancellationHandle_ =
         std::make_shared<CancellationHandle<>>();
     std::string query_;
+    // Wall-clock instant at which this entry was registered.
+    std::chrono::system_clock::time_point startedAt_ =
+        std::chrono::system_clock::now();
     explicit CancellationHandleWithQuery(std::string_view query)
         : query_{query} {}
   };
@@ -90,14 +94,31 @@ class QueryRegistry {
       std::make_shared<SynchronizedType>()};
 
  public:
+  // Snapshot of a single active query. Returned from `getActiveQueries`.
+  struct ActiveQueryInfo {
+    std::string query_;
+    // Wall-clock instant when the query was registered. Serialized to
+    // clients as a Unix-epoch timestamp in milliseconds.
+    std::chrono::system_clock::time_point startedAt_;
+
+    friend void to_json(nlohmann::json& json, const ActiveQueryInfo& info) {
+      json = {
+          {"query", info.query_},
+          {"started-at", std::chrono::duration_cast<std::chrono::milliseconds>(
+                             info.startedAt_.time_since_epoch())
+                             .count()},
+      };
+    }
+  };
+
   QueryRegistry() = default;
 
-  /// Tries to create a new unique OwningQueryId object from the given string.
-  /// \param id The id representation of the potential candidate.
-  /// \param query The string representation of the associated SPARQL query.
-  /// \return A std::optional<OwningQueryId> object wrapping the passed string
-  ///         if it was not present in the registry before. An empty
-  ///         std::optional if the id already existed before.
+  // Tries to create a new unique OwningQueryId object from the given string.
+  // \param id The id representation of the potential candidate.
+  // \param query The string representation of the associated SPARQL query.
+  // \return A std::optional<OwningQueryId> object wrapping the passed string
+  //         if it was not present in the registry before. An empty
+  //         std::optional if the id already existed before.
   std::optional<OwningQueryId> uniqueIdFromString(std::string id,
                                                   std::string_view query) {
     auto queryId = QueryId::idFromString(std::move(id));
@@ -119,8 +140,8 @@ class QueryRegistry {
     return std::nullopt;
   }
 
-  /// Generates a unique pseudo-random OwningQueryId object for this registry
-  /// and associates it with the given query.
+  // Generates a unique pseudo-random OwningQueryId object for this registry
+  // and associates it with the given query.
   OwningQueryId uniqueId(std::string_view query) {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
@@ -131,21 +152,22 @@ class QueryRegistry {
     return std::move(result.value());
   }
 
-  /// Member function that acquires a read lock and returns a vector
-  /// of all currently registered queries.
-  ad_utility::HashMap<QueryId, std::string> getActiveQueries() const {
+  // Member function that acquires a read lock and returns a snapshot of all
+  //  currently registered queries. See `ActiveQueryInfo` for the value shape.
+  ad_utility::HashMap<QueryId, ActiveQueryInfo> getActiveQueries() const {
     return registry_->withReadLock([](const auto& map) {
-      ad_utility::HashMap<QueryId, std::string> result;
+      ad_utility::HashMap<QueryId, ActiveQueryInfo> result;
       result.reserve(map.size());
       for (const auto& entry : map) {
-        result.emplace(entry.first, entry.second.query_);
+        result.emplace(entry.first, ActiveQueryInfo{entry.second.query_,
+                                                    entry.second.startedAt_});
       }
       return result;
     });
   }
 
-  /// Returns the cancellation handle from the registry if it exists, nullptr
-  /// otherwise.
+  // Returns the cancellation handle from the registry if it exists, nullptr
+  // otherwise.
   SharedCancellationHandle getCancellationHandle(const QueryId& queryId) const {
     return registry_->withReadLock([&queryId](const auto& map) {
       auto it = map.find(queryId);

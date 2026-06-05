@@ -14,7 +14,6 @@
 
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
-#include "index/IndexImpl.h"
 
 namespace ad_utility::triple_component {
 
@@ -95,22 +94,6 @@ NormalizedStringView BasicLiteralOrIri<isOwning>::getContent() const {
     return getIriContent();
   else
     AD_THROW("LiteralOrIri object contains neither Iri not Literal");
-}
-
-// ___________________________________________
-template <bool isOwning>
-ql::strong_ordering BasicLiteralOrIri<isOwning>::compareThreeWay(
-    const BasicLiteralOrIri& rhs) const {
-  int i = IndexImpl::staticGlobalSingletonComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation(),
-      LocaleManager::Level::TOTAL);
-  if (i < 0) {
-    return ql::strong_ordering::less;
-  } else if (i > 0) {
-    return ql::strong_ordering::greater;
-  } else {
-    return ql::strong_ordering::equal;
-  }
 }
 
 template class BasicLiteralOrIri<true>;

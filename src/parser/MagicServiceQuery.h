@@ -69,12 +69,12 @@ struct MagicServiceQuery {
   // objects are incrementally constructed by adding configuration triples.
   // Using this function the final state of the object can be checked.
   virtual void validate() const {
-      // Currently most `MagicServiceQuery` implementations do not make use of
-      // this method. Thus it is empty by default.
+    // Currently most `MagicServiceQuery` implementations do not make use of
+    // this method. Thus it is empty by default.
   };
 
   // Helper that returns a readable name for the type of `MagicServiceQuery`.
-  virtual constexpr std::string_view name() const = 0;
+  virtual std::string_view name() const = 0;
 
  protected:
   // Utility functions for variables in the magic service configuration triples

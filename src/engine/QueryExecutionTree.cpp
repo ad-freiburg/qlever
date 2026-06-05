@@ -209,7 +209,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   // return the original tree, without stripping any columns.
   if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
                          [&variablesToKeep](const Variable& variable) {
-                           return variablesToKeep.contains(variable);
+                           return ad_utility::contains(variablesToKeep,
+                                                       variable);
                          })) {
     return qet;
   }

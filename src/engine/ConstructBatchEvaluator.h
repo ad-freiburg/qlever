@@ -91,10 +91,9 @@ class ConstructBatchEvaluator {
       size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
-  // Convert a single `Id` to its `EvaluatedTerm` string representation.
-  // Returns `std::nullopt` if the `Id` has no string representation.
-  static std::optional<EvaluatedTerm> idToEvaluatedTerm(
-      const Index& index, Id id, const LocalVocab& localVocab);
+  // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
+  static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
+      std::optional<std::pair<std::string, const char*>> optStringAndType);
 };
 
 }  // namespace qlever::constructExport

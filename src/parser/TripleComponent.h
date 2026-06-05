@@ -25,6 +25,8 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
+class IndexImpl;
+
 namespace ad_utility::detail {
 
 template <typename T, typename U>
@@ -36,11 +38,11 @@ CPP_concept MoveAssignableWith =
 
 }  // namespace ad_utility::detail
 
-/// A wrapper around a `std::variant` that can hold the different types that the
-/// subject, predicate, or object of a triple can have in the Turtle Parser.
-/// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
-/// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
-/// of any other type).
+// A wrapper around a `std::variant` that can hold the different types that the
+// subject, predicate, or object of a triple can have in the Turtle Parser.
+// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
+// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
+// of any other type).
 class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
@@ -217,34 +219,11 @@ class TripleComponent {
   // Convert the `TripleComponent` to an `Id`. If the `TripleComponent` is a
   // literal or IRI, resolve using the `vocabulary`. If they are not found in
   // the vocabulary, return the positions of the two neighboring entries.
-  template <typename Vocabulary>
   [[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
-  toValueIdOrBounds(const Vocabulary& vocabulary,
-                    const EncodedIriManager& evManager) const {
-    AD_CONTRACT_CHECK(!isString());
-    std::optional<Id> vid = toValueIdIfNotString(&evManager);
-    if (vid != std::nullopt) return vid.value();
-    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-    const std::string& content = isLiteral()
-                                     ? getLiteral().toStringRepresentation()
-                                     : getIri().toStringRepresentation();
-    auto [lower, upper] = vocabulary.getPositionOfWord(content);
-    if (lower != upper) {
-      return Id::makeFromVocabIndex(lower);
-    }
-    return std::pair(lower, upper);
-  }
+  toValueIdOrBounds(const IndexImpl& index) const;
 
   // Like `toValueIdOrBounds`, but returns `std::nullopt` if not found.
-  template <typename Vocabulary>
-  [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
-    auto idOrBounds = toValueIdOrBounds(vocabulary, evManager);
-    if (auto* id = std::get_if<Id>(&idOrBounds)) {
-      return *id;
-    }
-    return std::nullopt;
-  }
+  [[nodiscard]] std::optional<Id> toValueId(const IndexImpl& index) const;
 
   // Like `toValueIdOrBounds`, but also take the given `LocalVocab` into
   // account. If this `TripleComponent` is neither found in `vocabulary` nor in
@@ -255,32 +234,7 @@ class TripleComponent {
   // `TripleComponent` object is created solely to call this method and we want
   // to avoid copying the literal or IRI when passing it to the local
   // vocabulary.
-  template <typename Vocabulary>
-  [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
-                             LocalVocab& localVocab,
-                             const EncodedIriManager& encodedIriManager) && {
-    auto idOrBounds = toValueIdOrBounds(vocabulary, encodedIriManager);
-    if (auto* id = std::get_if<Id>(&idOrBounds)) {
-      return *id;
-    }
-    using Bounds = std::pair<VocabIndex, VocabIndex>;
-    AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
-    auto [lower, upper] = std::get<Bounds>(idOrBounds);
-    // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
-    // which we look up in (and potentially add to) our local vocabulary.
-    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-    using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-    auto moveWord = [&]() -> LiteralOrIri {
-      if (isLiteral()) {
-        return LiteralOrIri{std::move(getLiteral())};
-      } else {
-        return LiteralOrIri{std::move(getIri())};
-      }
-    };
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
-                        Id::makeFromVocabIndex(upper))));
-  }
+  [[nodiscard]] Id toValueId(const IndexImpl& index, LocalVocab& localVocab) &&;
 
   // Human-readable output. Is used for debugging, testing, and for the creation
   // of descriptors and cache keys.

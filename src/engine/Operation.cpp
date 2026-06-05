@@ -1,6 +1,11 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
+// Copyright 2020-2026 The QLever Authors, in particular:
+//
+// 2020 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Operation.h"
 
@@ -350,6 +355,9 @@ std::shared_ptr<const Result> Operation::getResult(
             });
 
     if (_executionContext->disableCaching()) {
+      if (computationMode == ComputationMode::ONLY_IF_CACHED) {
+        return nullptr;
+      }
       return std::make_shared<Result>(runComputation(timer, computationMode));
     }
 
@@ -776,6 +784,18 @@ std::unique_ptr<Operation> Operation::clone() const {
   AD_EXPENSIVE_CHECK(!canResultBeCached() ||
                      getCacheKey() == result->getCacheKey());
   return result;
+}
+
+// _____________________________________________________________________________
+void Operation::getExternalValues(
+    std::vector<ExternalValues*>& externalValues) {
+  // Recursively process all children. This is the correct behavior for all
+  // classes except `ExternalValues` itself, which overrides this
+  // method.
+  for (auto* child : getChildren()) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    child->getRootOperation()->getExternalValues(externalValues);
+  }
 }
 
 // _____________________________________________________________________________
