@@ -200,11 +200,11 @@ CPP_template(typename RequestType)(
                                                             request,
                                                         std::optional<MediaType>
                                                             mediaType,
-                                                        bool doPreparePayload =
+                                                        bool preparePayload =
                                                             true) {
   return createHttpResponseFromGenerator(detail::toGenerator(std::move(body)),
                                          status, request, mediaType,
-                                         doPreparePayload);
+                                         preparePayload);
 }
 
 // Create a HttpResponse from a string with status 200 OK. Otherwise behaves
