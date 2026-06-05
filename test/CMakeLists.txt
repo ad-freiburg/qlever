@@ -524,3 +524,5 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
+
+addLinkAndDiscoverTest(LogTest)
