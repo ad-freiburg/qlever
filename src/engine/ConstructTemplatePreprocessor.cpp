@@ -55,6 +55,19 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
   // `RdfEscaping::normalizeIriWithBrackets`, producing the same internal
   // storage representation the vocabulary uses.
   ValueId dedupId = resolveConstantDedupId(
+      // TODO<ms2144>: verify that `iri.toSparql()` yields the Iri string in
+      // exactly the format which `fromIriref` expects in in?
+      // maybe we should make the "contract" of the expected format expliciy
+      // here, but how?
+      //  At SPARQL parse time (SparqlQLeverVisitor.cpp), the
+      // construct template IRI is built. There `Iri::toStringRepresentation()`
+      // is called to fill  the parser/data/Iri.h _string member variable with
+      // the format that Iri::toStringRepresentation() yields.
+      // Thus we need to ensure here that we 1) know which format the IRI is in
+      // and 2) thus choose the correct method to parse the Iri.
+      // Best case would be to make everything explicit.
+      // Even better would be to not have a string representation of the Iri
+      // in the construct template but have a struct which documents the format?
       TripleComponent{
           ad_utility::triple_component::Iri::fromIriref(iri.toSparql())},
       index, localVocabForConstantsInTemplate);

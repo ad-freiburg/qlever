@@ -61,26 +61,31 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns, index);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
-                       &index, cancellationHandle, cache = std::move(cache),
-                       accumulatedRowOffset =
-                           rowOffset](const TableWithRange& table) mutable {
-    const size_t numRowsOfTable = ql::ranges::size(table.view_);
+  auto preprocessedTemplatePtr =
+      std::make_shared<const PreprocessedConstructTemplate>(
+          std::move(preprocessedTemplate));
 
-    // Snapshot the offset for this table, then advance it for the next table.
-    const size_t tableRowOffset = accumulatedRowOffset;
-    accumulatedRowOffset += numRowsOfTable;
+  auto processTable =
+      [preprocessedTemplate = std::move(preprocessedTemplatePtr), &index,
+       cancellationHandle, cache = std::move(cache),
+       accumulatedRowOffset = rowOffset](const TableWithRange& table) mutable {
+        const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
-    return ranges::views::chunk(table.view_, BATCH_SIZE) |
-           ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
-                                 cancellationHandle,
-                                 tableRowOffset](auto chunkView) {
-             return computeBatch(table.tableWithVocab_, chunkView,
-                                 preprocessedTemplate, index, cache,
-                                 tableRowOffset, cancellationHandle);
-           }) |
-           ql::views::join;
-  };
+        // Snapshot the offset for this table, then advance it for the next
+        // table.
+        const size_t tableRowOffset = accumulatedRowOffset;
+        accumulatedRowOffset += numRowsOfTable;
+
+        return ranges::views::chunk(table.view_, BATCH_SIZE) |
+               ql::views::transform([&table, &preprocessedTemplate, &index,
+                                     &cache, cancellationHandle,
+                                     tableRowOffset](auto chunkView) {
+                 return computeBatch(table.tableWithVocab_, chunkView,
+                                     *preprocessedTemplate, index, cache,
+                                     tableRowOffset, cancellationHandle);
+               }) |
+               ql::views::join;
+      };
 
   auto pipeline = allView(std::move(rowIndices)) |
                   ql::views::transform(std::move(processTable)) |
