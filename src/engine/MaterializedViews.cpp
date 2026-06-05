@@ -748,6 +748,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     const VariableToColumnMap& varToCol) const {
   if (!getRuntimeParameter<
           &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    // TODO move away from here
     return nullptr;
   }
   auto info =
@@ -767,29 +768,49 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 }
 
 // _____________________________________________________________________________
-std::optional<MaterializedView::CacheKeyAndColumnMapping>
+std::optional<MaterializedView::CacheKeyWithAndWithoutInvariantPatterns>
 MaterializedView::computeCacheKey(QueryExecutionContext* qec) const {
   if (qec == nullptr || !originalQuery_.has_value()) {
     return std::nullopt;
   }
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{qec, handle};
   auto encodedIriManager = qec->getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
   auto parsedQuery =
       SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
-  // TODO fix this. Deadlock (this QP may not use mat views)...
-  AD_CONTRACT_CHECK(!getRuntimeParameter<
-                    &RuntimeParameters::enableMaterializedViewQueryRewrite_>());
-  auto executionTree = qp.createExecutionTree(parsedQuery);
-  // TODO<ullingec> What about the sorting problems?
 
-  ColumnMapping mapping;
-  const auto& viewCols = variableToColumnMap();
-  for (const auto& [var, col] : executionTree.getVariableColumns()) {
-    mapping.insert({col.columnIndex_, viewCols.at(var).columnIndex_});
-  }
-  return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
-                                  std::move(mapping)};
+  auto planAndComputeMapping = [&](ParsedQuery parsed) {
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    QueryPlanner qp{qec, handle};
+    qp.setEnableMaterializedViewRewriting(false);
+
+    auto executionTree = qp.createExecutionTree(parsed);
+    // TODO<ullingec> What about the sorting problems?
+
+    ColumnMapping mapping;
+    const auto& viewCols = variableToColumnMap();
+    for (const auto& [var, col] : executionTree.getVariableColumns()) {
+      mapping.insert({col.columnIndex_, viewCols.at(var).columnIndex_});
+    }
+    return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+                                    std::move(mapping)};
+  };
+
+  auto keyWithBinds = planAndComputeMapping(
+      parsedQuery);  // Needs to be passed by value as `qp.createExecutionTree`
+                     // modifies the parsed query.
+
+  // Remove all `BIND`s that are invariant to the query.
+  graphPatternAnalysis::BasicGraphPatternsInvariantTo invariantCheck{
+      // TODO for this check we need all variables, not only from the first
+      // graph pattern.
+      getVariablesPresentInFirstBasicGraphPattern(
+          parsedQuery._rootGraphPattern._graphPatterns)};
+  ql::erase_if(parsedQuery.children(), [&invariantCheck](const auto& child) {
+    return child.visit(invariantCheck);
+  });
+  auto keyWithoutBinds = planAndComputeMapping(std::move(parsedQuery));
+
+  return CacheKeyWithAndWithoutInvariantPatterns{std::move(keyWithBinds),
+                                                 std::move(keyWithoutBinds)};
 }

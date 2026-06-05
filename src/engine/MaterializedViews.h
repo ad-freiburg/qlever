@@ -257,7 +257,11 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     std::string cacheKey_;
     ColumnMapping columnMapping_;
   };
-  std::optional<CacheKeyAndColumnMapping> computeCacheKey(
+  struct CacheKeyWithAndWithoutInvariantPatterns {
+    CacheKeyAndColumnMapping full_;
+    CacheKeyAndColumnMapping withoutInvariants_;
+  };
+  std::optional<CacheKeyWithAndWithoutInvariantPatterns> computeCacheKey(
       QueryExecutionContext* qec) const;
 
   // If the materialized view contains a top-level `BIND` statement where the

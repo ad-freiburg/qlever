@@ -244,6 +244,8 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  void setEnableMaterializedViewRewriting(bool enableMaterializedViewRewriting);
+
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
   // that set. When the query has no `ORDER BY` clause, the set contains one
@@ -274,6 +276,8 @@ class QueryPlanner {
   // are then passed on to the created `QueryExecutionTree` such that they can
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
+
+  bool enableMaterializedViewRewriting_ = true;
 
   std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
