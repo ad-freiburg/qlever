@@ -343,6 +343,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
@@ -375,17 +376,21 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
       return difference.value();
     }
   } else if (isLongYear() && rhs.isLongYear()) {
-    //  `LargeYear` - `LargeYear` => `LargeYear` or `Date`.
-    int64_t year1 = getYear();
-    int64_t year2 = rhs.getYear();
-    int64_t result = year1 - year2;
-    if (result >= Date::minYear && result <= Date::maxYear) {
-      // The result year can be constructed as a `Date`.
-      return DateYearOrDuration{Date(result, 1, 1)};
-    } else {
-      // The result year will also be a `LargeYear`.
-      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
+    //  `LargeYear` - `LargeYear` => `DayTimeDuration`.
+    using namespace std::chrono;
+    // Assuming Jan 1st of respective year because only year is stored.
+    auto year1 = year_month_day{year(getYear()) / 1 / 1};
+    auto year2 = year_month_day{year(rhs.getYear()) / 1 / 1};
+
+    auto difference = sys_days(year1) - sys_days(year2);
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+    auto diff_count = difference.count();
+    if (diff_count < 0) {
+      durationType = DayTimeDuration::Type::Negative;
+      diff_count = -diff_count;
     }
+    return DateYearOrDuration{
+        DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
   }
 
   // The following will not be implemented (not viable):
@@ -409,98 +414,21 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     const Date& ownDate = getDateUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
 
-    std::optional<DateYearOrDuration> sum = ownDate + otherDuration;
+    std::optional<Date> sum = ownDate + otherDuration;
     if (!sum.has_value()) {
       return std::nullopt;
     } else {
       return DateYearOrDuration{sum.value()};
-    }
-  } else if (isLongYear() && rhs.isLongYear()) {
-    //  `LargeYear` + `LargeYear` => `LargeYear` or `Date`.
-    int64_t year1 = getYear();
-    int64_t year2 = rhs.getYear();
-    int64_t result = year1 + year2;
-    if (result >= Date::minYear && result <= Date::maxYear) {
-      // The result year can be constructed as a `Date`.
-      return DateYearOrDuration{Date(result, 1, 1)};
-    } else {
-      // The result year will also be a `LargeYear`.
-      return DateYearOrDuration{result, DateYearOrDuration::Type::Year};
     }
   }
 
   // The following will not be implemented (not viable):
   //  `Date` + `Date`,
   //  `DayTimeDuration` + `Date`,
-  //  `DayTimeDuration` + `LargeYear`.
+  //  `DayTimeDuration` + `LargeYear`,
+  //  `LargeYear` + `LargeYear` .
 
   // No viable addition.
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-DateYearOrDuration DateYearOrDuration::makeFromEpoch(
-    Date::Milliseconds timestamp, Date::TimeZone tz) {
-  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
-  // Shift the timestamp according to the given `TimeZone`offset.
-  timestamp = timestamp + std::chrono::hours{offset};
-
-  // Extract date from epoch timestamp.
-  auto days = std::chrono::floor<std::chrono::days>(timestamp);
-  std::chrono::year_month_day date = std::chrono::year_month_day{days};
-
-  auto time = timestamp - days;
-  // Extract time from remaining seconds.
-  auto seconds = std::chrono::floor<std::chrono::seconds>(time);
-  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
-
-  // Extract remaining milliseconds to later reconstruct the seconds correctly.
-  auto milliseconds =
-      std::chrono::floor<std::chrono::milliseconds>(time - seconds);
-
-  auto year = static_cast<int>(date.year());
-  // Check if the result can be stored in a `Date`.
-  if (-9999 <= year && year <= 9999) {
-    // The methods `year`, `month`, `day` return
-    // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
-    // static casts are necessary. For `month` and `day` only `operator
-    // unsigned` is supported, therefore two casts are necessary.
-    return DateYearOrDuration{
-        Date{year, static_cast<int>(static_cast<unsigned>(date.month())),
-             static_cast<int>(static_cast<unsigned>(date.day())),
-             static_cast<int>(remainder.hours().count()),
-             static_cast<int>(remainder.minutes().count()),
-             static_cast<double>(remainder.seconds().count() +
-                                 (milliseconds.count() / 1'000.0)),
-             tz}};
-  } else {  // nNeeds to be stored as a `LargeYear`.
-    return DateYearOrDuration{year, DateYearOrDuration::Type::Year};
-  }
-}
-
-// _____________________________________________________________________________
-std::optional<DateYearOrDuration> operator-(const Date lhs,
-                                            const DayTimeDuration& rhs) {
-  auto epochLhs = lhs.toEpoch();
-  if (!epochLhs.has_value()) {
-    return std::nullopt;
-  }
-  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Milliseconds newDate =
-      epochLhs.value() - std::chrono::milliseconds(totalMillisecondsRhs);
-  return DateYearOrDuration::makeFromEpoch(newDate, lhs.getTimeZone());
-}
-
-// _____________________________________________________________________________
-std::optional<DateYearOrDuration> operator+(const Date lhs,
-                                            const DayTimeDuration& rhs) {
-  auto epochLhs = lhs.toEpoch();
-  if (!epochLhs.has_value()) {
-    return std::nullopt;
-  }
-  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
-  Date::Milliseconds newDate =
-      epochLhs.value() + std::chrono::milliseconds(totalMillisecondsRhs);
-  return DateYearOrDuration::makeFromEpoch(newDate, lhs.getTimeZone());
 }
 #endif

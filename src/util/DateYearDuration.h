@@ -213,17 +213,12 @@ class DateYearOrDuration {
       const DateYearOrDuration& dateValue);
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  // Subtraction of two `DateYearOrDuration` objects.
-  // For undefined subtractions `std::nullopt` is returned.
+  // Subtraction and Addition of two `DateYearOrDuration` objects.
+  // For undefined operations `std::nullopt` is returned.
   [[nodiscard]] std::optional<DateYearOrDuration> operator-(
       const DateYearOrDuration& rhs) const;
   [[nodiscard]] std::optional<DateYearOrDuration> operator+(
       const DateYearOrDuration& rhs) const;
-
-  // From a Unix Epoch timestamp, construct the corresponding `Date` or
-  // `LargeYear`.
-  static DateYearOrDuration makeFromEpoch(Date::Milliseconds timestamp,
-                                          Date::TimeZone tz);
 #endif
 };
 #ifdef QLEVER_CPP_17

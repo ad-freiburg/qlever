@@ -97,10 +97,11 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 // _____________________________________________________________________________
 std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
-  // If a `xsd:gYear` is stored in a `Date` month and day are 0.
-  // Here a `xsd:gYear` is represented as 1st January of the year.
-  auto date = year_month_day{year(getYear()) / std::max(getMonth(), 1) /
-                             std::max(getDay(), 1)};
+  // For `xsd:gYear`s `getMonth/getDay`will return -1.
+  // In this case just assume Jan 1st of the respective year.
+  auto month = std::max(getMonth(), 1);
+  auto day = std::max(getDay(), 1);
+  auto date = year_month_day{year(getYear()) / month / day};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
