@@ -162,15 +162,28 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  auto additionalVars = absl::StrJoin(
-      additionalVariables_ |
-          ql::views::transform(
-              [](const auto& var) -> decltype(auto) { return var.name(); }),
+  auto isNotStripped = [this](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto triple = ql::ranges::views::concat(ql::ranges::views::single(subject_),
+                                          ql::ranges::views::single(predicate_),
+                                          ql::ranges::views::single(object_));
+  auto scanSpecString = absl::StrJoin(
+      ql::ranges::views::concat(
+          // All IRIs/literals and non-stripped variables from the scan triple.
+          triple |
+              ql::views::filter([&isNotStripped](const TripleComponent& tc) {
+                return !tc.isVariable() || isNotStripped(tc.getVariable());
+              }) |
+              ql::views::transform(&TripleComponent::toString),
+          // All non-stripped additional variables.
+          additionalVariables_ | ql::views::filter(isNotStripped) |
+              ql::views::transform([](const auto& var) -> decltype(auto) {
+                return var.name();
+              })),
       " ");
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
-                      subject_.toString(), " ", predicate_.toString(), " ",
-                      object_.toString(), additionalVars.empty() ? "" : " ",
-                      additionalVars);
+                      scanSpecString);
 }
 
 // _____________________________________________________________________________
