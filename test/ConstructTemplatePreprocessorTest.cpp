@@ -138,15 +138,14 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
 }
 
 // A template constant must resolve to the *same* `ValueId` that the identical
-// RDF term receives when it enters the index from the data. This is the
-// property the shared full-triple deduplication filter relies on: only if equal
-// terms have equal ids can a constant-bearing template triple be recognized as
-// equal to a data-bearing one. We pin this for all three id-assignment paths:
+// RDF term receives when it is read from the input knowledge graph during index
+// building. This is the property the shared full-triple deduplication filter
+// relies on: only if equal terms have equal ids can a constant-bearing template
+// triple be recognized as equal to a data-bearing one. We veriy this for all
+// three id-assignment paths:
 //   (a) a vocabulary IRI,
 //   (b) a vocabulary (language-tagged) literal,
 //   (c) an inline-encoded literal.
-// A failure in (a) or (b) but not (c) is the signature of a constant encoder
-// that skipped the vocabulary lookup (see `resolveConstantDedupId`).
 TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
   // Build an index whose data contains exactly the terms used as constants
   // below, so they are present in the vocabulary.
