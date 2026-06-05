@@ -12,6 +12,8 @@
 
 #include <re2/re2.h>
 
+#include <boost/iostreams/filter/gzip.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
 #include <future>
 #include <optional>
 #include <string>
@@ -110,6 +112,29 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   re2::RE2 endRegex_;
   std::string endRegexAsString_;
   bool exhausted_ = false;
+};
+
+/**
+ * @brief Read from a gzip-compressed file, returning decompressed bytes.
+ *
+ * Uses boost::iostreams with a gzip_decompressor filter. The caller
+ * (and the RDF parsers above) receive plain uncompressed bytes, so no
+ * parser changes are required to support .gz input files.
+ */
+class DecompressingFileBuffer : public ParallelBuffer {
+ public:
+  using BufferType = ad_utility::UninitializedVector<char>;
+
+  // Open the gzip-compressed `filename` and prepare for reading decompressed
+  // blocks of the given `blocksize`. Throws if the file cannot be opened.
+  DecompressingFileBuffer(size_t blocksize, const std::string& filename);
+
+  // Return the next decompressed block, or std::nullopt at EOF.
+  std::optional<BufferType> getNextBlock() override;
+
+ private:
+  boost::iostreams::filtering_istream stream_;
+  bool eof_ = false;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARALLELBUFFER_H

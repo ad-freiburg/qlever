@@ -71,12 +71,17 @@ struct InputFileSpecification {
   }
 
   // Create and return a `ParallelBuffer` for this spec. For filename-based
-  // specs, a `ParallelFileBuffer` with the given `blocksize` is returned. For
+  // specs, a `ParallelFileBuffer` is returned, unless the filename ends in
+  // `.gz`, in which case a `DecompressingFileBuffer` is returned instead. For
   // factory-based specs, the factory is called.
   std::unique_ptr<ParallelBuffer> getParallelBuffer(size_t blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<ParallelFileBuffer>(
-          blocksize, std::get<std::string>(source_));
+      const auto& fname = std::get<std::string>(source_);
+      if (fname.size() >= 3 &&
+          fname.compare(fname.size() - 3, 3, ".gz") == 0) {
+        return std::make_unique<DecompressingFileBuffer>(blocksize, fname);
+      }
+      return std::make_unique<ParallelFileBuffer>(blocksize, fname);
     }
     auto& [factory, description] =
         std::get<BufferFactoryAndDescription>(source_);
