@@ -359,16 +359,17 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   // Save the cache key for this view: once in full for matching the entire
   // unchanged view query, and once with invariant patterns (such as `BIND`s)
   // removed for matching queries that do not contain all of these patterns.
-  auto cacheKeyAndCols = view->computeCacheKey(qec);
-  if (cacheKeyAndCols.has_value()) {
-    auto [full, withoutInvariant] = cacheKeyAndCols.value();
-    auto insert = [&](auto& cacheKeyAndCol) {
-      byCacheKey_.insert({std::move(cacheKeyAndCol.cacheKey_),
-                          {view, std::move(cacheKeyAndCol.columnMapping_)}});
-    };
-    insert(full);
-    insert(withoutInvariant);
-  }
+  auto [full, withoutInvariant] = view->computeCacheKey(qec);
+  auto insert = [&](auto& cacheKeyAndCol) {
+    if (!cacheKeyAndCol.has_value()) {
+      return;
+    }
+    byCacheKey_.insert(
+        {std::move(cacheKeyAndCol.value().cacheKey_),
+         {view, std::move(cacheKeyAndCol.value().columnMapping_)}});
+  };
+  insert(full);
+  insert(withoutInvariant);
 
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {

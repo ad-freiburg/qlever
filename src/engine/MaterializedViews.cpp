@@ -768,29 +768,38 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 }
 
 // _____________________________________________________________________________
-std::optional<MaterializedView::CacheKeyWithAndWithoutInvariantPatterns>
-MaterializedView::computeCacheKey(QueryExecutionContext* qec) const {
-  if (qec == nullptr || !originalQuery_.has_value()) {
-    return std::nullopt;
+MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
+MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+  if (qecOriginal == nullptr || !originalQuery_.has_value()) {
+    return {std::nullopt, std::nullopt};
   }
-  auto encodedIriManager = qec->getIndex().encodedIriManager();
+  QueryExecutionContext qec{*qecOriginal};
+  qec.setDisableMaterializedViewRewriting(true);
+  auto encodedIriManager = qec.getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
   auto parsedQuery =
       SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  const auto& viewCols = variableToColumnMap();
 
-  auto planAndComputeMapping = [&](ParsedQuery parsed) {
+  auto planAndComputeMapping =
+      [&](ParsedQuery parsed) -> std::optional<CacheKeyAndColumnMapping> {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    QueryPlanner qp{qec, handle};
-    qp.setEnableMaterializedViewRewriting(false);
+    QueryPlanner qp{&qec, handle};
 
     auto executionTree = qp.createExecutionTree(parsed);
     // TODO<ullingec> What about the sorting problems?
 
     ColumnMapping mapping;
-    const auto& viewCols = variableToColumnMap();
     for (const auto& [var, col] : executionTree.getVariableColumns()) {
-      mapping.insert({col.columnIndex_, viewCols.at(var).columnIndex_});
+      auto it = viewCols.find(var);
+      // Internal variables and variables that are not selected by the
+      // materialized view query are not present in the view. Therefore this
+      // cache key can't be used then.
+      if (it == viewCols.end()) {
+        return std::nullopt;
+      }
+      mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
     return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
                                     std::move(mapping)};
@@ -802,7 +811,8 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qec) const {
 
   // Remove all `BIND`s that are invariant to the query.
   graphPatternAnalysis::BasicGraphPatternsInvariantTo invariantCheck{
-      // TODO for this check we need all variables, not only from the first
+      // TODO for this check we need all variables that are contained in the
+      // query except for BIND target variables, not only from the first
       // graph pattern.
       getVariablesPresentInFirstBasicGraphPattern(
           parsedQuery._rootGraphPattern._graphPatterns)};

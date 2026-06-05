@@ -167,6 +167,10 @@ bool QueryExecutionTree::readFromCache() {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::readFromMaterializedView() {
+  AD_CORRECTNESS_CHECK(qec_ != nullptr);
+  if (qec_->disableMaterializedViewRewriting()) {
+    return;
+  }
   auto scan = qec_->materializedViewsManager().makeIndexScan(
       qec_, getCacheKey(), getVariableColumns());
   if (scan != nullptr) {

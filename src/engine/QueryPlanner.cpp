@@ -2611,7 +2611,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
   if (!getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>() || !enableMaterializedViewRewriting_) {
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
+      _qec->disableMaterializedViewRewriting()) {
     return plans;
   }
 
@@ -3527,9 +3528,4 @@ void QueryPlanner::prepareReplacementPlansForGreedyPlanner(
       connectedComponent.push_back(std::move(plan));
     }
   }
-}
-
-// _______________________________________________________________
-void QueryPlanner::setEnableMaterializedViewRewriting(bool enableMaterializedViewRewriting) {
-  enableMaterializedViewRewriting_ = enableMaterializedViewRewriting;
 }

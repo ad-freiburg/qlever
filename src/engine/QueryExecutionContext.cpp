@@ -28,7 +28,8 @@ QueryExecutionContext::QueryExecutionContext(
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     std::function<void(std::string)> updateCallback, const bool pinSubtrees,
-    const bool pinResult, const DisableCaching disableCaching)
+    const bool pinResult, const DisableCaching disableCaching,
+    bool disableMaterializedViewRewriting)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(std::move(index)),
@@ -37,7 +38,8 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
-      materializedViewsManager_(std::move(materializedViewsManager)) {
+      materializedViewsManager_(std::move(materializedViewsManager)),
+      disableMaterializedViewRewriting_(disableMaterializedViewRewriting) {
   disableCaching_ = [disableCaching]() {
     if (disableCaching == DisableCaching::True) {
       return true;
