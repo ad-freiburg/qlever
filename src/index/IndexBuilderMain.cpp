@@ -50,8 +50,8 @@ static constexpr auto checkNumParameterValues =
     };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
-// corresponding `qlever::Filetype` value. If no filetype is given, try to
-// deduce the type from the filename.
+// corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
+// the type from the filename.
 qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
                              std::string_view filename) {
   auto impl = [](std::string_view s) -> std::optional<qlever::Filetype> {
