@@ -446,7 +446,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(
           ad_utility::triple_component::Iri::fromStringRepresentation(
-              item.toSparql()));
+              item.toStringRepresentation()));
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.

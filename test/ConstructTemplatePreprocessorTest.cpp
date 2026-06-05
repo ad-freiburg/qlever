@@ -137,6 +137,54 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 }
 
+// A template constant must resolve to the *same* `ValueId` that the identical
+// RDF term receives when it enters the index from the data. This is the
+// property the shared full-triple deduplication filter relies on: only if equal
+// terms have equal ids can a constant-bearing template triple be recognized as
+// equal to a data-bearing one. We pin this for all three id-assignment paths:
+//   (a) a vocabulary IRI,
+//   (b) a vocabulary (language-tagged) literal,
+//   (c) an inline-encoded literal.
+// A failure in (a) or (b) but not (c) is the signature of a constant encoder
+// that skipped the vocabulary lookup (see `resolveConstantDedupId`).
+TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
+  // Build an index whose data contains exactly the terms used as constants
+  // below, so they are present in the vocabulary.
+  const Index& index = ad_utility::testing::getQec(
+                           "<http://s> <http://p> <http://o> . "
+                           "<http://s> <http://p> \"foo\"@en . "
+                           "<http://s> <http://p> 1 .")
+                           ->getIndex();
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  // Preprocess the single template triple `<http://s> <http://p> OBJ` and
+  // return the dedup `ValueId` computed for the object constant.
+  auto objectDedupId = [&index](GraphTerm object) {
+    Triples triples;
+    triples.push_back({GraphTerm{Iri{"<http://s>"}},
+                       GraphTerm{Iri{"<http://p>"}}, std::move(object)});
+    VariableToColumnMap varMap;
+    auto result =
+        ConstructTemplatePreprocessor::preprocess(triples, varMap, index);
+    return std::get<PrecomputedConstant>(
+               result.preprocessedTriples_.at(0).at(2))
+        .dedupId_;
+  };
+
+  // (a) IRI constant vs. the same IRI from the data (vocabulary lookup).
+  EXPECT_EQ(objectDedupId(GraphTerm{Iri{"<http://o>"}}), getId("<http://o>"));
+
+  // (b) Non-encoded (language-tagged) literal vs. the same literal from data.
+  EXPECT_EQ(objectDedupId(GraphTerm{Literal{"\"foo\"@en"}}),
+            getId("\"foo\"@en"));
+
+  // (c) Inline-encoded literal: its `ValueId` is a pure function of the value,
+  // independent of the vocabulary.
+  EXPECT_EQ(objectDedupId(GraphTerm{
+                Literal{"\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>"}}),
+            Id::makeFromInt(1));
+}
+
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   Triples triples;
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri{"<http://p>"}},

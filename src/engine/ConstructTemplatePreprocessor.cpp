@@ -47,29 +47,16 @@ static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri, const Index& index,
     LocalVocab& localVocabForConstantsInTemplate) {
-  // `iri.toSparql()` yields the IRI in SPARQL `IRIREF` syntax, i.e. enclosed in
-  // angle brackets (`<...>`); see the SPARQL 1.1 grammar production [139]
-  // (https://www.w3.org/TR/sparql11-query/#rIRIREF). We use `fromIriref`
-  // (rather than `fromStringRepresentation`) because it actually parses that
-  // syntax: it normalizes/escapes the IRI content via
-  // `RdfEscaping::normalizeIriWithBrackets`, producing the same internal
-  // storage representation the vocabulary uses.
+  // The parser/data `Iri` stores the already-normalized QLever internal string
+  // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
+  // source text. Therefore construct the `TripleComponent` from exactly that
+  // representation. Parsing with `fromIriref` would also work for most values,
+  // but would obscure the contract and incorrectly suggest that this code
+  // receives SPARQL `IRIREF` syntax directly from the query text.
   ValueId dedupId = resolveConstantDedupId(
-      // TODO<ms2144>: verify that `iri.toSparql()` yields the Iri string in
-      // exactly the format which `fromIriref` expects in in?
-      // maybe we should make the "contract" of the expected format expliciy
-      // here, but how?
-      //  At SPARQL parse time (SparqlQLeverVisitor.cpp), the
-      // construct template IRI is built. There `Iri::toStringRepresentation()`
-      // is called to fill  the parser/data/Iri.h _string member variable with
-      // the format that Iri::toStringRepresentation() yields.
-      // Thus we need to ensure here that we 1) know which format the IRI is in
-      // and 2) thus choose the correct method to parse the Iri.
-      // Best case would be to make everything explicit.
-      // Even better would be to not have a string representation of the Iri
-      // in the construct template but have a struct which documents the format?
       TripleComponent{
-          ad_utility::triple_component::Iri::fromIriref(iri.toSparql())},
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              iri.toStringRepresentation())},
       index, localVocabForConstantsInTemplate);
   return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
                                  EvaluatedTermData{iri.iri(), nullptr}),

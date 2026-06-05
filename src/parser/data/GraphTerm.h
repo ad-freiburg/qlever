@@ -50,7 +50,7 @@ class GraphTerm : public GraphTermBase,
             element.toSparql());
       } else if constexpr (std::is_same_v<T, Iri>) {
         return ad_utility::triple_component::Iri::fromStringRepresentation(
-            element.toSparql());
+            element.toStringRepresentation());
       } else {
         static_assert(std::is_same_v<T, BlankNode>);
         const auto& blankNode = element.toSparql();
