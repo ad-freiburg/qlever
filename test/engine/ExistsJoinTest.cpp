@@ -467,7 +467,7 @@ TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, originalTreeIsNotOverwrittenOnDistinctColumns) {
+TEST(ExistsJoin, originalTreesAreNotOverwrittenWhenJoinColumnsEmpty) {
   auto* qec = getQec();
   auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{2, qec->getAllocator()},
