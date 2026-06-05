@@ -238,14 +238,14 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Literal literal{"some literal"};
+  Literal literal{"\"some literal\""};
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   EXPECT_EQ(evaluate(literal, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
 
-  auto expectedString = Optional("some literal"s);
+  auto expectedString = Optional("\"some literal\""s);
 
   EXPECT_THAT(evaluate(literal, context, OBJECT), expectedString);
   EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);

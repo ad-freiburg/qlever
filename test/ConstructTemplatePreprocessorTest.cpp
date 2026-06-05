@@ -107,7 +107,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   Triples triples;
   triples.push_back({GraphTerm{Iri{"<http://s>"}}, GraphTerm{Iri{"<http://p>"}},
-                     GraphTerm{Literal{"hello"}}});
+                     GraphTerm{Literal{"\"hello\""}}});
 
   VariableToColumnMap varMap;
   auto result =
@@ -115,7 +115,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
 
   EXPECT_THAT(result.preprocessedTriples_,
               matchSingleTriple(Const("<http://s>"), Const("<http://p>"),
-                                Const("hello")));
+                                Const("\"hello\"")));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 }
