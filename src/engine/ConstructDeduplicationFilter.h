@@ -35,6 +35,9 @@ using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
 using LruDeduplicationCache =
     ad_utility::util::LRUCache<DeduplicationKey, std::monostate>;
+using ad_utility::DeduplicationMode;
+using ad_utility::HashSetWithMemoryLimit;
+using ad_utility::OverloadCallOperator;
 
 // Per-template-triple dedup filter. `BatchWise` mode keeps only the last N
 // unique keys in a bounded LRU cache; `Global` mode keeps every unique key in
@@ -43,21 +46,21 @@ using LruDeduplicationCache =
 // chosen once from the mode at construction time.
 class PerTripleFilter {
  public:
-  explicit PerTripleFilter(const ad_utility::DeduplicationMode& mode,
+  explicit PerTripleFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& executionContext)
       : filter_{makeFilter(mode, executionContext)} {}
 
   // Returns true if `key` is new (not a duplicate), false otherwise.
   bool insert(const DeduplicationKey& key) {
     return std::visit(
-        ad_utility::OverloadCallOperator{
+        OverloadCallOperator{
             [](NoFilter) -> bool {
               // `DeduplicationMode::None` mode is routed to the non-dedup code
               // path, so its filter must never receive a key.
               AD_FAIL();
             },
             [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
-            [&key](ad_utility::HashSetWithMemoryLimit<DeduplicationKey>& set) {
+            [&key](HashSetWithMemoryLimit<DeduplicationKey>& set) {
               return set.insert(key).second;
             }},
         filter_);
@@ -65,28 +68,25 @@ class PerTripleFilter {
 
  private:
   struct NoFilter {};
-  using Filter =
-      std::variant<NoFilter, LruDeduplicationCache,
-                   ad_utility::HashSetWithMemoryLimit<DeduplicationKey>>;
+  using Filter = std::variant<NoFilter, LruDeduplicationCache,
+                              HashSetWithMemoryLimit<DeduplicationKey>>;
 
   Filter filter_;
 
   // Builds the dedup structure for `mode`: an empty `NoFilter` for `none`, a
   // bounded LRU cache for `BatchWise` (capacity = batch size), and an unbounded
   // hash set for `global`.
-  static Filter makeFilter(const ad_utility::DeduplicationMode& mode,
+  static Filter makeFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& queryExecutionContext) {
     return std::visit(
-        ad_utility::OverloadCallOperator{
-            [](const ad_utility::DeduplicationMode::None&) -> Filter {
-              return NoFilter{};
-            },
+        OverloadCallOperator{
+            [](const DeduplicationMode::None&) -> Filter { return NoFilter{}; },
             [&queryExecutionContext](
-                const ad_utility::DeduplicationMode::Global&) -> Filter {
-              return ad_utility::HashSetWithMemoryLimit<DeduplicationKey>{
+                const DeduplicationMode::Global&) -> Filter {
+              return HashSetWithMemoryLimit<DeduplicationKey>{
                   queryExecutionContext.getAllocator()};
             },
-            [](const ad_utility::DeduplicationMode::BatchWise& bw) -> Filter {
+            [](const DeduplicationMode::BatchWise& bw) -> Filter {
               return LruDeduplicationCache{bw.batchSize_};
             }},
         mode.value_);
@@ -102,21 +102,20 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                           const BatchEvaluationContext& ctx) {
   DeduplicationKey key;
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    key[pos] =
-        std::visit(ad_utility::OverloadCallOperator{
-                       [](const PrecomputedConstant& c) {
-                         AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
-                         return c.dedupId_;
-                       },
-                       [&ctx, absoluteRow](const PrecomputedVariable& v) {
-                         return ctx.idTable_[absoluteRow][v.columnIndex_];
-                       },
-                       [](const PrecomputedBlankNode&) -> ValueId {
-                         // Blank-node triples bypass deduplication, so their
-                         // key is never built.
-                         AD_FAIL();
-                       }},
-                   triple[pos]);
+    key[pos] = std::visit(
+        OverloadCallOperator{[](const PrecomputedConstant& c) {
+                               AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
+                               return c.dedupId_;
+                             },
+                             [&ctx, absoluteRow](const PrecomputedVariable& v) {
+                               return ctx.idTable_[absoluteRow][v.columnIndex_];
+                             },
+                             [](const PrecomputedBlankNode&) -> ValueId {
+                               // Blank-node triples bypass deduplication, so
+                               // their key is never built.
+                               AD_FAIL();
+                             }},
+        triple[pos]);
   }
   return key;
 }
@@ -134,7 +133,7 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
 class ConstructDeduplicationState {
  public:
   ConstructDeduplicationState(
-      const ad_utility::DeduplicationMode& mode,
+      const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext)
       : filter_{makeFilter(mode, queryExecutionContext)} {}
 
@@ -166,10 +165,9 @@ class ConstructDeduplicationState {
   std::optional<PerTripleFilter> filter_;
 
   static std::optional<PerTripleFilter> makeFilter(
-      const ad_utility::DeduplicationMode& mode,
+      const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext) {
-    if (std::holds_alternative<ad_utility::DeduplicationMode::None>(
-            mode.value_)) {
+    if (std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
       return std::nullopt;
     }
     return PerTripleFilter{mode, queryExecutionContext};
