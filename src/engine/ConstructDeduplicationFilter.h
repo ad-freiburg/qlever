@@ -126,8 +126,6 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
 // approximation that only remembers the most recent keys).
 // - `DeduplicationMode::None`: no filter at all; the dedup code path is never
 // entered.
-// In all modes, a triple that contains a blank node is never deduplicated (its
-// per-row blank-node id makes every instantiation distinct).
 class ConstructDeduplicationState {
  public:
   ConstructDeduplicationState(const ad_utility::DeduplicationMode& mode)
@@ -135,8 +133,7 @@ class ConstructDeduplicationState {
 
   // Returns true if the instantiation of template triple `tripleIdx` at
   // `absoluteRow` is new (should be emitted), false if it is a duplicate
-  // (skip). Triples containing a blank node are always "new". `none` mode must
-  // never reach here.
+  // (skip).
   bool isNew(size_t tripleIdx, size_t absoluteRow,
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx) {
