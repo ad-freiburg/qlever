@@ -50,9 +50,7 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
   // The parser/data `Iri` stores the already-normalized QLever internal string
   // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
   // source text. Therefore, construct the `TripleComponent` from exactly that
-  // representation. Parsing with `fromIriref` would also work for most values,
-  // but would obscure the contract and incorrectly suggest that this code
-  // receives SPARQL `IRIREF` syntax directly from the query text.
+  // representation.
   ValueId dedupId = resolveConstantDedupId(
       TripleComponent{
           ad_utility::triple_component::Iri::fromStringRepresentation(
