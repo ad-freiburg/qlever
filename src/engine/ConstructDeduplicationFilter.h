@@ -96,8 +96,7 @@ class PerTripleFilter {
 // Constructs the *full-triple* deduplication key for the instantiation of
 // `triple` at `absoluteRow`: the `ValueId` at each of the three positions
 // (subject, predicate, object), taken from the constant's `dedupId_` or the
-// variable's bound `ValueId` in the row. Must not be called for a triple that
-// contains a blank node (those bypass deduplication entirely).
+// variable's bound `ValueId` in the row.
 inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                           size_t absoluteRow,
                                           const BatchEvaluationContext& ctx) {

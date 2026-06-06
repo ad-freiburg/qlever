@@ -61,12 +61,16 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  auto processTable = [preprocessedTemplate = std::move(preprocessedTemplate),
-                       &index, cancellationHandle, cache = std::move(cache),
+  auto sharedTemplate = std::make_shared<PreprocessedConstructTemplate>(
+      std::move(preprocessedTemplate));
+  auto sharedCache = std::make_shared<IdCache>(std::move(cache));
+  auto processTable = [sharedTemplate, &index, cancellationHandle, sharedCache,
                        accumulatedRowOffset =
                            rowOffset](const TableWithRange& table) mutable {
-    const size_t numRowsOfTable = ql::ranges::size(table.view_);
+    const auto& preprocessedTemplate = *sharedTemplate;
+    auto& cache = *sharedCache;
 
+    const size_t numRowsOfTable = ql::ranges::size(table.view_);
     // Snapshot the offset for this table, then advance it for the next table.
     const size_t tableRowOffset = accumulatedRowOffset;
     accumulatedRowOffset += numRowsOfTable;
