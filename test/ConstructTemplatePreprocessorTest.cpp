@@ -423,7 +423,8 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
   triples.push_back({GraphTerm{Iri{"<http://s>"}}, GraphTerm{Iri{"<http://p>"}},
                      GraphTerm{Variable{"?val"}}});
   triples.push_back({GraphTerm{BlankNode{false, "b1"}},
-                     GraphTerm{Iri{"<http://q>"}}, GraphTerm{Literal{"text"}}});
+                     GraphTerm{Iri{"<http://q>"}},
+                     GraphTerm{Literal{"\"text\""}}});
 
   VariableToColumnMap varMap;
   varMap[Variable{"?val"}] = makeAlwaysDefinedColumn(4);
@@ -434,7 +435,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
       result.preprocessedTriples_,
       ElementsAre(ElementsAre(Const("<http://s>"), Const("<http://p>"), Var(4)),
                   ElementsAre(Bnode("_:u", "_b1"), Const("<http://q>"),
-                              Const("text"))));
+                              Const("\"text\""))));
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 4);
@@ -457,11 +458,11 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
-      GraphTerm{Literal{"hello"}}, OBJECT, varMap, testIndex(),
+      GraphTerm{Literal{"\"hello\""}}, OBJECT, varMap, testIndex(),
       testLocalVocab());
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Const("hello"));
+  EXPECT_THAT(result.value(), Const("\"hello\""));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
@@ -527,7 +528,7 @@ ValueId dedupIdAt(const PreprocessedConstructTemplate& result, size_t tripleIdx,
 TEST(ConstructTemplatePreprocessorTest, dedupIdIsResolvedForConstants) {
   Triples triples;
   triples.push_back({GraphTerm{Iri{"<http://s>"}}, GraphTerm{Iri{"<http://p>"}},
-                     GraphTerm{Literal{"hello"}}});
+                     GraphTerm{Literal{"\"hello\""}}});
 
   VariableToColumnMap varMap;
   auto result =
