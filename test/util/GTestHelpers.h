@@ -7,6 +7,8 @@
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -260,6 +262,27 @@ MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
     seen.push_back(std::move(val));
   }
   return true;
+}
+
+// _____________________________________________________________________________
+// Returns "<TestSuiteName>_<TestName>" for the currently running gtest, with
+// any '/' replaced by '_' (parameterized tests embed '/' in their names).
+// If `assertInGtestEnvironment` is true (the default), crashes if called
+// outside a running gtest (i.e. when `current_test_info()` returns nullptr).
+// Pass false when the caller is also used by non-test code (e.g. benchmarks),
+// in which case an empty string is returned instead.
+inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  if (assertInGtestEnvironment) {
+    AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  }
+  if (testInfo == nullptr) {
+    return "";
+  }
+  return absl::StrReplaceAll(
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
+      {{"/", "_"}});
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H
