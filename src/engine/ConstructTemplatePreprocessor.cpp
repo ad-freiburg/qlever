@@ -49,7 +49,7 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     LocalVocab& localVocabForConstantsInTemplate) {
   // The parser/data `Iri` stores the already-normalized QLever internal string
   // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
-  // source text. Therefore construct the `TripleComponent` from exactly that
+  // source text. Therefore, construct the `TripleComponent` from exactly that
   // representation. Parsing with `fromIriref` would also work for most values,
   // but would obscure the contract and incorrectly suggest that this code
   // receives SPARQL `IRIREF` syntax directly from the query text.
@@ -58,9 +58,8 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
           ad_utility::triple_component::Iri::fromStringRepresentation(
               iri.toStringRepresentation())},
       index, localVocabForConstantsInTemplate);
-  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
-                                 EvaluatedTermData{iri.iri(), nullptr}),
-                             dedupId};
+  return PrecomputedConstant{
+      std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr), dedupId};
 }
 
 // _____________________________________________________________________________
