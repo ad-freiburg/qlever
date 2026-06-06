@@ -54,13 +54,10 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
-  // The `ValueId` used as this constant's component of the full-triple
-  // deduplication key (`global` mode). IRIs and encoded values resolve from the
-  // index vocabulary / ID bits; literals not present in the vocabulary are
-  // assigned a fresh `LocalVocabIndex` in the template's `constantLocalVocab_`.
-  // Resolved once at preprocessing time (see
-  // `ConstructTemplatePreprocessor::preprocessIri`/`preprocessLiteral`).
-  // Defaults to `makeUndefined()`.
+  // The `ValueId` for this constant, used as its component of the full-triple
+  // deduplication key (`global` mode). Resolved once at preprocessing time by
+  // `ConstructTemplatePreprocessor` (see `resolveConstantDedupId`).
+  // Set to default undefined value here.
   ValueId dedupId_ = ValueId::makeUndefined();
 };
 
@@ -115,24 +112,16 @@ struct PreprocessedConstructTemplate {
   std::vector<std::vector<size_t>> variableColumnsPerTriple_;
   // For each template triple at index i, this flag is true if the triple
   // contains at least one blank node term (either a user-defined blank-node
-  // term like `_:a` or an anonymous blank node `[]`). Used during deduplication
-  // of CONSTRUCT query results: triples that contain blank nodes are excluded
-  // from deduplication because blank node IDs are generated per-row, making
-  // every instantiation distinct across result rows.
+  // term like `_:a` or an anonymous blank node `[]`).
   std::vector<bool> tripleContainsBlankNode_;
   // Ground (fully constant) template triples, pre-instantiated once at
-  // preprocessing time. A ground triple produces the identical output triple
-  // for every solution, so it is emitted exactly once before the first
-  // non-ground triple and only if the WHERE clause yields at least one solution
-  // regardless of the deduplication mode. Ground triples are therefore
-  // excluded from `preprocessedTriples_` and from the per-triple dedup
-  // structures above.
+  // preprocessing time.
   std::vector<EvaluatedTriple> groundTriples_;
   // Owns the `LocalVocabEntry`s created while resolving literal (and
   // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
   // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
-  // entry living in this vocab, so this member must outlive every use of those
-  // ids. Kept here so the lifetime is tied to the preprocessed template.
+  // entry living in this vocab, so the `LocalVocab` must outlive every use of
+  // those ids. Kept here so the lifetime is tied to the preprocessed template.
   LocalVocab constantLocalVocab_;
 };
 

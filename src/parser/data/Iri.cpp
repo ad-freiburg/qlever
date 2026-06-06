@@ -16,6 +16,6 @@ constexpr ctll::fixed_string iriValidationRegex =
 }  // namespace
 
 // ____________________________________________________________________________
-Iri::Iri(std::string str) : _stringRepresentation{std::move(str)} {
-  AD_CONTRACT_CHECK(ctre::match<iriValidationRegex>(_stringRepresentation));
+Iri::Iri(std::string str) : stringRepresentation_{std::move(str)} {
+  AD_CONTRACT_CHECK(ctre::match<iriValidationRegex>(stringRepresentation_));
 }

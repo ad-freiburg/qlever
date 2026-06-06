@@ -17,7 +17,8 @@
 // and may have QLever's internal language-tag prefix, for example
 // `@en@<example>`.
 class Iri {
-  std::string _stringRepresentation;
+ private:
+  std::string stringRepresentation_;
 
  public:
   // `str` must be a valid QLever internal IRI string representation.
@@ -25,19 +26,19 @@ class Iri {
 
   // ___________________________________________________________________________
   // Used for testing
-  const std::string& iri() const { return _stringRepresentation; }
+  const std::string& iri() const { return stringRepresentation_; }
 
   // ___________________________________________________________________________
   const std::string& toStringRepresentation() const {
-    return _stringRepresentation;
+    return stringRepresentation_;
   }
 
   // ___________________________________________________________________________
   // TODO: Replace this by `toStringRepresentation` at the call sites where
   // SPARQL output is not actually required.
-  std::string toSparql() const { return _stringRepresentation; }
+  std::string toSparql() const { return stringRepresentation_; }
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _stringRepresentation)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, stringRepresentation_);
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_IRI_H
