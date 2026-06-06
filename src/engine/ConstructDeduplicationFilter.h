@@ -29,11 +29,7 @@ namespace qlever::constructExport {
 // The deduplication key identifying one instantiated triple: the `ValueId`s at
 // its three positions (subject, predicate, object), in order. Constants
 // contribute their precomputed `dedupId_`, variables their bound `ValueId` from
-// the row (see `makeFullTripleKey`). A single shared filter can collapse
-// duplicates produced by different template triples (see
-// `ConstructDeduplicationState`). Triples containing a blank node are never
-// keyed: their per-row blank-node ids would make every key unique, so such
-// triples bypass deduplication entirely.
+// the row (see `makeFullTripleKey`).
 using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
 using LruDeduplicationCache =
