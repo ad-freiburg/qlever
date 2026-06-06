@@ -223,10 +223,6 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-# The SerializerTest uses temporary files. The tests fail when multiple test
-# cases are run in parallel. This should be fixed by using distinct filenames
-# for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
