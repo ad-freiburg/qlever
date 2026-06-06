@@ -17,6 +17,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
+#include "engine/QueryExecutionContext.h"
 #include "global/ValueId.h"
 #include "util/ConstructDeduplicationMode.h"
 #include "util/Exception.h"
@@ -42,8 +43,9 @@ using LruDeduplicationCache =
 // chosen once from the mode at construction time.
 class PerTripleFilter {
  public:
-  explicit PerTripleFilter(const ad_utility::DeduplicationMode& mode)
-      : filter_{makeFilter(mode)} {}
+  explicit PerTripleFilter(const ad_utility::DeduplicationMode& mode,
+                           const QueryExecutionContext& executionContext)
+      : filter_{makeFilter(mode, executionContext)} {}
 
   // Returns true if `key` is new (not a duplicate), false otherwise.
   bool insert(const DeduplicationKey& key) {
@@ -55,7 +57,7 @@ class PerTripleFilter {
               AD_FAIL();
             },
             [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
-            [&key](ad_utility::HashSet<DeduplicationKey>& set) {
+            [&key](ad_utility::HashSetWithMemoryLimit<DeduplicationKey>& set) {
               return set.insert(key).second;
             }},
         filter_);
@@ -63,22 +65,26 @@ class PerTripleFilter {
 
  private:
   struct NoFilter {};
-  using Filter = std::variant<NoFilter, LruDeduplicationCache,
-                              ad_utility::HashSet<DeduplicationKey>>;
+  using Filter =
+      std::variant<NoFilter, LruDeduplicationCache,
+                   ad_utility::HashSetWithMemoryLimit<DeduplicationKey>>;
 
   Filter filter_;
 
   // Builds the dedup structure for `mode`: an empty `NoFilter` for `none`, a
   // bounded LRU cache for `BatchWise` (capacity = batch size), and an unbounded
   // hash set for `global`.
-  static Filter makeFilter(const ad_utility::DeduplicationMode& mode) {
+  static Filter makeFilter(const ad_utility::DeduplicationMode& mode,
+                           const QueryExecutionContext& queryExecutionContext) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ad_utility::DeduplicationMode::None&) -> Filter {
               return NoFilter{};
             },
-            [](const ad_utility::DeduplicationMode::Global&) -> Filter {
-              return ad_utility::HashSet<DeduplicationKey>{};
+            [&queryExecutionContext](
+                const ad_utility::DeduplicationMode::Global&) -> Filter {
+              return ad_utility::HashSetWithMemoryLimit<DeduplicationKey>{
+                  queryExecutionContext.getAllocator()};
             },
             [](const ad_utility::DeduplicationMode::BatchWise& bw) -> Filter {
               return LruDeduplicationCache{bw.batchSize_};
@@ -128,8 +134,10 @@ inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
 // entered.
 class ConstructDeduplicationState {
  public:
-  ConstructDeduplicationState(const ad_utility::DeduplicationMode& mode)
-      : filter_{makeFilter(mode)} {}
+  ConstructDeduplicationState(
+      const ad_utility::DeduplicationMode& mode,
+      const QueryExecutionContext& queryExecutionContext)
+      : filter_{makeFilter(mode, queryExecutionContext)} {}
 
   // Returns true if the instantiation of template triple `tripleIdx` at
   // `absoluteRow` is new (should be emitted), false if it is a duplicate
@@ -159,12 +167,13 @@ class ConstructDeduplicationState {
   std::optional<PerTripleFilter> filter_;
 
   static std::optional<PerTripleFilter> makeFilter(
-      const ad_utility::DeduplicationMode& mode) {
+      const ad_utility::DeduplicationMode& mode,
+      const QueryExecutionContext& queryExecutionContext) {
     if (std::holds_alternative<ad_utility::DeduplicationMode::None>(
             mode.value_)) {
       return std::nullopt;
     }
-    return PerTripleFilter{mode};
+    return PerTripleFilter{mode, queryExecutionContext};
   }
 };
 
