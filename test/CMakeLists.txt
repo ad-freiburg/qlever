@@ -27,6 +27,18 @@ function(linkAndDiscoverTest basename)
     gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
 endfunction()
 
+# Same as `linkAndDiscoverTest`, but marks the discovered tests as
+# `RUN_SERIAL` so that ctest does not run them concurrently with other tests.
+# Use this only for tests whose behaviour depends on wall-clock timing
+# (e.g. `TimerTest`, `ProgressBarTest`), where concurrent load on the
+# machine would otherwise make them flaky. Filename-clash parallelism
+# issues should be fixed via per-test unique filenames instead.
+function(linkAndDiscoverTestSerial basename)
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+            TRUE LABELS "${basename}")
+endfunction()
+
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
@@ -86,6 +98,28 @@ function(addLinkAndRunAsSingleTest basename)
 
 endfunction()
 
+# Serial variants of `addLinkAndDiscoverTest` / `addLinkAndDiscoverTestNoLibs`.
+# See `linkAndDiscoverTestSerial` for the policy on when to use them.
+function(addLinkAndDiscoverTestSerial basename)
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTestSerial(${basename} testUtil ${ARGN})
+    endif ()
+endfunction()
+
+function(addLinkAndDiscoverTestSerialNoLibs basename)
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTestSerial(${basename} ${ARGN})
+    endif ()
+endfunction()
+
 # Only compile and link the test, but do not run it.
 # Usage: Same as for the two functions above.
 function(addAndLinkTest basename)
@@ -104,7 +138,7 @@ add_subdirectory(libqlever)
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
-    addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+    addLinkAndDiscoverTestSerial(BenchmarkMeasurementContainerTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
@@ -133,7 +167,7 @@ addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
-addLinkAndDiscoverTestNoLibs(ConcurrentCacheTest)
+addLinkAndDiscoverTestSerialNoLibs(ConcurrentCacheTest)
 
 # This test also seems to use the same filenames and should be fixed.
 addLinkAndDiscoverTest(FileTest)
@@ -317,7 +351,7 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
-addLinkAndDiscoverTest(TimerTest)
+addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
@@ -411,7 +445,7 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
-addLinkAndDiscoverTest(ProgressBarTest util)
+addLinkAndDiscoverTestSerial(ProgressBarTest util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
