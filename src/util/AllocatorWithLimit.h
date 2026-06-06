@@ -71,7 +71,7 @@ class AllocationMemoryLeft {
 /*
  * Threadsafe Wrapper around AllocationMemoryLeft.
  * Copies of objects of this class will refer to the same AllocationMemoryLeft
- * object Concurrent access is handled via ad_utility::Synchronized.
+ * object. Concurrent access is handled via ad_utility::Synchronized.
  */
 class AllocationMemoryLeftThreadsafe {
  public:
@@ -92,7 +92,7 @@ class AllocationMemoryLeftThreadsafe {
 };
 }  // namespace detail
 
-// setup a shared Allocation state. For the usage see documentation of the
+// set up a shared Allocation state. For the usage see documentation of the
 // Limited Allocator class
 inline detail::AllocationMemoryLeftThreadsafe
 makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
