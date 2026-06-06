@@ -774,6 +774,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     AD_THROW("SparqlJSON export is not supported for CONSTRUCT queries");
   }
   AD_CONTRACT_CHECK(format != qleverJson);
+
   result->logResultSize();
   uint64_t resultSize = 0;
 
