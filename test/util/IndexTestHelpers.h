@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "AllocatorTestHelpers.h"
+#include "GTestHelpers.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -103,6 +104,15 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig config);
 // Create a test index at the given `indexBasename` and with the given `turtle`
 // as input, leave all other settings at the default.
 Index makeTestIndex(const std::string& indexBasename, std::string turtle);
+
+// Overloads that derive the basename from the currently running gtest name.
+inline Index makeTestIndex(TestIndexConfig config) {
+  return makeTestIndex(gtestCurrentTestName(), std::move(config));
+}
+
+inline Index makeTestIndex(std::string turtle) {
+  return makeTestIndex(gtestCurrentTestName(), std::move(turtle));
+}
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
