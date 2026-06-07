@@ -1548,6 +1548,18 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
                             }),
                 vec.end());
     }
+    // The writing to the external vector has to be done in order, to
+    // make the update from local to global ids work.
+
+    auto writeTriplesFuture = std::async(
+        std::launch::async,
+        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+          globalWritePtr->withWriteLockAndOrdered(
+              [&](auto& writerPtr) {
+                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+              },
+              numFiles);
+        });
     {
       ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
       writePartialVocabularyToFile(vec, partialFilename);
@@ -1556,13 +1568,7 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
     vec.clear();
     {
       ad_utility::TimeBlockAndLog l{"writing to global file"};
-      // The writing to the external vector has to be done in order, to
-      // make the update from local to global ids work.
-      globalWritePtr->withWriteLockAndOrdered(
-          [&localIds, &mapping](auto& writerPtr) {
-            writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-          },
-          numFiles);
+      writeTriplesFuture.get();
     }
   };
 }
