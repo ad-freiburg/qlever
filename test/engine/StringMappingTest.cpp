@@ -17,8 +17,7 @@ using namespace qlever::binary_export;
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
-  // This is important so we have a working comparator.
-  ad_utility::testing::getQec("<a> <b> <c> .");
+  auto* qec = ad_utility::testing::getQec("<a> <b> <c> .");
   auto toMappedId = [](size_t count) {
     return Id::makeFromLocalVocabIndex(
         reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
@@ -31,11 +30,11 @@ TEST(StringMapping, remapId) {
     EXPECT_EQ(a.getBits(), b.getBits());
   };
 
-  LocalVocabEntry testWord{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"abc\"")};
-  LocalVocabEntry duplicateWord{
-      ad_utility::triple_component::Iri::fromStringRepresentation("<b>")};
+  const auto& index = qec->getIndex();
+  LocalVocabEntry testWord =
+      LocalVocabEntry::fromStringRepresentation("\"abc\"", index);
+  LocalVocabEntry duplicateWord =
+      LocalVocabEntry::fromStringRepresentation("<b>", index);
   StringMapping mapping;
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
@@ -68,9 +67,9 @@ TEST(StringMapping, flush) {
   auto* qec = ad_utility::testing::getQec(std::move(config));
   StringMapping mapping;
 
-  LocalVocabEntry testWord{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"abc\"")};
+  const auto& index = qec->getIndex();
+  LocalVocabEntry testWord =
+      LocalVocabEntry::fromStringRepresentation("\"abc\"", index);
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
@@ -88,6 +87,6 @@ TEST(StringMapping, flush) {
   EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
 
   EXPECT_THAT(
-      mapping.flush(qec->getIndex()),
+      mapping.flush(index),
       ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 }

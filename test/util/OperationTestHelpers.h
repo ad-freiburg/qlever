@@ -59,7 +59,8 @@ class ShallowParentOperation : public Operation {
   std::shared_ptr<QueryExecutionTree> child_;
 
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
-      : child_{std::move(child)} {}
+      : Operation{child->getRootOperation()->getExecutionContext()},
+        child_{std::move(child)} {}
   std::string getCacheKeyImpl() const override { return "ParentOperation"; }
   std::string getDescriptor() const override {
     return "ParentOperationDescriptor";

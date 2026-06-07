@@ -124,8 +124,8 @@ class SparqlExpressionPimpl {
 
   // For a concise description of this method and its functionality, refer to
   // the corresponding declaration in SparqlExpression.h.
-  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata()
-      const;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      const LocalVocabContext& context) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

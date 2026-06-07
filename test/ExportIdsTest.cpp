@@ -197,16 +197,13 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
   // IRIs
 
-  // Create an EncodedIriManager with test prefixes
-  std::vector<std::string> prefixes = {"http://example.org/",
-                                       "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
-
   // Create a test index config with the encoded IRI manager
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/",
+                                                "http://test.com/"};
   auto qec = getQec(std::move(config));
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
 
   // Test driver lambda to reduce code duplication
   LocalVocab emptyLocalVocab;

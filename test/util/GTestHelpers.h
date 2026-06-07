@@ -6,12 +6,16 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
 #include <optional>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -93,15 +97,31 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // _____________________________________________________________________________
 // Some tests require a certain log level, e.g. but not only because they
 // capture log output and make assertions about it. This macro can be used to
-// skip such tests if the log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
-  if (LOGLEVEL < level) {                                       \
-    GTEST_SKIP() << "This test requires log level of at least " \
-                 << ad_utility::Log::getLevel<level>()          \
-                 << ", but the current log level is "           \
-                 << ad_utility::Log::getLevel<LOGLEVEL>();      \
-  }                                                             \
-  ASSERT_GE(LOGLEVEL, level);
+// skip such tests if the runtime log level is too low.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                       \
+  if (::ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed) <  \
+      (level)) {                                                               \
+    GTEST_SKIP() << "This test requires a runtime log level of at least "      \
+                 << ad_utility::LogLevel{level}.toString()                     \
+                 << ", but the current runtime log level is "                  \
+                 << ad_utility::LogLevel{::ad_utility::detail::runtimeLogLevel \
+                                             .load(std::memory_order_relaxed)} \
+                        .toString();                                           \
+  }
+
+// _____________________________________________________________________________
+// Set the runtime log level to `level` and return an `absl::Cleanup` that
+// restores the previous level when it goes out of scope. Use this in tests
+// that temporarily need a specific log level to avoid leaving the global
+// atomic modified after the test finishes.
+inline auto setLoglevelForTesting(LogLevel level) {
+  auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
+      level.value(), std::memory_order_relaxed);
+  return absl::MakeCleanup([previous] {
+    ::ad_utility::detail::runtimeLogLevel.store(previous,
+                                                std::memory_order_relaxed);
+  });
+}
 
 // _____________________________________________________________________________
 
@@ -212,9 +232,11 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // returns a function `ArrayType -> Matcher<ArrayType>` that applies
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
-template <typename T, typename ArrayType, typename MakeMatcher>
-requires std::is_convertible_v<ArrayType, std::vector<T>>
-auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
+CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
+    requires std::is_convertible_v<
+        ArrayType,
+        std::vector<T>>) auto liftMatcherToElementsAreArray(MakeMatcher
+                                                                makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;
@@ -240,6 +262,27 @@ MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
     seen.push_back(std::move(val));
   }
   return true;
+}
+
+// _____________________________________________________________________________
+// Returns "<TestSuiteName>_<TestName>" for the currently running gtest, with
+// any '/' replaced by '_' (parameterized tests embed '/' in their names).
+// If `assertInGtestEnvironment` is true (the default), crashes if called
+// outside a running gtest (i.e. when `current_test_info()` returns nullptr).
+// Pass false when the caller is also used by non-test code (e.g. benchmarks),
+// in which case an empty string is returned instead.
+inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  if (assertInGtestEnvironment) {
+    AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  }
+  if (testInfo == nullptr) {
+    return "";
+  }
+  return absl::StrReplaceAll(
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
+      {{"/", "_"}});
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

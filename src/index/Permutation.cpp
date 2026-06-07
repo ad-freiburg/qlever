@@ -123,7 +123,8 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
-  return reader().getDistinctCol1IdsAndCounts(
+  return reader().getDistinctColIdsAndCounts(
+      1,
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
@@ -137,9 +138,10 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  return reader().getDistinctCol0IdsAndCounts(
-      getScanSpecAndBlocks(scanSpec, locatedTriplesState), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader().getDistinctColIdsAndCounts(
+      0, getScanSpecAndBlocks(scanSpec, locatedTriplesState),
+      cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
+      limitOffset);
 }
 
 // _____________________________________________________________________

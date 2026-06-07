@@ -65,7 +65,7 @@ std::string Date::getFormattedYear() const {
                         : absl::StrFormat("%05d", getYear());
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   auto epoch1 = toEpoch();
@@ -87,21 +87,56 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   // Get total nanoseconds and convert them so a seconds double.
   double second =
       std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
-      1'000'000'000;
-  // Only passing seconds to DayTimeDuration. The object itself will convert the
-  // input to days, hours, minutes and seconds.
-  return DayTimeDuration(durationType, 0, 0, 0, second);
+      1'000'000'000.0;
+  // Only passing seconds to `DayTimeDuration`. The object itself will convert
+  // the input to days, hours, minutes and seconds.
+  return DayTimeDuration{durationType, 0, 0, 0, second};
+}
+
+// _____________________________________________________________________________
+std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
+  auto epochLhs = toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Nanoseconds newDate =
+      epochLhs.value() -
+      std::chrono::nanoseconds(totalMillisecondsRhs *
+                               1'000'000);  // milliseconds to nanoseconds
+  return makeFromEpoch(newDate, getTimeZone());
+}
+
+// _____________________________________________________________________________
+std::optional<Date> Date::operator+(const DayTimeDuration& rhs) const {
+  auto epochLhs = toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Nanoseconds newDate =
+      epochLhs.value() +
+      std::chrono::nanoseconds(totalMillisecondsRhs *
+                               1'000'000);  // milliseconds to nanoseconds
+  return makeFromEpoch(newDate, getTimeZone());
 }
 
 // _____________________________________________________________________________
 std::optional<Date::Nanoseconds> Date::toEpoch() const {
   using namespace std::chrono;
-  auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
+  // For `xsd:gYear`s `getMonth/getDay`will return -1.
+  // In this case just assume Jan 1st of the respective year.
+  auto month = std::max(getMonth(), 1);
+  auto day = std::max(getDay(), 1);
+  auto date = year_month_day{year(getYear()) / month / day};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
+    // If getHour returns -1 the date does not specify time, therefore just
+    // assume 0 hours.
+    auto hour = std::max(getHour(), 0);
     Date::Nanoseconds result =
-        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
+        sys_days(date) + hours{hour - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<nanoseconds>(
             second);  // Here all times are converted to a UTC time.
@@ -111,10 +146,37 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
     return std::nullopt;
   }
 }
+
+// _____________________________________________________________________________
+Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
+  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
+  // Shift the timestamp according to the given `TimeZone`offset.
+  timestamp = timestamp + std::chrono::hours{offset};
+
+  // Extract date from epoch timestamp.
+  auto days = std::chrono::floor<std::chrono::days>(timestamp);
+  std::chrono::year_month_day date = std::chrono::year_month_day{days};
+
+  // Extract time from remaining seconds.
+  auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
+  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
+
+  // The methods `year`, `month`, `day` return
+  // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
+  // static casts are necessary. For `month` and `day` only `operator unsigned`
+  // is supported, therefore two casts are necessary.
+  return Date{static_cast<int>(date.year()),
+              static_cast<int>(static_cast<unsigned>(date.month())),
+              static_cast<int>(static_cast<unsigned>(date.day())),
+              static_cast<int>(remainder.hours().count()),
+              static_cast<int>(remainder.minutes().count()),
+              static_cast<double>(remainder.seconds().count()),
+              tz};
+}
+
 #endif
 // _____________________________________________________________________________
-int8_t Date::getTimeZoneOffsetToUTCInHours() const {
-  TimeZone tz = getTimeZone();
+int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.
   return std::visit(
       [](auto& value) {
@@ -129,4 +191,8 @@ int8_t Date::getTimeZoneOffsetToUTCInHours() const {
         }
       },
       tz);
+}
+
+int8_t Date::getTimeZoneOffsetToUTCInHours() const {
+  return Date::getTimeZoneOffsetToUTCInHours(getTimeZone());
 }

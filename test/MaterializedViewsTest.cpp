@@ -38,6 +38,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerWarnings.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -348,8 +349,10 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
+    DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
     std::vector<Variable> vars =
         varToCol | ql::views::keys | ::ranges::to<std::vector>();
+    GCC_REENABLE_WARNINGS
     ql::ranges::sort(
         vars.begin(), vars.end(), [&](const auto& a, const auto& b) {
           return varToCol.at(a).columnIndex_ < varToCol.at(b).columnIndex_;
@@ -676,7 +679,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Write fake view metadata with unsupported version.
       nlohmann::json viewInfo = {{"version", 0}};
       ad_utility::makeOfstream(
-          "_materializedViewsTestIndex.view.testView5.viewinfo.json")
+          absl::StrCat(testIndexBase_, ".view.testView5.viewinfo.json"))
           << viewInfo.dump() << std::endl;
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -694,7 +697,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Remove the `query` key from the metadata JSON file.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView6.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("query");
       ad_utility::makeOfstream(metadataFilename)
@@ -716,7 +719,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // file, in particular, no `UndefStatus`.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView7.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView7.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("columns");
       viewInfo["columns"] = std::vector<std::string>{"?s", "?p", "?o", "?g"};
@@ -746,7 +749,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     Permutation testPermutation{Permutation::Enum::SPO,
                                 ad_utility::makeUnlimitedAllocator<Id>()};
     const std::string testView1Filename =
-        "_materializedViewsTestIndex.view.testView1";
+        absl::StrCat(testIndexBase_, ".view.testView1");
     // A materialized view permutation does not have a corresponding internal
     // permutation.
     EXPECT_ANY_THROW(testPermutation.loadFromDisk(
@@ -788,7 +791,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
     server.initialize(testIndexBase_, false, true, true, false,
                       {"testViewForServerPreload"});
-    EXPECT_TRUE(server.materializedViewsManager_.isViewLoaded(
+    EXPECT_TRUE(server.materializedViewsManager_->isViewLoaded(
         "testViewForServerPreload"));
   }
 
@@ -1470,7 +1473,7 @@ constexpr std::string_view geoBoundingBoxesViewQuery = R"(
 
 // Automatic `BIND` push-down for bounding boxes in `SpatialJoin`.
 TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
-  const std::string onDiskBase = "_materializedViewRewriteSpatialJoin";
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "geoms";
 
   // Initialize engine on test index.
@@ -1584,7 +1587,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
       " <m2> <p2> <http://example.com/> . \n"
       " <m2> <p3> \"abc\" . \n"
       " <s2> <p3> <o3> . \n";
-  const std::string onDiskBase = "_materializedViewRewriteChain";
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewChain";
 
   // Initialized libqlever.
@@ -1649,3 +1652,72 @@ INSTANTIATE_TEST_SUITE_P(
         // An additional `BIND` is ignored and the view can still be used for
         // query rewriting. Also uses a different sorting.
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
+  // Regression test for #2866.
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("testView1", plan);
+
+  // Test that the placeholder variable for the third column of both views,
+  // which is not read, does not trigger an assertion error.
+  {
+    auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s1> ;
+                   view:column-p ?p .
+        }
+      }
+    )");
+    auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s2> ;
+                   view:column-p ?p .
+        }
+      }
+    )");
+    auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
+    auto indexScanRight =
+        dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
+    EXPECT_NO_THROW(
+        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight));
+  }
+
+  // Test that an join column that is not in the first three columns is
+  // correctly checked and thus triggers the assertion.
+  {
+    auto [qetLeft, qecLeft, parsedLeft] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s1> ;
+                   view:column-p ?p ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    auto [qetRight, qecRight, parsedRight] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView1 {
+          _:config view:column-s <s2> ;
+                   view:column-p ?p ;
+                   view:column-g ?g .
+        }
+      }
+    )");
+    auto indexScanLeft = dynamic_cast<IndexScan&>(*qetLeft->getRootOperation());
+    auto indexScanRight =
+        dynamic_cast<IndexScan&>(*qetRight->getRootOperation());
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight),
+        ::testing::HasSubstr(
+            "The two IndexScans for a lazy single-column join have "
+            "more than one column in common."));
+  }
+}

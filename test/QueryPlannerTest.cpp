@@ -2648,6 +2648,21 @@ TEST(QueryPlanner, Exists) {
       "SELECT * FROM <g> FROM NAMED <g2> { ?x ?y ?z FILTER EXISTS {?a ?b ?c. "
       "GRAPH ?g { ?u ?v ?c}}}",
       filter);
+  // Make sure we get the correct permutation.
+  h::expect("SELECT ?s { ?s <p> <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "<p>", "<o>"),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO,
+                                                   Permutation::Enum::SOP}))));
+  h::expect("SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "?p", "<o>",
+                                                  {Permutation::Enum::OSP}),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO}))));
 }
 
 // _____________________________________________________________________________

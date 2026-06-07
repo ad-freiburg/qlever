@@ -297,7 +297,8 @@ class IndexNestedLoopJoin {
               rightResult_->idTable(), rightColumns);
           auto matchHelper =
               [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
-               transformationFunc = std::move(transformationFunc)](
+               transformationFunc = std::move(transformationFunc),
+               rightResult = rightResult_](
                   auto&& idTable,
                   LocalVocab localVocab) -> Result::IdTableVocabPair {
             detail::RightFiller matchTracker{

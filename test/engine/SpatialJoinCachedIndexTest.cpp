@@ -27,7 +27,7 @@ void serializeAndDeserializeCache(NamedResultCache& cache,
   cache.clear();
   ByteBufferReadSerializer reader{std::move(writer).data()};
   cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                           *qec->getIndex().getBlankNodeManager());
+                           qec->getLocalVocabContext());
 }
 
 // _____________________________________________________________________________

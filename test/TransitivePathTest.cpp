@@ -36,7 +36,7 @@ class TransitivePathTest
  public:
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
-  makePath(IdTable input, Vars vars, TransitivePathSide left,
+  makePath(IdTable input, const Vars& vars, TransitivePathSide left,
            TransitivePathSide right, size_t minDist, size_t maxDist,
            std::optional<std::string> turtleInput = std::nullopt,
            const std::optional<Variable>& graphVariable = std::nullopt) {
@@ -60,7 +60,7 @@ class TransitivePathTest
 
   // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
-      IdTable input, Vars vars, TransitivePathSide left,
+      IdTable input, const Vars& vars, TransitivePathSide left,
       TransitivePathSide right, size_t minDist, size_t maxDist,
       std::optional<std::string> turtleInput = std::nullopt,
       const std::optional<Variable>& graphVariable = std::nullopt) {
@@ -847,6 +847,45 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 }
 
 // _____________________________________________________________________________
+// Exactly `n` occurrences (`{n}` with `n > 1`); on a chain graph the result
+// must contain only the pairs at distance `n`.
+TEST_P(TransitivePathTest, exactLengthGreaterThanOne) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  auto expected = makeIdTableFromVector({{0, 2}, {1, 3}, {2, 4}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 2, 2);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+// `{n,m}` with `n > m` (e.g. `{5,3}`). The natural reading of the W3C
+// equivalence (empty union over `[n, m]`) is "empty result", and QLever's
+// DFS produces exactly that.
+TEST_P(TransitivePathTest, minGreaterThanMaxIsEmpty) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  IdTable expected{2, sub.getAllocator()};
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 5, 3);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, zeroLength) {
   std::string index = "<a> a 0 , 1 , 2 , 4 , 7 , 10 , 11 .";
 
@@ -1003,8 +1042,24 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   using ad_utility::triple_component::Literal;
-  std::string index = "<a> a 0 , 1 , 2 , 4 .";
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput = "<a> a 0 , 1 , 2 , 4 .";
+  auto* qec = getQec(std::move(config));
   std::string literal = "my-literal";
+
+  auto makeCustomPath = [qec](IdTable input, const Vars& vars,
+                              TransitivePathSide left, TransitivePathSide right,
+                              size_t minDist, size_t maxDist) {
+    bool useBinSearch = std::get<0>(GetParam());
+    // Clear the cache to avoid crosstalk between tests.
+    qec->clearCacheUnpinnedOnly();
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), vars);
+    return TransitivePathBase::makeTransitivePath(
+        qec, std::move(subtree), std::move(left), std::move(right), minDist,
+        maxDist, useBinSearch,
+        qlever::index::GraphFilter<TripleComponent>::All(), std::nullopt);
+  };
 
   // Simulate entries in the delta triples by using entries that are not in the
   // index
@@ -1015,7 +1070,8 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   // be changed in the future).
   LocalVocab localVocab;
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{Literal::literalWithoutQuotes(literal)}));
+      LocalVocabEntry::literalWithoutQuotes(literal,
+                                            qec->getLocalVocabContext())));
   auto sub = makeIdTableFromVector({
       {id, id},
   });
@@ -1027,9 +1083,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, reference, 0);
     TransitivePathSide right(std::nullopt, 1, reference, 1);
-    auto T = makePathUnbound(
-        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
-        std::numeric_limits<size_t>::max(), index);
+    auto T =
+        makeCustomPath(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                       left, right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 
@@ -1040,9 +1096,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, reference, 0);
     TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-    auto T = makePathUnbound(
-        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
-        std::numeric_limits<size_t>::max(), index);
+    auto T =
+        makeCustomPath(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                       left, right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 
@@ -1053,9 +1109,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
     TransitivePathSide right(std::nullopt, 1, reference, 1);
-    auto T = makePathUnbound(
-        std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right,
-        1, std::numeric_limits<size_t>::max(), std::move(index));
+    auto T = makeCustomPath(std::move(sub),
+                            {Variable{"?start"}, Variable{"?target"}}, left,
+                            right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 

@@ -69,9 +69,10 @@ class Sort : public Operation {
     return subtree_->knownEmptyResult();
   }
 
-  // The sort operation never has a semantic meaning. It's just a mean to an end
-  // to sort an input to make another operation more efficient. That's why we
-  // can propagate limits and offsets right through it.
+  // For a `Sort` with `LIMIT N`, any N rows are fine as long as they are
+  // sorted: there is no user-defined order that the `LIMIT` is taken against
+  // (user-facing `ORDER BY` goes through `OrderBy`, not `Sort`). So we can
+  // let the subtree compute only N rows and sort those.
   LimitOffsetSupport supportsLimitOffset() const override {
     return LimitOffsetSupport::YES;
   }
