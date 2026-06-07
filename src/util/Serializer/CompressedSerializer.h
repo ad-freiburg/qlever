@@ -45,7 +45,7 @@ CPP_template(typename CompressionFunction)(
   explicit CompressingBlockProcessor(CompressionFunction compressionFunction)
       : compressionFunction_{std::move(compressionFunction)} {}
 
-  CPP_template(typename UnderlyingSerializer)(
+  CPP_template_2(typename UnderlyingSerializer)(
       requires WriteSerializer<UnderlyingSerializer>) void
   operator()(ql::span<const char> block,
              UnderlyingSerializer& underlyingSerializer) {
