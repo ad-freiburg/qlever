@@ -509,3 +509,23 @@ TEST(ServerTest, gspDelete) {
   testDelete("default", StatusIs(http::status::ok));
   testDelete("graph=foo", StatusIs(http::status::not_found));
 }
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPost) {
+  // TODO: test more broadly including the delta triples after the operation
+  auto expectPost = [](std::string body, const auto& responseMatcher) {
+    auto baseName = "ServerTest_gspPost";
+    makeTestIndex(baseName, "");
+    SimulateHttpRequest simulateHttpRequest{baseName};
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    body);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, responseMatcher);
+  };
+  expectPost("", StatusIs(http::status::no_content));
+  expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+}
