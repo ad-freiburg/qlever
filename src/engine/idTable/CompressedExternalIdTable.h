@@ -184,14 +184,6 @@ class CompressedExternalIdTableWriter {
     return result;
   }
 
-  template <size_t N = 0>
-  auto getGeneratorForAllRows() {
-    // Note: As soon as we drop the support for GCC11 this can be
-    // `return getAllRowGenerators<N>() | ql::views::join;
-    return ql::views::join(
-        ad_utility::OwningViewNoConst{getAllRowGenerators<N>()});
-  }
-
   // Clear the underlying file and completely reset the data structure s.t. it
   // can be reused.
   void clear() {
@@ -298,11 +290,8 @@ class CompressedExternalIdTableWriter {
 
  public:
   // Read all blocks as a single `InputRangeTypeErased<IdTableStatic<N>>` via
-  // one background thread. Unlike `getGeneratorForAllRows()`, this creates
-  // O(1) threads regardless of the number of stored blocks. The trade-off is
-  // that column decompression within each block is sequential rather than
-  // parallel; the background thread itself already provides the necessary
-  // concurrency with the consumer.
+  // one background thread. This creates O(1) threads regardless of the number
+  // of stored blocks.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
