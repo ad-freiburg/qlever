@@ -152,13 +152,16 @@ TEST(LRUCache, insertWithoutValueWorksForEmptyValueTypes) {
   EXPECT_TRUE(cache.tryGet(3));
 }
 
-// White-box tests for the private helpers.
+// White-box tests for the private helpers. These live in the same namespace as
+// `LRUCache` so the `FRIEND_TEST` friend declarations (which name the test
+// classes in `ad_utility::util`) actually grant access to the private members.
+namespace ad_utility::util {
 
 // _____________________________________________________________________________
 // `markMRU` moves the given list node to the front of `keys_` and leaves all
 // other nodes (and `cache_`) untouched.
 TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
-  ad_utility::util::LRUCache<int, int> cache{3};
+  LRUCache<int, int> cache{3};
   cache.insert(1, 10);
   cache.insert(2, 20);
   cache.insert(3, 30);
@@ -180,7 +183,7 @@ TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
 // the new key to the front of `keys_` and evicts nothing. It does NOT insert a
 // `cache_` entry (that is the caller's responsibility).
 TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
-  ad_utility::util::LRUCache<int, int> cache{3};
+  LRUCache<int, int> cache{3};
   cache.insert(1, 10);  // keys_: {1}, cache_: {1}
 
   cache.evictLRUIfFullAndMarkMRU(2);
@@ -197,7 +200,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
 // both `keys_` and `cache_`, recycles its list node to the front, and seats the
 // new key there. The new key's `cache_` entry is still left to the caller.
 TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
-  ad_utility::util::LRUCache<int, int> cache{2};
+  LRUCache<int, int> cache{2};
   cache.insert(1, 10);
   cache.insert(2, 20);  // keys_: {2, 1}; key 1 is LRU.
 
@@ -217,7 +220,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
 // (so the factory may read `keys_.front()`), stores the produced value, and
 // returns a reference to the stored value.
 TEST(LRUCacheWhiteBox, insertNewEntrySeatsKeyBeforeComputingValue) {
-  ad_utility::util::LRUCache<int, int> cache{2};
+  LRUCache<int, int> cache{2};
 
   bool factoryCalled = false;
   const int& stored = cache.insertNewEntry(7, [&] {
@@ -233,3 +236,5 @@ TEST(LRUCacheWhiteBox, insertNewEntrySeatsKeyBeforeComputingValue) {
   EXPECT_EQ(&stored, &cache.cache_.find(7)->second.first);
   EXPECT_EQ((std::vector<int>{7}), keysOrder(cache.keys_));
 }
+
+}  // namespace ad_utility::util

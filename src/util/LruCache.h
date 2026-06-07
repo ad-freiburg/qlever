@@ -65,9 +65,10 @@ class LRUCache {
   }
 
   // Check if `key` is in the cache and return a reference to the value if it is
-  // found. Otherwise, compute the value by calling `computeFunction(key)` (it
-  // is invoked with the key as a `const K&` and must return something
-  // convertible to `V`), store it in the cache, and return a reference to it.
+  // found. Otherwise, compute the value by calling `computeFunction(key)`
+  // (`computeFunction` is invoked with the key as a `const K&` and must return
+  // something convertible to `V`), store it in the cache, and return a
+  // reference to it.
   // If the cache is already at maximum capacity, evict the least recently used
   // element first.
   CPP_template(typename Key, typename Func)(
@@ -78,8 +79,9 @@ class LRUCache {
     if (optValue) {
       return optValue.value();
     }
-    return insertNewEntry(std::forward<Key>(key),
-                          [&] { return computeFunction(keys_.front()); });
+    return insertNewEntry(std::forward<Key>(key), [&computeFunction, this] {
+      return computeFunction(keys_.front());
+    });
   }
 
   // Insert the key-value pair into the cache.
@@ -104,7 +106,7 @@ class LRUCache {
 
     // Cache miss: make room at the front and insert the new entry there.
     insertNewEntry(std::forward<Key>(key),
-                   [&] { return std::forward<Value>(newValue); });
+                   [&newValue] { return std::forward<Value>(newValue); });
     return true;
   }
 
@@ -149,8 +151,9 @@ class LRUCache {
   // value is obtained by invoking `makeValue()` (after `key` has been seated at
   // the front, so it may read `keys_.front()`). Returns a reference to the
   // stored value. Precondition: `key` is not already present in the cache.
-  template <typename Key, typename MakeValue>
-  V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
+  CPP_template(typename Key, typename MakeValue)(
+      requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
+      V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
     evictLRUIfFullAndMarkMRU(std::forward<Key>(key));
     auto result = cache_.try_emplace(keys_.front(), makeValue(), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);

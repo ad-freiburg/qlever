@@ -5,8 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/LazyGroupBy.h"
