@@ -379,7 +379,10 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  // This allocator is not being used for anything.
+  // Pass a 0-byte allocator as a sanity check: nothing below allocates
+  // through `newIndex`'s allocator, and if a future change ever does, this
+  // will throw immediately rather than silently using whatever allocator
+  // the source index happens to have.
   IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 

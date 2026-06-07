@@ -138,6 +138,7 @@ class Permutation {
   //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
   //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
   //   join-specific prefiltered block metadata.
+  //
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
