@@ -124,13 +124,18 @@ class LRUCache {
     keys_.splice(keys_.begin(), keys_, node);
   }
 
-  // If the cache is already at capacity, evict the least-recently-used key
-  // from both `keys_` and `cache_`.
-  // Caller must still insert the matching `cache_` entry,
-  // keyed on `keys_.front()`.
+  // Seat `key` as the most-recently-used key at the front of `keys_`, evicting
+  // the least-recently-used key first if the cache is full (this removes that
+  // old key from both `keys_` and `cache_`).
+  //
+  // This only updates `keys_`. It does NOT add a `cache_` entry for the new
+  // `key`. After this returns, `keys_.front()` holds `key` but `cache_` has no
+  // entry for it yet, so the cache is temporarily inconsistent. The caller must
+  // complete the insertion of the key-value-pair by adding the matching
+  // `cache_` entry, keyed on `keys_.front()`.
   // Precondition: `key` is not already present in the cache.
   template <typename Key>
-  void evictLRUIfFullAndMarkMRU(Key&& key) {
+  void evictLRUKeyIfFullAndMarkNewKeyAsMRU(Key&& key) {
     if (cache_.size() >= capacity_) {
       cache_.erase(keys_.back());
       // Recycle the evicted (back) node by moving it to the front and
@@ -155,7 +160,7 @@ class LRUCache {
   CPP_template(typename Key, typename MakeValue)(
       requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
       V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
-    evictLRUIfFullAndMarkMRU(std::forward<Key>(key));
+    evictLRUKeyIfFullAndMarkNewKeyAsMRU(std::forward<Key>(key));
     auto result = cache_.try_emplace(keys_.front(), makeValue(), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;

@@ -179,14 +179,14 @@ TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
 }
 
 // _____________________________________________________________________________
-// When the cache is below capacity, `evictLRUIfFullAndMarkMRU` simply pushes
-// the new key to the front of `keys_` and evicts nothing. It does NOT insert a
-// `cache_` entry (that is the caller's responsibility).
+// When the cache is below capacity, `evictLRUKeyIfFullAndMarkNewKeyAsMRU`
+// simply pushes the new key to the front of `keys_` and evicts nothing. It does
+// NOT insert a `cache_` entry (that is the caller's responsibility).
 TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
   LRUCache<int, int> cache{3};
   cache.insert(1, 10);  // keys_: {1}, cache_: {1}
 
-  cache.evictLRUIfFullAndMarkMRU(2);
+  cache.evictLRUKeyIfFullAndMarkNewKeyAsMRU(2);
 
   EXPECT_EQ((std::vector<int>{2, 1}), GetKeysInOrder(cache.keys_));
   // No `cache_` entry was created for key 2 by the helper.
@@ -196,15 +196,18 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
 }
 
 // _____________________________________________________________________________
-// When the cache is full, `evictLRUIfFullAndMarkMRU` evicts the LRU key from
-// both `keys_` and `cache_`, recycles its list node to the front, and seats the
-// new key there. The new key's `cache_` entry is still left to the caller.
+// When the cache is full, `evictLRUKeyIfFullAndMarkNewKeyAsMRU` evicts the LRU
+// key from both `keys_` and `cache_`, recycles its list node to the front, and
+// seats the new key there. It only updates `keys_`: it does NOT add a `cache_`
+// entry for the new key, so afterwards `keys_.front()` holds the new key while
+// `cache_` has no entry for it yet. Adding the value that corresponds to this
+// newly added key to the `cache_` is the caller's responsibility.
 TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
   LRUCache<int, int> cache{2};
   cache.insert(1, 10);
   cache.insert(2, 20);  // keys_: {2, 1}; key 1 is LRU.
 
-  cache.evictLRUIfFullAndMarkMRU(3);
+  cache.evictLRUKeyIfFullAndMarkNewKeyAsMRU(3);
 
   // The recycled node now holds key 3 at the front; key 1 was evicted.
   EXPECT_EQ((std::vector<int>{3, 2}), GetKeysInOrder(cache.keys_));
