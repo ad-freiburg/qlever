@@ -39,8 +39,6 @@ class LRUCache {
   // cached value `V`, and `.second` is an iterator (a "bookmark") into `keys_`
   // marking this key's position in the recency list. Storing the iterator lets
   // a cache hit move the key to the front (MRU) in O(1) without searching
-  // `keys_`. Hence, for an entry `it`: `it->first` is the key,
-  // `it->second.first` the value, and `it->second.second` the bookmark into
   // `keys_`.
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 
