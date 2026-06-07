@@ -80,8 +80,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(
     ValueId dedupId = resolveConstantDedupId(std::move(parsedObject), index,
                                              localVocabForConstantsInTemplate);
     return PrecomputedConstant{
-        std::make_shared<const EvaluatedTermData>(
-            EvaluatedTermData{literal.literal(), nullptr}),
+        std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
         dedupId};
   }
   return std::nullopt;
