@@ -166,10 +166,10 @@ class LRUCache {
     return result.first->second.first;
   }
 
-  FRIEND_TEST(LRUCacheWhiteBox, markMRUReordersKeysList);
-  FRIEND_TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull);
-  FRIEND_TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull);
-  FRIEND_TEST(LRUCacheWhiteBox, insertNewEntrySeatsKeyBeforeComputingValue);
+  FRIEND_TEST(markMRU, reordersKeysList);
+  FRIEND_TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, pushesFrontWhenNotFull);
+  FRIEND_TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, evictsAndRecyclesWhenFull);
+  FRIEND_TEST(insertNewEntry, seatsKeyBeforeComputingValue);
 };
 
 }  // namespace ad_utility::util

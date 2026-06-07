@@ -26,7 +26,7 @@ std::vector<int> GetKeysInOrder(const std::list<int>& keys) {
 }
 }  // namespace
 
-TEST(LRUCache, testLruCache) {
+TEST(getOrCompute, computesOnMissAndReturnsCachedOnHit) {
   ad_utility::util::LRUCache<int, int> cache{2};
   // Type-erase the lambdas to get a better coverage report.
   using F = std::function<int(int)>;
@@ -59,13 +59,13 @@ TEST(LRUCache, testLruCache) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, testEmptyCapacityForbidden) {
+TEST(constructor, zeroCapacityForbidden) {
   EXPECT_THROW((ad_utility::util::LRUCache<int, int>{0}),
                ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, tryGetReturnsNoneOnMiss) {
+TEST(tryGet, returnsNoneOnMiss) {
   ad_utility::util::LRUCache<int, int> cache{2};
   auto prevCapacity = cache.capacity();
   EXPECT_FALSE(cache.tryGet(42));
@@ -73,7 +73,7 @@ TEST(LRUCache, tryGetReturnsNoneOnMiss) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, tryGetReturnsValueOnHit) {
+TEST(tryGet, returnsValueOnHit) {
   ad_utility::util::LRUCache<int, int> cache{2};
   cache.getOrCompute(7, [](int k) { return k * 10; });
   auto v = cache.tryGet(7);
@@ -84,7 +84,7 @@ TEST(LRUCache, tryGetReturnsValueOnHit) {
 // _____________________________________________________________________________
 // After a `tryGet` hit, the accessed key becomes MRU and must survive the next
 // eviction.
-TEST(LRUCache, tryGetPromotesToMostRecentlyUsed) {
+TEST(tryGet, promotesToMostRecentlyUsed) {
   ad_utility::util::LRUCache<int, int> cache{2};
   cache.getOrCompute(1, [](int k) { return k; });
   cache.getOrCompute(2, [](int k) { return k; });
@@ -99,7 +99,7 @@ TEST(LRUCache, tryGetPromotesToMostRecentlyUsed) {
 // _____________________________________________________________________________
 // `tryGet` on a missing key must not insert anything; a subsequent
 // `getOrCompute` for the same key must still call the compute function.
-TEST(LRUCache, tryGetDoesNotInsert) {
+TEST(tryGet, doesNotInsert) {
   ad_utility::util::LRUCache<int, int> cache{2};
   EXPECT_FALSE(cache.tryGet(99));
   int computeCount = 0;
@@ -111,7 +111,7 @@ TEST(LRUCache, tryGetDoesNotInsert) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, insertReturnsWhetherKeyWasNewAndUpdatesValue) {
+TEST(insert, returnsWhetherKeyWasNewAndUpdatesValue) {
   ad_utility::util::LRUCache<int, int> cache{2};
 
   EXPECT_TRUE(cache.insert(1, 10));
@@ -124,7 +124,7 @@ TEST(LRUCache, insertReturnsWhetherKeyWasNewAndUpdatesValue) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, duplicateInsertPromotesToMostRecentlyUsed) {
+TEST(insert, duplicatePromotesToMostRecentlyUsed) {
   ad_utility::util::LRUCache<int, int> cache{2};
 
   EXPECT_TRUE(cache.insert(1, 10));
@@ -138,7 +138,7 @@ TEST(LRUCache, duplicateInsertPromotesToMostRecentlyUsed) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, insertWithoutValueWorksForEmptyValueTypes) {
+TEST(insert, withoutValueWorksForEmptyValueTypes) {
   ad_utility::util::LRUCache<int, std::monostate> cache{2};
 
   EXPECT_TRUE(cache.insert(1));
@@ -160,7 +160,7 @@ namespace ad_utility::util {
 // _____________________________________________________________________________
 // `markMRU` moves the given list node to the front of `keys_` and leaves all
 // other nodes (and `cache_`) untouched.
-TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
+TEST(markMRU, reordersKeysList) {
   LRUCache<int, int> cache{3};
   cache.insert(1, 10);
   cache.insert(2, 20);
@@ -182,7 +182,7 @@ TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
 // When the cache is below capacity, `evictLRUKeyIfFullAndMarkNewKeyAsMRU`
 // simply pushes the new key to the front of `keys_` and evicts nothing. It does
 // NOT insert a `cache_` entry (that is the caller's responsibility).
-TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
+TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, pushesFrontWhenNotFull) {
   LRUCache<int, int> cache{3};
   cache.insert(1, 10);  // keys_: {1}, cache_: {1}
 
@@ -202,7 +202,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
 // entry for the new key, so afterwards `keys_.front()` holds the new key while
 // `cache_` has no entry for it yet. Adding the value that corresponds to this
 // newly added key to the `cache_` is the caller's responsibility.
-TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
+TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, evictsAndRecyclesWhenFull) {
   LRUCache<int, int> cache{2};
   cache.insert(1, 10);
   cache.insert(2, 20);  // keys_: {2, 1}; key 1 is LRU.
@@ -222,7 +222,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
 // `insertNewEntry` seats the key at the front BEFORE invoking the value factory
 // (so the factory may read `keys_.front()`), stores the produced value, and
 // returns a reference to the stored value.
-TEST(LRUCacheWhiteBox, insertNewEntrySeatsKeyBeforeComputingValue) {
+TEST(insertNewEntry, seatsKeyBeforeComputingValue) {
   LRUCache<int, int> cache{2};
 
   bool factoryCalled = false;
