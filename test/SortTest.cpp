@@ -425,3 +425,21 @@ TEST(Sort, inMemorySortMaterializedInput) {
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsPropagated) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  Sort sort{qec, subtree, {0}};
+  sort.applyLimitOffset({2, 1});
+
+  EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+            LimitOffsetClause(2, 1));
+  // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}

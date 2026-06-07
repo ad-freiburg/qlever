@@ -115,8 +115,7 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
                            "detected in \"application/unknown\"."));
   };
 
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
         return GraphStoreProtocol::transformPost(request, graph, index);
@@ -150,8 +149,7 @@ TEST(GraphStoreProtocolTest, transformGet) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPut) {
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   auto expectTransformPut = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
       const testing::Matcher<const ParsedQuery&>& dropMatcher,
@@ -213,8 +211,7 @@ TEST(GraphStoreProtocolTest, transformPut) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformDelete) {
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   auto expectTransformDelete =
       [&index](const GraphOrDefault& graph,
                const testing::Matcher<const ParsedQuery&>& matcher,
@@ -228,8 +225,7 @@ TEST(GraphStoreProtocolTest, transformDelete) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
                   ad_utility::testing::makeGetRequest("/?default"), index),
@@ -378,8 +374,7 @@ MATCHER_P(IfBlankNode, sub, "") {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
   auto expectConvert =
       [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
@@ -439,8 +434,7 @@ TEST(GraphStoreProtocolTest, convertTriples) {
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
   // Create a simple index with default config for now
-  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
-                                                  TestIndexConfig{});
+  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
 
   // Test transformPost with IRIs that would be encoded if the feature were
   // enabled
