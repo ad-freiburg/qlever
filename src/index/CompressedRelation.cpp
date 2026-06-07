@@ -726,12 +726,15 @@ CompressedRelationReader::getBlocksForJoin(
 
   // Find the matching blocks on each side using a linear-time merge zipper.
   // Both sequences are sorted by `first_` with non-overlapping intervals
-  // (invariant enforced above by AD_CORRECTNESS_CHECK). The stateful pointer
-  // into `otherBlocks` never moves backward because a.first_ is
-  // non-decreasing, giving O(n + m) total. Note: it is tempting to reuse the
-  // `zipperJoinWithUndef` routine, but this doesn't work because the implicit
-  // equality defined by `!lessThan(a,b) && !lessThan(b, a)` is not
-  // transitive.
+  // (i.e. consecutive blocks `b1, b2` from the same side satisfy
+  // `b1.last_ < b2.first_`; invariant enforced above by the
+  // `AD_CORRECTNESS_CHECK` on `is_sorted` under `blockLessThanBlock`). The
+  // stateful pointer into `otherBlocks` never moves backward because
+  // `a.first_` is non-decreasing, giving O(n + m) total.
+  //
+  // NOTE: it is tempting to reuse the `zipperJoinWithUndef` routine, but this
+  // doesn't work because the implicit equality defined by `!lessThan(a,b) &&
+  // !lessThan(b, a)` is not transitive.
   auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
                                                   const auto& otherBlocks) {
     std::vector<CompressedBlockMetadata> result;
