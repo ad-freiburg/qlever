@@ -719,9 +719,9 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   // thread-safe way.
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
-  // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](Buffer::row_reference& curTriple, auto& idMap) {
-    for (auto& id : curTriple) {
+  // For all rows find their mapping from partial to global ids.
+  auto transformRow = [](ql::span<Id> row, const auto& idMap) {
+    for (auto& id : row) {
       // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
       // probably the mapping should also be defined as `HashMap<VocabIndex,
       // VocabIndex>` instead of `HashMap<Id, Id>`
@@ -763,15 +763,14 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   // Return a lambda that for each of the `triples` transforms its partial to
   // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
   // multiple batches need access to the same map.
-  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
+  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformRow,
                         &getWriteTask](Buffer triples,
                                        std::shared_ptr<Map> idMap) {
     return [&isQLeverInternalTriple, &writeQueue,
             triples = std::make_shared<Buffer>(std::move(triples)),
-            idMap = std::move(idMap), &getWriteTask,
-            &transformTriple]() mutable {
-      for (Buffer::row_reference triple : *triples) {
-        transformTriple(triple, *idMap);
+            idMap = std::move(idMap), &getWriteTask, &transformRow]() mutable {
+      for (auto row : triples->getColumns()) {
+        transformRow(row, *idMap);
       }
       auto beginInternal =
           std::partition(triples->begin(), triples->end(),
