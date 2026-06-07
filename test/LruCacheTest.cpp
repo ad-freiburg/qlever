@@ -21,7 +21,7 @@ namespace {
 // Copy a recency list `keys_` (MRU first) into a vector, for white-box
 // assertions on the internal ordering. The friend test reads `cache.keys_` and
 // passes it here.
-std::vector<int> keysOrder(const std::list<int>& keys) {
+std::vector<int> GetKeysInOrder(const std::list<int>& keys) {
   return std::vector<int>(keys.begin(), keys.end());
 }
 }  // namespace
@@ -166,13 +166,13 @@ TEST(LRUCacheWhiteBox, markMRUReordersKeysList) {
   cache.insert(2, 20);
   cache.insert(3, 30);
   // After inserting 1, 2, 3 the recency list is 3, 2, 1 (MRU first).
-  ASSERT_EQ((std::vector<int>{3, 2, 1}), keysOrder(cache.keys_));
+  ASSERT_EQ((std::vector<int>{3, 2, 1}), GetKeysInOrder(cache.keys_));
 
   // Promote key 1 (currently LRU) to the front via its stored bookmark.
   auto bookmarkOfKey1 = cache.cache_.find(1)->second.second;
   cache.markMRU(bookmarkOfKey1);
 
-  EXPECT_EQ((std::vector<int>{1, 3, 2}), keysOrder(cache.keys_));
+  EXPECT_EQ((std::vector<int>{1, 3, 2}), GetKeysInOrder(cache.keys_));
   // `cache_` is unchanged in size and the bookmarks still resolve.
   EXPECT_EQ(3u, cache.cache_.size());
   EXPECT_EQ(10, cache.cache_.find(1)->second.first);
@@ -188,7 +188,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullPushesFrontWhenNotFull) {
 
   cache.evictLRUIfFullAndMarkMRU(2);
 
-  EXPECT_EQ((std::vector<int>{2, 1}), keysOrder(cache.keys_));
+  EXPECT_EQ((std::vector<int>{2, 1}), GetKeysInOrder(cache.keys_));
   // No `cache_` entry was created for key 2 by the helper.
   EXPECT_FALSE(cache.cache_.contains(2));
   EXPECT_TRUE(cache.cache_.contains(1));
@@ -207,7 +207,7 @@ TEST(LRUCacheWhiteBox, evictLRUIfFullEvictsAndRecyclesWhenFull) {
   cache.evictLRUIfFullAndMarkMRU(3);
 
   // The recycled node now holds key 3 at the front; key 1 was evicted.
-  EXPECT_EQ((std::vector<int>{3, 2}), keysOrder(cache.keys_));
+  EXPECT_EQ((std::vector<int>{3, 2}), GetKeysInOrder(cache.keys_));
   // Key 1 is gone from `cache_`; key 2 remains; key 3 is not inserted yet.
   EXPECT_FALSE(cache.cache_.contains(1));
   EXPECT_TRUE(cache.cache_.contains(2));
@@ -234,7 +234,7 @@ TEST(LRUCacheWhiteBox, insertNewEntrySeatsKeyBeforeComputingValue) {
   EXPECT_EQ(70, stored);
   // The returned reference aliases the stored value.
   EXPECT_EQ(&stored, &cache.cache_.find(7)->second.first);
-  EXPECT_EQ((std::vector<int>{7}), keysOrder(cache.keys_));
+  EXPECT_EQ((std::vector<int>{7}), GetKeysInOrder(cache.keys_));
 }
 
 }  // namespace ad_utility::util
