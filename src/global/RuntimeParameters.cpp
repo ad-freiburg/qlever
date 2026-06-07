@@ -66,7 +66,6 @@ RuntimeParameters::RuntimeParameters() {
   // in sync with the parameter default from the start.
   logLevel_.setOnUpdateAction(
       [](LogLevel level) { ad_utility::setRuntimeLogLevel(level); });
-  add(constructDeduplicate_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

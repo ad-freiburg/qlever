@@ -176,6 +176,19 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // The runtime log level. Messages with a higher level are suppressed. The
+  // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
+  LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
+                              "log-level"};
+
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
+  // "global": a triple is emitted at most once across the entire result.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  // triples (per template triple); bounded memory, partial deduplication.
+  DeduplicationModeParameter constructDeduplicate_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplicate"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
