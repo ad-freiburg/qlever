@@ -125,8 +125,9 @@ class LRUCache {
   }
 
   // If the cache is already at capacity, evict the least-recently-used key
-  // from both `keys_` and `cache_`.Caller must still insert the matching
-  // `cache_` entry, keyed on `keys_.front()`.
+  // from both `keys_` and `cache_`.
+  // Caller must still insert the matching `cache_` entry,
+  // keyed on `keys_.front()`.
   // Precondition: `key` is not already present in the cache.
   template <typename Key>
   void evictLRUIfFullAndMarkMRU(Key&& key) {
@@ -146,10 +147,11 @@ class LRUCache {
   }
 
   // Insert a brand-new entry for `key` as the most-recently-used element,
-  // evicting the least-recently-used entry first if the cache is full. The
-  // value is obtained by invoking `makeValue()` (after `key` has been seated at
-  // the front, so it may read `keys_.front()`). Returns a reference to the
-  // stored value. Precondition: `key` is not already present in the cache.
+  // evicting the least-recently-used entry first if the cache is full.
+  // The value is obtained by invoking `makeValue()` (after `key` has been
+  // seated at the front, so it may read `keys_.front()`).
+  // Returns a reference to the stored value.
+  // Precondition: `key` is not already present in the cache.
   CPP_template(typename Key, typename MakeValue)(
       requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
       V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
