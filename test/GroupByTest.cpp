@@ -2046,7 +2046,7 @@ TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
   std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
   GroupByImpl groupBy{&qec, {varX}, aliases, join};
 
-  // 1 VALUES row for <a>, SPO cardinality of <a> = 4 (not 3) → count = 4.
+  // 1 VALUES row for <a>, SPO cardinality of <a> = 4 (not 3) -> count = 4.
   EXPECT_THAT(groupBy.computeGroupByForJoinWithFullScan(),
               optionalHasTable({{getId("<a>"), I(4)}}));
 }
