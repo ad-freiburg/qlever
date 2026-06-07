@@ -349,6 +349,9 @@ class Date {
   // Calculates `Date` that is time of the `DayTimeDuration` earlier.
   std::optional<Date> operator-(const DayTimeDuration& rhs) const;
 
+  // Calculates `Date` that is time of the `DayTimeDuration` later.
+  std::optional<Date> operator+(const DayTimeDuration& rhs) const;
+
   // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
   std::optional<Nanoseconds> toEpoch() const;
