@@ -35,11 +35,11 @@ class LRUCache {
   size_t capacity_;
   // Stores keys in order of usage (MRU at front).
   std::list<K> keys_;
-  // Maps each key to its mapped value, which is itself a pair: `.first` is the
-  // cached value `V`, and `.second` is an iterator (a "bookmark") into `keys_`
-  // marking this key's position in the recency list. Storing the iterator lets
-  // a cache hit move the key to the front (MRU) in O(1) without searching
-  // `keys_`.
+  // Maps each key to its mapped value. The mapped value is itself a pair. Its
+  // `.first` is the cached value `V`. Its `.second` is an iterator (a
+  // "bookmark") into `keys_` that marks this key's position in the recency
+  // list. Storing the iterator lets a cache hit move the key to the front (MRU)
+  // in O(1) without searching `keys_`.
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 
  public:
@@ -62,13 +62,12 @@ class LRUCache {
     return boost::optional<const V&>(value);
   }
 
-  // Check if `key` is in the cache and return a reference to the value if it is
-  // found. Otherwise, compute the value by calling `computeFunction(key)`
-  // (`computeFunction` is invoked with the key as a `const K&` and must return
-  // something convertible to `V`), store it in the cache, and return a
-  // reference to it.
-  // If the cache is already at maximum capacity, evict the least recently used
-  // element first.
+  // Check if `key` is in the cache. If it is found, return a reference to the
+  // value. Otherwise, compute the value by calling `computeFunction(key)`.
+  // `computeFunction` is invoked with the key as a `const K&` and must return
+  // something convertible to `V`. The computed value is stored in the cache,
+  // and a reference to it is returned. If the cache is already at maximum
+  // capacity, the least recently used element is evicted first.
   CPP_template(typename Key, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
           Func, V, const K&>) const V& getOrCompute(Key&& key,
@@ -100,25 +99,27 @@ class LRUCache {
       markMRU(listIteratorToKey);
       oldValue = std::forward<Value>(newValue);  // perfect forwarding.
       return false;
+    } else {
+      // Cache miss: make room at the front and insert the new entry there.
+      insertNewEntry(std::forward<Key>(key),
+                     [&newValue] { return std::forward<Value>(newValue); });
+      return true;
     }
-
-    // Cache miss: make room at the front and insert the new entry there.
-    insertNewEntry(std::forward<Key>(key),
-                   [&newValue] { return std::forward<Value>(newValue); });
-    return true;
   }
 
   // Set-like insertion for empty value types. This stores a default-constructed
-  // empty value and returns true iff the key was not already present.
+  // empty value and returns `true` iff the key was not already present.
   template <typename Key>
   bool insert(Key&& key)
       requires std::is_empty_v<V> && std::is_default_constructible_v<V> {
-    return insert(std::forward<Key>(key), V{});
+    return insert(std::forward<Key>(key), V{});  // perfect forwarding.
   }
 
  private:
   // Move the list node `node` to the front of `keys_`, marking its key as the
-  // most recently used. O(1); does not invalidate any iterators.
+  // most recently used. O(1); does not invalidate any iterators into `keys_`,
+  // including the ones stored as bookmarks in `cache_` (the `.second.second` of
+  // each entry).
   void markMRU(typename std::list<K>::iterator node) {
     keys_.splice(keys_.begin(), keys_, node);
   }
