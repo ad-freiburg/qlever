@@ -19,6 +19,7 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -26,13 +27,37 @@
 
 namespace ad_utility::serialization {
 
-// A `vector<char>` where a `resize` doesn't zero-initialize the new bytes
-// (for efficiency reasons).
-using UninitializedBuffer =
-    std::vector<char, ad_utility::default_init_allocator<char>>;
+// A `BlockProcessor` (see `BufferedWriteSerializer`) that compresses each block
+// using the provided `CompressionFunction` (which must be a callable that takes
+// a span of chars and a target buffer to store the compressed result in) and
+// writes it (prefixed with the uncompressed size) to the underlying serializer.
+CPP_template(typename CompressionFunction)(
+    requires ql::concepts::invocable<
+        CompressionFunction, ql::span<const char>,
+        UninitializedBuffer&>) class CompressingBlockProcessor {
+ private:
+  CompressionFunction compressionFunction_;
+  // We need to temporarily store a single compressed block before flushing it.
+  // Using a member variable for this purpose avoids reallocations.
+  UninitializedBuffer compressedBuffer_;
 
-// A write serializer that writes the data in compressed blocks to the
-// `UnderlyingSerializer` (which must be a `WriteSerializer') using the
+ public:
+  explicit CompressingBlockProcessor(CompressionFunction compressionFunction)
+      : compressionFunction_{std::move(compressionFunction)} {}
+
+  CPP_template(typename UnderlyingSerializer)(
+      requires WriteSerializer<UnderlyingSerializer>) void
+  operator()(ql::span<const char> block,
+             UnderlyingSerializer& underlyingSerializer) {
+    size_t uncompressedSize = block.size();
+    underlyingSerializer << uncompressedSize;
+    std::invoke(compressionFunction_, block, compressedBuffer_);
+    underlyingSerializer << compressedBuffer_;
+  }
+};
+
+// A `WriteSerializer` that writes the data in compressed blocks to the
+// `UnderlyingSerializer` (which must be a `WriteSerializer`) using the
 // provided `CompressionFunction` (which must be callable that takes a
 // span of chars and returns a vector of chars).
 //
@@ -40,22 +65,21 @@ using UninitializedBuffer =
 // exceeds the block size. Then the full block is compressed and serialized as a
 // vector to the underlying serializer. The last, possibly incomplete block is
 // written on destruction or when `close()` is called.
+//
+// The buffering itself is performed by the `BufferedWriteSerializer`; the
+// `CompressedWriteSerializer` merely plugs in a `CompressingBlockProcessor`
+// that transforms (compresses) each block before it is passed to the next
+// layer.
 CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<CompressionFunction, ql::span<const char>,
-                  UninitializedBuffer&>) class CompressedWriteSerializer {
- public:
-  using SerializerType = WriteSerializerTag;
-
- private:
-  std::optional<UnderlyingSerializer> underlyingSerializer_;
-  CompressionFunction compressionFunction_;
-  size_t blocksize_;
-  // A buffer for the uncompressed data.
-  UninitializedBuffer buffer_;
-  // We need to temporarily store a single compressed block before flushing it.
-  // Using a member variable for this purpose avoids reallocations.
-  UninitializedBuffer compressedBuffer_;
+                  UninitializedBuffer&>) class CompressedWriteSerializer
+    : public BufferedWriteSerializer<
+          UnderlyingSerializer,
+          CompressingBlockProcessor<CompressionFunction>> {
+  using Base =
+      BufferedWriteSerializer<UnderlyingSerializer,
+                              CompressingBlockProcessor<CompressionFunction>>;
 
  public:
   // Create from the underlying serializer, the function used for compression,
@@ -66,73 +90,9 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   CompressedWriteSerializer(UnderlyingSerializer underlyingSerializer,
                             CompressionFunction compressionFunction,
                             ad_utility::MemorySize blocksize)
-      : underlyingSerializer_{std::in_place, std::move(underlyingSerializer)},
-        compressionFunction_{std::move(compressionFunction)},
-        blocksize_{blocksize.getBytes()} {
-    buffer_.reserve(blocksize_);
-  }
-
-  // This is a move-only class.
-  CompressedWriteSerializer(const CompressedWriteSerializer&) = delete;
-  CompressedWriteSerializer& operator=(const CompressedWriteSerializer&) =
-      delete;
-  CompressedWriteSerializer(CompressedWriteSerializer&&) = default;
-  CompressedWriteSerializer& operator=(CompressedWriteSerializer&&) = default;
-
-  ~CompressedWriteSerializer() {
-    ad_utility::terminateIfThrows(
-        [this]() { close(); },
-        "The closing of a `CompressedWriteSerializer` failed");
-  }
-
-  // Main serialization function.
-  void serializeBytes(const char* bytePointer, size_t numBytes) {
-    while (numBytes > 0) {
-      size_t capacity = buffer_.capacity() - buffer_.size();
-      size_t bytesToCopy = std::min(capacity, numBytes);
-      buffer_.insert(buffer_.end(), bytePointer, bytePointer + bytesToCopy);
-      if (bytesToCopy < capacity) {
-        return;
-      }
-      flushBlock();
-      numBytes -= bytesToCopy;
-      bytePointer += bytesToCopy;
-    }
-  }
-
-  // After a call to `close` no more calls to `serializeBytes` are allowed.
-  void close() {
-    if (underlyingSerializer_.has_value()) {
-      flushBlock();
-      underlyingSerializer_.reset();
-    }
-  }
-
-  // Flush the temporary buffer, and then move out the underlying serializer.
-  UnderlyingSerializer underlyingSerializer() && {
-    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
-    flushBlock();
-    return std::move(*underlyingSerializer_);
-  }
-
- private:
-  // Flush the `buffer_` by compressing it and writing to the
-  // `underlyingSerializer_`.
-  //
-  // NOTE: By the logic of `serializeBytes`, it is enforced that `buffer_` is
-  // never larger than `blocksize_`. This lets us avoid unnecessary memory
-  // allocations.
-  void flushBlock() {
-    if (buffer_.empty()) {
-      return;
-    }
-    AD_CORRECTNESS_CHECK(buffer_.size() <= blocksize_);
-    size_t uncompressedSize = buffer_.size();
-    *underlyingSerializer_ << uncompressedSize;
-    compressionFunction_(buffer_, compressedBuffer_);
-    *underlyingSerializer_ << compressedBuffer_;
-    buffer_.clear();
-  }
+      : Base{std::move(underlyingSerializer), blocksize,
+             CompressingBlockProcessor<CompressionFunction>{
+                 std::move(compressionFunction)}} {}
 };
 
 // A read serializer that decompresses data in blocks from the
