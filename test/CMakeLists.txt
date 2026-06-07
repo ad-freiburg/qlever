@@ -27,10 +27,12 @@ function(linkAndDiscoverTest basename)
     gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
 endfunction()
 
-# Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
-# Similar to `linkAndDiscoverTestSerial` but also requires that the test is run serially
-# (without any of the other test cases running in parallel). This can be
-# required e.g. if several tests cases write to the same file.
+# Same as `linkAndDiscoverTest`, but marks the discovered tests as
+# `RUN_SERIAL` so that ctest does not run them concurrently with other tests.
+# Use this only for tests whose behaviour depends on wall-clock timing
+# (e.g. `TimerTest`, `ProgressBarTest`), where concurrent load on the
+# machine would otherwise make them flaky. Filename-clash parallelism
+# issues should be fixed via per-test unique filenames instead.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
@@ -96,10 +98,8 @@ function(addLinkAndRunAsSingleTest basename)
 
 endfunction()
 
-# Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
-# Similar to `addAndLinkTest` but also requires that the test is run serially
-# (without any of the other test cases running in parallel). This can be
-# required e.g. if several tests cases write to the same file.
+# Serial variants of `addLinkAndDiscoverTest` / `addLinkAndDiscoverTestNoLibs`.
+# See `linkAndDiscoverTestSerial` for the policy on when to use them.
 function(addLinkAndDiscoverTestSerial basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
@@ -107,6 +107,16 @@ function(addLinkAndDiscoverTestSerial basename)
     else ()
         addTest(${basename})
         linkAndDiscoverTestSerial(${basename} testUtil ${ARGN})
+    endif ()
+endfunction()
+
+function(addLinkAndDiscoverTestSerialNoLibs basename)
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTestSerial(${basename} ${ARGN})
     endif ()
 endfunction()
 
@@ -128,7 +138,7 @@ add_subdirectory(libqlever)
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
-    addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+    addLinkAndDiscoverTestSerial(BenchmarkMeasurementContainerTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
@@ -157,10 +167,10 @@ addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
-addLinkAndDiscoverTestNoLibs(ConcurrentCacheTest)
+addLinkAndDiscoverTestSerialNoLibs(ConcurrentCacheTest)
 
 # This test also seems to use the same filenames and should be fixed.
-addLinkAndDiscoverTestSerial(FileTest)
+addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
@@ -168,16 +178,13 @@ addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-# We currently always use static file names for all indices, which
-# makes it impossible to run the test cases for the Index class in parallel.
-# TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(IndexTest index)
+addLinkAndDiscoverTest(IndexTest index)
 
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
-addLinkAndDiscoverTestSerial(IdTripleTest index)
+addLinkAndDiscoverTest(IdTripleTest index)
 
-addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
@@ -187,9 +194,9 @@ addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
+addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
+addLinkAndDiscoverTest(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
@@ -197,7 +204,7 @@ addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
-addLinkAndDiscoverTestSerial(GroupByTest engine)
+addLinkAndDiscoverTest(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
@@ -206,7 +213,7 @@ addLinkAndDiscoverTest(HasPredicateScanTest engine)
 addLinkAndDiscoverTest(MmapVectorTest)
 
 # BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTestSerial(BufferedVectorTest)
+addLinkAndDiscoverTest(BufferedVectorTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
@@ -218,7 +225,7 @@ else ()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif ()
 
-addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
+addLinkAndDiscoverTest(RdfParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -250,10 +257,6 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-# The SerializerTest uses temporary files. The tests fail when multiple test
-# cases are run in parallel. This should be fixed by using distinct filenames
-# for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
@@ -268,9 +271,9 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
 
-addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTestSerial(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)
+addLinkAndDiscoverTest(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(StreamableBodyTest http)
 
@@ -312,7 +315,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
+addLinkAndDiscoverTest(DateYearDurationTest util parser)
 
 addLinkAndDiscoverTest(DurationTest util)
 
@@ -328,21 +331,21 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
-addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(RelationalExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
-addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
+addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine parser)
 
-addLinkAndDiscoverTestSerial(LocalVocabTest engine)
+addLinkAndDiscoverTest(LocalVocabTest engine)
 
-addLinkAndDiscoverTestSerial(ValuesTest engine)
+addLinkAndDiscoverTest(ValuesTest engine)
 
-addLinkAndDiscoverTestSerial(ServiceTest engine)
+addLinkAndDiscoverTest(ServiceTest engine)
 
-addLinkAndDiscoverTestSerial(LoadTest engine)
+addLinkAndDiscoverTest(LoadTest engine)
 
-addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
+addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
@@ -350,33 +353,33 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
-addLinkAndDiscoverTest(TimerTest)
+addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+addLinkAndDiscoverTest(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest engine)
+addLinkAndDiscoverTest(PrefilterExpressionIndexTest engine)
 
-addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
+addLinkAndDiscoverTest(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
-addLinkAndDiscoverTestSerial(RandomExpressionTest index)
+addLinkAndDiscoverTest(RandomExpressionTest index)
 
-addLinkAndDiscoverTestSerial(NowDatetimeExpressionTest index)
+addLinkAndDiscoverTest(NowDatetimeExpressionTest index)
 
-addLinkAndDiscoverTestSerial(LanguageExpressionsTest index)
+addLinkAndDiscoverTest(LanguageExpressionsTest index)
 
-addLinkAndDiscoverTestSerial(SortTest engine)
+addLinkAndDiscoverTest(SortTest engine)
 
-addLinkAndDiscoverTestSerial(OrderByTest engine)
+addLinkAndDiscoverTest(OrderByTest engine)
 
-addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
+addLinkAndDiscoverTest(ValuesForTestingTest index)
 
-addLinkAndDiscoverTestSerial(ExportQueryExecutionTreesTest index engine parser)
+addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine parser)
 
-addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(AggregateExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
@@ -444,7 +447,7 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
-addLinkAndDiscoverTest(ProgressBarTest util)
+addLinkAndDiscoverTestSerial(ProgressBarTest util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
@@ -488,9 +491,9 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest util)
 
-addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
+addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
-addLinkAndDiscoverTestSerial(HttpErrorTest engine)
+addLinkAndDiscoverTest(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
 
@@ -522,3 +525,5 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
+
+addLinkAndDiscoverTest(LogTest)

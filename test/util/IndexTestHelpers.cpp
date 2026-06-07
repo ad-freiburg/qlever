@@ -359,8 +359,12 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
   if (!contextMap.contains(c)) {
+    // We have to pass `false` to `gtestCurrentTestName` to make this work for
+    // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
+    // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        "_staticGlobalTestIndex" + std::to_string(contextMap.size());
+        absl::StrCat("_staticGlobalTestIndex", gtestCurrentTestName(false), "_",
+                     contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
                      for (const std::string& indexFilename :
