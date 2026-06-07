@@ -37,7 +37,7 @@ class Result {
     IdTableVocabPair(IdTable idTable, LocalVocab localVocab)
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
 
-    // Helper constructor for `IdTables` with a static amount of rows.
+    // Helper constructor for `IdTables` with a static amount of columns.
     template <int COLS>
     IdTableVocabPair(IdTableStatic<COLS> idTable, LocalVocab localVocab)
         : IdTableVocabPair{std::move(idTable).toDynamic(),

@@ -51,6 +51,10 @@ class LazyGroupByRange
   bool singleIdTable_{false};
   // runtime state
   size_t inWidth_;
+  // Keep the lazy result blocks as `IdTableStatic` (that is, with fixed width),
+  // to avoid a conversion for every block (this used to be a performance bug).
+  // The paths that need a (dynamic) `IdTable` are not performance-criticial
+  // and convert using `toDynamic()` explicitly.
   IdTableStatic<OUT_WIDTH> resultTable_;
   std::unique_ptr<LazyGroupBy> lazyGroupBy_;
   LocalVocab currentLocalVocab_;
