@@ -61,7 +61,10 @@ using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
-// Data produced after parsing: vocabulary metadata and unsorted ID triples.
+// Data produced after parsing: vocabulary metadata and the number of triple
+// batches per worker. The ID triples themselves are written to disk (one file
+// per worker, see `IndexImpl::unsortedTriplesFilename`) and read back by
+// `IndexImpl::convertPartialToGlobalIds`.
 struct IndexBuilderDataAsExternalVector {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
@@ -86,8 +89,6 @@ struct IndexBuilderDataAsFirstPermutationSorter {
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
@@ -628,20 +629,20 @@ class IndexImpl {
  protected:
   // Private member functions
 
-  // Create Vocabulary and directly write it to disk. Create TripleVec with all
-  // the triples converted to id space. This Vec can be used for creating
-  // permutations. Member vocab_ will be empty after this because it is not
-  // needed for index creation once the TripleVec is set up and it would be a
-  // waste of RAM.
+  // Create Vocabulary and directly write it to disk. Write all the triples
+  // converted to id space to disk, sorted into the first permutation, so that
+  // they can be used for creating the permutations. Member vocab_ will be empty
+  // after this because it is not needed for index creation once the triples are
+  // set up and it would be a waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
 
   // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
   // threads that work completely independently of each other. Each of them
   // processes batches of `linesPerPartial` triples, and for each batch writes
-  // one partial vocabulary file and stores the corresponding ID triples in its
-  // own file. The memory used by the item allocator is freed when this function
-  // returns.
+  // one partial vocabulary file and serializes the corresponding ID triples to
+  // its own file (see `unsortedTriplesFilename`). The memory used by the item
+  // allocator is freed when this function returns.
   BuildPartialVocabulariesResult buildPartialVocabularies(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
@@ -668,7 +669,13 @@ class IndexImpl {
   void writePartialVocabulary(
       const std::string& filenameSuffix, ItemMapAndBuffer items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      TripleVec& idTriples) const;
+      TripleWriter& idTriples) const;
+
+  // The name of the file to which the worker with index `workerIdx` serializes
+  // the triples with the partial IDs of the partial vocabularies it has built.
+  std::string unsortedTriplesFilename(size_t workerIdx) const {
+    return absl::StrCat(onDiskBase_, UNSORTED_TRIPLES_INFIX, workerIdx, ".dat");
+  }
 
   // Return a Turtle parser that parses the given files. The parser will be
   // configured to either parse in parallel or not (per input file), and to
@@ -678,9 +685,14 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;
 
+  // Read the unsorted ID triples (written by `buildPartialVocabularies`, one
+  // file per worker, batch by batch, one batch per partial vocabulary) back
+  // from disk, convert their partial to global IDs using the corresponding
+  // partial-vocabulary mappings, and feed them into the sorter for the first
+  // permutation.
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
+      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

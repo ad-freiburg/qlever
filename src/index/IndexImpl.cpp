@@ -43,6 +43,8 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ParallelExecutor.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/CompressedSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -512,11 +514,12 @@ IndexImpl::runPartialVocabularyWorker(
     std::atomic<size_t>* numHasWordTriples,
     ad_utility::ConcurrentProgressBar& progressBar, size_t workerIdx) {
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  WorkerResult workerResult{
-      {},
-      std::make_unique<TripleVec>(
-          absl::StrCat(onDiskBase_, ".unsorted-triples.", workerIdx, ".dat"),
-          2_MB * NumColumnsIndexBuilding, allocator_)};
+  WorkerResult workerResult;
+  // The triples of all the batches of this worker are serialized to a single
+  // file, one batch after the other. The file is private to this worker, so no
+  // synchronization is needed.
+  TripleWriter idTriples{ad_utility::serialization::FileWriteSerializer{
+      unsortedTriplesFilename(workerIdx)}};
   bool parserExhausted = false;
   while (!parserExhausted) {
     // Each worker builds its own partial vocabulary, so all the IDs may start
@@ -561,8 +564,11 @@ IndexImpl::runPartialVocabularyWorker(
             workerIdx, workerResult.numTriplesPerBatch_.size());
     workerResult.numTriplesPerBatch_.push_back(localWriter.size());
     writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
-                           std::move(localWriter), *workerResult.idTriples_);
+                           std::move(localWriter), idTriples);
   }
+  // Flush the remaining buffered triples and close the file, so that it can be
+  // read back by `convertPartialToGlobalIds`.
+  idTriples.close();
   return workerResult;
 }
 
@@ -613,16 +619,23 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   if (result.partialVocabularySuffixes().empty()) {
     auto& workerResult = result.workerResults_.at(0);
     workerResult.numTriplesPerBatch_.push_back(0);
+    // The first worker hasn't written a single triple, so we can simply
+    // overwrite its (empty) file.
+    TripleWriter idTriples{ad_utility::serialization::FileWriteSerializer{
+        unsortedTriplesFilename(0)}};
     writePartialVocabulary(
         BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
         ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
-        *workerResult.idTriples_);
+        idTriples);
+    idTriples.close();
   }
 
   progressBar.logFinalProgressString();
   size_t numTriplesTotal = ::ranges::accumulate(
-      result.workerResults_, size_t{0}, {},
-      [](const auto& workerResult) { return workerResult.idTriples_->size(); });
+      result.workerResults_, size_t{0}, {}, [](const auto& workerResult) {
+        return ::ranges::accumulate(workerResult.numTriplesPerBatch_,
+                                    size_t{0});
+      });
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << numTriplesTotal << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
@@ -681,8 +694,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
 // _____________________________________________________________________________
 template <typename Func>
-auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
-                                          Func isQLeverInternalTriple)
+auto IndexImpl::convertPartialToGlobalIds(
+    const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
@@ -762,7 +775,7 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
 
   // Return a lambda that for each of the `triples` transforms its partial to
   // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
-  // multiple batches need access to the same map.
+  // the returned lambda has to be copyable.
   auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformRow,
                         &getWriteTask](Buffer triples,
                                        std::shared_ptr<Map> idMap) {
@@ -821,35 +834,40 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   // The mappings are yielded in the same order as `partialVocabSuffixes`, that
   // is, in the order in which the triples of the individual workers are stored.
   auto mappingIt = mappings.begin();
-  for (auto& workerResult : data.workerResults_) {
-    auto triplesGenerator = workerResult.idTriples_->getRows();
-    auto it = triplesGenerator.begin();
-    for (size_t numTriples : workerResult.numTriplesPerBatch_) {
-      AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
-      auto idMap = std::make_shared<Map>(std::move(*mappingIt));
+  for (size_t workerIdx :
+       ad_utility::integerRange(data.workerResults_.size())) {
+    std::string triplesFilename = unsortedTriplesFilename(workerIdx);
+    {
+      ad_utility::serialization::ZstdReadSerializer triplesReader{
+          ad_utility::serialization::FileReadSerializer{triplesFilename}};
+      const auto& numTriplesPerBatch =
+          data.workerResults_.at(workerIdx).numTriplesPerBatch_;
+      for ([[maybe_unused]] size_t batchIdx :
+           ad_utility::integerRange(numTriplesPerBatch.size())) {
+        AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
+        auto idMap = std::make_shared<Map>(std::move(*mappingIt));
 
-      const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
-      Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
-      buffer.reserve(bufferSize);
-      auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
-                        bufferSize]() {
-        lookupQueue.push(getLookupTask(std::move(buffer), idMap));
-        buffer.clear();
-        buffer.reserve(bufferSize);
-      };
-      // Update the triples that belong to this partial vocabulary.
-      for ([[maybe_unused]] auto idx : ad_utility::integerRange(numTriples)) {
-        buffer.push_back(*it);
-        if (buffer.size() >= bufferSize) {
-          pushBatch();
+        // Read the triples that belong to this partial vocabulary. They were
+        // serialized as a single vector (the number of triples followed by the
+        // triples themselves), so we first read the number of triples, reserve
+        // the buffer accordingly, and then read them all in before pushing them
+        // to the lookup queue as a single batch.
+        size_t numTriplesInBatch;
+        triplesReader >> numTriplesInBatch;
+        Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
+        buffer.reserve(numTriplesInBatch);
+        for ([[maybe_unused]] size_t idx :
+             ad_utility::integerRange(numTriplesInBatch)) {
+          std::array<Id, NumColumnsIndexBuilding> triple;
+          triplesReader >> triple;
+          buffer.push_back(triple);
         }
-        ++it;
+        lookupQueue.push(getLookupTask(std::move(buffer), std::move(idMap)));
+        ++mappingIt;
       }
-      if (!buffer.empty()) {
-        pushBatch();
-      }
-      ++mappingIt;
     }
+    // The triples of this worker are only needed for this conversion step.
+    deleteTemporaryFile(triplesFilename);
   }
   lookupQueue.finish();
   writeQueue.finish();
@@ -1713,7 +1731,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 void IndexImpl::writePartialVocabulary(
     const std::string& filenameSuffix, ItemMapAndBuffer items,
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    TripleVec& idTriples) const {
+    TripleWriter& idTriples) const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
@@ -1752,7 +1770,7 @@ void IndexImpl::writePartialVocabulary(
   }
   auto writeTriplesFuture =
       std::async(std::launch::async, [&idTriples, &localIds, &mapping]() {
-        writeMappedIdsToExtVec(localIds, mapping, idTriples);
+        writeMappedIdsToExtVec(std::move(localIds), mapping, idTriples);
       });
   {
     ad_utility::TimeBlockAndLog l{"write partial vocabulary"};

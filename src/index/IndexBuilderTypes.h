@@ -373,21 +373,17 @@ MappedTriples mapTripleToIds(
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The triples and partial vocabularies that a single worker thread has
-  // created. The workers work completely independently of each other, so each
-  // of them has its own `idTriples_`.
+  // The partial vocabularies that a single worker thread has created. The
+  // workers work completely independently of each other, so each of them
+  // writes its triples to its own file (see
+  // `IndexImpl::unsortedTriplesFilename`).
   struct WorkerResult {
     // The i-th entry is the actual number of triples in the i-th batch of
     // this worker (a batch consists of a partial vocabulary and the triples
     // that were mapped using it). It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The first
-    // `numTriplesPerBatch_[0]` rows of `idTriples_` are the triples of the
-    // first batch, the next `numTriplesPerBatch_[1]` rows are the triples of
-    // the second batch, and so on.
+    // specified `batchSize` because of internally added triples. The batches
+    // are serialized to the worker's file in exactly this order.
     std::vector<size_t> numTriplesPerBatch_;
-    std::unique_ptr<TripleVec> idTriples_;
   };
   // One entry per worker, in the order of the worker indices.
   std::vector<WorkerResult> workerResults_;

@@ -21,6 +21,7 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "util/HashMap.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeVector.h"
@@ -52,8 +53,10 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
   return idMap;
 }
 
-using TripleVec =
-    ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+// The serializer that is used to write the parsed triples with their partial
+// IDs to disk (one file per worker, see `IndexImpl::buildPartialVocabularies`).
+using TripleWriter = ad_utility::serialization::ZstdWriteSerializer<
+    ad_utility::serialization::FileWriteSerializer>;
 
 namespace ad_utility::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
@@ -300,13 +303,11 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  */
 ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
-/**
- * @brief for each of the IdTriples in <input>: map the three Ids using the
- * <map> and write the resulting Id triple to <*writePtr>
- */
+// For each of the IdTriples in `input`: map the three Ids using the `map` and
+// serialize the resulting batch of Id triples to `writePtr`.
 void writeMappedIdsToExtVec(
-    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<Id, Id>& map, TripleVec& vec);
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
+    const HashMap<uint64_t, uint64_t>& map, TripleWriter& writer);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
