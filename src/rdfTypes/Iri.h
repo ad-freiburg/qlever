@@ -16,7 +16,6 @@
 #include <string_view>
 #include <type_traits>
 
-#include "backports/StartsWithAndEndsWith.h"
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
@@ -107,10 +106,9 @@ class Iri : public BasicIri<true> {
   // Create a new `Iri` given a prefix IRI and its suffix.
   static Iri fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix);
 
-  // Create a new `Iri` object, considering the base IRI. For IRIs with a
-  // scheme (like `<http://...>`), this is the same as `fromIriref`. For IRIs
-  // without a scheme, prepend the base prefix for relative IRIs (like
-  // `<UPI001AF4585D>`) or for absolute IRIs (like `</prosite/PS51927>`).
+  // Create a new `Iri` object, considering the base IRI, following the
+  // specification of RFC 3986. For absolute IRIs with a scheme (like
+  // `<http://...>`), this is the same as `fromIriref`.
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                     const qlever::util::ParsedUri& baseUri);
 

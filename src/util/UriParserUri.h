@@ -46,7 +46,7 @@ class UriParserUri {
     return a == nullptr && b == nullptr;
   }
 
-  explicit UriParserUri(UriUriA uri) : uri_{std::move(uri)} {
+  explicit UriParserUri(const UriUriA& uri) : uri_{uri} {
     uriMakeOwnerA(&uri_);
   }
 

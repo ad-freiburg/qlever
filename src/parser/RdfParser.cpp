@@ -1128,7 +1128,7 @@ template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-    this->assignParsingHeader(*this, parser);
+    this->copyHeaderFrom(*this, parser);
     parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     // Ensure that all sub-parsers use the same file-level blank node prefix
@@ -1219,7 +1219,7 @@ void RdfParallelParser<T>::initialize(
       break;
     }
   }
-  this->assignParsingHeader(std::move(declarationParser), *this);
+  this->copyHeaderFrom(std::move(declarationParser), *this);
   remainingBatchFromInitialization.reserve(remainder.size());
   ql::ranges::copy(remainder,
                    std::back_inserter(remainingBatchFromInitialization));

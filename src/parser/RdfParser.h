@@ -229,7 +229,7 @@ class TurtleParser : public RdfParserBase {
   // Unified interface to copy/move data that has been collected by the parallel
   // parser before sharding out to parallel worker threads.
   template <typename Source, typename Target>
-  static void assignParsingHeader(Source&& source, Target& target) {
+  static void copyHeaderFrom(Source&& source, Target& target) {
     target.prefixMap_ = AD_FWD(source).prefixMap_;
     target.baseIri_ = AD_FWD(source).baseIri_;
   }
