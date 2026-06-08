@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <ostream>
 #include <random>
 #include <string_view>
 
@@ -35,10 +34,6 @@ class QueryId {
 
   friend void to_json(nlohmann::json& json, const QueryId& queryId) {
     json = queryId.id_;
-  }
-
-  friend std::ostream& operator<<(std::ostream& os, const QueryId& queryId) {
-    return os << queryId.id_;
   }
 
  public:
