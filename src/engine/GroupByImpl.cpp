@@ -51,7 +51,11 @@ class LazyGroupByRange
   bool singleIdTable_{false};
   // runtime state
   size_t inWidth_;
-  IdTable resultTable_;
+  // Keep the lazy result blocks as `IdTableStatic` (that is, with fixed width),
+  // to avoid a conversion for every block (this used to be a performance bug).
+  // The paths that need a (dynamic) `IdTable` are not performance-criticial
+  // and convert using `toDynamic()` explicitly.
+  IdTableStatic<OUT_WIDTH> resultTable_;
   std::unique_ptr<LazyGroupBy> lazyGroupBy_;
   LocalVocab currentLocalVocab_;
   std::vector<LocalVocab> storedLocalVocabs_;
@@ -119,17 +123,16 @@ class LazyGroupByRange
                      sparqlExpression::EvaluationContext& evaluationContext) {
     if (groupSplitAcrossTables_) {
       lazyGroupBy_->processBlock(evaluationContext, blockStart, blockEnd);
-      lazyGroupBy_->commitRow(resultTable_, evaluationContext,
+      IdTable resultTable = std::move(resultTable_).toDynamic();
+      lazyGroupBy_->commitRow(resultTable, evaluationContext,
                               currentGroupBlock_);
+      resultTable_ = std::move(resultTable).template toStatic<OUT_WIDTH>();
       groupSplitAcrossTables_ = false;
     } else {
       // This processes the whole block in batches if possible.
-      IdTableStatic<OUT_WIDTH> table{
-          std::move(resultTable_).template toStatic<OUT_WIDTH>()};
       parent_->template processBlock<OUT_WIDTH>(
-          table, aggregates_, evaluationContext, blockStart, blockEnd,
+          resultTable_, aggregates_, evaluationContext, blockStart, blockEnd,
           &currentLocalVocab_, groupByCols_);
-      resultTable_ = std::move(table).toDynamic();
     }
   }
 
@@ -188,9 +191,10 @@ class LazyGroupByRange
       if (groupByCols_.empty()) {
         // If we have an implicit GROUP BY, where the entire input is a
         // single group, we need to produce one result row.
-        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable_, aggregates_,
+        IdTable resultTable = std::move(resultTable_).toDynamic();
+        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
                                                       &currentLocalVocab_);
-        return IdTableVocabPair{std::move(resultTable_),
+        return IdTableVocabPair{std::move(resultTable),
                                 std::move(currentLocalVocab_)};
       }
       if (singleIdTable_) {
@@ -216,10 +220,10 @@ class LazyGroupByRange
     sparqlExpression::EvaluationContext evaluationContext =
         parent_->createEvaluationContext(currentLocalVocab_, idTable);
 
-    lazyGroupBy_->commitRow(resultTable_, evaluationContext,
-                            currentGroupBlock_);
+    IdTable resultTable = std::move(resultTable_).toDynamic();
+    lazyGroupBy_->commitRow(resultTable, evaluationContext, currentGroupBlock_);
     currentLocalVocab_.mergeWith(storedLocalVocabs_);
-    return IdTableVocabPair{std::move(resultTable_),
+    return IdTableVocabPair{std::move(resultTable),
                             std::move(currentLocalVocab_)};
   }
 };
