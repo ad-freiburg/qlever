@@ -536,6 +536,7 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
             cancellationHandle,
             {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
                                     Id::makeFromInt(3), g}}});
+        deltaTriples.consolidateAll();
       });
 
   auto [state, vocab, blankNodes] =
