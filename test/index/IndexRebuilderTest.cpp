@@ -506,6 +506,56 @@ TEST(IndexRebuilder, materializeToIndex) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
+  // Build a regular source index (with the default, unlimited allocator), but
+  // then load it with an allocator that has zero available memory. Rebuilding
+  // such an index should still succeed, because the rebuild streams the data
+  // and does not rely on the source index's allocator.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string sourceIndexName = "materializeToIndexWithZeroMemorySourceIndex";
+  std::string baseFolder = "/tmp/" + sourceIndexName;
+  std::string newIndexName = baseFolder + "/index";
+  std::string logFile = newIndexName + ".log";
+
+  // Build the on-disk source index using the default unlimited allocator.
+  ad_utility::testing::makeTestIndex(sourceIndexName,
+                                     "<a> <b> <c> . <d> <e> _:f .");
+
+  // Load the source index with a zero-memory allocator.
+  Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+  index.createFromOnDiskIndex(sourceIndexName, false);
+
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
+        auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                                     DEFAULT_GRAPH_IRI)}
+                     .toValueId(index)
+                     .value();
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                    Id::makeFromInt(3), g}}});
+      });
+
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  std::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+
+  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
+                                             state, vocab, blankNodes,
+                                             cancellationHandle, logFile));
+
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  EXPECT_EQ(newIndex.numTriples().normal, 3);
+}
+
+// _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();

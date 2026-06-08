@@ -26,7 +26,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexForLibQlever";
+  c.baseName_ = "LibQlever.buildIndexAndRunQuery";
 
   // Test the activation of the memory limit
   c.memoryLimit_ = ad_utility::MemorySize::bytes(0);
@@ -128,7 +128,7 @@ TEST(LibQlever, fulltextIndex) {
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
   c.wordsfile_ = wordsfileName;
   c.docsfile_ = docsFileName;
-  c.baseName_ = "testIndexForLibQlever";
+  c.baseName_ = "LibQlever.fulltextIndex";
   EXPECT_NO_THROW(Qlever::buildIndex(c));
   {
     EngineConfig ec{c};
@@ -205,7 +205,7 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexWithoutPermutations";
+  c.baseName_ = "LibQlever.loadIndexWithoutPermutations";
   c.memoryLimit_ = std::nullopt;
 
   // Build the index normally.
@@ -243,7 +243,7 @@ TEST(LibQlever, disableCaching) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexWithoutPermutations";
+  c.baseName_ = "LibQlever.disableCaching";
   c.memoryLimit_ = std::nullopt;
 
   // Build the index normally.
