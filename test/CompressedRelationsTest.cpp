@@ -6,6 +6,7 @@
 
 #include <thread>
 
+#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
@@ -1338,22 +1339,24 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     GTEST_SKIP_("This test assumes that there are at least 2 threads.");
   }
   {
-    // Check if is is limited to actual threads.
+    // Check if it is limited to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
+    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
+                                    16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
               threads * 2);
   }
   {
-    // Check if is is expanded to actual threads.
+    // Check if it is expanded to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
+    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
+                                    16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
@@ -1363,8 +1366,9 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     // Check if minimum of 4 tasks is honored.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
+    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
+                                    16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
