@@ -378,12 +378,15 @@ struct BuildPartialVocabulariesResult {
   // writes its triples to its own file (see
   // `IndexImpl::unsortedTriplesFilename`).
   struct WorkerResult {
-    // The i-th entry is the actual number of triples in the i-th batch of
-    // this worker (a batch consists of a partial vocabulary and the triples
-    // that were mapped using it). It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The batches
-    // are serialized to the worker's file in exactly this order.
-    std::vector<size_t> numTriplesPerBatch_;
+    // The number of batches (a batch consists of a partial vocabulary and the
+    // triples that were mapped using it) that this worker has created. The
+    // batches are serialized to the worker's file in exactly this order, each
+    // of them prefixed with its number of triples, so that the reader doesn't
+    // need any further bookkeeping.
+    size_t numBatches_ = 0;
+    // The total number of triples that this worker has written. Only used for
+    // logging.
+    size_t numTriples_ = 0;
   };
   // One entry per worker, in the order of the worker indices.
   std::vector<WorkerResult> workerResults_;
@@ -403,10 +406,8 @@ struct BuildPartialVocabulariesResult {
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
     for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
-      const auto& numTriplesPerBatch =
-          workerResults_[workerIdx].numTriplesPerBatch_;
       for (size_t partialVocabIdx :
-           ad_utility::integerRange(numTriplesPerBatch.size())) {
+           ad_utility::integerRange(workerResults_[workerIdx].numBatches_)) {
         suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
       }
     }

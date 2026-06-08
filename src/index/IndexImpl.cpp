@@ -561,8 +561,9 @@ IndexImpl::runPartialVocabularyWorker(
     }
     auto filenameSuffix =
         BuildPartialVocabulariesResult::partialVocabularySuffix(
-            workerIdx, workerResult.numTriplesPerBatch_.size());
-    workerResult.numTriplesPerBatch_.push_back(localWriter.size());
+            workerIdx, workerResult.numBatches_);
+    ++workerResult.numBatches_;
+    workerResult.numTriples_ += localWriter.size();
     writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
                            std::move(localWriter), idTriples);
   }
@@ -618,7 +619,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // (which every `ItemMapManager` adds to its map).
   if (result.partialVocabularySuffixes().empty()) {
     auto& workerResult = result.workerResults_.at(0);
-    workerResult.numTriplesPerBatch_.push_back(0);
+    ++workerResult.numBatches_;
     // The first worker hasn't written a single triple, so we can simply
     // overwrite its (empty) file.
     TripleWriter idTriples{ad_utility::serialization::FileWriteSerializer{
@@ -632,10 +633,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
   progressBar.logFinalProgressString();
   size_t numTriplesTotal = ::ranges::accumulate(
-      result.workerResults_, size_t{0}, {}, [](const auto& workerResult) {
-        return ::ranges::accumulate(workerResult.numTriplesPerBatch_,
-                                    size_t{0});
-      });
+      result.workerResults_, size_t{0}, {},
+      [](const auto& workerResult) { return workerResult.numTriples_; });
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << numTriplesTotal << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
@@ -840,10 +839,8 @@ auto IndexImpl::convertPartialToGlobalIds(
     {
       ad_utility::serialization::ZstdReadSerializer triplesReader{
           ad_utility::serialization::FileReadSerializer{triplesFilename}};
-      const auto& numTriplesPerBatch =
-          data.workerResults_.at(workerIdx).numTriplesPerBatch_;
-      for ([[maybe_unused]] size_t batchIdx :
-           ad_utility::integerRange(numTriplesPerBatch.size())) {
+      for ([[maybe_unused]] size_t batchIdx : ad_utility::integerRange(
+               data.workerResults_.at(workerIdx).numBatches_)) {
         AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
         auto idMap = std::make_shared<Map>(std::move(*mappingIt));
 
