@@ -129,9 +129,7 @@ struct ZipIteratorStruct {
   operator()(It begin1, It end1, It begin2, It end2, Compare cmp = {},
              Projection proj = {}) const {
     return detail::ZipMergeIteratorImpl<It, Compare, Projection>(
-        std::forward<It>(begin1), std::forward<It>(end1),
-        std::forward<It>(begin2), std::forward<It>(end2), std::move(cmp),
-        std::move(proj));
+        begin1, end1, begin2, end2, std::move(cmp), std::move(proj));
   }
 };
 
