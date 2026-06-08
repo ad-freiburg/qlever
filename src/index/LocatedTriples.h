@@ -241,6 +241,7 @@ class SortedLocatedTriplesVector {
   }
 
   size_t size() const;
+  size_t sizeForTesting() const;
   bool empty() const;
 
   bool operator==(const SortedLocatedTriplesVector& other) const {

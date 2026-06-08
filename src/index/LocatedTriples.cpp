@@ -231,6 +231,12 @@ size_t SortedLocatedTriplesVector::size() const {
 }
 
 // ____________________________________________________________________________
+size_t SortedLocatedTriplesVector::sizeForTesting() const {
+  AD_CONTRACT_CHECK(isClean());
+  return std::distance(begin(), end());
+}
+
+// ____________________________________________________________________________
 bool SortedLocatedTriplesVector::empty() const {
   // No need to ensure that items are sorted, because it keeps one
   // `LocatedTriple` for each triple. So the triples cannot get empty through
@@ -599,8 +605,9 @@ void LocatedTriplesPerBlock::erase(ql::span<LocatedTriple> sortedTriples) {
 // ____________________________________________________________________________
 size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
   auto sizes =
-      map_ | ql::views::values |
-      ql::views::transform([](const auto& block) { return block.size(); });
+      map_ | ql::views::values | ql::views::transform([](const auto& block) {
+        return block.sizeForTesting();
+      });
   return std::accumulate(sizes.begin(), sizes.end(), 0UL);
 }
 
