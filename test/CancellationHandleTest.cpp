@@ -452,7 +452,7 @@ TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
 
   handle.startWatchDog();
   // Wait for Watchdog to start
-  std::this_thread::sleep_for(1ms);
+  std::this_thread::sleep_for(5ms);
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
 
