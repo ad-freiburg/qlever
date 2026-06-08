@@ -120,15 +120,12 @@ class QueryRegistry {
     SharedCancellationHandle cancellationHandle_ =
         std::make_shared<CancellationHandle<>>();
     std::string query_;
-    // Client IP captured from the `X-Real-IP` request header at registration
-    // time. Empty string if the header was absent.
-    std::string clientIp_;
-    // Wall-clock instant at which this entry was registered.
-    std::chrono::system_clock::time_point startedAt_ =
-        std::chrono::system_clock::now();
+    // Wall-clock instant at which this entry was registered. Supplied by the
+    // caller so the same value also feeds the start-event log line.
+    std::chrono::system_clock::time_point startedAt_;
     CancellationHandleWithQuery(std::string_view query,
-                                std::string_view clientIp)
-        : query_{query}, clientIp_{clientIp} {}
+                                std::chrono::system_clock::time_point startedAt)
+        : query_{query}, startedAt_{startedAt} {}
   };
   using SynchronizedType = ad_utility::Synchronized<
       ad_utility::HashMap<QueryId, CancellationHandleWithQuery>>;
@@ -163,8 +160,11 @@ class QueryRegistry {
   QueryRegistry() = default;
 
   // Test-only constructor that redirects start/end events to a
-  // caller-owned `QueryEventLog`.
-  explicit QueryRegistry(QueryEventLog* eventLog) : eventLog_{eventLog} {}
+  // caller-owned `QueryEventLog`. The pointer is non-owning and must outlive
+  // the registry; it is dereferenced unconditionally when emitting events.
+  explicit QueryRegistry(QueryEventLog* eventLog) : eventLog_{eventLog} {
+    AD_CONTRACT_CHECK(eventLog_ != nullptr);
+  }
 
   // Tries to create a new unique OwningQueryId object from the given string.
   // \param id The id representation of the potential candidate.
@@ -175,17 +175,12 @@ class QueryRegistry {
   std::optional<OwningQueryId> uniqueIdFromString(
       std::string id, std::string_view query, std::string_view clientIp = {}) {
     auto queryId = QueryId::idFromString(std::move(id));
-    // Capture the entry's `startedAt_` while the lock is held so the value
-    // logged here matches what `getActiveQueries()` reports for this query.
-    std::chrono::system_clock::time_point startedAt;
-    {
-      auto lockedMap = registry_->wlock();
-      auto [it, success] = lockedMap->try_emplace(queryId, query, clientIp);
-      if (!success) {
-        return std::nullopt;
-      }
-      startedAt = it->second.startedAt_;
-    }
+
+    // Do all work that might throw (JSON, allocations) before inserting into
+    // the registry, so a failure here leaves no leftover entry. `startedAt` is
+    // computed once and used for both the entry and the start line, so both
+    // report the same time.
+    auto startedAt = std::chrono::system_clock::now();
     auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                            startedAt.time_since_epoch())
                            .count();
@@ -200,7 +195,6 @@ class QueryRegistry {
     };
     auto startPayload = startLine.dump();
     startPayload.push_back('\n');
-    eventLog_->push(std::move(startPayload));
 
     // Created before the lambda so the lambda can capture it.
     auto status =
@@ -228,8 +222,23 @@ class QueryRegistry {
         registry->wlock()->erase(qid);
       }
     };
-    return OwningQueryId{std::move(queryId), std::move(status),
-                         std::move(unregister)};
+
+    // Insert into the registry. If the id is already in use, nothing was
+    // added, so we just return.
+    {
+      auto lockedMap = registry_->wlock();
+      if (!lockedMap->try_emplace(queryId, query, startedAt).second) {
+        return std::nullopt;
+      }
+    }
+
+    // Build the OwningQueryId first (only moves, never throws), then write the
+    // start event. If the write throws, the OwningQueryId is destroyed and
+    // removes the entry again.
+    OwningQueryId owningQueryId{std::move(queryId), std::move(status),
+                                std::move(unregister)};
+    eventLog_->push(std::move(startPayload));
+    return owningQueryId;
   }
 
   // Generates a unique pseudo-random OwningQueryId object for this registry

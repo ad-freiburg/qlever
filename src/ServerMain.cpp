@@ -229,18 +229,18 @@ int main(int argc, char** argv) {
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
 
-  // Per-query jsonl metrics log
-  ad_utility::QueryEventLog::instance().setOutputFile(
-      std::filesystem::path{indexBasename + ".metrics-log.jsonl"});
-
   try {
+    // Per-query jsonl metrics log, written next to the index files.
+    ad_utility::QueryEventLog::instance().setOutputFile(
+        std::filesystem::path{indexBasename + ".metrics-log.jsonl"});
+
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {
-    // This code should never be reached as all exceptions should be handled
-    // within server.run()
+    // Reached if opening the metrics log fails; server.run() otherwise handles
+    // its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }
