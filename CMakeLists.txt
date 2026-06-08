@@ -308,17 +308,23 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-misleading-indentation)
     # With LTO, GCC raises false positives that surface during the link-time
     # optimization (`lto1`) phase and therefore cannot be suppressed via the
-    # in-source pragmas in CompilerWarnings.h:
+    # in-source pragmas in CompilerWarnings.h. They all originate in inlined
+    # third-party code (abseil, s2) that is only stitched together during
+    # whole-program optimization:
     #  * `stringop-overflow` while optimizing abseil's own translation units
     #    (e.g. `str_cat.cc` inlined into `flag.cc`).
     #  * `odr` on compiler-generated coroutine frame types (the `.Frame` structs
     #    synthesized for `cppcoro::generator` and boost.asio awaitables): the
     #    synthetic frame fields get different internal names across translation
     #    units, which GCC misreports as an ODR violation.
-    # Both are emitted in the whole-program/`lto1` phase, where the governing
-    # warning flags are read from the link command line, so they only need to be
+    #  * `maybe-uninitialized` in abseil's `inlined_vector` when inlined through
+    #    s2's `s2closest_point_query_base.h`.
+    #  * `stringop-overread` in s2's `compact_array.h` / `mutable_s2shape_index`.
+    # These are all emitted in the whole-program/`lto1` phase, where the
+    # governing warning flags are read from the link command line, so they are
     # disabled via the link options (a compile-time suppression would not apply).
-    add_link_options(-Wno-stringop-overflow -Wno-odr)
+    add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
+            -Wno-stringop-overread)
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
