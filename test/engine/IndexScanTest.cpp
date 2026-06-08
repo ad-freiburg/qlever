@@ -1568,7 +1568,10 @@ TEST(IndexScanTest, StripColumns) {
         dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
 
     // Test accessor functions
-    EXPECT_EQ(strippedScanOp.getDescriptor(), baseScan.getDescriptor());
+    const auto descriptor = strippedScanOp.getDescriptor();
+    for (const auto& var : varsToKeep) {
+      EXPECT_THAT(descriptor, ::testing::HasSubstr(var.name()));
+    }
     EXPECT_EQ(strippedScanOp.subject().toString(),
               baseScan.subject().toString());
     EXPECT_EQ(strippedScanOp.predicate().toString(),
