@@ -180,8 +180,8 @@ class OperationTestFixture : public testing::Test {
   std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
     indexConfig.blocksizePermutations = 32_B;
-    return std::make_shared<Index>(
-        makeTestIndex("OperationTest", std::move(indexConfig)));
+
+    return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
