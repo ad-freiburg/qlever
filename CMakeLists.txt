@@ -306,6 +306,19 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
+    # With LTO, GCC raises false positives that surface during the link-time
+    # optimization (`lto1`) phase and therefore cannot be suppressed via the
+    # in-source pragmas in CompilerWarnings.h:
+    #  * `stringop-overflow` while optimizing abseil's own translation units
+    #    (e.g. `str_cat.cc` inlined into `flag.cc`).
+    #  * `odr` on compiler-generated coroutine frame types (the `.Frame` structs
+    #    synthesized for `cppcoro::generator` and boost.asio awaitables): the
+    #    synthetic frame fields get different internal names across translation
+    #    units, which GCC misreports as an ODR violation.
+    # Both are emitted in the whole-program/`lto1` phase, where the governing
+    # warning flags are read from the link command line, so they only need to be
+    # disabled via the link options (a compile-time suppression would not apply).
+    add_link_options(-Wno-stringop-overflow -Wno-odr)
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
