@@ -243,15 +243,13 @@ void CountAvailablePredicates::computePatternTrick(
         const size_t start = t * chunkSize;
         const size_t end = std::min(start + chunkSize, input.size());
         if (start >= end) break;
-        tasks.emplace_back(
-            [&localPatternCounts, &subjectColumn, &patternColumn, t, start,
-             end]() {
-              for (size_t i = start; i < end; ++i) {
-                if (i > 0 && subjectColumn[i] == subjectColumn[i - 1])
-                  continue;
-                localPatternCounts[t][patternColumn[i].getInt()]++;
-              }
-            });
+        tasks.emplace_back([&localPatternCounts, &subjectColumn, &patternColumn,
+                            t, start, end]() {
+          for (size_t i = start; i < end; ++i) {
+            if (i > 0 && subjectColumn[i] == subjectColumn[i - 1]) continue;
+            localPatternCounts[t][patternColumn[i].getInt()]++;
+          }
+        });
       }
       ad_utility::runTasksInParallel(std::move(tasks));
     }
@@ -282,25 +280,25 @@ void CountAvailablePredicates::computePatternTrick(
         const size_t start = t * chunkSize;
         const size_t end = std::min(start + chunkSize, patternVec.size());
         if (start >= end) break;
-        tasks.emplace_back(
-            [&localPredicateCounts, &localSubsumed, &localPatternPredicates,
-             &illegalFound, &patternVec, &patterns, t, start, end]() {
-              for (size_t i = start; i < end; ++i) {
-                auto [patternIndex, patternCount] = patternVec[i];
-                if (patternIndex >= patterns.size()) {
-                  if (patternIndex != Pattern::NoPattern) {
-                    illegalFound.store(true, std::memory_order_relaxed);
-                  }
-                  continue;
-                }
-                const auto& pattern = patterns[patternIndex];
-                localPatternPredicates[t] += pattern.size();
-                for (const auto& predicate : pattern) {
-                  localPredicateCounts[t][predicate] += patternCount;
-                  localSubsumed[t] += patternCount;
-                }
+        tasks.emplace_back([&localPredicateCounts, &localSubsumed,
+                            &localPatternPredicates, &illegalFound, &patternVec,
+                            &patterns, t, start, end]() {
+          for (size_t i = start; i < end; ++i) {
+            auto [patternIndex, patternCount] = patternVec[i];
+            if (patternIndex >= patterns.size()) {
+              if (patternIndex != Pattern::NoPattern) {
+                illegalFound.store(true, std::memory_order_relaxed);
               }
-            });
+              continue;
+            }
+            const auto& pattern = patterns[patternIndex];
+            localPatternPredicates[t] += pattern.size();
+            for (const auto& predicate : pattern) {
+              localPredicateCounts[t][predicate] += patternCount;
+              localSubsumed[t] += patternCount;
+            }
+          }
+        });
       }
       ad_utility::runTasksInParallel(std::move(tasks));
     }
