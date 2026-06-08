@@ -6,7 +6,6 @@
 
 #include <thread>
 
-#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
@@ -203,12 +202,12 @@ compressedRelationTestWriteCompressedRelations(
 }
 
 namespace {
-// Create a safe cleanup object, that automatically tries to delete the file at
-// the given `filename` when it is destroyed. This is used to delete the
-// persistent index files that are created for these tests.
-auto makeCleanup(std::string filename) {
-  return ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
+// Returns a unique filename for temporary files of a test and a safe cleanup
+// object, that automatically tries to delete the file when it is destroyed.
+auto testFilenameWithCleanup() {
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup{[filename]() { ad_utility::deleteFile(filename); }};
+  return std::make_pair(std::move(filename), std::move(cleanup));
 }
 
 // From the `inputs` delete each triple with probability `locatedProbab` and
@@ -280,8 +279,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   auto [inputsWithoutLocated, locatedTriplesInput] =
       makeLocatedTriplesFromPartOfInput(locatedTriplesProbability, inputs);
   DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
-  auto filename = gtestCurrentTestName();
-  auto cleanup = makeCleanup(filename);
+  auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocksOriginal, metaData, readerPtr] =
       writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -1342,9 +1340,8 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     // Check if it is limited to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
-    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
-    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
-                                    16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
@@ -1354,9 +1351,8 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     // Check if it is expanded to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
-    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
-    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
-                                    16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
@@ -1366,9 +1362,8 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     // Check if minimum of 4 tasks is honored.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1);
-    auto [tmpPath, tmpCleanup] = ad_utility::testing::filenameForTesting();
-    CompressedRelationWriter writer{1, ad_utility::File{tmpPath.string(), "w+"},
-                                    16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
