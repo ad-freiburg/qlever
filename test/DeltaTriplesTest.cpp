@@ -172,7 +172,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // - `numInserted()` and `numDeleted()` and the derived `getCounts()`
   // - `numTriples()` for all `LocatedTriplesPerBlock`
   // - the inserted and deleted triples (unordered)
-  auto StateIs = [this, &TriplesAreStr](
+  auto StateIs = [&TriplesAreStr](
                      size_t numInserted, size_t numDeleted,
                      size_t numTriplesInAllPermutations,
                      size_t numInternalInserted, size_t numInternalDeleted,

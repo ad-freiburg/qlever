@@ -147,16 +147,20 @@ class SortedLocatedTriplesVector {
     // Stable sort ensures that the operations for each triple are not
     // reordered. Older `LocatedTriple`s are before newer ones.
     ql::ranges::stable_sort(rangeToSort, {}, &LocatedTriple::triple_);
-    // We want to keep the last `LocatedTriple` for elements with the same
-    // triple. The first element on the reverse iterators is exactly this last
-    // element.
+    // We want to keep the last `LocatedTriple` for consecutive groups with the
+    // same triple. `unique` keeps the first element for consecutive groups with
+    // the same element. So `unique(reverse)` does exactly what we want.
     auto freedReverse = ql::ranges::unique(ql::views::reverse(rangeToSort), {},
                                            &LocatedTriple::triple_);
-    // `unique` was on a reversed range so the freed range is also reversed.
-    // Reverse it again to obtain the forward range of the erase element.
-    auto toFree = ql::views::reverse(freedReverse);
+    // std::ranges and ranges-v3 have different return types for `unique`. The
+    // `#ifdef` below accommodates the differences.
+#ifdef QLEVER_CPP_17
+    auto eraseEnd = freedReverse.base();
+#else
+    auto eraseEnd = freedReverse.begin().base();
+#endif
     // Delete the freed up space which is at the beginning of `rangeToSort`.
-    triples.erase(toFree.begin(), toFree.end());
+    triples.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
   // Whether the items are all sorted and deduplicated. Items can only be read
@@ -273,11 +277,8 @@ class BlockSortedLocatedTriplesVectorImpl {
   // boundaries (each block's last element).
   size_t findBlock(const LocatedTriple& lt) const {
     LocatedTripleCompare comp;
-    auto it = std::lower_bound(
-        blocks_.begin(), blocks_.end(), lt,
-        [&comp](const Block& block, const LocatedTriple& value) {
-          return comp(block.back(), value);
-        });
+    auto it = ql::ranges::lower_bound(
+        blocks_, lt, comp, [](const Block& block) { return block.back(); });
     return static_cast<size_t>(it - blocks_.begin());
   }
 
@@ -398,7 +399,8 @@ class BlockSortedLocatedTriplesVectorImpl {
         }
 
         if (pendIt != pendEnd) {
-          mergeIntoBlock(blocks_[i], ql::span(&*pendIt, pendEnd - pendIt));
+          mergeIntoBlock(blocks_[i],
+                         ql::span(std::to_address(pendIt), pendEnd - pendIt));
           splitIfNeeded(i);
           // If we just split, the next block is at i+1 which is the new second
           // half. The loop increment will move to i+1 which is correct since

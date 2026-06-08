@@ -39,17 +39,17 @@ CPP_template(typename It, typename Compare = std::less<>,
   using reference = std::iterator_traits<It>::reference;
 
  private:
-  It it1;
-  It end1;
-  It it2;
-  It end2;
+  It it1_;
+  It end1_;
+  It it2_;
+  It end2_;
   Compare comp;
-  Projection proj;
+  Projection proj_;
 
  public:
   explicit ZipMergeIteratorImpl(It b1, It e1, It b2, It e2, Compare cmp = {},
                                 Projection proj = {})
-      : it1(b1), end1(e1), it2(b2), end2(e2), comp(cmp), proj(proj) {
+      : it1_(b1), end1_(e1), it2_(b2), end2_(e2), comp(cmp), proj_(proj) {
     if constexpr (std::is_pointer_v<Compare> ||
                   std::is_member_pointer_v<Compare>) {
       AD_CONTRACT_CHECK(comp != nullptr);
@@ -74,10 +74,10 @@ CPP_template(typename It, typename Compare = std::less<>,
 
   // Determine which element to yield next.
   Decision decide() const {
-    if (it2 == end2) return Decision::UseFirst;
-    if (it1 == end1) return Decision::UseSecond;
-    const auto& p1 = std::invoke(proj, *it1);
-    const auto& p2 = std::invoke(proj, *it2);
+    if (it2_ == end2_) return Decision::UseFirst;
+    if (it1_ == end1_) return Decision::UseSecond;
+    const auto& p1 = std::invoke(proj_, *it1_);
+    const auto& p2 = std::invoke(proj_, *it2_);
     if (std::invoke(comp, p1, p2)) return Decision::UseFirst;
     if (std::invoke(comp, p2, p1)) return Decision::UseSecond;
     return Decision::UseSecondSkipFirst;
@@ -85,24 +85,24 @@ CPP_template(typename It, typename Compare = std::less<>,
 
  public:
   reference operator*() const {
-    return (decision_ == Decision::UseFirst) ? *it1 : *it2;
+    return (decision_ == Decision::UseFirst) ? *it1_ : *it2_;
   }
   pointer operator->() const {
-    return (decision_ == Decision::UseFirst ? it1.operator->()
-                                            : it2.operator->());
+    return (decision_ == Decision::UseFirst ? it1_.operator->()
+                                            : it2_.operator->());
   }
 
   ZipMergeIteratorImpl& operator++() {
     switch (decision_) {
       case Decision::UseFirst:
-        ++it1;
+        ++it1_;
         break;
       case Decision::UseSecond:
-        ++it2;
+        ++it2_;
         break;
       case Decision::UseSecondSkipFirst:
-        ++it1;
-        ++it2;
+        ++it1_;
+        ++it2_;
         break;
     }
     decision_ = decide();
@@ -115,8 +115,8 @@ CPP_template(typename It, typename Compare = std::less<>,
   }
 
   bool operator==(const ZipMergeIteratorImpl& o) const {
-    return std::tie(it1, end1, it2, end2) ==
-           std::tie(o.it1, o.end1, o.it2, o.end2);
+    return std::tie(it1_, end1_, it2_, end2_) ==
+           std::tie(o.it1_, o.end1_, o.it2_, o.end2_);
   }
 };
 

@@ -84,10 +84,6 @@ class FlattenIterator {
     }
     return outerIt_ == other.outerIt_ && innerIt_ == other.innerIt_;
   }
-
-  bool operator!=(const FlattenIterator& other) const {
-    return !(*this == other);
-  }
 };
 
 }  // namespace ad_utility::detail
