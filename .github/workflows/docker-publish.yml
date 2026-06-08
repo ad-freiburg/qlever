@@ -50,6 +50,12 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           tags: ${{ env.IMAGE }}
+          # Enable LTO only for the image published from `master` (i.e. not for
+          # pull requests), so released images are optimized while PR builds stay
+          # fast. The same value must be used for the E2E build step below, so
+          # that it can reuse this build's cache instead of recompiling.
+          build-args: |
+            ENABLE_LTO=${{ github.event_name != 'pull_request' }}
           # push-by-digest means that the built image is not associated with a tag. Instead, the only way to refer to it
           # is by using its digest (which is basically a unique hash).
           outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
@@ -81,7 +87,10 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           # The cache should already provide this. So no rebuild should occur.
+          # `build-args` must match the main build step above for the cache to hit.
           context: .
+          build-args: |
+            ENABLE_LTO=${{ github.event_name != 'pull_request' }}
           load: true
           push: false
           tags: ${{ env.IMAGE }}:tmp-${{ github.sha }}

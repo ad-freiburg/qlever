@@ -352,18 +352,23 @@ endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
-option(ENABLE_LTO "Enable link-time optimization for Release builds" ON)
+# LTO noticeably increases build time, so it is off by default (e.g. for CI and
+# local builds). It is opted into explicitly for the published Docker image
+# built on `master` (see `Dockerfile` / `.github/workflows/docker-publish.yml`).
+option(ENABLE_LTO "Enable link-time optimization" OFF)
 if (ENABLE_LTO)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=auto")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto=auto")
-        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=auto")
-        set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=auto")
+        # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
+        # ordinary machine code. This lets the (non-shipped) test binaries link
+        # the shared libraries *without* LTO (via `-fno-lto`, see
+        # `test/CMakeLists.txt`): they reuse the embedded machine code instead of
+        # triggering an expensive whole-program optimization at link time, while
+        # the product binaries still link with `-flto` and get full LTO.
+        add_compile_options(-flto=auto -ffat-lto-objects)
+        add_link_options(-flto=auto)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=thin")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto=thin")
-        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=thin")
-        set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=thin")
+        add_compile_options(-flto=thin -ffat-lto-objects)
+        add_link_options(-flto=thin)
     endif()
 endif()
 
