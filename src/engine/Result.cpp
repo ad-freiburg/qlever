@@ -59,6 +59,7 @@ namespace {
 template <typename IdTableT>
 void assertSortOrderIsRespected(const IdTableT& idTable,
                                 const std::vector<ColumnIndex>& sortedBy) {
+  static_assert(ad_utility::SameAsAny<IdTableT, IdTable, IdTableView<0>>);
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
         return colIndex < idTable.numColumns();
