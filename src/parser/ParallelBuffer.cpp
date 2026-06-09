@@ -9,42 +9,44 @@
 
 #include "parser/ParallelBuffer.h"
 
+#include "util/AsyncStream.h"
+#include "util/File.h"
 #include "util/StringUtils.h"
+
+namespace {
+// A range that synchronously reads blocks of (at most) `blocksize` bytes from
+// `file` until the end of the file is reached.
+struct FileBlockReader
+    : ad_utility::InputRangeFromGet<ParallelBuffer::BufferType> {
+  FileBlockReader(ad_utility::File file, size_t blocksize)
+      : file_{std::move(file)}, blocksize_{blocksize} {}
+
+  std::optional<ParallelBuffer::BufferType> get() override {
+    ParallelBuffer::BufferType buf(blocksize_);
+    auto numBytesRead = file_.read(buf.data(), blocksize_);
+    if (numBytesRead == 0) {
+      return std::nullopt;
+    }
+    buf.resize(numBytesRead);
+    return buf;
+  }
+
+ private:
+  ad_utility::File file_;
+  size_t blocksize_;
+};
+}  // namespace
 
 // _________________________________________________________________________
 ParallelFileBuffer::ParallelFileBuffer(size_t blocksize,
                                        const std::string& filename)
-    : ParallelBuffer{blocksize}, eof_{false} {
-  file_.open(filename, "r");
-  buf_.resize(blocksize_);
-  auto task = [&file = this->file_, bs = this->blocksize_,
-               &buf = this->buf_]() { return file.read(buf.data(), bs); };
-  fut_ = std::async(task);
-}
+    : ParallelBuffer{blocksize},
+      stream_{ad_utility::streams::runStreamAsync(
+          FileBlockReader{ad_utility::File{filename, "r"}, blocksize}, 1)} {}
 
 // ___________________________________________________________________________
 std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
-  AD_CONTRACT_CHECK(file_.isOpen());
-  if (eof_) {
-    return std::nullopt;
-  }
-  AD_CORRECTNESS_CHECK(fut_.valid());
-  auto numBytesRead = fut_.get();
-  if (numBytesRead == 0) {
-    eof_ = true;
-    return std::nullopt;
-  }
-  buf_.resize(numBytesRead);
-  std::optional<BufferType> ret = std::move(buf_);
-
-  buf_.resize(blocksize_);
-  auto getNextBlock = [&file = this->file_, bs = this->blocksize_,
-                       &buf = this->buf_]() {
-    return file.read(buf.data(), bs);
-  };
-  fut_ = std::async(getNextBlock);
-
-  return ret;
+  return stream_.get();
 }
 
 // ____________________________________________________________________________

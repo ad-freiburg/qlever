@@ -12,12 +12,11 @@
 
 #include <re2/re2.h>
 
-#include <future>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "util/File.h"
+#include "util/Iterators.h"
 #include "util/UninitializedAllocator.h"
 
 /**
@@ -72,10 +71,8 @@ class ParallelFileBuffer : public ParallelBuffer {
   std::optional<BufferType> getNextBlock() override;
 
  private:
-  ad_utility::File file_;
-  bool eof_ = true;
-  BufferType buf_;
-  std::future<size_t> fut_;
+  // The blocks of the file, read ahead by a background thread.
+  ad_utility::InputRangeTypeErased<BufferType> stream_;
 };
 
 // A parallel buffer that reads input in blocks, where each block, except
