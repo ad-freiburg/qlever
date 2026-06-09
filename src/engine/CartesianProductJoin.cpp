@@ -402,8 +402,8 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
               lastTableOffset = size_t{0}, producedTableSize = size_t{0},
               lazyResult =
                   std::move(lazyResult)](auto& idTableVocabPair) mutable {
-    // These things have to be done after handling a single input, so we do
-    // them at the beginning of each but the last iteration.
+    // These things have to be done after handling a single input, so we do them
+    // at the beginning of each but the last iteration.
     lastTableOffset += idTables.back()->size();
     limit -= producedTableSize;
     offset += producedTableSize;
