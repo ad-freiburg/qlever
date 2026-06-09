@@ -724,22 +724,33 @@ CompressedRelationReader::getBlocksForJoin(
   auto blocksWithFirstAndLastId2 =
       getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
-  // Find the matching blocks on each side by performing binary search on the
-  // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
-  // routine, but this doesn't work because the implicit equality defined by
-  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
+  // Find the matching blocks on each side using a linear-time merge zipper.
+  // Both sequences are sorted by `first_` with non-overlapping intervals
+  // (i.e. consecutive blocks `b1, b2` from the same side satisfy
+  // `b1.last_ < b2.first_`; invariant enforced above by the
+  // `AD_CORRECTNESS_CHECK` on `is_sorted` under `blockLessThanBlock`). The
+  // stateful pointer into `otherBlocks` never moves backward because
+  // `a.first_` is non-decreasing, giving O(n + m) total.
+  //
+  // NOTE: it is tempting to reuse the `zipperJoinWithUndef` routine, but this
+  // doesn't work because the implicit equality defined by `!lessThan(a,b) &&
+  // !lessThan(b, a)` is not transitive.
   auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
                                                   const auto& otherBlocks) {
     std::vector<CompressedBlockMetadata> result;
-    for (const auto& block : blocks) {
-      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
-               .empty()) {
-        result.push_back(block.block_);
+    auto [it, end] = getBeginAndEnd(otherBlocks);
+    for (const auto& a : blocks) {
+      it = ql::ranges::find_if_not(it, end,
+                                   [&blockLessThanBlock, &a](const auto& b) {
+                                     return blockLessThanBlock(b, a);
+                                   });
+      if (it == end) {
+        break;
+      }
+      if (!blockLessThanBlock(a, *it)) {
+        result.push_back(a.block_);
       }
     }
-    // The following check isn't expensive as there are only few blocks.
-    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
-                         result.end());
     return result;
   };
 
