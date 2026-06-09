@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/any_invocable.h>
 
+#include <future>
 #include <optional>
 #include <queue>
 #include <string>
@@ -80,6 +81,18 @@ class TaskQueue {
     // If TrackTimes==true, measure the time and add it to pushTime_,
     // else only perform the pushing.
     return executeAndUpdateTimer(action, pushTime_);
+  }
+
+  // Submit a callable and return a `std::future` for its result. The returned
+  // future resolves (or throws) once the task completes.
+  template <typename Func>
+  auto submit(Func&& func)
+      -> std::future<std::invoke_result_t<std::decay_t<Func>>> {
+    using R = std::invoke_result_t<std::decay_t<Func>>;
+    std::packaged_task<R()> task{AD_FWD(func)};
+    auto future = task.get_future();
+    push(std::move(task));
+    return future;
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
