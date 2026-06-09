@@ -661,8 +661,7 @@ TEST(ParserTest, testParse) {
     EXPECT_THAT(
         pq_1,
         m::ConstructQuery(
-            {{Variable{"?x"},
-              Iri::fromStringRepresentation("<http://xmlns.com/foaf/0.1/name>"),
+            {{Variable{"?x"}, Iri("<http://xmlns.com/foaf/0.1/name>"),
               Variable{"?name"}}},
             m::GraphPattern(m::Triples({SparqlTriple{
                 Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
@@ -677,10 +676,8 @@ TEST(ParserTest, testParse) {
 
     EXPECT_THAT(pq_2,
                 m::ConstructQuery(
-                    {{Iri::fromStringRepresentation(
-                          "<http://example.org/person#Alice>"),
-                      Iri::fromStringRepresentation(
-                          "<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
+                    {{Iri("<http://example.org/person#Alice>"),
+                      Iri("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
                         Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
@@ -1675,8 +1672,7 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
               PropertyPath::makeNegated({PropertyPath::fromIri(
-                  ad_utility::triple_component::Iri::fromIriref(
-                      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
 
   // Other tests for similar variants.
@@ -1687,18 +1683,16 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
               PropertyPath::makeNegated({PropertyPath::fromIri(
-                  ad_utility::triple_component::Iri::fromIriref(
-                      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !^a ?o }"),
-      m::SelectQuery(m::AsteriskSelect(),
-                     m::GraphPattern(m::Triples({SparqlTriple{
-                         TripleComponent{Variable{"?s"}},
-                         PropertyPath::makeNegated(
-                             {PropertyPath::makeInverse(PropertyPath::fromIri(
-                                 ad_utility::triple_component::Iri::fromIriref(
-                                     "<http://www.w3.org/1999/02/"
-                                     "22-rdf-syntax-ns#type>")))}),
-                         TripleComponent{Variable{"?o"}}}}))));
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::makeInverse(
+                  PropertyPath::fromIri(Iri("<http://www.w3.org/1999/02/"
+                                            "22-rdf-syntax-ns#type>")))}),
+              TripleComponent{Variable{"?o"}}}}))));
 }
