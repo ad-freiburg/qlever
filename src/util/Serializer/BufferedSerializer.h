@@ -75,7 +75,7 @@ CPP_template(typename UnderlyingSerializer,
   BufferedWriteSerializer(UnderlyingSerializer underlyingSerializer,
                           MemorySize blocksize,
                           BlockProcessor blockProcessor = {})
-      : underlyingSerializer_{std::in_place, std::move(underlyingSerializer)},
+      : underlyingSerializer_{std::move(underlyingSerializer)},
         blockProcessor_{std::move(blockProcessor)},
         blocksize_{blocksize.getBytes()} {
     buffer_.reserve(blocksize_);
@@ -121,7 +121,9 @@ CPP_template(typename UnderlyingSerializer,
   UnderlyingSerializer underlyingSerializer() && {
     AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
     flushBlock();
-    return std::move(*underlyingSerializer_);
+    UnderlyingSerializer serializer = std::move(underlyingSerializer_.value());
+    underlyingSerializer_.reset();
+    return serializer;
   }
 
  private:
@@ -132,7 +134,7 @@ CPP_template(typename UnderlyingSerializer,
       return;
     }
     std::invoke(blockProcessor_, ql::span<const char>{buffer_},
-                *underlyingSerializer_);
+                underlyingSerializer_.value());
     buffer_.clear();
   }
 };
