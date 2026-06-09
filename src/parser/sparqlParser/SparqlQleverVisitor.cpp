@@ -444,9 +444,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              item.toSparql()));
+      return PropertyPath::fromIri(item);
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
@@ -2062,9 +2060,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              term.toSparql()));
+      return PropertyPath::fromIri(term);
     }
   };
   for (auto& triple : objectList.second) {
@@ -2298,8 +2294,8 @@ template <typename TripleType, typename Func>
 TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
                                     Func iriStringToPredicate) {
   typename TripleType::second_type triples;
-  GraphTerm nextTerm{Iri::fromStringRepresentation(
-      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")};
+  GraphTerm nextTerm{
+      Iri::fromIriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")};
   for (auto& graphNode : ql::ranges::reverse_view(elements)) {
     GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
@@ -2321,7 +2317,7 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri::fromStringRepresentation(std::move(iri))};
+    return GraphTerm{Iri::fromIriref(std::move(iri))};
   });
 }
 
@@ -2374,8 +2370,7 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
     // TODO<joka921> Unify.
     return visit(ctx->iri());
   } else if (ctx->NIL()) {
-    return Iri::fromStringRepresentation(
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    return Iri::fromIriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
   } else {
     return visitAlternative<Literal>(ctx->numericLiteral(),
                                      ctx->booleanLiteral(), ctx->rdfLiteral());
