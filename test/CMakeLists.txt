@@ -240,6 +240,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
+
 addLinkAndDiscoverTest(MinusTest engine)
 
 # this test runs for quite some time and might have spurious failures!

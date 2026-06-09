@@ -8,8 +8,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <boost/align/aligned_allocator.hpp>
-
 #include "backports/span.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
@@ -1053,8 +1051,7 @@ TEST(AlignedSerializer, MismatchedAlignmentProducesWrongResults) {
     // Read with an aligned reader. An explicit copy is needed because the
     // aligned reader's storage uses a different allocator type.
     auto d = std::move(writer).data();
-    using AlignedVec = std::vector<char, boost::alignment::aligned_allocator<
-                                             char, alignof(std::max_align_t)>>;
+    using AlignedVec = std::vector<char, ad_utility::AlignedAllocator<char>>;
     AlignedByteBufferReadSerializer reader{AlignedVec(d.begin(), d.end())};
     char cRead;
     reader >> cRead;
