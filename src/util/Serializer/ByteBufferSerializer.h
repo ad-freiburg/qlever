@@ -5,12 +5,12 @@
 #ifndef QLEVER_BYTEBUFFERSERIALIZER_H
 #define QLEVER_BYTEBUFFERSERIALIZER_H
 
+#include <boost/align/aligned_allocator.hpp>
 #include <cstdint>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
-#include "util/AlignedAllocator.h"
 #include "util/Exception.h"
 #include "util/Serializer/Serializer.h"
 
@@ -24,10 +24,11 @@ template <bool usesAlignedSerialization = false>
 class ByteBufferWriteSerializerT {
  public:
   using SerializerType = WriteSerializerTag;
-  using Storage =
-      std::conditional_t<usesAlignedSerialization,
-                         std::vector<char, ad_utility::AlignedAllocator<char>>,
-                         std::vector<char>>;
+  using Storage = std::conditional_t<
+      usesAlignedSerialization,
+      std::vector<char, boost::alignment::aligned_allocator<
+                            char, alignof(std::max_align_t)>>,
+      std::vector<char>>;
   static constexpr bool UsesAlignedSerialization = usesAlignedSerialization;
 
   ByteBufferWriteSerializerT() = default;
@@ -142,7 +143,8 @@ using ByteBufferReadSerializer = ByteBufferReadSerializerT<false>;
 // Aligned variants of the byte buffer serializers.
 using AlignedByteBufferWriteSerializer = ByteBufferWriteSerializerT<true>;
 using AlignedByteBufferReadSerializer = ByteBufferReadSerializerT<
-    true, std::vector<char, ad_utility::AlignedAllocator<char>>>;
+    true, std::vector<char, boost::alignment::aligned_allocator<
+                                char, alignof(std::max_align_t)>>>;
 
 static_assert(ZeroCopyReadSerializer<AlignedByteBufferReadSerializer>);
 
