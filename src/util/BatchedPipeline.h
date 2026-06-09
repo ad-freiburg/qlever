@@ -11,6 +11,7 @@
 #include "backports/iterator.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TaskQueue.h"
 #include "util/Timer.h"
 #include "util/TupleHelpers.h"
 #include "util/UninitializedAllocator.h"
@@ -22,6 +23,14 @@ using Timer = ad_utility::Timer;
 
 namespace detail {
 using ThreadsafeTimer = ad_utility::timer::ThreadSafeTimer;
+
+// Holds pre-created thread pools for a pipeline built by
+// `setupParallelPipeline`.
+struct PipelineExecutor {
+  ad_utility::TaskQueue<> batcherPool_;
+  ad_utility::TaskQueue<> orchestratorPool_;
+  ad_utility::TaskQueue<> workerPool_;
+};
 
 /* This is used as a return value for the pickupBatch calls of our pipeline
  * elements If the  is false this means that our
@@ -58,24 +67,27 @@ class Batcher {
   std::unique_ptr<Creator> creator_;
   std::unique_ptr<ThreadsafeTimer> waitingTime_{
       std::make_unique<ThreadsafeTimer>()};
+  ad_utility::TaskQueue<>* pool_;
   std::future<detail::Batch<ValueT>> fut_;
 
  public:
   // construct from the batchSize and Creator Rvalue Reference
-  /// @brief Don't use these, call setupPipeline or setupParallelPipeline
-  /// instead
-  Batcher(size_t batchSize, Creator&& creator)
+  /// @brief Don't use this, call setupParallelPipeline instead
+  Batcher(size_t batchSize, Creator&& creator, ad_utility::TaskQueue<>* pool)
       : batchSize_(batchSize),
-        creator_(std::make_unique<Creator>(std::move(creator))) {
+        creator_(std::make_unique<Creator>(std::move(creator))),
+        pool_(pool) {
     orderNextBatch();
   }
 
-  // construct from the batchSize and Creator const Reference
-  /// @brief Don't use these, call setupPipeline or setupParallelPipeline
-  /// instead
-  Batcher(size_t batchSize, const Creator& creator)
-      : batchSize_(batchSize), creator_(std::make_unique<Creator>(creator)) {
-    orderNextBatch();
+  Batcher(Batcher&&) = default;
+  Batcher& operator=(Batcher&&) = default;
+
+  // Wait for the `std::future` to terminate.
+  ~Batcher() {
+    if (fut_.valid()) {
+      ad_utility::ignoreExceptionIfThrows([this]() { fut_.wait(); });
+    }
   }
 
   /* Get the next batch of values. A batch contains exactly batchSize values
@@ -105,15 +117,14 @@ class Batcher {
   [[nodiscard]] size_t getBatchSize() const { return batchSize_; }
 
  private:
-  // start assembling the next batch in parallel
+  // start assembling the next batch via the dedicated thread pool
   void orderNextBatch() {
     // since the unique_ptr creator_ owns the creator,
     // the captured pointer will stay valid even while this
     // class is moved.
-    fut_ = std::async(std::launch::async,
-                      [bs = batchSize_, ptr = creator_.get()]() {
-                        return produceBatchInternal(bs, ptr);
-                      });
+    fut_ = pool_->submit([bs = batchSize_, ptr = creator_.get()]() {
+      return produceBatchInternal(bs, ptr);
+    });
   }
 
   /* retrieve values from the creator and store them in the Batch result.
@@ -195,6 +206,12 @@ class BatchedPipeline {
   uniquePtrTuple transformers_;
   rawPtrTuple rawTransformers_;
   std::unique_ptr<PreviousStage> previousStage_;
+  // Transform sub-batches in parallel.
+  ad_utility::TaskQueue<>* workerPool_;
+  // 1 dedicated thread that blocks on the previous stage and then dispatches
+  // work to `workerPool_`. Kept separate to avoid deadlocking the worker
+  // threads with a blocking task.
+  ad_utility::TaskQueue<>* orchestratorPool_;
   std::future<Batch<ResT>> fut_;
 
  public:
@@ -203,11 +220,24 @@ class BatchedPipeline {
    * an issue, but copying is pretty much the default for Function objects in
    * C++
    */
-  BatchedPipeline(PreviousStage&& p, FirstTransformer t, Transformers... ts)
+  BatchedPipeline(PipelineExecutor& exec, PreviousStage&& p, FirstTransformer t,
+                  Transformers... ts)
       : transformers_(toUniquePtrTuple(t, ts...)),
         rawTransformers_(toRawPtrTuple(transformers_)),
-        previousStage_(std::make_unique<PreviousStage>(std::move(p))) {
+        previousStage_(std::make_unique<PreviousStage>(std::move(p))),
+        workerPool_(&exec.workerPool_),
+        orchestratorPool_(&exec.orchestratorPool_) {
     orderNextBatch();
+  }
+
+  BatchedPipeline(BatchedPipeline&&) = default;
+  BatchedPipeline& operator=(BatchedPipeline&&) = default;
+
+  // Wait for the `std::future` to terminate.
+  ~BatchedPipeline() {
+    if (fut_.valid()) {
+      ad_utility::ignoreExceptionIfThrows([this]() { fut_.wait(); });
+    }
   }
 
   // _____________________________________________________________________
@@ -224,14 +254,18 @@ class BatchedPipeline {
     }
   }
 
-  // asynchronously prepare the next Batch in a different thread
+  // Asynchronously prepare the next batch. The orchestrator task runs on the
+  // dedicated `orchestratorPool_` thread. Within it the per-element worker
+  // tasks are dispatched to `workerPool_`.
   void orderNextBatch() {
     auto lambda =
-        [p = previousStage_.get(),
-         batchSize = previousStage_->getBatchSize()](auto... transformerPtrs) {
-          return std::async(
-              std::launch::async, [p, batchSize, transformerPtrs...]() {
-                return produceBatchInternal(p, batchSize, transformerPtrs...);
+        [p = previousStage_.get(), batchSize = previousStage_->getBatchSize(),
+         workerPool = workerPool_,
+         orchestratorPool = orchestratorPool_](auto... transformerPtrs) {
+          return orchestratorPool->submit(
+              [p, batchSize, workerPool, transformerPtrs...]() {
+                return produceBatchInternal(p, batchSize, workerPool,
+                                            transformerPtrs...);
               });
         };
     fut_ = std::apply(lambda, rawTransformers_);
@@ -263,19 +297,16 @@ class BatchedPipeline {
   template <typename... TransformerPtrs>
   static Batch<ResT> produceBatchInternal(PreviousStage* previousStage,
                                           size_t inBatchSize,
+                                          ad_utility::TaskQueue<>* pool,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
     Batch<ResT> result;
     result.isPipelineGood_ = inBatch.isPipelineGood_;
-    const size_t batchSize = inBatchSize / Parallelism;
-    // We know the total size in advance, so we can preallocate the memory and
-    // the threads can directly write to the final result.
     result.content_.resize(inBatch.content_.size());
+    const size_t batchSize = inBatchSize / Parallelism;
     auto futures = setupParallelismImpl(
         batchSize, inBatch.content_, result.content_,
-        std::make_index_sequence<Parallelism>{}, transformers...);
-    // if we had multiple threads, we have to merge the partial results in the
-    // correct order.
+        std::make_index_sequence<Parallelism>{}, pool, transformers...);
     for (size_t i = 0; i < Parallelism; ++i) {
       futures[i].get();
     }
@@ -321,32 +352,31 @@ class BatchedPipeline {
    * which possibly have different types (lambdas!) are applied to the correct
    * subbatch.
    * @tparam InVec std::vector of the PreviousStage's value type
-   * @param futuresPtr pointer to one future per Transformer that will be
-   * associated with the respective subbatch calculation
    * @param batchSize the correct batchSize that will also be respected for
    * incomplete batches
    * @param index 0 <= index < Parallelism. The index of the next transformer
    * that is to be assigned. Only used for recursion purposes, must be 0 when
    * called externally
    * @param in The InVec of elements to transform
-   * @param transformer Pointer to the first transformer
+   * @param pool Raw pointer to the per-stage worker pool.
    * @param transformers Pointers to the remaining transformers
    */
   template <size_t... I, typename InVec, typename OutVec,
             typename... TransformerPtrs>
   static auto setupParallelismImpl(size_t batchSize, InVec& in, OutVec& out,
                                    std::index_sequence<I...>,
+                                   ad_utility::TaskQueue<>* pool,
                                    TransformerPtrs... transformers) {
     AD_CORRECTNESS_CHECK(out.size() == in.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
       return std::array{
-          (createIthFuture<I>(batchSize, in, out, transformers))...};
+          (createIthFuture<I>(batchSize, in, out, transformers, pool))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
           std::get<0>(std::forward_as_tuple(transformers...));
       return std::array{
-          (createIthFuture<I>(batchSize, in, out, onlyTransformer))...};
+          (createIthFuture<I>(batchSize, in, out, onlyTransformer, pool))...};
     }
   }
 
@@ -354,16 +384,14 @@ class BatchedPipeline {
             typename TransformerPtr>
   static std::future<void> createIthFuture(size_t batchSize, InVec& in,
                                            OutVec& out,
-                                           TransformerPtr transformer) {
+                                           TransformerPtr transformer,
+                                           ad_utility::TaskQueue<>* pool) {
     auto [startIt, endIt] =
         getBatchRange(std::begin(in), std::end(in), batchSize, Idx);
-    // start a thread for the transformer.
-    return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt,
-                       outIt = out.begin() + (startIt - in.begin())] {
-                        std::vector<ResT> res;
-                        moveAndTransform(startIt, endIt, outIt, transformer);
-                      });
+    return pool->submit([transformer, startIt, endIt,
+                         outIt = out.begin() + (startIt - in.begin())] {
+      moveAndTransform(startIt, endIt, outIt, transformer);
+    });
   }
 };
 
@@ -375,36 +403,13 @@ class BatchedPipeline {
  */
 template <size_t Parallelism, class PreviousStage, class Transformer,
           class... OtherTransformers>
-auto makeBatchedPipeline(PreviousStage&& p, Transformer&& t,
-                         OtherTransformers&&... other) {
+auto makeBatchedPipeline(PipelineExecutor& exec, PreviousStage&& p,
+                         Transformer&& t, OtherTransformers&&... other) {
   return BatchedPipeline<Parallelism, std::decay_t<PreviousStage>,
                          std::decay_t<Transformer>,
                          std::decay_t<OtherTransformers>...>(
-      std::forward<PreviousStage>(p), std::forward<Transformer>(t),
+      exec, std::forward<PreviousStage>(p), std::forward<Transformer>(t),
       std::forward<OtherTransformers>(other)...);
-}
-
-/* recursion base case, we are trying to setup a Pipeline but are out of
- * transformers, just return the pipeline used by the global setupPipeline
- * function
- */
-template <typename SoFar>
-auto setupPipelineRecursive(SoFar&& sofar) {
-  return std::forward<SoFar>(sofar);
-}
-
-/* add one BatchedPipeline Layer to the pipeline sofar using the
- * first transformer and then recurse for the remaining transformers
- * Used by the global setupPipeline function
- */
-template <typename SoFar, typename NextTransformer,
-          typename... MoreTransformers>
-auto setupPipelineRecursive(SoFar&& sofar, NextTransformer&& next,
-                            MoreTransformers&&... transformers) {
-  return setupPipelineRecursive(
-      makeBatchedPipeline<1>(std::forward<SoFar>(sofar),
-                             std::forward<NextTransformer>(next)),
-      std::forward<MoreTransformers>(transformers)...);
 }
 
 /*
@@ -418,24 +423,6 @@ auto setupParallelPipelineRecursive(SoFar&& sofar) {
 
 /*
  * Recursion For the setupParallelPipeline function.
- * This is the case where the nextTransformer is not a tuple.
- * This means that our next BatchedPipeline layer will use the
- * same transformer for all its <NextParallelis> threads.
- */
-template <size_t NextParallelism, size_t... Parallelisms, typename SoFar,
-          typename NextTransformer,
-          typename = std::enable_if_t<!is_tuple<NextTransformer>::value>,
-          typename... MoreTransformers>
-auto setupParallelPipelineRecursive(SoFar&& sofar, NextTransformer&& next,
-                                    MoreTransformers&&... transformers) {
-  return setupParallelPipelineRecursive<Parallelisms...>(
-      makeBatchedPipeline<NextParallelism>(std::forward<SoFar>(sofar),
-                                           std::forward<NextTransformer>(next)),
-      std::forward<MoreTransformers>(transformers)...);
-}
-
-/*
- * Recursion For the setupParallelPipeline function.
  * This is the case where the nextTransformer is a tuple of <NextParallelism>
  * different transformers. (the size of the tuple is statically asserted inside
  * the BatchedPipeline class) This means that our next BatchedPipeline layer
@@ -444,12 +431,12 @@ auto setupParallelPipelineRecursive(SoFar&& sofar, NextTransformer&& next,
  */
 template <size_t NextParallelism, size_t... Parallelisms, typename SoFar,
           typename... NextTransformer, typename... MoreTransformers>
-auto setupParallelPipelineRecursive(SoFar&& sofar,
+auto setupParallelPipelineRecursive(PipelineExecutor& exec, SoFar&& sofar,
                                     std::tuple<NextTransformer...>&& next,
                                     MoreTransformers&&... transformers) {
-  auto lambda = [&sofar](NextTransformer&&... transformers) {
-    return makeBatchedPipeline<NextParallelism>(std::forward<SoFar>(sofar),
-                                                std::move(transformers)...);
+  auto lambda = [&sofar, &exec](NextTransformer&&... transformers) {
+    return makeBatchedPipeline<NextParallelism>(
+        exec, std::forward<SoFar>(sofar), std::move(transformers)...);
   };
 
   return setupParallelPipelineRecursive<Parallelisms...>(
@@ -461,18 +448,15 @@ class Interface;  // forward declaration needed below for friend declaration
 
 }  // namespace detail
 
-/* Holds a Pipeline (Object on which we can call "pickupBatch" and get a
- * Batch<ValueType> and extracts its elements one by one. Internally buffers one
- * batch and concurrently produces the nextBatch while it issues the element
- * from the buffer one at a time via the getNextValue() method.
- */
-/**
- * @brief An instantiation of this templated class is created by the calls to
- * setupPipeline() and setupParallelPipeline() It supports the getNextValue()
- * interface that will return std::optional<ValueT> for each of the completely
- * transformed elements in a pipeline and std::nullopt once it is exhausted. See
- * the documentation of the setup* functions
- */
+// Holds a Pipeline (Object on which we can call "pickupBatch" and get a
+// Batch<ValueType> and extracts its elements one by one. Internally buffers one
+// batch and concurrently produces the nextBatch while it issues the element
+// from the buffer one at a time via the getNextValue() method. An instantiation
+// of this templated class is created by the calls to `setupParallelPipeline()`.
+// It supports the getNextValue() interface that will return
+// std::optional<ValueT> for each of the completely transformed elements in a
+// pipeline and std::nullopt once it is exhausted. See the documentation of the
+// setup* functions.
 template <class Pipeline>
 class BatchExtractor {
  public:
@@ -481,11 +465,7 @@ class BatchExtractor {
       decltype(std::declval<Pipeline>().pickupBatch().content_[0])>;
 
  private:
-  using ThreadsafeTimer = detail::ThreadsafeTimer;
-  std::unique_ptr<ThreadsafeTimer> waitingTime_{
-      std::make_unique<ThreadsafeTimer>()};
   std::unique_ptr<Pipeline> pipeline_;
-  std::future<detail::Batch<ValueT>> fut_;
   std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> buffer_;
   size_t bufferPosition_ = 0;
   bool isPipelineValid_ = true;
@@ -496,32 +476,19 @@ class BatchExtractor {
   /// Might block if the pipeline is currently busy and the internal buffer is
   /// empty
   std::optional<ValueT> getNextValue() {
-    // we return the elements in order
-    if (buffer_.size() == bufferPosition_ && isPipelineValid_) {
-      // we have to wait for the next parallel batch to be completed.
-      auto timer = waitingTime_->startMeasurement();
-      {
-        auto res = fut_.get();
-        isPipelineValid_ = res.isPipelineGood_;
-        buffer_ = std::move(res.content_);
+    if (bufferPosition_ == buffer_.size()) {
+      if (!isPipelineValid_) {
+        return std::nullopt;
       }
-      timer.stop();
+      auto res = pipeline_->pickupBatch();
+      isPipelineValid_ = res.isPipelineGood_;
+      buffer_ = std::move(res.content_);
       bufferPosition_ = 0;
-      if (isPipelineValid_) {
-        // if possible, directly submit the next parsing job
-        fut_ = std::async(std::launch::async, [ptr = pipeline_.get()]() {
-          return ptr->pickupBatch();
-        });
+      if (buffer_.empty()) {
+        return std::nullopt;
       }
     }
-    // we now should have some values in our buffer
-    if (bufferPosition_ < buffer_.size()) {
-      return std::move(buffer_[bufferPosition_++]);
-    } else {
-      // we can only reach this if the pipeline is exhausted and we have reached
-      // past the last element.
-      return std::nullopt;
-    }
+    return std::move(buffer_[bufferPosition_++]);
   }
 
   /**
@@ -529,51 +496,37 @@ class BatchExtractor {
    * pickupBatch were blocking. TODO<joka921>: how useful is this measure?
    */
   [[nodiscard]] std::vector<Timer::Duration> getWaitingTime() const {
-    auto res = pipeline_->getWaitingTime();
-    res.push_back(waitingTime_->value());
-    return res;
+    return pipeline_->getWaitingTime();
   }
 
   /// return the batchSize
-  [[nodiscard]] size_t getBatchSize() const { return pipeline_.getBatchSize(); }
+  [[nodiscard]] size_t getBatchSize() const {
+    return pipeline_->getBatchSize();
+  }
 
  private:
   // Pipelines are move-only types
   explicit BatchExtractor(Pipeline&& pipeline)
-      : pipeline_(std::make_unique<Pipeline>(std::move(pipeline))) {
-    fut_ = std::async(std::launch::async,
-                      [ptr = pipeline_.get()]() { return ptr->pickupBatch(); });
-  }
+      : pipeline_(std::make_unique<Pipeline>(std::move(pipeline))) {}
   friend class detail::Interface;
 };
 
 namespace detail {
 class Interface {
  public:
-  // the actual implementation of setupPipeline, hidden in this class s.t.
-  // we can make the BatchExtractor's constructor private and expose a minimal
-  // interface
-  template <typename Creator, typename... Ts>
-  static auto setupPipeline(size_t batchSize, Creator&& creator,
-                            Ts&&... transformers) {
-    auto batcher = detail::Batcher(batchSize, std::forward<Creator>(creator));
-    auto pipeline = detail::setupPipelineRecursive(
-        std::move(batcher), std::forward<Ts>(transformers)...);
-    return BatchExtractor(std::move(pipeline));
-  }
-
   // the actual implementation of setupParallelPipeline, hidden in this class
   // s.t. we can make the BatchExtractor's constructor private and expose a
   // minimal interface
   template <size_t... Parallelisms, typename Creator, typename... Ts>
-  static auto setupParallelPipeline(size_t batchSize, Creator&& creator,
-                                    Ts&&... transformers) {
+  static auto setupParallelPipeline(PipelineExecutor& exec, size_t batchSize,
+                                    Creator&& creator, Ts&&... transformers) {
     static_assert(sizeof...(Parallelisms) == sizeof...(Ts),
                   "setupParallelPipeline needs same number of parallelism "
                   "specifiers and transformers");
-    auto batcher = detail::Batcher(batchSize, std::forward<Creator>(creator));
+    auto batcher = detail::Batcher(batchSize, std::forward<Creator>(creator),
+                                   &exec.batcherPool_);
     auto pipeline = detail::setupParallelPipelineRecursive<Parallelisms...>(
-        std::move(batcher), std::forward<Ts>(transformers)...);
+        exec, std::move(batcher), std::forward<Ts>(transformers)...);
     return BatchExtractor(std::move(pipeline));
   }
 };
@@ -581,91 +534,49 @@ class Interface {
 
 /**
  * @brief setup a pipeline that efficiently creates and transforms values.
- * Concurrency is used ONLY BETWEEN the different stages
- *
- * (if you want to use concurrency also within the stages see the
- * setupParallelPipeline() function below)
- *
- * Each element is created by the creator and then transformed by all of the
- * transformers one after another s.t. it becomes
- * ... TransformerN(....(Transformer1(creator()))
- * This is implemented by first creating a batch of values. Then this batch is
- * passed to the first transformer which transforms it while the creator creates
- * the nextBatch in Parallel. This principle applies to all the transformers.
- * This means that all the transformers/ different stages of the pipeline must
- * be able to run in Parallel without conflicts (but of course, no two
- * transformers access the same element at a time. This allows us to use
- * Transformers which might have sideeffects. For examples see the corresponding
- * unitTests.
- * @param batchSize the size of the batches. Might influence Performance (time
- * vs. memory consumption)
- * @param creator repeated calls to creator() must create the initial values of
- * type T_0 one at a time as std::optional<T_0> a return value of std::nullopt
- * means that no more elements are created
- * @param transformers Function objects that perform the different
- * transformations in the order they are listed. The i-th transformer takes a
- * T_i&& and returns a T_{i+1}; Currently the transformers must be
- * copy-constructible
- * @return a BatchExtractor on which we can call getNextValue() to get
- * std::optional<ReturnTypeOfLastTransformers> here also a std::nullopt
- * signalizes the last value.
- */
-template <typename Creator, typename... Ts>
-auto setupPipeline(size_t batchSize, Creator&& creator, Ts&&... transformers) {
-  return detail::Interface::setupPipeline(batchSize,
-                                          std::forward<Creator>(creator),
-                                          std::forward<Ts>(transformers)...);
-}
-
-/**
- * @brief setup a pipeline that efficiently creates and transforms values.
- * Concurrency is used between and within the different stages
- *
- * In general this works similar to the setupPipeline() function template. Make
- * sure to read and understand the corresponding documentation first. It has the
- * following difference::
+ * Concurrency is used between and within the different stages.
  *
  * With each Transformer there is a degree of Parallelism (a size_t) associated.
- * If this is degree is 1, this stage behaves exactly the same as in the
- * setupPipeline function above.
- *
- * Otherwise let p be the degree of Parallelism of the i-th Transformer. then
- * there are two possibilities:
- * - The transformer is a single function object. Then for each batch p threads
- * are started that each are assigned a part of the batch. Those are then
- * transformed concurrently by calls to the transformer. This means that the
- * transformer must be threadsafe.
- *
- * - The transformer is a std::tuple of p function objects. Then again the batch
- * is split into p parts where the first part is transformed by the first
- * element of the tuple, the second part by the second element... In this case
- * it is of course necessary, that the return types of the function objects in
- * the tuple are compatible, the return type of this stage is derived from the
- * first tuple element. The following guarantee holds: If two (not necessary
- * consecutive) stages i and j have the same degree of parallelism p > 1  and
- * both specify a tuple of p function objects then the elements that are
- * transformed by the k-th tuple element on stage i are also transformed by the
- * k-th tuple element on stage j.
+ * The transformer must be a std::tuple of p function objects (where p is the
+ * corresponding degree of parallelism). The batch is split into p parts where
+ * the first part is transformed by the first element of the tuple, the second
+ * part by the second element... It is of course necessary, that the return
+ * types of the function objects in the tuple are compatible, the return type of
+ * this stage is derived from the first tuple element. The following guarantee
+ * holds: If two (not necessary consecutive) stages i and j have the same degree
+ * of parallelism p > 1 and both specify a tuple of p function objects then the
+ * elements that are transformed by the k-th tuple element on stage i are also
+ * transformed by the k-th tuple element on stage j.
  *
  * @tparam Parallelisms One size_t for each transformer, assigning it a degree
  * of parallelism
+ * @param exec An instance of `PipelineExecutor` that holds the pre-created
+ * thread pools for the pipeline. It must outlive the returned pipeline.
  * @param batchSize the size of the batches. Might influence Performance (time
  * vs. memory consumption)
  * @param creator repeated calls to creator() must create the initial values of
  * type T_0 one at a time as std::optional<T_0> a return value of std::nullopt
  * means that no more elements are created
- * @param transformers for each element either one FunctionObject or a tuple of
- * k function objects, where k is the corresponding entry in the Parallelisms.
+ * @param transformers for each element a tuple of k function objects, where k
+ * is the corresponding entry in the Parallelisms.
  * @return a BatchExtractor on which we can call getNextValue() to get
  * std::optional<ReturnTypeOfLastTransformers> here also a std::nullopt
  * signalizes the last value.
  */
 template <size_t... Parallelisms, typename Creator, typename... Ts>
-static auto setupParallelPipeline(size_t batchSize, Creator&& creator,
+static auto setupParallelPipeline(detail::PipelineExecutor& exec,
+                                  size_t batchSize, Creator&& creator,
                                   Ts&&... transformers) {
   return detail::Interface::setupParallelPipeline<Parallelisms...>(
-      batchSize, std::forward<Creator>(creator),
+      exec, batchSize, std::forward<Creator>(creator),
       std::forward<Ts>(transformers)...);
+}
+
+// Create a `PipelineExecutor` whose pre-created pools can be shared across
+// multiple invocations of `setupParallelPipeline<Parallelism>`.
+inline detail::PipelineExecutor makePipelineExecutor(size_t parallelism) {
+  return {ad_utility::TaskQueue<>(1, 1), ad_utility::TaskQueue<>(1, 1),
+          ad_utility::TaskQueue<>(parallelism, parallelism)};
 }
 
 }  // namespace ad_pipeline

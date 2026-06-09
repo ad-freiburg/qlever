@@ -4,52 +4,58 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <optional>
+#include <tuple>
 
 #include "util/BatchedPipeline.h"
 
+using ad_pipeline::makePipelineExecutor;
+
 TEST(BatcherTest, MoveOnlyCreator) {
+  auto exec = makePipelineExecutor(1);
   auto pipeline = ad_pipeline::detail::Batcher(
-      20, [ptr = std::unique_ptr<int>()]() { return std::optional(25); });
+      20, [ptr = std::unique_ptr<int>()]() { return std::optional(25); },
+      &exec.batcherPool_);
   auto batch = pipeline.pickupBatch();
   ASSERT_TRUE(batch.isPipelineGood_);
   ASSERT_EQ(20u, batch.content_.size());
   ASSERT_EQ(batch.content_[0], 25);
 }
 
+// A move-only creator (it captures a `unique_ptr`) must also work through the
+// full `BatchExtractor` interface returned by `setupParallelPipeline`.
 TEST(BatcherTest, MoveOnlyCreator2) {
-  auto pipeline = ad_pipeline::setupPipeline(
-      20, [ptr = std::make_unique<int>(23)]() { return std::optional(*ptr); });
+  auto exec = makePipelineExecutor(1);
+  auto pipeline = ad_pipeline::setupParallelPipeline<1>(
+      exec, 20,
+      [ptr = std::make_unique<int>(23)]() { return std::optional(*ptr); },
+      std::tuple([](int x) { return x; }));
   auto batch = pipeline.getNextValue();
   ASSERT_TRUE(batch);
   ASSERT_EQ(23, batch.value());
 }
 
 TEST(BatchedPipelineTest, BasicPipeline) {
-  auto pipeline =
-      ad_pipeline::detail::Batcher(20, []() { return std::optional(25); });
-  auto batch = pipeline.pickupBatch();
-  ASSERT_TRUE(batch.isPipelineGood_);
-  ASSERT_EQ(20u, batch.content_.size());
-  ASSERT_EQ(batch.content_[0], 25);
-
-  auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<1>(
-      std::move(pipeline), [](const auto x) { return x + 3; });
-  auto batch2 = pipeline2.pickupBatch();
-  ASSERT_TRUE(batch2.isPipelineGood_);
-  ASSERT_EQ(20u, batch2.content_.size());
-  ASSERT_EQ(batch2.content_[0], 28);
-
-  auto pipeline3 = ad_pipeline::detail::makeBatchedPipeline<1>(
-      std::move(pipeline2), [](const auto x) { return std::to_string(x); });
-  auto batch3 = pipeline3.pickupBatch();
-  ASSERT_TRUE(batch3.isPipelineGood_);
-  ASSERT_EQ(20u, batch3.content_.size());
-  ASSERT_EQ(batch3.content_[0], std::string("28"));
-
+  // A single transforming stage on top of a `Batcher`.
   {
-    auto finalPipeline = ad_pipeline::setupPipeline(
-        20,
+    auto exec = makePipelineExecutor(1);
+    auto pipeline = ad_pipeline::detail::Batcher(
+        20, []() { return std::optional(25); }, &exec.batcherPool_);
+    auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<1>(
+        exec, std::move(pipeline), [](const auto x) { return x + 3; });
+    auto batch2 = pipeline2.pickupBatch();
+    ASSERT_TRUE(batch2.isPipelineGood_);
+    ASSERT_EQ(20u, batch2.content_.size());
+    ASSERT_EQ(batch2.content_[0], 28);
+  }
+
+  // A full pipeline through the `BatchExtractor` interface. This also exercises
+  // the exhaustion of the creator and the move semantics of the extractor.
+  {
+    auto exec = makePipelineExecutor(1);
+    auto finalPipeline = ad_pipeline::setupParallelPipeline<1>(
+        exec, 20,
         [i = 0]() mutable -> std::optional<int> {
           if (i < 100) {
             ++i;
@@ -57,24 +63,17 @@ TEST(BatchedPipelineTest, BasicPipeline) {
           }
           return std::nullopt;
         },
-        [a = 0](const auto& x) mutable {
-          a += 3;
-          return (x + a) * (x + a);
-        },
-        [a = int(0)](const auto& x) mutable {
-          a += 2;
-          return x + a;
-        });
+        std::tuple([](const auto& x) { return x * x; }));
     int n = 1;
     while (auto opt = finalPipeline.getNextValue()) {
-      ASSERT_EQ((n + 3 * n) * (n + 3 * n) + 2 * n, opt.value());
+      ASSERT_EQ(n * n, opt.value());
       ++n;
       if (n == 50) break;
     }
 
     auto pipelineMoved = std::move(finalPipeline);
     while (auto opt = pipelineMoved.getNextValue()) {
-      ASSERT_EQ((n + 3 * n) * (n + 3 * n) + 2 * n, opt.value());
+      ASSERT_EQ(n * n, opt.value());
       ++n;
     }
     ASSERT_EQ(n, 101);
@@ -82,12 +81,15 @@ TEST(BatchedPipelineTest, BasicPipeline) {
 }
 
 TEST(BatchedPipelineTest, SimpleParallelism) {
+  // A single transformer that is broadcast over several worker threads.
   {
+    auto exec = makePipelineExecutor(3);
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return std::optional(i++); },
+        &exec.batcherPool_);
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<3>(
-        std::move(pipeline), [](const auto x) { return x * 3; });
+        exec, std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.pickupBatch();
     ASSERT_TRUE(batch2.isPipelineGood_);
     ASSERT_EQ(20u, batch2.content_.size());
@@ -95,12 +97,15 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
       ASSERT_EQ(batch2.content_[i], i * 3);
     }
   }
+  // More threads than elements in the batch.
   {
+    auto exec = makePipelineExecutor(40);
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return std::optional(i++); },
+        &exec.batcherPool_);
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
-        std::move(pipeline), [](const auto x) { return x * 3; });
+        exec, std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.pickupBatch();
     ASSERT_TRUE(batch2.isPipelineGood_);
     ASSERT_EQ(20u, batch2.content_.size());
@@ -109,16 +114,19 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
     }
   }
 
+  // The same, but through the `BatchExtractor` interface. A tuple with a single
+  // transformer is broadcast over all `<Parallelism>` worker threads.
   {
+    auto exec = makePipelineExecutor(4);
     auto pipeline = ad_pipeline::setupParallelPipeline<4>(
-        20,
+        exec, 20,
         [i = 0ull]() mutable -> std::optional<size_t> {
           if (i >= 67) {
             return std::nullopt;
           }
           return std::optional(i++);
         },
-        [](const auto x) { return x * 3; });
+        std::tuple([](const auto x) { return x * 3; }));
 
     size_t j = 0;
     while (auto opt = pipeline.getNextValue()) {
@@ -130,12 +138,15 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
 }
 
 TEST(BatchedPipelineTest, BranchedParallelism) {
+  // Two different transformers, each applied to one half of the batch.
   {
+    auto exec = makePipelineExecutor(2);
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return std::optional(i++); },
+        &exec.batcherPool_);
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<2>(
-        std::move(pipeline), [](const auto x) { return x * 3; },
+        exec, std::move(pipeline), [](const auto x) { return x * 3; },
         [](const auto x) { return x * 2; });
     auto batch2 = pipeline2.pickupBatch();
     ASSERT_TRUE(batch2.isPipelineGood_);
@@ -147,12 +158,15 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
       ASSERT_EQ(batch2.content_[i], i * 2);
     }
   }
+  // A single transformer that is broadcast over more threads than elements.
   {
+    auto exec = makePipelineExecutor(40);
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return std::optional(i++); },
+        &exec.batcherPool_);
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
-        std::move(pipeline), [](const auto x) { return x * 3; });
+        exec, std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.pickupBatch();
     ASSERT_TRUE(batch2.isPipelineGood_);
     ASSERT_EQ(20u, batch2.content_.size());
@@ -161,9 +175,12 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
     }
   }
 
+  // The branched case through the `BatchExtractor` interface, using a tuple of
+  // two transformers (this mirrors the production usage in `IndexImpl`).
   {
+    auto exec = makePipelineExecutor(2);
     auto pipeline = ad_pipeline::setupParallelPipeline<2>(
-        20,
+        exec, 20,
         [i = 0ull]() mutable -> std::optional<size_t> {
           if (i >= 67) {
             return std::nullopt;

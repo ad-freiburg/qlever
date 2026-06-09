@@ -515,6 +515,11 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   ItemAlloc itemAlloc(&cachingMemoryResource);
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
+  // Pre-create the thread pools once so they are reused across all
+  // partial-vocabulary iterations.
+  auto pipelineExecutor =
+      ad_pipeline::makePipelineExecutor(NUM_PARALLEL_ITEM_MAPS);
+
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -524,7 +529,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
     {
       auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
-          parserBatchSize_,
+          pipelineExecutor, parserBatchSize_,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
