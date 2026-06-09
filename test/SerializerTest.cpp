@@ -5,6 +5,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -328,7 +329,8 @@ auto testWithCallableSerializer = [](auto testFunction) {
 };
 
 auto testWithFileSerialization = [](auto testFunction) {
-  const std::string filename = "serializationTest.tmp";
+  const std::string filename =
+      absl::StrCat("serializationTest_", gtestCurrentTestName(), ".tmp");
   FileWriteSerializer writer{filename};
   auto makeReaderFromWriter = [filename, &writer] {
     writer.close();
@@ -578,7 +580,7 @@ TEST(VectorIncrementalSerializer, Serialize) {
   std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
   std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
                                    "kartoffelsalat"};
-  std::string filename = "vectorIncrementalTest.tmp";
+  std::string filename = gtestCurrentTestName();
 
   auto testIncrementalSerialization = [filename](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
@@ -602,7 +604,7 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
   std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
   std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
                                    "kartoffelsalat"};
-  std::string filename = "vectorIncrementalTest.tmp";
+  std::string filename = gtestCurrentTestName();
 
   auto testIncrementalSerialization = [filename](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
