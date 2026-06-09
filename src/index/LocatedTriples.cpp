@@ -256,7 +256,7 @@ LocatedTriplesPerBlock::getUpdatesIfPresent(size_t blockIndex) const {
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::consolidateAllBlocks() {
-  for (auto& locatedTriples : map_ | std::views::values) {
+  for (auto& locatedTriples : map_ | ql::views::values) {
     locatedTriples.consolidate();
   }
 }

@@ -254,7 +254,7 @@ class SortedLocatedTriplesVector {
     return triples_ == other.triples_;
   }
 };
-static_assert(std::ranges::range<SortedLocatedTriplesVector>);
+static_assert(ql::ranges::range<SortedLocatedTriplesVector>);
 
 // Variant of `SortedLocatedTriplesVector` that stores triples across multiple
 // sorted, non-overlapping blocks. Blocks are dynamically split when they exceed
@@ -304,7 +304,7 @@ class BlockSortedLocatedTriplesVectorImpl {
 
   // Remove empty blocks from `blocks_`.
   void removeEmptyBlocks() {
-    std::erase_if(blocks_, [](const Block& b) { return b.empty(); });
+    ql::erase_if(blocks_, [](const Block& b) { return b.empty(); });
   }
 
   // Merge sorted `pending` elements into an existing sorted `block` with
@@ -399,8 +399,9 @@ class BlockSortedLocatedTriplesVectorImpl {
         }
 
         if (pendIt != pendEnd) {
-          mergeIntoBlock(blocks_[i],
-                         ql::span(std::to_address(pendIt), pendEnd - pendIt));
+          // `std::to_address` is only available from C++20 on, and we have no
+          // backport for it.
+          mergeIntoBlock(blocks_[i], ql::span(&(*pendIt), pendEnd - pendIt));
           splitIfNeeded(i);
           // If we just split, the next block is at i+1 which is the new second
           // half. The loop increment will move to i+1 which is correct since
@@ -533,7 +534,7 @@ class BlockSortedLocatedTriplesVectorImpl {
 
 using BlockSortedLocatedTriplesVector =
     BlockSortedLocatedTriplesVectorImpl<200>;
-static_assert(std::ranges::range<BlockSortedLocatedTriplesVector>);
+static_assert(ql::ranges::range<BlockSortedLocatedTriplesVector>);
 
 using LocatedTriples = SortedLocatedTriplesVector;
 

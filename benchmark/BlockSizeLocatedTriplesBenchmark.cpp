@@ -86,7 +86,7 @@ class BlockSizeLocatedTriplesBenchmark : public BenchmarkInterface {
     auto triples = generateTriples(N, seed);
     ql::ranges::sort(triples, LocatedTripleCompare{});
     // Deduplicate by triple_ to satisfy fromSorted's sorted invariant.
-    auto [newEnd, _] = ql::ranges::unique(triples, {}, &LocatedTriple::triple_);
+    auto newEnd = ::ranges::unique(triples, {}, &LocatedTriple::triple_);
     triples.erase(newEnd, triples.end());
     return triples;
   }

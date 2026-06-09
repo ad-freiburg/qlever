@@ -33,10 +33,10 @@ CPP_template(typename It, typename Compare = std::less<>,
  public:
   using iterator_category = std::forward_iterator_tag;
   using iterator_concept = std::forward_iterator_tag;
-  using value_type = std::iterator_traits<It>::value_type;
+  using value_type = typename std::iterator_traits<It>::value_type;
   using difference_type = std::ptrdiff_t;
-  using pointer = std::iterator_traits<It>::pointer;
-  using reference = std::iterator_traits<It>::reference;
+  using pointer = typename std::iterator_traits<It>::pointer;
+  using reference = typename std::iterator_traits<It>::reference;
 
  private:
   It it1_;
