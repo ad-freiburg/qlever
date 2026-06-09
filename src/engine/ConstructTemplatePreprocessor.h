@@ -15,6 +15,7 @@
 #include "index/LocalVocab.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
+#include "util/HashSet.h"
 
 namespace qlever::constructExport {
 
@@ -33,34 +34,74 @@ class ConstructTemplatePreprocessor {
   // resolved to a stable `ValueId` (their full-triple deduplication key
   // component) using `index`; literals not present in the vocabulary are
   // assigned a fresh id in the returned template's `constantLocalVocab_`.
+  //
+  // This is a thin factory over the internal single-use builder: it constructs
+  // a `ConstructTemplatePreprocessor` and runs it once.
   static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns, const Index& index);
 
   // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. Returns
   // `std::nullopt` if the term is undefined (e.g. an unbound variable).
+  // `localVocabForConstants` backs the entries of any constant's `dedupId_` and
+  // must outlive the returned term. Exposed (as a thin builder wrapper) for
+  // white-box per-term unit tests.
   static std::optional<PreprocessedTerm> preprocessTerm(
       const GraphTerm& term, PositionInTriple role,
       const VariableToColumnMap& variableColumns, const Index& index,
       LocalVocab& localVocabForConstants);
 
  private:
-  static std::optional<PreprocessedTerm> preprocessIri(
-      const Iri& iri, const Index& index, LocalVocab& localVocabForConstants);
-  static std::optional<PreprocessedTerm> preprocessLiteral(
-      const Literal& literal, PositionInTriple role, const Index& index,
-      LocalVocab& localVocabForConstants);
-  static std::optional<PreprocessedTerm> preprocessVariable(
-      const Variable& variable, const VariableToColumnMap& variableColumns);
-  static std::optional<PreprocessedTerm> preprocessBlankNode(
+  // The read-only collaborators, stored once instead of being threaded through
+  // every helper.
+  const VariableToColumnMap& variableColumns_;
+  const Index& index_;
+  // The template being built up.
+  PreprocessedConstructTemplate result_;
+  // The `LocalVocab` that backs constant `dedupId_` entries. In the full
+  // `preprocess` flow this references
+  // `result_.localVocabForConstantsInTemplate_` (so it ships with the result);
+  // the per-term `preprocessTerm` entry points it at a caller-owned vocab
+  // instead. Declared after `result_` so the self-reference in the constructor
+  // is well-defined.
+  LocalVocab& localVocab_;
+  // Tracks which `IdTable` column indices have already been added to
+  // `result_.uniqueVariableColumns_` to avoid duplicates.
+  ad_utility::HashSet<size_t> seenColumns_;
+
+  // Constructor for the full-template flow: constants go into `result_`'s own
+  // vocab, which is returned alongside the template.
+  ConstructTemplatePreprocessor(const VariableToColumnMap& variableColumns,
+                                const Index& index)
+      : variableColumns_{variableColumns},
+        index_{index},
+        localVocab_{result_.localVocabForConstantsInTemplate_} {}
+
+  // Constructor for the per-term flow: constants go into a caller-owned vocab.
+  ConstructTemplatePreprocessor(const VariableToColumnMap& variableColumns,
+                                const Index& index, LocalVocab& localVocab)
+      : variableColumns_{variableColumns},
+        index_{index},
+        localVocab_{localVocab} {}
+
+  // Run the preprocessing over all template triples and return the (moved-out)
+  // result. Single-shot: call exactly once per instance.
+  PreprocessedConstructTemplate run(const Triples& templateTriples);
+
+  std::optional<PreprocessedTerm> preprocessTermImpl(const GraphTerm& term,
+                                                     PositionInTriple role);
+
+  std::optional<PreprocessedTerm> preprocessIri(const Iri& iri);
+  std::optional<PreprocessedTerm> preprocessLiteral(const Literal& literal,
+                                                    PositionInTriple role);
+  std::optional<PreprocessedTerm> preprocessVariable(const Variable& variable);
+  std::optional<PreprocessedTerm> preprocessBlankNode(
       const BlankNode& blankNode);
 
   // Preprocess all three terms of a single template triple. Returns
   // `std::nullopt` if any term fails to preprocess (e.g. an unbound variable).
-  static std::optional<PreprocessedTriple> preprocessTriple(
-      const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      LocalVocab& constantLocalVocab);
+  std::optional<PreprocessedTriple> preprocessTriple(
+      const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple);
 };
 
 }  // namespace qlever::constructExport
