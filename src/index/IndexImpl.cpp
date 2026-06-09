@@ -479,17 +479,15 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 namespace {
-// The concrete types used by the parse-and-convert pipeline below. One triple
-// (and the possibly added language tag triples) is converted to IDs on each
+// The concrete types used by the parse-and-map pipeline below. One triple
+// (and the possibly added language tag triples) is mapped to IDs on each
 // mapper thread (and per `ItemMapManager`, see `getIdMapLambdas`).
 using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
 using ParsedTripleQueue =
     ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>;
 
-// A batch of triples that have already been converted to IDs by one mapper
-// thread, together with the number of input triples it was created from (the
-// latter is needed for progress reporting, as a single input triple can produce
-// several internal ID triples).
+// A batch of triples that have already been mapped to IDs by one mapper thread,
+// together with the number of input triples it was created from.
 struct TransformedTripleBatch {
   size_t numInputTriples_;
   std::vector<IdTriple> idTriples_;
@@ -525,8 +523,8 @@ auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
         }
       })...};
   return absl::Cleanup{[&queue, futures = std::move(futures)]() {
-    // Finish the queue first, so a thread blocked on a full queue (e.g. after a
-    // consumer stopped draining) unblocks and can be joined.
+    // Finish the queue first, so a thread blocked on a full queue unblocks and
+    // can be joined.
     queue.finish();
     for (auto& future : futures) {
       future.wait();
@@ -548,15 +546,15 @@ auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
 // a batch of parsed triples from `parsedQueue`, converts all of them to IDs
 // using its dedicated `mapper`, and pushes the result to `resultQueue`.
 template <typename Mappers>
-auto convertTriples(ad_utility::TaskQueue<>& transformPool, Mappers& mappers,
-                    ParsedTripleQueue& parsedQueue,
-                    ResultTripleQueue& resultQueue) {
+auto mapTriples(ad_utility::TaskQueue<>& transformPool, Mappers& mappers,
+                ParsedTripleQueue& parsedQueue,
+                ResultTripleQueue& resultQueue) {
   // Turn a single `mapper` into a producer that pops one batch of parsed
-  // triples and converts it to a `TransformedTripleBatch`.
+  // triples and maps it to a `TransformedTripleBatch`.
   auto makeProducer = [&parsedQueue](auto& mapper) {
     return [&mapper, &parsedQueue]() -> std::optional<TransformedTripleBatch> {
       auto batch = parsedQueue.pop();
-      if (!batch) {
+      if (!batch.has_value()) {
         return std::nullopt;
       }
       std::vector<IdTriple> idTriples;
@@ -618,14 +616,13 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
 
-  // Pre-create the thread pools once so that they are reused across all
+  // Create the thread pools once so that they are reused across all
   // partial-vocabulary iterations. One thread parses the input into batches of
   // triples, `NUM_PARALLEL_ITEM_MAPS` threads concurrently convert the strings
   // in these triples to IDs, each using its own `ItemMapManager`.
-  ad_utility::TaskQueue<> parserPool{1, 1, "Parsing input triples"};
-  ad_utility::TaskQueue<> transformPool{NUM_PARALLEL_ITEM_MAPS,
-                                        NUM_PARALLEL_ITEM_MAPS,
-                                        "Converting triples to IDs"};
+  ad_utility::TaskQueue parserPool{1, 1};
+  ad_utility::TaskQueue transformPool{NUM_PARALLEL_ITEM_MAPS,
+                                      NUM_PARALLEL_ITEM_MAPS};
 
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
@@ -635,7 +632,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      // The parsed (but not yet converted) batches are handed from the parser
+      // The parsed (but not yet mapped) batches are handed from the parser
       // thread to the mapper threads via `parsedQueue`, the converted
       // batches are handed back to this thread via `resultQueue`.
       ParsedTripleQueue parsedQueue{NUM_PARALLEL_ITEM_MAPS};
@@ -648,20 +645,18 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
           parser, linesPerPartial,
           [&parserExhausted]() { parserExhausted = true; }};
 
-      // The mappers that convert a single triple (and the possibly added
-      // language tag triples) to IDs using the provided hash maps via
-      // `itemArray`. There is one mapper (and one map) per mapper thread.
-      // See the documentation of `getIdMapLambdas` for more details.
+      // The mappers that map a single triple (and the possibly added language
+      // tag triples) to IDs using the provided hash maps via `itemArray`. There
+      // is one mapper (and one map) per mapper thread.
       auto mappers = getIdMapLambdas(
           itemArray, linesPerPartial, &(vocab_.getCaseComparator()), this,
           itemAlloc, addHasWordTriples_ ? &numHasWordTriples : nullptr);
 
-      // Start the background threads that parse the input and convert it to
-      // IDs.
+      // Start the background threads that parse the input and map it to ids.
       auto parserCleanup =
           consumeParserBatches(parserPool, parserBatcher, parsedQueue);
       auto mapperCleanup =
-          convertTriples(transformPool, mappers, parsedQueue, resultQueue);
+          mapTriples(transformPool, mappers, parsedQueue, resultQueue);
 
       // Collect the converted triples on this thread.
       while (auto result = resultQueue.pop()) {
