@@ -59,6 +59,7 @@ class BasicIri {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
 
+  // expects `s` to be in QLeveres internal normalized format.
   static BasicIri fromStringRepresentation(StorageType s);
 
   std::conditional_t<isOwning, const std::string&, std::string_view>

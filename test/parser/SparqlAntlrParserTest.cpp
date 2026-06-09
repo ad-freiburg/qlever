@@ -22,7 +22,6 @@
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "rdfTypes/Iri.h"
 #include "util/SourceLocation.h"
 
 namespace {
@@ -36,6 +35,10 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
       ad_utility::triple_component::Iri::fromIriref(iri));
+}
+
+namespace tc {
+auto Iri = ad_utility::triple_component::Iri::fromIriref;
 }
 
 const EncodedIriManager* encodedIriManager() {
@@ -141,20 +144,20 @@ TEST(SparqlParser, ComplexConstructTemplate) {
       parse<&Parser::constructTemplate>(input),
       m::ConstructClause(
           {{Blank("0"), Var("?a"), Blank("3")},
-           {Blank("2"), Iri(first), Blank("1")},
-           {Blank("2"), Iri(rest), Iri(nil)},
-           {Blank("1"), Iri(first), Var("?c")},
-           {Blank("1"), Iri(rest), Iri(nil)},
-           {Blank("3"), Iri(first), Var("?b")},
-           {Blank("3"), Iri(rest), Blank("2")},
+           {Blank("2"), tc::Iri(first), Blank("1")},
+           {Blank("2"), tc::Iri(rest), tc::Iri(nil)},
+           {Blank("1"), tc::Iri(first), Var("?c")},
+           {Blank("1"), tc::Iri(rest), tc::Iri(nil)},
+           {Blank("3"), tc::Iri(first), Var("?b")},
+           {Blank("3"), tc::Iri(rest), Blank("2")},
            {Blank("0"), Var("?d"), Blank("4")},
            {Blank("4"), Var("?e"), Blank("5")},
            {Blank("5"), Var("?f"), Var("?g")},
-           {Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                "#something>"),
-            Iri(type),
-            Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                "#somethingelse>")}}));
+           {tc::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                    "#something>"),
+            tc::Iri(type),
+            tc::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                    "#somethingelse>")}}));
 }
 
 TEST(SparqlParser, GraphTerm) {
@@ -794,8 +797,8 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                  {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}},
                  {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
   expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
-                {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
-                 {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
+                {{tc::Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
+                 {tc::Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
   auto expectTriplesConstruct =
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
@@ -810,7 +813,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       "<foo> "
       "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
       "\"Berlin Freiburg\"",
-      {{Iri("<foo>"),
+      {{tc::Iri("<foo>"),
         PathIri("<http://qlever.cs.uni-freiburg.de/builtin-functions/"
                 "contains-word>"),
         Literal("\"Berlin Freiburg\"")}});
@@ -1542,27 +1545,29 @@ TEST(SparqlParser, Quads) {
   };
 
   expectQuads("?a <b> <c>",
-              m::Quads({{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}, {}));
+              m::Quads({{Var("?a"), tc::Iri("<b>"), tc::Iri("<c>")}}, {}));
   expectQuads("GRAPH <foo> { ?a <b> <c> }",
               m::Quads({}, {{Iri("<foo>"),
-                             {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
+                             {{Var("?a"), tc::Iri("<b>"), tc::Iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
-      m::Quads({},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
-                {Iri("<bar>"), {{::Iri("<d>"), ::Iri("<e>"), Var("?f")}}}}));
-  expectQuads(
-      "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
-      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
-                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
+      m::Quads(
+          {}, {{Iri("<foo>"), {{Var("?a"), tc::Iri("<b>"), tc::Iri("<c>")}}},
+               {Iri("<bar>"), {{tc::Iri("<d>"), tc::Iri("<e>"), Var("?f")}}}}));
+  expectQuads("GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
+              m::Quads({{tc::Iri("<d>"), tc::Iri("<e>"), tc::Iri("<f>")},
+                        {tc::Iri("<g>"), tc::Iri("<h>"), tc::Iri("<i>")}},
+                       {{tc::Iri("<foo>"),
+                         {{Var("?a"), tc::Iri("<b>"), tc::Iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> GRAPH <bar> { "
       "<j> <k> <l> }",
-      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
-                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
-                {Iri("<bar>"), {{::Iri("<j>"), ::Iri("<k>"), ::Iri("<l>")}}}}));
+      m::Quads(
+          {{tc::Iri("<d>"), tc::Iri("<e>"), tc::Iri("<f>")},
+           {tc::Iri("<g>"), tc::Iri("<h>"), tc::Iri("<i>")}},
+          {{tc::Iri("<foo>"), {{Var("?a"), tc::Iri("<b>"), tc::Iri("<c>")}}},
+           {tc::Iri("<bar>"),
+            {{tc::Iri("<j>"), tc::Iri("<k>"), tc::Iri("<l>")}}}}));
 }
 
 TEST(SparqlParser, QuadData) {
@@ -1571,7 +1576,7 @@ TEST(SparqlParser, QuadData) {
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
 
   expectQuadData("{ <a> <b> <c> }",
-                 Quads{{{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {}});
+                 Quads{{{tc::Iri("<a>"), tc::Iri("<b>"), tc::Iri("<c>")}}, {}});
   expectQuadDataFails("{ <a> <b> ?c }");
   expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
   expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
@@ -1637,10 +1642,11 @@ TEST(SparqlParser, QuadsNotTriples) {
 
   expectQuadsNotTriples(
       "GRAPH <foo> { <a> <b> <c> }",
-      GraphBlock(Iri("<foo>"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
-  expectQuadsNotTriples(
-      "GRAPH ?f { <a> <b> <c> }",
-      GraphBlock(Var("?f"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
+      GraphBlock(tc::Iri("<foo>"),
+                 {{tc::Iri("<a>"), tc::Iri("<b>"), tc::Iri("<c>")}}));
+  expectQuadsNotTriples("GRAPH ?f { <a> <b> <c> }",
+                        GraphBlock(Var("?f"), {{tc::Iri("<a>"), tc::Iri("<b>"),
+                                                tc::Iri("<c>")}}));
   expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
   expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }
@@ -1727,9 +1733,9 @@ TEST(SparqlParser, Datasets) {
             m::AskQuery(filterGraphPattern, datasets, noGraphs));
   expectConstruct(
       "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b?c}}",
-      m::ConstructQuery(
-          {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
-          filterGraphPattern, datasets, noGraphs));
+      m::ConstructQuery({std::array<GraphTerm, 3>{
+                            tc::Iri("<a>"), tc::Iri("<b>"), tc::Iri("<c>")}},
+                        filterGraphPattern, datasets, noGraphs));
   // See comment in visit function for `DescribeQueryContext`.
   expectDescribe(
       "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
