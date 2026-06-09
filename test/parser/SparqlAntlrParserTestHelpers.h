@@ -25,7 +25,6 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
