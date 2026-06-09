@@ -11,41 +11,33 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 
 namespace ad_utility {
 
 // An allocator adaptor that wraps an underlying `Allocator` and guarantees
 // that every returned pointer is aligned to at least `MinAlignment` bytes.
-// `MinAlignment` must be a power of two.
+// `MinAlignment` must be a power of two between 1 and 256.
 //
 // When `alignof(T) >= MinAlignment`, the underlying allocator is used directly
 // (a conforming allocator already guarantees `alignof(T)` alignment). When
-// `alignof(T) < MinAlignment`, over-allocation is used: a slightly larger raw
-// block is requested from the underlying allocator (rebound to `char`), the
-// pointer is advanced to the next `MinAlignment`-aligned address, and the
-// original raw pointer is stored in the bytes just before the aligned block so
-// that `deallocate` can recover and free the original allocation.
-//
-// Memory layout for the over-allocation path:
-//   [raw]...[raw + sizeof(void*)]...[aligned = next MinAlignment
-//   boundary]...[data: n*sizeof(T)]
-//                     ↑
-//         stored "raw" pointer (via memcpy)
+// `alignof(T) < MinAlignment`, `MinAlignment` extra bytes are allocated to
+// provide alignment padding and one byte of metadata that lets `deallocate`
+// recover the start of the raw allocation.
 //
 // The `rebind<U>` struct correctly propagates `MinAlignment` through
 // `std::vector`'s internal rebind mechanism.
 template <typename T, typename Allocator = std::allocator<T>,
           size_t MinAlignment = alignof(std::max_align_t)>
 class AlignedAllocator {
+  static_assert(MinAlignment > 0 && MinAlignment <= 256,
+                "`MinAlignment` must be between 1 and 256.");
   static_assert((MinAlignment & (MinAlignment - 1)) == 0,
                 "`MinAlignment` must be a power of two.");
 
   using Traits = std::allocator_traits<Allocator>;
   using ByteAlloc = typename Traits::template rebind_alloc<char>;
   static constexpr bool needsOveralignment = alignof(T) < MinAlignment;
-  static constexpr std::size_t overhead = sizeof(void*) + MinAlignment;
   // Store `ByteAlloc` on the over-allocation path (the only allocator used
   // there), or the raw `Allocator` on the direct path, so no rebind is needed
   // at call time.
@@ -96,28 +88,21 @@ class AlignedAllocator {
     if constexpr (!needsOveralignment) {
       return Traits::allocate(allocator_, n);
     } else {
-      // Over-allocate: reserve enough extra bytes to (a) store the original raw
-      // pointer in the `sizeof(void*)` bytes immediately preceding the aligned
-      // result, and (b) absorb up to `MinAlignment - 1` bytes of alignment
-      // padding.
-      std::size_t totalBytes = n * sizeof(T) + overhead;
+      std::size_t totalBytes = n * sizeof(T) + MinAlignment;
       char* raw =
           std::allocator_traits<ByteAlloc>::allocate(allocator_, totalBytes);
 
-      // Advance past the `sizeof(void*)` header region, then round up to the
-      // next `MinAlignment`-aligned address.
+      // Round up to the next `MinAlignment`-aligned address, leaving at least
+      // one byte before it to store the offset metadata.
       auto rawAddr = reinterpret_cast<std::uintptr_t>(raw);
-      auto startAddr = rawAddr + sizeof(void*);
       auto alignedAddr =
-          (startAddr + MinAlignment - 1) & ~(std::uintptr_t{MinAlignment - 1});
+          (rawAddr + MinAlignment) & ~(std::uintptr_t{MinAlignment - 1});
       T* result = reinterpret_cast<T*>(alignedAddr);
 
-      // Store the original raw pointer in the `sizeof(void*)` bytes before the
-      // aligned result so that `deallocate` can recover and free it. Using
-      // `memcpy` avoids strict-aliasing UB.
-      void* rawVoid = raw;
-      std::memcpy(reinterpret_cast<char*>(result) - sizeof(void*), &rawVoid,
-                  sizeof(void*));
+      // Store `offset - 1` as a `uint8_t` in the byte immediately before the
+      // aligned result, so that `deallocate` can recover the original start.
+      *(reinterpret_cast<uint8_t*>(result) - 1) =
+          static_cast<uint8_t>(alignedAddr - rawAddr - 1);
 
       return result;
     }
@@ -128,13 +113,13 @@ class AlignedAllocator {
     if constexpr (!needsOveralignment) {
       Traits::deallocate(allocator_, p, n);
     } else {
-      std::size_t totalBytes = n * sizeof(T) + overhead;
+      std::size_t totalBytes = n * sizeof(T) + MinAlignment;
 
-      // Recover the original raw pointer that was stored by `allocate`.
-      void* rawVoid{};
-      std::memcpy(&rawVoid, reinterpret_cast<const char*>(p) - sizeof(void*),
-                  sizeof(void*));
-      char* raw = static_cast<char*>(rawVoid);
+      // Recover the original allocation start from the offset byte stored by
+      // `allocate`.
+      auto stored = *(reinterpret_cast<const uint8_t*>(p) - 1);
+      char* raw =
+          reinterpret_cast<char*>(p) - (static_cast<std::size_t>(stored) + 1);
 
       std::allocator_traits<ByteAlloc>::deallocate(allocator_, raw, totalBytes);
     }

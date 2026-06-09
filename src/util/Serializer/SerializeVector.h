@@ -27,7 +27,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
-    ad_utility::serialization::alignForType<V>(serializer);
+    ad_utility::serialization::alignSerializerForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -68,7 +68,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
-    ad_utility::serialization::alignForType<V>(serializer);
+    ad_utility::serialization::alignSerializerForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -88,7 +88,7 @@ CPP_template(typename T, typename S)(
     ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
   std::size_t size;
   serializer >> size;
-  alignForType<T>(serializer);
+  alignSerializerForType<T>(serializer);
   auto bytes = serializer.getSpanToBytes(size * sizeof(T));
   AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
   AD_CORRECTNESS_CHECK(
@@ -117,7 +117,7 @@ CPP_template(typename T, typename Serializer)(
     // `_size` does not have the correct value yet. The correct size will be set
     // in the finish() method.
     _serializer << _size;
-    alignForType<T>(_serializer);
+    alignSerializerForType<T>(_serializer);
   }
 
   void push(const T& element) {

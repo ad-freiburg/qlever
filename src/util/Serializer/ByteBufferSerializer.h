@@ -5,6 +5,8 @@
 #ifndef QLEVER_BYTEBUFFERSERIALIZER_H
 #define QLEVER_BYTEBUFFERSERIALIZER_H
 
+#include <absl/base/casts.h>
+
 #include <cstdint>
 #include <vector>
 
@@ -18,7 +20,8 @@ namespace ad_utility::serialization {
 /**
  * Serializer that writes to a buffer of bytes. The `AlignedSerialization`
  * template parameter controls whether alignment padding is inserted for
- * trivially serializable types (see `alignForType` in `Serializer.h`).
+ * trivially serializable types (see `alignSerializerForType` in
+ * `Serializer.h`).
  */
 template <bool usesAlignedSerialization = false>
 class ByteBufferWriteSerializerT {
@@ -57,9 +60,9 @@ class ByteBufferWriteSerializerT {
 /**
  * Serializer that reads from a buffer of bytes. The `AlignedSerialization`
  * template parameter controls whether alignment padding is skipped for
- * trivially serializable types (see `alignForType` in `Serializer.h`).
- * The underlying `Storage` can be any random access range over `const char`, in
- * particular `std::vector<char>` and `ql::span<const char>`.
+ * trivially serializable types (see `alignSerializerForType` in
+ * `Serializer.h`). The underlying `Storage` can be any random access range over
+ * `const char`, in particular `std::vector<char>` and `ql::span<const char>`.
  */
 template <bool AlignedSerialization = false,
           typename Storage = std::vector<char>>
@@ -79,7 +82,7 @@ class ByteBufferReadSerializerT {
   explicit ByteBufferReadSerializerT(Storage data) : data_{std::move(data)} {
     if constexpr (AlignedSerialization) {
       AD_CONTRACT_CHECK(
-          reinterpret_cast<std::uintptr_t>(data_.data()) %
+          absl::bit_cast<std::uintptr_t>(data_.data()) %
                   alignof(std::max_align_t) ==
               0,
           "Buffer passed to an aligned read serializer must be aligned to "

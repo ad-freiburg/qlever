@@ -322,7 +322,7 @@ CPP_concept ZeroCopyReadSerializer =
 // This adds padding bytes (zeros) if necessary. If the serializer does not use
 // aligned serialization, this is a no-op.
 CPP_template(typename T, typename S)(
-    requires WriteSerializer<S>) void alignForType(S& serializer) {
+    requires WriteSerializer<S>) void alignSerializerForType(S& serializer) {
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
@@ -338,7 +338,7 @@ CPP_template(typename T, typename S)(
 // of type `T`. If the serializer does not use aligned serialization, this is a
 // no-op.
 CPP_template(typename T, typename S)(
-    requires ReadSerializer<S>) void alignForType(S& serializer) {
+    requires ReadSerializer<S>) void alignSerializerForType(S& serializer) {
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     size_t alignment = alignof(T);
