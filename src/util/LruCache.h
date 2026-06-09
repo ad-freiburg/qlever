@@ -76,7 +76,7 @@ class LRUCache {
     if (optValue) {
       return optValue.value();
     }
-    return insertNewEntry(std::forward<Key>(key), [&computeFunction, this] {
+    return insertNewEntry(AD_FWD(key), [&computeFunction, this] {
       return computeFunction(keys_.front());
     });
   }
@@ -97,12 +97,11 @@ class LRUCache {
       // Cache hit: mark most-recently-used, then overwrite the stored value.
       auto& [oldValue, listIteratorToKey] = cacheHitIterator->second;
       markMRU(listIteratorToKey);
-      oldValue = std::forward<Value>(newValue);  // perfect forwarding.
+      oldValue = AD_FWD(newValue);
       return false;
     } else {
       // Cache miss: make room at the front and insert the new entry there.
-      insertNewEntry(std::forward<Key>(key),
-                     [&newValue] { return std::forward<Value>(newValue); });
+      insertNewEntry(AD_FWD(key), [&newValue] { return AD_FWD(newValue); });
       return true;
     }
   }
@@ -112,7 +111,7 @@ class LRUCache {
   CPP_template(typename Key)(
       requires std::is_empty_v<V> CPP_and
           std::is_default_constructible_v<V>) bool insert(Key&& key) {
-    return insert(std::forward<Key>(key), V{});  // perfect forwarding.
+    return insert(AD_FWD(key), V{});
   }
 
  private:
@@ -143,11 +142,11 @@ class LRUCache {
       auto leastRecentlyUsedKey = std::prev(keys_.end());
       markMRU(leastRecentlyUsedKey);
       // replace least recently used key with new key.
-      keys_.front() = std::forward<Key>(key);  // perfect forwarding
+      keys_.front() = AD_FWD(key);
     } else {
       // if the capacity is not full, just insert new key as most recently used
       // key (at the front of the list).
-      keys_.push_front(K{std::forward<Key>(key)});  // perfect forwarding
+      keys_.push_front(K{AD_FWD(key)});
     }
   }
 
@@ -160,16 +159,18 @@ class LRUCache {
   CPP_template(typename Key, typename MakeValue)(
       requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
       V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
-    evictLRUKeyIfFullAndMarkNewKeyAsMRU(std::forward<Key>(key));
+    evictLRUKeyIfFullAndMarkNewKeyAsMRU(AD_FWD(key));
     auto result = cache_.try_emplace(keys_.front(), makeValue(), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;
   }
 
-  FRIEND_TEST(markMRU, reordersKeysList);
-  FRIEND_TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, pushesFrontWhenNotFull);
-  FRIEND_TEST(evictLRUKeyIfFullAndMarkNewKeyAsMRU, evictsAndRecyclesWhenFull);
-  FRIEND_TEST(insertNewEntry, seatsKeyBeforeComputingValue);
+  FRIEND_TEST(LRUCache, markMRUReordersKeysList);
+  FRIEND_TEST(LRUCache,
+              evictLRUKeyIfFullAndMarkNewKeyAsMRUPushesFrontWhenNotFull);
+  FRIEND_TEST(LRUCache,
+              evictLRUKeyIfFullAndMarkNewKeyAsMRUEvictsAndRecyclesWhenFull);
+  FRIEND_TEST(LRUCache, insertNewEntrySeatsKeyBeforeComputingValue);
 };
 
 }  // namespace ad_utility::util
