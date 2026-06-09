@@ -269,7 +269,7 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
   return MultiVariantWith<GraphTerm, ::Iri>(
-      testing::Eq(Iri::fromStringRepresentation(value)));
+      testing::Eq(Iri::fromIriref(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
