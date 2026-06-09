@@ -109,9 +109,9 @@ class LRUCache {
 
   // Set-like insertion for empty value types. This stores a default-constructed
   // empty value and returns `true` iff the key was not already present.
-  template <typename Key>
-  bool insert(Key&& key)
-      requires std::is_empty_v<V> && std::is_default_constructible_v<V> {
+  CPP_template(typename Key)(
+      requires std::is_emtpy_v<V> CPP_and
+          std::is_default_constructible_v<V>) bool insert(Key&& key) {
     return insert(std::forward<Key>(key), V{});  // perfect forwarding.
   }
 
