@@ -43,7 +43,15 @@ class AlignedAllocator {
                 "`MinAlignment` must be a power of two.");
 
   using Traits = std::allocator_traits<Allocator>;
-  Allocator allocator_;
+  using ByteAlloc = typename Traits::template rebind_alloc<char>;
+  static constexpr bool needsOveralignment = alignof(T) < MinAlignment;
+  static constexpr std::size_t overhead = sizeof(void*) + MinAlignment;
+  // Store `ByteAlloc` on the over-allocation path (the only allocator used
+  // there), or the raw `Allocator` on the direct path, so no rebind is needed
+  // at call time.
+  using StoredAlloc =
+      std::conditional_t<needsOveralignment, ByteAlloc, Allocator>;
+  StoredAlloc allocator_;
 
  public:
   using value_type = T;
@@ -85,21 +93,16 @@ class AlignedAllocator {
   // alignment. When `alignof(T) >= MinAlignment` the underlying allocator is
   // used directly. Otherwise over-allocation is used to guarantee alignment.
   T* allocate(std::size_t n) {
-    if constexpr (alignof(T) >= MinAlignment) {
+    if constexpr (!needsOveralignment) {
       return Traits::allocate(allocator_, n);
     } else {
       // Over-allocate: reserve enough extra bytes to (a) store the original raw
       // pointer in the `sizeof(void*)` bytes immediately preceding the aligned
       // result, and (b) absorb up to `MinAlignment - 1` bytes of alignment
       // padding.
-      constexpr std::size_t overhead = sizeof(void*) + MinAlignment;
       std::size_t totalBytes = n * sizeof(T) + overhead;
-
-      using ByteAlloc = typename std::allocator_traits<
-          Allocator>::template rebind_alloc<char>;
-      ByteAlloc byteAlloc{allocator_};
       char* raw =
-          std::allocator_traits<ByteAlloc>::allocate(byteAlloc, totalBytes);
+          std::allocator_traits<ByteAlloc>::allocate(allocator_, totalBytes);
 
       // Advance past the `sizeof(void*)` header region, then round up to the
       // next `MinAlignment`-aligned address.
@@ -122,10 +125,9 @@ class AlignedAllocator {
 
   // Free a block previously returned by `allocate(n)`.
   void deallocate(T* p, std::size_t n) noexcept {
-    if constexpr (alignof(T) >= MinAlignment) {
+    if constexpr (!needsOveralignment) {
       Traits::deallocate(allocator_, p, n);
     } else {
-      constexpr std::size_t overhead = sizeof(void*) + MinAlignment;
       std::size_t totalBytes = n * sizeof(T) + overhead;
 
       // Recover the original raw pointer that was stored by `allocate`.
@@ -134,10 +136,7 @@ class AlignedAllocator {
                   sizeof(void*));
       char* raw = static_cast<char*>(rawVoid);
 
-      using ByteAlloc = typename std::allocator_traits<
-          Allocator>::template rebind_alloc<char>;
-      ByteAlloc byteAlloc{allocator_};
-      std::allocator_traits<ByteAlloc>::deallocate(byteAlloc, raw, totalBytes);
+      std::allocator_traits<ByteAlloc>::deallocate(allocator_, raw, totalBytes);
     }
   }
 
