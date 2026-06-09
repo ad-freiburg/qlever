@@ -10,11 +10,11 @@
 #include "backports/three_way_comparison.h"
 
 // TODO: replace usages of this class with `ad_utility::triple_component::Iri`
-class Iri {
+class DeprecatedIri {
   std::string _string;
 
  public:
-  explicit Iri(std::string str);
+  explicit DeprecatedIri(std::string str);
 
   // ___________________________________________________________________________
   // Used for testing
@@ -23,7 +23,7 @@ class Iri {
   // ___________________________________________________________________________
   std::string toSparql() const { return _string; }
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _string)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeprecatedIri, _string)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_IRI_H

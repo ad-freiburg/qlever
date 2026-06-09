@@ -1868,17 +1868,15 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    // This is an artefact of there being two distinct Iri types.
-    return std::visit(ad_utility::OverloadCallOperator{
-                          [](const Variable& v) -> GraphTerm { return v; },
-                          [](const TripleComponent::Iri& i) -> GraphTerm {
-                            return Iri(i.toStringRepresentation());
-                          }},
-                      visit(ctx->varOrIri()));
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const Variable& v) -> GraphTerm { return v; },
+            [](const TripleComponent::Iri& i) -> GraphTerm { return i; }},
+        visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{a.toStringRepresentation()}};
+    return GraphTerm{a};
   }
 }
 
@@ -2300,7 +2298,8 @@ template <typename TripleType, typename Func>
 TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
                                     Func iriStringToPredicate) {
   typename TripleType::second_type triples;
-  GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+  GraphTerm nextTerm{Iri::fromStringRepresentation(
+      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")};
   for (auto& graphNode : ql::ranges::reverse_view(elements)) {
     GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
@@ -2322,7 +2321,7 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri{std::move(iri)}};
+    return GraphTerm{Iri::fromStringRepresentation(std::move(iri))};
   });
 }
 
@@ -2373,9 +2372,10 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
     // TODO<joka921> Unify.
-    return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
+    return visit(ctx->iri());
   } else if (ctx->NIL()) {
-    return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+    return Iri::fromStringRepresentation(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
   } else {
     return visitAlternative<Literal>(ctx->numericLiteral(),
                                      ctx->booleanLiteral(), ctx->rdfLiteral());

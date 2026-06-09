@@ -15,10 +15,11 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/BlankNode.h"
-#include "parser/data/Iri.h"
 #include "parser/data/Literal.h"
+#include "rdfTypes/Iri.h"
 #include "util/VisitMixin.h"
 
+using Iri = ad_utility::triple_component::Iri;
 using GraphTermBase = std::variant<Literal, BlankNode, Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
