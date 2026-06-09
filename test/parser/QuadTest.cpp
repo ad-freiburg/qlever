@@ -37,16 +37,16 @@ TEST(QuadTest, getQuads) {
     return SparqlTripleSimpleWithGraph(c, c, c, g);
   };
   expectGetQuads({}, {}, {});
-  expectGetQuads({TripleOf(Iri("<a>"))}, {},
+  expectGetQuads({TripleOf(tc::Iri("<a>"))}, {},
                  {QuadOf(tc::Iri("<a>"), std::monostate{})});
-  expectGetQuads({TripleOf(Iri("<a>"))},
-                 {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
+  expectGetQuads({TripleOf(tc::Iri("<a>"))},
+                 {{tc::Iri("<b>"), {TripleOf(tc::Iri("<a>"))}}},
                  {QuadOf(tc::Iri("<a>"), std::monostate{}),
                   QuadOf(tc::Iri("<a>"), tc::Iri("<b>"))});
   expectGetQuads(
-      {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
+      {TripleOf(tc::Iri("<a>")), TripleOf(tc::Iri("<d>"))},
+      {{tc::Iri("<b>"), {TripleOf(tc::Iri("<a>"))}},
+       {tc::Iri("<b>"), {TripleOf(tc::Iri("<b>")), TripleOf(tc::Iri("<c>"))}}},
       {QuadOf(tc::Iri("<a>"), std::monostate{}),
        QuadOf(tc::Iri("<d>"), std::monostate{}),
        QuadOf(tc::Iri("<a>"), tc::Iri("<b>")),
@@ -107,17 +107,17 @@ TEST(QuadTest, getOperations) {
       };
   expectGetQuads({}, {}, ElementsAre(matchers::Triples({})));
   expectGetQuads(
-      {TripleOf(Iri("<a>"))}, {},
+      {TripleOf(tc::Iri("<a>"))}, {},
       ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>"))})));
+  expectGetQuads({TripleOf(tc::Iri("<a>"))},
+                 {{tc::Iri("<b>"), {TripleOf(tc::Iri("<a>"))}}},
+                 ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>"))}),
+                             GraphTriples({SparqlTriple(tc::Iri("<a>"))},
+                                          tc::Iri("<b>"))));
   expectGetQuads(
-      {TripleOf(Iri("<a>"))}, {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
-      ElementsAre(
-          matchers::Triples({SparqlTriple(tc::Iri("<a>"))}),
-          GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>"))));
-  expectGetQuads(
-      {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
+      {TripleOf(tc::Iri("<a>")), TripleOf(tc::Iri("<d>"))},
+      {{tc::Iri("<b>"), {TripleOf(tc::Iri("<a>"))}},
+       {tc::Iri("<b>"), {TripleOf(tc::Iri("<b>")), TripleOf(tc::Iri("<c>"))}}},
       ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>")),
                                      SparqlTriple(tc::Iri("<d>"))}),
                   GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>")),
@@ -141,8 +141,8 @@ TEST(QuadTest, forAllVariables) {
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;
-  Triple noVars{GraphTerm(Iri("<a>")), GraphTerm(Iri("<b>")),
-                GraphTerm(Iri("<c>"))};
+  Triple noVars{GraphTerm(tc::Iri("<a>")), GraphTerm(tc::Iri("<b>")),
+                GraphTerm(tc::Iri("<c>"))};
   Triple differentVars{GraphTerm(Var("?a")), GraphTerm(Var("?b")),
                        GraphTerm(Var("?c"))};
   Triple sameVar{GraphTerm(Var("?a")), GraphTerm(Var("?a")),
