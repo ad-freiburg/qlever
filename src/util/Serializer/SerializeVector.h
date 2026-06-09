@@ -81,10 +81,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
 // Read a span of trivially copyable values from the serializer without copying
 // them. The pointer of the span will point into the serializers internal
 // buffer. Can only be called if a `span` or `vector` of the same type was
-// written to the serializer at its current position.
+// written to the serializer at its current position using a serializer
+// that implements aligned serialization.
 CPP_template(typename T, typename S)(
     requires ZeroCopyReadSerializer<S> CPP_and TriviallySerializable<T>)
-    std::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
+    ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
   std::size_t size;
   serializer >> size;
   alignForType<T>(serializer);
@@ -96,7 +97,7 @@ CPP_template(typename T, typename S)(
   // `char` without calling `start_lifetime_as_array` or memcopying the data,
   // But no compiler implements this as of now, and it has been working in
   // practice forever.
-  return std::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
+  return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
 }
 
 /// Incrementally serialize a std::vector to disk without materializing it.

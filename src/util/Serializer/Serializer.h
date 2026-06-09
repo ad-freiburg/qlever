@@ -328,9 +328,7 @@ CPP_template(typename T, typename S)(
     static constexpr size_t alignment = alignof(T);
     size_t padding = alignment - (currentPos % alignment);
     if (padding > 0) {
-      // Use a static array to avoid dynamic allocation for padding.
-      // 64 bytes should cover all practical alignment requirements.
-      std::array<char, alignment> zeros = {0};
+      static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
     }
   }

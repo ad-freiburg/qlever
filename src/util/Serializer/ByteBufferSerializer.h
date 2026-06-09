@@ -5,10 +5,12 @@
 #ifndef QLEVER_BYTEBUFFERSERIALIZER_H
 #define QLEVER_BYTEBUFFERSERIALIZER_H
 
+#include <cstdint>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
+#include "util/AlignedAllocator.h"
 #include "util/Exception.h"
 #include "util/Serializer/Serializer.h"
 
@@ -18,12 +20,15 @@ namespace ad_utility::serialization {
  * template parameter controls whether alignment padding is inserted for
  * trivially serializable types (see `alignForType` in `Serializer.h`).
  */
-template <bool AlignedSerialization = false>
+template <bool usesAlignedSerialization = false>
 class ByteBufferWriteSerializerT {
  public:
   using SerializerType = WriteSerializerTag;
-  using Storage = std::vector<char>;
-  static constexpr bool UsesAlignedSerialization = AlignedSerialization;
+  using Storage =
+      std::conditional_t<usesAlignedSerialization,
+                         std::vector<char, ad_utility::AlignedAllocator<char>>,
+                         std::vector<char>>;
+  static constexpr bool UsesAlignedSerialization = usesAlignedSerialization;
 
   ByteBufferWriteSerializerT() = default;
   ByteBufferWriteSerializerT(const ByteBufferWriteSerializerT&) = delete;
@@ -71,7 +76,16 @@ class ByteBufferReadSerializerT {
   ql::ranges::iterator_t<std::add_const_t<Storage>> iterator_{data_.begin()};
 
  public:
-  explicit ByteBufferReadSerializerT(Storage data) : data_{std::move(data)} {};
+  explicit ByteBufferReadSerializerT(Storage data) : data_{std::move(data)} {
+    if constexpr (AlignedSerialization) {
+      AD_CONTRACT_CHECK(
+          reinterpret_cast<std::uintptr_t>(data_.data()) %
+                  alignof(std::max_align_t) ==
+              0,
+          "Buffer passed to an aligned read serializer must be aligned to "
+          "`alignof(std::max_align_t)`");
+    }
+  }
   void serializeBytes(char* bytePointer, size_t numBytes) {
     AD_CONTRACT_CHECK(iterator_ + numBytes <= data_.end());
     std::copy(iterator_, iterator_ + numBytes, bytePointer);
@@ -127,7 +141,10 @@ using ByteBufferReadSerializer = ByteBufferReadSerializerT<false>;
 
 // Aligned variants of the byte buffer serializers.
 using AlignedByteBufferWriteSerializer = ByteBufferWriteSerializerT<true>;
-using AlignedByteBufferReadSerializer = ByteBufferReadSerializerT<true>;
+using AlignedByteBufferReadSerializer = ByteBufferReadSerializerT<
+    true, std::vector<char, ad_utility::AlignedAllocator<char>>>;
+
+static_assert(ZeroCopyReadSerializer<AlignedByteBufferReadSerializer>);
 
 }  // namespace ad_utility::serialization
 

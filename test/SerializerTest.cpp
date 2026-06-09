@@ -1025,8 +1025,10 @@ TEST(AlignedSerializer, MismatchedAlignmentProducesWrongResults) {
     std::vector<int64_t> v = {100, 200, 300};
     writer << v;
 
-    // Read the raw buffer with an unaligned reader.
-    ByteBufferReadSerializer reader{std::move(writer).data()};
+    // Read the raw buffer with an unaligned reader. An explicit copy is needed
+    // because the aligned writer's storage uses a different allocator type.
+    auto d = std::move(writer).data();
+    ByteBufferReadSerializer reader{std::vector<char>(d.begin(), d.end())};
     char cRead;
     reader >> cRead;
     EXPECT_EQ(cRead, 'X');
@@ -1046,8 +1048,11 @@ TEST(AlignedSerializer, MismatchedAlignmentProducesWrongResults) {
     std::vector<int64_t> v = {100, 200, 300};
     writer << v;
 
-    // Read with an aligned reader.
-    AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+    // Read with an aligned reader. An explicit copy is needed because the
+    // aligned reader's storage uses a different allocator type.
+    auto d = std::move(writer).data();
+    using AlignedVec = std::vector<char, ad_utility::AlignedAllocator<char>>;
+    AlignedByteBufferReadSerializer reader{AlignedVec(d.begin(), d.end())};
     char cRead;
     reader >> cRead;
     EXPECT_EQ(cRead, 'X');
