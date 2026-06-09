@@ -102,6 +102,8 @@ class ConstructTemplatePreprocessor {
   // `std::nullopt` if any term fails to preprocess (e.g. an unbound variable).
   std::optional<PreprocessedTriple> preprocessTriple(
       const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple);
+
+  ValueId resolveConstantDedupId(TripleComponent tripleComponent);
 };
 
 }  // namespace qlever::constructExport

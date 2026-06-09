@@ -15,8 +15,6 @@
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
 #include "util/Algorithm.h"
-#include "util/HashMap.h"
-#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VariantRangeFilter.h"
 
@@ -27,11 +25,9 @@ namespace qlever::constructExport {
 // `ValueId`s directly; a literal/IRI not present in the vocabulary is assigned
 // a fresh `LocalVocabIndex` in `localvocabForConstructTemplateConstants`. This
 // `ValueId` is the constant's component of the full-triple deduplication key.
-static ValueId resolveConstantDedupId(
-    TripleComponent tripleComponent, const Index& index,
-    LocalVocab& localvocabForConstructTemplateConstants) {
-  return std::move(tripleComponent)
-      .toValueId(index, localvocabForConstructTemplateConstants);
+ValueId ConstructTemplatePreprocessor::resolveConstantDedupId(
+    TripleComponent tripleComponent) {
+  return std::move(tripleComponent).toValueId(index_, localVocab_);
 }
 
 // True if any of the triple's three positions is a blank node. Such triples are
@@ -49,11 +45,9 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
   // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
   // source text. Therefore, construct the `TripleComponent` from exactly that
   // representation.
-  ValueId dedupId = resolveConstantDedupId(
-      TripleComponent{
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              iri.toStringRepresentation())},
-      index_, localVocab_);
+  ValueId dedupId = resolveConstantDedupId(TripleComponent{
+      ad_utility::triple_component::Iri::fromStringRepresentation(
+          iri.toStringRepresentation())});
   return PrecomputedConstant{
       std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr), dedupId};
 }
@@ -74,8 +68,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
     TripleComponent parsedObject =
         RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             literal.toSparql());
-    ValueId dedupId =
-        resolveConstantDedupId(std::move(parsedObject), index_, localVocab_);
+    ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
     return PrecomputedConstant{
         std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
         dedupId};
