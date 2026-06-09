@@ -161,9 +161,7 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (!requestLaziness) {
     AD_CORRECTNESS_CHECK(!lazyResult);
     return {writeAllColumns(
-                subResults | ql::views::transform([](const auto& r) {
-                  return r->idTableView();
-                }),
+                subResults | ql::views::transform(&Result::idTableView),
                 getLimitOffset()._offset, getLimitOffset().limitOrDefault()),
             resultSortedOn(), std::move(staticMergedVocab)};
   }
@@ -382,13 +380,14 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   std::vector<std::shared_ptr<const IdTableView<0>>> idTables;
   idTables.reserve(subresults.size() + 1);
   for (auto& result : subresults) {
-    idTables.emplace_back(result, &result->idTableView());
+    auto* idTableView = &result->idTableView();
+    idTables.emplace_back(std::move(result), idTableView);
   }
   // Placeholder for the current `IdTable` from the lazy result. The view is
   // kept as a non-const `shared_ptr` so it can be updated in-place on each
   // iteration without a new allocation; the implicit conversion to
   // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
-  auto placeholder = std::make_shared<IdTable>(IdTable{0, allocator()});
+  auto placeholder = std::make_shared<IdTable>(0, allocator());
   auto placeholderView =
       std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
   idTables.push_back(placeholderView);
