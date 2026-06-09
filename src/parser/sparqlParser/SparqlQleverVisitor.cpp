@@ -2060,7 +2060,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(term);
+      return PropertyPath::fromIri(std::get<Iri>(term));
     }
   };
   for (auto& triple : objectList.second) {
