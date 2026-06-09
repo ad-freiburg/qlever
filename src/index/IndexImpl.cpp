@@ -1506,7 +1506,8 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     ItemMapArray items,
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
+    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
+    const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
                << std::endl;
