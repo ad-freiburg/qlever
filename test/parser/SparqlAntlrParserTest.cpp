@@ -1181,21 +1181,21 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+          {{Var{"?a"}, Iri::fromIriref("<foo>"), Var{"?c"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
       "> 0) .}",
       m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}},
-           {Iri{"<bar>"}, Var{"?b"}, Iri{"<baz>"}}},
+          {{Var{"?a"}, Iri::fromIriref("<foo>"), Var{"?c"}},
+           {Iri::fromIriref("<bar>"), Var{"?b"}, Iri::fromIriref("<baz>")}},
           m::GraphPattern(false, {"(?a > 0)"},
                           m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+              {{Var{"?a"}, Iri::fromIriref("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
           m::pq::LimitOffset({10}), m::pq::OrderKeys({{Var{"?a"}, false}})));
   // This case of the grammar is not useful without Datasets, but we still
@@ -1203,14 +1203,14 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT WHERE { ?a <foo> ?b }",
       m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
+          {{Var{"?a"}, Iri::fromIriref("<foo>"), Var{"?b"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, iri("<foo>"), Var{"?b"}}}))));
 
   // Blank nodes turn into variables inside WHERE.
   expectConstructQuery(
       "CONSTRUCT WHERE { [] <foo> ?b }",
       m::ConstructQuery(
-          {{BlankNode{true, "0"}, Iri{"<foo>"}, Var{"?b"}}},
+          {{BlankNode{true, "0"}, Iri::fromIriref("<foo>"), Var{"?b"}}},
           m::GraphPattern(m::Triples(
               {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                  "g_0")},
@@ -1220,7 +1220,7 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT WHERE { <bar> ?foo \"Abc\"@en }",
       m::ConstructQuery(
-          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\"@en"}}},
+          {{Iri::fromIriref("<bar>"), Var{"?foo"}, Literal{"\"Abc\"@en"}}},
           m::GraphPattern(m::Triples(
               {{iri("<bar>"), Var{"?foo"}, lit("\"Abc\"", "@en")}}))));
   // CONSTRUCT with datasets.
@@ -1336,14 +1336,14 @@ TEST(SparqlParser, Query) {
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+              {{Var{"?a"}, Iri::fromIriref("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
           m::VisibleVariables({Var{"?a"}, Var{"?b"}, Var{"?c"}})));
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+              {{Var{"?x"}, Iri::fromIriref("<foo>"), Iri::fromIriref("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
@@ -1355,7 +1355,7 @@ TEST(SparqlParser, Query) {
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+              {{Var{"?x"}, Iri::fromIriref("<foo>"), Iri::fromIriref("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x"),
@@ -1789,10 +1789,10 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
 
     EXPECT_THAT(
         result.resultOfParse_,
-        m::ConstructQuery(
-            {{Iri{"<http://example.org/123>"}, Iri{"<http://example.org/456>"},
-              Iri{"<http://test.com/id/789>"}}},
-            m::GraphPattern(m::OrderedTriples(
-                {{{encoded123, unencoded456, encoded789}}}))));
+        m::ConstructQuery({{Iri::fromIriref("<http://example.org/123>"),
+                            Iri::fromIriref("<http://example.org/456>"),
+                            Iri::fromIriref("<http://test.com/id/789>")}},
+                          m::GraphPattern(m::OrderedTriples(
+                              {{{encoded123, unencoded456, encoded789}}}))));
   }
 }
