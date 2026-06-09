@@ -1632,7 +1632,6 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
-  const auto Iri = TripleComponent::Iri::fromIriref;
   auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
                        const ad_utility::sparql_types::Triples& triples)
       -> testing::Matcher<const Quads::GraphBlock&> {
