@@ -20,6 +20,7 @@ namespace m = matchers;
 namespace p = parsedQuery;
 
 using Var = Variable;
+using Iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
@@ -660,7 +661,8 @@ TEST(ParserTest, testParse) {
     EXPECT_THAT(
         pq_1,
         m::ConstructQuery(
-            {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+            {{Variable{"?x"},
+              Iri::fromStringRepresentation("<http://xmlns.com/foaf/0.1/name>"),
               Variable{"?name"}}},
             m::GraphPattern(m::Triples({SparqlTriple{
                 Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
@@ -675,8 +677,10 @@ TEST(ParserTest, testParse) {
 
     EXPECT_THAT(pq_2,
                 m::ConstructQuery(
-                    {{Iri{"<http://example.org/person#Alice>"},
-                      Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
+                    {{Iri::fromStringRepresentation(
+                          "<http://example.org/person#Alice>"),
+                      Iri::fromStringRepresentation(
+                          "<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
                         Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
@@ -1611,7 +1615,7 @@ TEST(ParserTest, parseWithDatasets) {
                          "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
                          {{{Iri("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
-                                    ::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+                                    Iri("<a>"), Iri("<b>"), Iri("<c>")}},
                                 filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(
       parseQuery("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",

@@ -43,7 +43,7 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
           out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-          out << "Iri " << object.iri();
+          out << "Iri " << object.toStringRepresentation();
         } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {
@@ -269,7 +269,7 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
   return MultiVariantWith<GraphTerm, ::Iri>(
-      AD_PROPERTY(::Iri, iri, testing::Eq(value)));
+      testing::Eq(Iri::fromStringRepresentation(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
