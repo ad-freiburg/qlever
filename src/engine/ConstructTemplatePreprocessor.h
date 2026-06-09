@@ -42,14 +42,14 @@ class ConstructTemplatePreprocessor {
   static std::optional<PreprocessedTerm> preprocessTerm(
       const GraphTerm& term, PositionInTriple role,
       const VariableToColumnMap& variableColumns, const Index& index,
-      LocalVocab& constantLocalVocab);
+      LocalVocab& localVocabForConstants);
 
  private:
   static std::optional<PreprocessedTerm> preprocessIri(
-      const Iri& iri, const Index& index, LocalVocab& constantLocalVocab);
+      const Iri& iri, const Index& index, LocalVocab& localVocabForConstants);
   static std::optional<PreprocessedTerm> preprocessLiteral(
       const Literal& literal, PositionInTriple role, const Index& index,
-      LocalVocab& constantLocalVocab);
+      LocalVocab& localVocabForConstants);
   static std::optional<PreprocessedTerm> preprocessVariable(
       const Variable& variable, const VariableToColumnMap& variableColumns);
   static std::optional<PreprocessedTerm> preprocessBlankNode(

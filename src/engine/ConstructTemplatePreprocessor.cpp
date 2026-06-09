@@ -38,10 +38,9 @@ static ValueId resolveConstantDedupId(
 // excluded from deduplication: their per-row blank node ids make every
 // instantiation distinct.
 static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
-  return ql::ranges::any_of(triple, [](const PreprocessedTerm& term) {
-    return std::holds_alternative<PrecomputedBlankNode>(term);
-  });
-}
+  return ql::ranges::any_of(triple,
+                            ad_utility::holdsAlternative<PrecomputedBlankNode>);
+};
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
@@ -107,22 +106,24 @@ ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
     const VariableToColumnMap& variableColumns, const Index& index,
-    LocalVocab& constantLocalVocab) {
-  return term.visit([&role, &variableColumns, &index, &constantLocalVocab](
-                        const auto& t) -> std::optional<PreprocessedTerm> {
-    using T = std::decay_t<decltype(t)>;
-    if constexpr (std::is_same_v<T, Iri>) {
-      return preprocessIri(t, index, constantLocalVocab);
-    } else if constexpr (std::is_same_v<T, Literal>) {
-      return preprocessLiteral(t, role, index, constantLocalVocab);
-    } else if constexpr (std::is_same_v<T, Variable>) {
-      return preprocessVariable(t, variableColumns);
-    } else if constexpr (std::is_same_v<T, BlankNode>) {
-      return preprocessBlankNode(t);
-    } else {
-      static_assert(ad_utility::alwaysFalse<T>);
-    }
-  });
+    LocalVocab& localVocabForConstantsInTemplate) {
+  return term.visit(
+      [&role, &variableColumns, &index, &localVocabForConstantsInTemplate](
+          const auto& t) -> std::optional<PreprocessedTerm> {
+        using T = std::decay_t<decltype(t)>;
+        if constexpr (std::is_same_v<T, Iri>) {
+          return preprocessIri(t, index, localVocabForConstantsInTemplate);
+        } else if constexpr (std::is_same_v<T, Literal>) {
+          return preprocessLiteral(t, role, index,
+                                   localVocabForConstantsInTemplate);
+        } else if constexpr (std::is_same_v<T, Variable>) {
+          return preprocessVariable(t, variableColumns);
+        } else if constexpr (std::is_same_v<T, BlankNode>) {
+          return preprocessBlankNode(t);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      });
 }
 
 // _____________________________________________________________________________
@@ -152,8 +153,9 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
   ad_utility::HashSet<size_t> seenColumns;
 
   for (const auto& triple : templateTriples) {
-    auto preprocessedTriple = preprocessTriple(triple, variableColumns, index,
-                                               result.constantLocalVocab_);
+    auto preprocessedTriple =
+        preprocessTriple(triple, variableColumns, index,
+                         result.localVocabForConstantsInTemplate_);
     if (!preprocessedTriple) continue;
 
     // Collect each unique `IdTable` column index.
