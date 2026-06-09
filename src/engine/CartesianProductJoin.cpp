@@ -245,8 +245,9 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
     size_t resultColIdx = 0;
     size_t numTables = ql::ranges::size(idTables);
     for (const auto& [tableIdx, input] : ::ranges::views::enumerate(idTables)) {
-      size_t extraOffset =
-          (tableIdx + 1 == numTables) ? lastTableOffset * groupSize : 0;
+      size_t extraOffset = (static_cast<size_t>(tableIdx) + 1 == numTables)
+                               ? lastTableOffset * groupSize
+                               : 0;
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
         writeResultColumn(resultCol, inputCol, groupSize, offset - extraOffset);
@@ -383,20 +384,23 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   for (auto& result : subresults) {
     idTables.emplace_back(result, &result->idTableView());
   }
-  // Placeholder for the current `IdTable` from the lazy result. Kept as a
-  // separate owned table so we can update it and replace the view at the back
-  // of `idTables` on each iteration.
+  // Placeholder for the current `IdTable` from the lazy result. The view is
+  // kept as a non-const `shared_ptr` so it can be updated in-place on each
+  // iteration without a new allocation; the implicit conversion to
+  // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
   auto placeholder = std::make_shared<IdTable>(IdTable{0, allocator()});
-  idTables.push_back(
-      std::make_shared<const IdTableView<0>>(placeholder->asStaticView<0>()));
+  auto placeholderView =
+      std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
+  idTables.push_back(placeholderView);
 
   auto generatedTables = lazyResult->idTables();
 
   auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
               limit = getLimitOffset().limitOrDefault(),
               offset = getLimitOffset()._offset, idTables = std::move(idTables),
-              placeholder = std::move(placeholder), lastTableOffset = size_t{0},
-              producedTableSize = size_t{0},
+              placeholder = std::move(placeholder),
+              placeholderView = std::move(placeholderView),
+              lastTableOffset = size_t{0}, producedTableSize = size_t{0},
               lazyResult =
                   std::move(lazyResult)](auto& idTableVocabPair) mutable {
     // These things have to be done after handling a single input, so we do
@@ -407,11 +411,9 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
     producedTableSize = 0;
 
     auto& [idTable, localVocab] = idTableVocabPair;
-    // Replace the placeholder table and update the view at the back of
-    // `idTables` so it reflects the new content.
+    // Replace the placeholder table and update the view in-place.
     *placeholder = std::move(idTable);
-    idTables.back() =
-        std::make_shared<const IdTableView<0>>(placeholder->asStaticView<0>());
+    *placeholderView = placeholder->asStaticView<0>();
     if (idTables.back()->empty()) {
       return Result::IdTableLoopControl::makeContinue();
     }
@@ -422,12 +424,8 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
         ad_utility::InputRangeTypeErased{
             ad_utility::OwningView{self->produceTablesLazily(
                 std::move(localVocab),
-                ql::ranges::ref_view(idTables) |
-                    ql::views::transform(
-                        [](const auto& p) -> const IdTableView<0>& {
-                          return *p;
-                        }),
-                offset, limit, lastTableOffset)} |
+                ql::views::transform(idTables, ad_utility::dereference), offset,
+                limit, lastTableOffset)} |
             ql::views::transform([&producedTableSize](auto& tableAndVocab) {
               producedTableSize += tableAndVocab.idTable_.size();
               return std::move(tableAndVocab);
