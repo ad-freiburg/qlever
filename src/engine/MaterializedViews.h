@@ -339,7 +339,9 @@ class MaterializedViewsManager {
       QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
 
-  //  variable cols,
+  //  Check if there is a materialized view that can be used to replace a query
+  //  with the given cache key. The `VariableToColumnMap` needs to be provided
+  //  to apply the view's column permutation.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec, const std::string& cacheKey,
       const VariableToColumnMap& varToCol) const;

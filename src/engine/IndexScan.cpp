@@ -167,7 +167,6 @@ string IndexScan::getDescriptor() const {
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }),
       " ");
-  // TODO don't print spo or additional if they are stripped.
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
                       subject_.toString(), " ", predicate_.toString(), " ",
                       object_.toString(), additionalVars.empty() ? "" : " ",

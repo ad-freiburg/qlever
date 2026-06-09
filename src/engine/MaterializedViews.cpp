@@ -746,11 +746,6 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     QueryExecutionContext* qec, const std::string& cacheKey,
     const VariableToColumnMap& varToCol) const {
-  if (!getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
-    // TODO move away from here
-    return nullptr;
-  }
   auto info =
       loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
   if (!info.has_value()) {
