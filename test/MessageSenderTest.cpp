@@ -17,6 +17,7 @@ using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
+using ad_utility::websocket::QueryStatus;
 using PayloadType = std::pair<std::shared_ptr<const std::string>, size_t>;
 
 using namespace boost::asio::experimental::awaitable_operators;
@@ -105,5 +106,27 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   // The destructor of `MessageSender` calls `signalEnd` on the underlying
   // distributor instance asynchronously, so we need to wait for it to be
   // executed before destroying the backing `QueryHub` instance.
+  co_await net::post(net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+// `sharedStatus()` must hand out the OwningQueryId's own status atomic, so a
+// write through one handle is visible through another.
+ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  QueryHub queryHub{ioContext};
+
+  {
+    MessageSender messageSender{std::move(queryId), queryHub};
+    auto handle = messageSender.sharedStatus();
+    ASSERT_NE(handle, nullptr);
+    EXPECT_EQ(handle->load(), QueryStatus::Unknown);
+
+    handle->store(QueryStatus::Ok);
+    EXPECT_EQ(messageSender.sharedStatus()->load(), QueryStatus::Ok);
+  }
+  // Wait for the asynchronous `signalEnd` before the `QueryHub` is destroyed.
   co_await net::post(net::use_awaitable);
 }

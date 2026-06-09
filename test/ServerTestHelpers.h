@@ -10,6 +10,7 @@
 #include <boost/beast/http.hpp>
 
 #include "engine/Server.h"
+#include "util/QueryEventLog.h"
 
 namespace serverTestHelpers {
 
@@ -21,6 +22,9 @@ using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 // Test the HTTP request processing of the `Server` class.
 struct SimulateHttpRequest {
   std::string indexBaseName_;
+  // Optional: redirect the server's query start/end events to a caller-owned
+  // log so a test can read them back. Null keeps the production singleton.
+  ad_utility::QueryEventLog* eventLog_ = nullptr;
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
@@ -38,7 +42,7 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName,
+        [](auto request, auto indexName, auto* eventLog,
            auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
@@ -46,6 +50,11 @@ struct SimulateHttpRequest {
           server.initialize(indexName, false);
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
+          // Point the registry at the test's log, if one was provided.
+          if (eventLog != nullptr) {
+            server.queryRegistry_ =
+                ad_utility::websocket::QueryRegistry{eventLog};
+          }
 
           // Simulate receiving the HTTP request.
           auto result =
@@ -53,7 +62,7 @@ struct SimulateHttpRequest {
                   .template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, io),
+        }(request, indexBaseName_, eventLog_, io),
         boost::asio::use_future);
     io.run();
     return fut.get();

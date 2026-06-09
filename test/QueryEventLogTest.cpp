@@ -44,6 +44,15 @@ TEST(QueryEventLog, DoubleConfigureThrows) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryEventLog, SetOutputFileOpenFailureThrows) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  QueryEventLog log;
+  // `path` does not exist, so using it as a directory gives `child.log` a
+  // non-existent parent and the file cannot be opened.
+  EXPECT_ANY_THROW(log.setOutputFile(path / "child.log"));
+}
+
+// _____________________________________________________________________________
 TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {

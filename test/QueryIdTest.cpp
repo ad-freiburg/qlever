@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -142,6 +143,14 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
 
 // _____________________________________________________________________________
 
+// The test-only constructor dereferences the `QueryEventLog` pointer
+// unconditionally when emitting events, so a null pointer must be rejected.
+TEST(QueryRegistry, nullEventLogIsRejected) {
+  EXPECT_ANY_THROW(QueryRegistry{nullptr});
+}
+
+// _____________________________________________________________________________
+
 TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
   QueryRegistry registry{};
   auto queryId = registry.uniqueId("my-query");
@@ -261,6 +270,51 @@ TEST(QueryRegistry, registrationEmitsStartEventLine) {
   EXPECT_EQ(start.at("ts-ms").get<int64_t>(), expectedStartedAt);
   EXPECT_EQ(start.at("client-ip").get<std::string>(), "");
   EXPECT_EQ(start.at("query").get<std::string>(), "SELECT * WHERE {}");
+}
+
+// _____________________________________________________________________________
+
+// If the registry dies before the `OwningQueryId`, the end event must still
+// be written (one end per start); only the registry erase is skipped.
+TEST(QueryRegistry, endEventWrittenWhenRegistryDestroyedFirst) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    std::optional<QueryRegistry> registry{std::in_place, &log};
+    auto owned = registry->uniqueIdFromString("01123581321345589144",
+                                              "SELECT * WHERE {}");
+    ASSERT_TRUE(owned.has_value());
+    registry.reset();  // weak_ptr in the unregister lambda now expired
+    owned.reset();     // fires the lambda: pushes end, skips erase, no crash
+  }
+
+  auto events = parseAll(readLines(path));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.front().at("event").get<std::string>(), "start");
+  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
+}
+
+// _____________________________________________________________________________
+
+// A non-empty client IP passed to `uniqueIdFromString` must appear verbatim
+// in the start event's `client-ip` field.
+TEST(QueryRegistry, startEventCarriesClientIp) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    QueryEventLog log;
+    log.setOutputFile(path);
+    {
+      QueryRegistry registry{&log};
+      auto owned = registry.uniqueIdFromString("01123581321345589144",
+                                               "SELECT * WHERE {}", "10.0.0.5");
+      ASSERT_TRUE(owned.has_value());
+    }
+  }
+
+  auto events = parseAll(readLines(path));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.front().at("client-ip").get<std::string>(), "10.0.0.5");
 }
 
 // _____________________________________________________________________________

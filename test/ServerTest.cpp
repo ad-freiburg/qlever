@@ -6,6 +6,7 @@
 
 #include <boost/beast/http.hpp>
 
+#include "./util/FileTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
@@ -14,6 +15,7 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/QueryEventLog.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
@@ -528,4 +530,68 @@ TEST(ServerTest, gspPost) {
   };
   expectPost("", StatusIs(http::status::no_content));
   expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+}
+
+// _____________________________________________________________________________
+// Read a query-event-log file and parse each JSONL line.
+namespace {
+std::vector<json> parseEventLog(const std::filesystem::path& path) {
+  std::vector<json> events;
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    events.push_back(json::parse(line));
+  }
+  return events;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// A successful query writes a `start` event carrying the X-Real-IP client IP
+// and an `end` event with status "ok".
+TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ad_utility::QueryEventLog log;
+    log.setOutputFile(path);
+    SimulateHttpRequest simulateHttpRequest{base, &log};
+
+    auto request = makePostRequest("/", "application/sparql-query",
+                                   "SELECT * WHERE { ?a ?b ?c }");
+    request.set("X-Real-IP", "10.0.0.5");
+    request.set(http::field::accept, "application/sparql-results+json");
+    EXPECT_THAT(simulateHttpRequest.processRaw(request),
+                StatusIs(http::status::ok));
+  }  // log destroyed → queue drained, file closed
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.front().at("event").get<std::string>(), "start");
+  EXPECT_EQ(events.front().at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
+  EXPECT_EQ(events.back().at("status").get<std::string>(), "ok");
+}
+
+// _____________________________________________________________________________
+// A query that throws during execution (Turtle is not a valid result format
+// for SELECT) writes an `end` event with status "failed".
+TEST(ServerTest, queryEventLogRecordsFailedStatus) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ad_utility::QueryEventLog log;
+    log.setOutputFile(path);
+    SimulateHttpRequest simulateHttpRequest{base, &log};
+
+    auto request = makePostRequest("/", "application/sparql-query",
+                                   "SELECT * WHERE { ?a ?b ?c }");
+    request.set(http::field::accept, "text/turtle");
+    simulateHttpRequest.processRaw(request);
+  }
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
+  EXPECT_EQ(events.back().at("status").get<std::string>(), "failed");
 }
