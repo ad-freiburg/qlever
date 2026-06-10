@@ -33,6 +33,7 @@
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
+  using Iri = ad_utility::triple_component::Iri;
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;

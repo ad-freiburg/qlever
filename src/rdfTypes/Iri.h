@@ -90,12 +90,6 @@ class BasicIri {
     return std::move(iri_);
   }
 
-  // Return the IRI as it would appear in a SPARQL query or Turtle document,
-  // i.e. the bracketed `<...>` form. This is identical to
-  // `toStringRepresentation` and returns the same `<...>` format as the
-  // historical `parser/data/Iri::toSparql`, the only difference being that this
-  // value is normalized (escapes resolved), which is invisible for IRIs without
-  // escapes.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql() && {
     return toStringRepresentation();
   }
@@ -133,14 +127,6 @@ class Iri : public BasicIri<true> {
   static Iri fromStringRepresentation(std::string s);
 
   // Create a new `Iri` given an IRI string with brackets.
-  // As per https://www.ietf.org/rfc/rfc3987.txt: An IRI reference may be
-  // absolute or relative. However, the "IRI" that results from such a reference
-  // only includes absolute IRIs; any relative IRI references are resolved to
-  // their absolute form.
-  //
-  // NOTE: `fromIriref` does NOT validate the syntax of its input; it only
-  // normalizes the part inside the brackets. Use `fromIrirefValidated` if the
-  // input is untrusted and you want a hard syntax check.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
   // Like `fromIriref`, but first validate that `stringWithBrackets` is a

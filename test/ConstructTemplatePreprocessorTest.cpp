@@ -71,7 +71,7 @@ auto Var = matchesPrecomputedVariable;
 auto Bnode = matchesPrecomputedBlankNode;
 auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
 
-TEST(ConstructTemplatePreprocessorTest, preprocessiri) {
+TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
