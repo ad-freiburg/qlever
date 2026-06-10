@@ -36,8 +36,8 @@ constexpr auto tripleComponentLiteral =
     };
 
 // Create a `TripleComponent` that stores an `Iri` from the given `<iriref>`
-constexpr auto iri = [](std::string_view s) {
-  return TripleComponent::Iri::fromIriref(s);
+constexpr auto iriV = [](std::string_view s) {
+  return TripleComponent::Iri::fromIrirefValidated(s);
 };
 }  // namespace ad_utility::testing
 

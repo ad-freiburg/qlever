@@ -19,11 +19,10 @@ namespace m = matchers;
 namespace p = parsedQuery;
 
 using Var = Variable;
-using Iri = ad_utility::triple_component::Iri;
+using iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = ad_utility::testing::iri;
-auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
+auto iriV = ad_utility::testing::iri;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
