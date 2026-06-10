@@ -4,7 +4,7 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
-#include "util/Generator.h"
+#include "util/Iterators.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -66,14 +66,16 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyInternalExternal::lookupBatchesStreamed(
     VocabLookupInput input) const {
-  auto gen =
-      [](const VocabularyInternalExternal* self,
-         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
-    for (auto& batch : input) {
-      co_yield self->lookupBatch(batch);
-    }
-  }(this, std::move(input));
-  return VocabLookupOutput{std::move(gen)};
+  // NOTE: Not implemented as a coroutine, because coroutines are not
+  // available in the C++17 compatibility build.
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
+      [this, input = std::move(
+                 input)]() mutable -> std::optional<VocabBatchLookupResult> {
+        if (auto batch = input.get()) {
+          return lookupBatch(*batch);
+        }
+        return std::nullopt;
+      })};
 }
 
 // _____________________________________________________________________________

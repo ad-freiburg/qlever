@@ -13,7 +13,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/File.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/json.h"
 
 namespace po = boost::program_options;
@@ -130,18 +130,24 @@ int main(int argc, char** argv) {
       asm volatile("" ::"r,m"(word.data()) : "memory");
     }
   } else if (streamedLookup) {
-    // Streamed (pipelined) batch lookup.
-    auto makeBatches =
-        [&allIndices, batchSize]() -> cppcoro::generator<std::vector<size_t>> {
-      for (size_t offset = 0; offset < allIndices.size(); offset += batchSize) {
-        size_t currentBatchSize =
-            std::min(batchSize, allIndices.size() - offset);
-        co_yield std::vector<size_t>(
-            allIndices.begin() + offset,
-            allIndices.begin() + offset + currentBatchSize);
-      }
-    };
-    auto results = vocab.lookupBatchesStreamed(VocabLookupInput{makeBatches()});
+    // Streamed (pipelined) batch lookup. (Not implemented as a coroutine,
+    // because coroutines are not available in the C++17 compatibility build.)
+    auto makeBatches = ad_utility::InputRangeFromGetCallable(
+        [&allIndices, batchSize,
+         offset = size_t{0}]() mutable -> std::optional<std::vector<size_t>> {
+          if (offset >= allIndices.size()) {
+            return std::nullopt;
+          }
+          size_t currentBatchSize =
+              std::min(batchSize, allIndices.size() - offset);
+          std::vector<size_t> batch(
+              allIndices.begin() + offset,
+              allIndices.begin() + offset + currentBatchSize);
+          offset += currentBatchSize;
+          return batch;
+        });
+    auto results =
+        vocab.lookupBatchesStreamed(VocabLookupInput{std::move(makeBatches)});
     for (auto& result : results) {
       for (const auto& sv : *result) {
         totalStringBytes += sv.size();

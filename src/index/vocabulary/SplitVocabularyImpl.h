@@ -9,7 +9,7 @@
 #include "index/Vocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -168,14 +168,16 @@ QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
 VocabLookupOutput SplitVocabulary<SF, SFN, S...>::lookupBatchesStreamed(
     VocabLookupInput input) const {
-  auto gen =
-      [](const SplitVocabulary* self,
-         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
-    for (auto& batch : input) {
-      co_yield self->lookupBatch(batch);
-    }
-  }(this, std::move(input));
-  return VocabLookupOutput{std::move(gen)};
+  // NOTE: Not implemented as a coroutine, because coroutines are not
+  // available in the C++17 compatibility build.
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
+      [this, input = std::move(
+                 input)]() mutable -> std::optional<VocabBatchLookupResult> {
+        if (auto batch = input.get()) {
+          return lookupBatch(*batch);
+        }
+        return std::nullopt;
+      })};
 }
 
 // _____________________________________________________________________________
