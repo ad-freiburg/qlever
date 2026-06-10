@@ -479,6 +479,13 @@ TEST(QueryRegistry, endEventStatusTimeout) {
   EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Timeout), "timeout");
 }
 
+// An out-of-range value exercises the trailing fallback after the exhaustive
+// switch in `toString`, which is otherwise unreachable.
+TEST(QueryStatus, toStringFallbackForUnknownValue) {
+  EXPECT_EQ(ad_utility::websocket::toString(static_cast<QueryStatus>(42)),
+            "unknown");
+}
+
 // _____________________________________________________________________________
 
 /// `sharedStatus()` returns a handle that writes through to the same
