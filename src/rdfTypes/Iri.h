@@ -113,7 +113,26 @@ class Iri : public BasicIri<true> {
   // absolute or relative. However, the "IRI" that results from such a reference
   // only includes absolute IRIs; any relative IRI references are resolved to
   // their absolute form.
+  //
+  // NOTE: `fromIriref` does NOT validate the syntax of its input; it only
+  // normalizes the part inside the brackets. Use `fromIrirefValidated` if the
+  // input is untrusted and you want a hard syntax check.
   static Iri fromIriref(std::string_view stringWithBrackets);
+
+  // Like `fromIriref`, but first validate that `stringWithBrackets` is a
+  // syntactically valid `IRIREF` and `throw` an `ad_utility::Exception`
+  // otherwise. The accepted format is the SPARQL/Turtle `IRIREF` production
+  // according to https://www.ietf.org/rfc/rfc3987.txt:
+  //
+  //   IRIREF ::= '<' ([^<>"{}|^`\] - [#x00-#x20])* '>'
+  //
+  // which the regex below encodes: a `<`, then zero or more characters that are
+  // none of `<>"{}|^`\` and not a control character or space (the `\0- ` range
+  // covers all bytes from `#x00` to `#x20` inclusive), then a closing `>`. The
+  // body may be empty (`<>` is valid). Unlike the historical
+  // `parser/data/Iri` constructor, the optional leading `@lang@` prefix from
+  // QLever's internal normalized format is deliberately NOT accepted here.
+  static Iri fromIrirefValidated(std::string_view stringWithBrackets);
 
   // Create a new `Iri` given an IRI string without brackets.
   static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);

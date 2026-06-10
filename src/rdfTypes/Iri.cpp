@@ -62,6 +62,21 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 }
 
 // ____________________________________________________________________________
+Iri Iri::fromIrirefValidated(std::string_view stringWithBrackets) {
+  // CTRE pattern for the SPARQL/Turtle `IRIREF` production (see the
+  // documentation of `fromIrirefValidated` in `Iri.h` for a full explanation).
+  // `\0- ` matches every byte in the range `#x00`-`#x20` (control chars and
+  // space).
+  static constexpr ctll::fixed_string irirefRegex = "<[^<>\"{}|^\\\\`\\0- ]*>";
+  if (!ctre::match<irirefRegex>(stringWithBrackets)) {
+    AD_THROW(absl::StrCat("The string \"", stringWithBrackets,
+                          "\" is not a valid IRI reference (IRIREF)."
+                          "See https://www.ietf.org/rfc/rfc3987.txt:"));
+  }
+  return fromIriref(stringWithBrackets);
+}
+
+// ____________________________________________________________________________
 Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(stringWithoutBrackets, '<') &&
                        !ql::ends_with(stringWithoutBrackets, '>'));
