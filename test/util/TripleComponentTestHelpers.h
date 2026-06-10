@@ -36,9 +36,11 @@ constexpr auto tripleComponentLiteral =
     };
 
 // Create a `TripleComponent` that stores an `Iri` from the given `<iriref>`.
-// Validates the passed string `s`.
+// Deliberately does NOT validate `s`: several tests construct syntactically
+// invalid IRIs (e.g. with embedded whitespace) as test data. Use
+// `Iri::fromIrirefValidated` directly when a test wants validation.
 constexpr auto iri = [](std::string_view s) {
-  return TripleComponent::Iri::fromIrirefValidated(s);
+  return TripleComponent::Iri::fromIriref(s);
 };
 }  // namespace ad_utility::testing
 

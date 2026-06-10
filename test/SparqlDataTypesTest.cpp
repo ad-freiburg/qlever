@@ -29,6 +29,8 @@ namespace {
 
 using Iri = ad_utility::triple_component::Iri;
 auto iri = ad_utility::testing::iri;
+// Validating variant, used to test that invalid IRIs are rejected.
+auto iriV = Iri::fromIrirefValidated;
 
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -149,23 +151,24 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
-  EXPECT_THROW(iri("http://linkwithoutangularbrackets"), ad_utility::Exception);
-  EXPECT_THROW(iri("<<nestedangularbrackets>>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<duplicatedangularbracker>>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<<duplicatedangularbracker>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<noend"), ad_utility::Exception);
-  EXPECT_THROW(iri("nostart>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<\"withdoublequote>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<{withcurlybrace>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<}withcurlybrace>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<|withpipesymbol>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<^withcaret>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<\\withbackslash>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<`withbacktick>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("http://linkwithoutangularbrackets"),
+               ad_utility::Exception);
+  EXPECT_THROW(iriV("<<nestedangularbrackets>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<duplicatedangularbracker>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<<duplicatedangularbracker>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<noend"), ad_utility::Exception);
+  EXPECT_THROW(iriV("nostart>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\"withdoublequote>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<{withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<}withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<|withpipesymbol>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<^withcaret>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\\withbackslash>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<`withbacktick>"), ad_utility::Exception);
   // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
   // but the following two are probably the most common cases
-  EXPECT_THROW(iri("<with whitespace>"), ad_utility::Exception);
-  EXPECT_THROW(iri("<with\r\nnewline>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<with whitespace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<with\r\nnewline>"), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
