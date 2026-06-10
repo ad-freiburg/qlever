@@ -27,8 +27,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // The file in which the offsets of the words are stored. It contains one
   // `Offset` per word, plus a final offset that marks the end of the last
-  // word. The number of words is therefore the number of stored offsets minus
-  // one.
+  // word, followed by an `MmapVectorMetaData` trailer at the end of the file
+  // that records the number of offsets. The number of words is therefore the
+  // number of stored offsets minus one.
   ad_utility::File offsetsFile_;
 
   // The number of words stored in the vocabulary.
@@ -64,21 +65,21 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     void finishImpl() override;
   };
 
-  /// Open the vocabulary from file. It must have been previously written to
-  /// this file, for example via `buildFromVector` or `buildFromTextFile`.
+  // Open the vocabulary from file. It must have been previously written to
+  // this file via a `WordWriter`.
   void open(const std::string& filename);
 
   // Return the word that is stored at the index. Throw an exception if `idx >=
   // size`.
   std::string operator[](uint64_t idx) const;
 
-  /// Get the number of words in the vocabulary.
+  // Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
-  /// Default constructor for an empty vocabulary.
+  // Default constructor for an empty vocabulary.
   VocabularyOnDisk() = default;
 
-  /// `VocabularyOnDisk` is movable, but not copyable.
+  // `VocabularyOnDisk` is movable, but not copyable.
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 

@@ -53,8 +53,10 @@ void VocabularyOnDisk::WordWriter::finishImpl() {
   // vocabulary.
   offsetsFile_.write(&currentOffset_, sizeof(currentOffset_));
   ++numWords_;
-  // For backwards compatibility we still have to write the same redundant
-  // trailer that MmapVector used to write.
+  // Write the `MmapVectorMetaData` trailer that older vocabulary files also
+  // used. Only the `size_` field is read by `VocabularyOnDisk` (`capacity_`
+  // and `bytesize_` are MmapVector-internal and unused here), but we keep
+  // the full struct so that older binaries can also read these new files.
   ad_utility::MmapVectorMetaData{numWords_, numWords_,
                                  numWords_ * sizeof(uint64_t)}
       .writeToFile(offsetsFile_);
@@ -75,8 +77,8 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename, "r");
   offsetsFile_.open(filename + offsetSuffix_, "r");
-  // For backwards compatibility we have to check the trailer of the file for
-  // the actual size.
+  // Read the offset count from the `MmapVectorMetaData` trailer, which is
+  // the canonical layout used by both old and new vocabulary files.
   uint64_t numOffsets =
       ad_utility::MmapVectorMetaData::readFromFile(offsetsFile_).size_;
   AD_CORRECTNESS_CHECK(numOffsets > 0);
