@@ -946,7 +946,6 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     }
   };
 
-  using Iri = TripleComponent::Iri;
   // The graph specified in the `WITH` clause or `std::monostate{}` if there was
   // no with clause.
   auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
@@ -1270,7 +1269,6 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
   VarOrIri varOrIri = visit(ctx->varOrIri());
-  using Iri = TripleComponent::Iri;
   auto serviceIri =
       std::visit(ad_utility::OverloadCallOperator{
                      [&ctx](const Variable&) -> Iri {
@@ -2367,7 +2365,6 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
   if (ctx->blankNode()) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
-    // TODO<joka921> Unify.
     return visit(ctx->iri());
   } else if (ctx->NIL()) {
     return Iri::fromIrirefValidated(
