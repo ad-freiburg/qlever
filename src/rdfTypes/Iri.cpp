@@ -36,7 +36,6 @@ NormalizedStringView BasicIri<isOwning>::getContent() const {
 // ____________________________________________________________________________
 template <bool isOwning>
 BasicIri<isOwning> BasicIri<isOwning>::fromStringRepresentation(StorageType s) {
-  // The validity of the internal representation is checked in the constructor.
   return BasicIri{std::move(s)};
 }
 
