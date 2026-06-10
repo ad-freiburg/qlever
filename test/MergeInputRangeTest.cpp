@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2026 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -12,7 +12,7 @@
 
 #include <vector>
 
-#include "util/MergeInputRange.h"
+#include "util/ZipMergeIterator.h"
 
 using ad_utility::zipIterator;
 using testing::ElementsAre;

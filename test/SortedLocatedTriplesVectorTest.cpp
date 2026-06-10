@@ -28,6 +28,7 @@ auto LT = [](size_t blockIndex, const IdTriple<>& triple, bool insertOrDelete) {
 auto lt1 = LT(0, IT(1, 2, 3), true);
 auto lt1I = LT(0, IT(1, 2, 3), false);
 auto lt2 = LT(0, IT(1, 2, 4), true);
+auto lt2I = LT(0, IT(1, 2, 4), false);
 auto lt3 = LT(0, IT(1, 2, 5), true);
 auto lt3I = LT(0, IT(1, 2, 5), false);
 auto lt4 = LT(0, IT(2, 1, 1), true);
@@ -290,67 +291,53 @@ TEST(SortedLocatedTriplesVectorTest, iteration) {
   }
 }
 
-// ====== Old part. ======
-
-// Test erase functionality.
 TEST(SortedLocatedTriplesVectorTest, erase) {
-  SortedLocatedTriplesVector sv;
-
-  auto lt1 = LT(0, IT(1, 2, 3), true);
-  auto lt2 = LT(0, IT(2, 3, 4), true);
-  auto lt3 = LT(0, IT(3, 4, 5), true);
-
-  sv.insert(lt1);
-  sv.insert(lt2);
-  sv.insert(lt3);
-  sv.consolidate();
-
-  EXPECT_EQ(sv.size(), 3);
-
-  // erase requires sorted data (AD_CONTRACT_CHECK inside); after erase the
-  // vector stays sorted since sortedUntil_ is updated.
-  sv.erase(lt2);
-
-  EXPECT_EQ(sv.size(), 2);
-
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 2);
-  EXPECT_EQ(result[0].triple_, IT(1, 2, 3));
-  EXPECT_EQ(result[1].triple_, IT(3, 4, 5));
+  {
+    SV s = SV::fromSorted({lt1, lt2, lt3, lt4});
+    s.erase(lt2);
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt3, lt4));
+    s.erase(lt4);
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt3));
+    s.erase(lt1);
+    EXPECT_THAT(s, testing::ElementsAre(lt3));
+    s.erase(lt3);
+    EXPECT_THAT(s, testing::ElementsAre());
+  }
+  {
+    SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5, lt6});
+    s.erase(std::vector<LocatedTriple>{});
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt2, lt3, lt4, lt5, lt6));
+    s.erase(std::vector{lt2, lt4});
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt3, lt5, lt6));
+    s.erase(std::vector{lt1, lt2});  // `lt2` is no longer contained.
+    EXPECT_THAT(s, testing::ElementsAre(lt3, lt5, lt6));
+    s.erase(std::vector{lt6, lt3,
+                        lt5});  // this `erase` overload sorts the elements
+    EXPECT_THAT(s, testing::ElementsAre());
+  }
+  {
+    SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5, lt6});
+    auto erase = [&s](std::vector<LocatedTriple> triples) {
+      s.eraseSorted(triples);
+    };
+    erase({});
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt2, lt3, lt4, lt5, lt6));
+    erase({lt2, lt4});
+    EXPECT_THAT(s, testing::ElementsAre(lt1, lt3, lt5, lt6));
+    erase({lt1, lt2});  // `lt2` is no longer contained.
+    EXPECT_THAT(s, testing::ElementsAre(lt3, lt5, lt6));
+    if (ad_utility::areExpensiveChecksEnabled) {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          erase({lt6, lt3, lt5}),
+          AssertionFailed("ql::ranges::is_sorted(sortedTriples)"));
+    }
+    erase({lt3, lt5, lt6});  // this `erase` overload sorts the elements
+    EXPECT_THAT(s, testing::ElementsAre());
+  }
 }
 
-// Test equality operator.
-TEST(SortedLocatedTriplesVectorTest, equality) {
-  SortedLocatedTriplesVector sv1;
-  SortedLocatedTriplesVector sv2;
-
-  sv1.insert(LT(0, IT(1, 2, 3), true));
-  sv1.insert(LT(0, IT(2, 3, 4), true));
-
-  sv2.insert(LT(0, IT(2, 3, 4), true));
-  sv2.insert(LT(0, IT(1, 2, 3), true));
-
-  // Must sort before comparing.
-  sv1.consolidate();
-  sv2.consolidate();
-
-  EXPECT_EQ(sv1, sv2);
-}
-
-TEST(SortedLocatedTriplesVectorTest, sortedVector) {
-  using SV = SortedLocatedTriplesVector;
-  using LT = LocatedTriple;
-  using LTs = std::vector<LT>;
-
-  // Helpers: three distinct triples, each with insert/delete variants.
-  auto LT1d = LT{0, IT(10, 1, 0), false};
-  auto LT1i = LT{0, IT(10, 1, 0), true};
-  auto LT2d = LT{0, IT(10, 2, 1), false};
-  auto LT2i = LT{0, IT(10, 2, 1), true};
-  auto LT3d = LT{0, IT(11, 3, 0), false};
-  auto LT3i = LT{0, IT(11, 3, 0), true};
-
-  auto expect = [](LTs input, const testing::Matcher<LTs>& expect,
+TEST(SortedLocatedTriplesVectorTest, sortAndRemoveDuplicates) {
+  auto expect = [](std::vector<LocatedTriple> input, const auto& resultMatcher,
                    std::optional<size_t> subrangeBegin = std::nullopt,
                    std::optional<size_t> subrangeEnd = std::nullopt,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -359,308 +346,92 @@ TEST(SortedLocatedTriplesVectorTest, sortedVector) {
         input.begin() + subrangeBegin.value_or(0),
         input.begin() + subrangeEnd.value_or(input.size()));
     SV::sortAndRemoveDuplicates(input, subrange);
-    EXPECT_THAT(input, expect);
+    EXPECT_THAT(input, resultMatcher);
   };
 
-  expect({}, testing::IsEmpty());
-  expect({LT1i}, testing::Eq(LTs{LT1i}));
-  expect({LT1d, LT2i, LT3d}, testing::Eq(LTs{LT1d, LT2i, LT3d}));
-  expect({LT3d, LT1i, LT2d}, testing::Eq(LTs{LT1i, LT2d, LT3d}));
-  expect({LT1i, LT2d, LT3d, LT1d, LT1i, LT2i},
-         testing::Eq(LTs{LT1i, LT2i, LT3d}));
-  expect({LT1d, LT1i, LT1d, LT1i}, testing::Eq(LTs{LT1i}));
-  expect({LT1d, LT2i, LT3i, LT2d, LT3d},
-         testing::Eq(LTs{LT1d, LT2i, LT2d, LT3d}), 2);
-  expect({LT1d, LT2i, LT1i, LT2d, LT1d},
-         testing::Eq(LTs{LT1d, LT2i, LT1d, LT2d}), 2);
+  expect({}, testing::ElementsAre());
+  expect({lt1}, testing::ElementsAre(lt1));
+  expect({lt1I, lt2, lt3I}, testing::ElementsAre(lt1I, lt2, lt3I));
+  expect({lt3I, lt1, lt2I}, testing::ElementsAre(lt1, lt2I, lt3I));
+  expect({lt1, lt2I, lt3I, lt1I, lt1, lt2},
+         testing::ElementsAre(lt1, lt2, lt3I));
+  expect({lt1I, lt1, lt1I, lt1}, testing::ElementsAre(lt1));
+  expect({lt1I, lt2, lt3, lt2I, lt3I},
+         testing::ElementsAre(lt1I, lt2, lt2I, lt3I), 2);
+  expect({lt1I, lt2, lt1, lt2I, lt1I},
+         testing::ElementsAre(lt1I, lt2, lt1I, lt2I), 2);
+  expect({lt1I, lt2, lt1, lt2I, lt1I},
+         testing::ElementsAre(lt1, lt2, lt2I, lt1I), 0, 3);
 }
 
 TEST(SortedLocatedTriplesVectorTest, eraseSortedSubRange) {
-  using SV = SortedLocatedTriplesVector;
   using LTs = std::vector<LocatedTriple>;
 
-  auto lt0 = LT(0, IT(0, 0, 0), true);  // smaller than all others
-  auto lt1 = LT(0, IT(1, 2, 3), true);
-  auto lt2 = LT(0, IT(2, 3, 4), true);
-  auto lt3 = LT(0, IT(3, 4, 5), true);
-  auto lt4 = LT(0, IT(9, 9, 9), true);  // larger than all others
-
   auto test = [](LTs triples, LTs toDelete, const LTs& expected,
+                 size_t numDeleted,
                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    SV::eraseSortedSubRange(triples, toDelete);
+    EXPECT_EQ(SV::eraseSortedSubRange(triples, triples, toDelete), numDeleted);
     EXPECT_EQ(triples, expected);
   };
 
-  test({}, {}, {});
-  test({}, {lt1}, {});
-  test({lt1, lt2, lt3}, {}, {lt1, lt2, lt3});
-  test({lt1}, {lt1}, {});
-  test({lt1}, {lt2}, {lt1});
-  test({lt1, lt2, lt3}, {lt1}, {lt2, lt3});
-  test({lt1, lt2, lt3}, {lt2}, {lt1, lt3});
-  test({lt1, lt2, lt3}, {lt3}, {lt1, lt2});
-  test({lt1, lt2, lt3}, {lt1, lt2, lt3}, {});
-  test({lt1, lt2, lt3}, {lt1, lt3}, {lt2});
-  test({lt1, lt2}, {lt0, lt2}, {lt1});
-  test({lt1, lt2}, {lt1, lt4}, {lt2});
-  test({lt1, lt2, lt3}, {lt0, lt2, lt4}, {lt1, lt3});
-  test({lt1, lt2, lt3}, {lt0, lt4}, {lt1, lt2, lt3});
+  test({}, {}, {}, 0);
+  test({}, {lt1}, {}, 0);
+  test({lt1, lt2, lt3}, {}, {lt1, lt2, lt3}, 0);
+  test({lt1}, {lt1}, {}, 1);
+  test({lt1}, {lt2}, {lt1}, 0);
+  test({lt1, lt2, lt3}, {lt1}, {lt2, lt3}, 1);
+  test({lt1, lt2, lt3}, {lt2}, {lt1, lt3}, 1);
+  test({lt1, lt2, lt3}, {lt3}, {lt1, lt2}, 1);
+  test({lt1, lt2, lt3}, {lt1, lt2, lt3}, {}, 3);
+  test({lt1, lt2, lt3}, {lt1, lt3}, {lt2}, 2);
+  test({lt2, lt3}, {lt1, lt3}, {lt2}, 1);
+  test({lt1, lt2}, {lt1, lt4}, {lt2}, 1);
+  test({lt2, lt3, lt4}, {lt1, lt3, lt5}, {lt2, lt4}, 1);
+  test({lt2, lt3, lt4}, {lt1, lt5}, {lt2, lt3, lt4}, 0);
 }
 
-// ============================================================================
-// BlockSortedLocatedTriplesVector tests
-// ============================================================================
+TEST(SortedLocatedTriplesVectorTest, equality) {
+  EXPECT_EQ(SV::fromSorted({lt1, lt2}), SV::fromSorted({lt1, lt2}));
+  EXPECT_NE(SV::fromSorted({lt1, lt2}), SV::fromSorted({lt3}));
+  {
+    SV s1;
+    SV s2;
 
-TEST(BlockSortedLocatedTriplesVectorTest, test) {
-  auto lt1 = LT(0, IT(1, 2, 3), true);
-  auto lt1I = LT(0, IT(1, 2, 3), false);
+    s1.insert(lt1);
+    s1.insert(lt2);
 
-  BlockSortedLocatedTriplesVector sv;
-  EXPECT_TRUE(sv.empty());
-  EXPECT_EQ(sv.size(), 0);
+    s2.insert(lt2);
+    s2.insert(lt1);
 
-  sv.insert(lt1);
-  sv.consolidate();
+    AD_EXPECT_THROW_WITH_MESSAGE(s1 == s2, NotClean);
+    s1.consolidate();
+    s2.consolidate();
 
-  EXPECT_FALSE(sv.empty());
-  EXPECT_EQ(sv.size(), 1);
-  EXPECT_EQ(*sv.begin(), lt1);
-
-  sv.insert(lt1);
-  sv.consolidate();
-
-  EXPECT_FALSE(sv.empty());
-  EXPECT_EQ(sv.size(), 1);
-
-  sv.insert(lt1I);
-  sv.insert(lt1);
-  sv.consolidate();
-
-  EXPECT_FALSE(sv.empty());
-  EXPECT_EQ(sv.size(), 1);
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, insertAndIterate) {
-  BlockSortedLocatedTriplesVector sv;
-  EXPECT_TRUE(sv.empty());
-
-  sv.insert(LT(0, IT(3, 2, 1), true));
-  sv.insert(LT(0, IT(1, 2, 3), true));
-  sv.insert(LT(0, IT(2, 2, 2), true));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(sv.begin(), testing::_);
-
-  sv.consolidate();
-
-  EXPECT_FALSE(sv.empty());
-  EXPECT_EQ(sv.size(), 3);
-
-  std::vector<LocatedTriple> result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 3);
-  EXPECT_EQ(result[0].triple_, IT(1, 2, 3));
-  EXPECT_EQ(result[1].triple_, IT(2, 2, 2));
-  EXPECT_EQ(result[2].triple_, IT(3, 2, 1));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, duplicatesRemoved) {
-  BlockSortedLocatedTriplesVector sv;
-
-  sv.insert(LT(0, IT(1, 2, 3), true));
-  sv.insert(LT(0, IT(1, 2, 3), false));
-  sv.consolidate();
-
-  EXPECT_EQ(sv.size(), 1);
-
-  auto it = sv.begin();
-  EXPECT_EQ(it->triple_, IT(1, 2, 3));
-  EXPECT_FALSE(it->insertOrDelete_);
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, erase) {
-  BlockSortedLocatedTriplesVector sv;
-
-  auto lt1 = LT(0, IT(1, 2, 3), true);
-  auto lt2 = LT(0, IT(2, 3, 4), true);
-  auto lt3 = LT(0, IT(3, 4, 5), true);
-
-  sv.insert(lt1);
-  sv.insert(lt2);
-  sv.insert(lt3);
-  sv.consolidate();
-
-  EXPECT_EQ(sv.size(), 3);
-
-  sv.erase(lt2);
-
-  EXPECT_EQ(sv.size(), 2);
-
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 2);
-  EXPECT_EQ(result[0].triple_, IT(1, 2, 3));
-  EXPECT_EQ(result[1].triple_, IT(3, 4, 5));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, explicitSorting) {
-  BlockSortedLocatedTriplesVector sv;
-
-  sv.insert(LT(0, IT(3, 0, 0), true));
-  sv.insert(LT(0, IT(1, 0, 0), true));
-
-  sv.consolidate();
-  EXPECT_EQ(sv.size(), 2);
-
-  sv.insert(LT(0, IT(2, 0, 0), true));
-  sv.consolidate();
-
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 3);
-  EXPECT_EQ(result[0].triple_, IT(1, 0, 0));
-  EXPECT_EQ(result[1].triple_, IT(2, 0, 0));
-  EXPECT_EQ(result[2].triple_, IT(3, 0, 0));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, equality) {
-  BlockSortedLocatedTriplesVector sv1;
-  BlockSortedLocatedTriplesVector sv2;
-
-  sv1.insert(LT(0, IT(1, 2, 3), true));
-  sv1.insert(LT(0, IT(2, 3, 4), true));
-
-  sv2.insert(LT(0, IT(2, 3, 4), true));
-  sv2.insert(LT(0, IT(1, 2, 3), true));
-
-  sv1.consolidate();
-  sv2.consolidate();
-
-  EXPECT_EQ(sv1, sv2);
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, emptyVector) {
-  BlockSortedLocatedTriplesVector sv;
-
-  EXPECT_TRUE(sv.empty());
-  EXPECT_EQ(sv.size(), 0);
-  EXPECT_EQ(sv.begin(), sv.end());
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, back) {
-  BlockSortedLocatedTriplesVector sv;
-
-  sv.insert(LT(0, IT(1, 0, 0), true));
-  sv.insert(LT(0, IT(5, 0, 0), true));
-  sv.insert(LT(0, IT(3, 0, 0), true));
-  sv.consolidate();
-
-  EXPECT_EQ(sv.back().triple_, IT(5, 0, 0));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, batchErase) {
-  BlockSortedLocatedTriplesVector sv;
-
-  auto lt1 = LT(0, IT(1, 0, 0), true);
-  auto lt2 = LT(0, IT(2, 0, 0), true);
-  auto lt3 = LT(0, IT(3, 0, 0), true);
-  auto lt4 = LT(0, IT(4, 0, 0), true);
-
-  sv.insert(lt1);
-  sv.insert(lt2);
-  sv.insert(lt3);
-  sv.insert(lt4);
-  sv.consolidate();
-
-  sv.erase(std::vector{lt2, lt4});
-
-  EXPECT_EQ(sv.size(), 2);
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 2);
-  EXPECT_EQ(result[0].triple_, IT(1, 0, 0));
-  EXPECT_EQ(result[1].triple_, IT(3, 0, 0));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, manyElementsSplitsBlocks) {
-  BlockSortedLocatedTriplesVector sv;
-
-  // Insert more than kTargetBlockSize elements to trigger splitting.
-  constexpr size_t n = 2048;
-  for (size_t i = 0; i < n; ++i) {
-    sv.insert(LT(0, IT(i, 0, 0), true));
+    EXPECT_EQ(s1, s2);
   }
-  sv.consolidate();
+  {
+    SV s1;
+    SV s2;
 
-  EXPECT_EQ(sv.size(), n);
+    s1.insert(lt1);
+    s1.insert(lt2);
+    s1.insert(lt3);
+    s1.insert(lt4);
+    s1.insert(lt5);
+    s1.consolidate();
+    s1.insert(lt6);
+    s1.consolidate();
 
-  // Verify iteration yields all elements in sorted order.
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), n);
-  for (size_t i = 0; i < n; ++i) {
-    EXPECT_EQ(result[i].triple_, IT(i, 0, 0));
+    s2.insert(lt6);
+    s2.insert(lt5);
+    s2.insert(lt4);
+    s2.insert(lt3);
+    s2.insert(lt2);
+    s2.consolidate();
+    s2.insert(lt1);
+    s2.consolidate();
+
+    EXPECT_NE(s1, s2);
   }
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, eraseEntireBlock) {
-  BlockSortedLocatedTriplesVector sv;
-
-  // Insert a single element, erase it.
-  auto lt1 = LT(0, IT(1, 0, 0), true);
-  sv.insert(lt1);
-  sv.consolidate();
-
-  sv.erase(lt1);
-  EXPECT_TRUE(sv.empty());
-  EXPECT_EQ(sv.size(), 0);
-  EXPECT_EQ(sv.begin(), sv.end());
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, incrementalConsolidate) {
-  BlockSortedLocatedTriplesVector sv;
-
-  // First batch.
-  sv.insert(LT(0, IT(1, 0, 0), true));
-  sv.insert(LT(0, IT(5, 0, 0), true));
-  sv.consolidate();
-
-  // Second batch inserts elements between existing ones.
-  sv.insert(LT(0, IT(3, 0, 0), true));
-  sv.insert(LT(0, IT(7, 0, 0), true));
-  sv.consolidate();
-
-  EXPECT_EQ(sv.size(), 4);
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 4);
-  EXPECT_EQ(result[0].triple_, IT(1, 0, 0));
-  EXPECT_EQ(result[1].triple_, IT(3, 0, 0));
-  EXPECT_EQ(result[2].triple_, IT(5, 0, 0));
-  EXPECT_EQ(result[3].triple_, IT(7, 0, 0));
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, duplicateAcrossConsolidations) {
-  BlockSortedLocatedTriplesVector sv;
-
-  // Insert a triple, consolidate, then insert the same triple with different
-  // insertOrDelete.
-  sv.insert(LT(0, IT(1, 0, 0), true));
-  sv.consolidate();
-
-  sv.insert(LT(0, IT(1, 0, 0), false));
-  sv.consolidate();
-
-  EXPECT_EQ(sv.size(), 1);
-  EXPECT_FALSE(sv.begin()->insertOrDelete_);
-}
-
-TEST(BlockSortedLocatedTriplesVectorTest, fromSorted) {
-  std::vector<LocatedTriple> sorted = {
-      LT(0, IT(1, 0, 0), true),
-      LT(0, IT(2, 0, 0), true),
-      LT(0, IT(3, 0, 0), true),
-  };
-  auto sv = BlockSortedLocatedTriplesVector::fromSorted(std::move(sorted));
-
-  EXPECT_EQ(sv.size(), 3);
-  std::vector result(sv.begin(), sv.end());
-  ASSERT_EQ(result.size(), 3);
-  EXPECT_EQ(result[0].triple_, IT(1, 0, 0));
-  EXPECT_EQ(result[1].triple_, IT(2, 0, 0));
-  EXPECT_EQ(result[2].triple_, IT(3, 0, 0));
 }

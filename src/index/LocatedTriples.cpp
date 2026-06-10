@@ -205,28 +205,43 @@ const LocatedTriple& SortedLocatedTriplesVector::back() const {
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
   AD_CONTRACT_CHECK(isClean());
-  AD_CONTRACT_CHECK(isSinglePartOnly());
-  auto iter = ql::ranges::lower_bound(triples_, elem);
-  AD_CONTRACT_CHECK(iter != triples_.end() && *iter == elem);
-  triples_.erase(iter);
-  numItemsLargePart_ = triples_.size();
+  auto deleteInRange = [this, &elem](auto subrange) {
+    auto iter = ql::ranges::lower_bound(subrange, elem);
+    if (iter != subrange.end()) {
+      AD_CORRECTNESS_CHECK(*iter == elem);
+      triples_.erase(iter);
+      return 1;
+    }
+    return 0;
+  };
+  numItemsLargePart_ -= deleteInRange(ql::ranges::subrange(
+      triples_.begin(), triples_.begin() + numItemsLargePart_));
+  deleteInRange(ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
+                                     triples_.end()));
 }
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
   AD_CONTRACT_CHECK(isClean());
-  AD_CONTRACT_CHECK(isSinglePartOnly());
   ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
-  eraseSortedSubRange(triples_, toDelete);
-  numItemsLargePart_ = triples_.size();
+  eraseSorted(ql::span(toDelete));
 }
 
 // ____________________________________________________________________________
-void SortedLocatedTriplesVector::erase(ql::span<LocatedTriple> sortedTriples) {
+void SortedLocatedTriplesVector::eraseSorted(
+    ql::span<LocatedTriple> sortedTriples) {
   AD_CONTRACT_CHECK(isClean());
-  AD_CONTRACT_CHECK(isSinglePartOnly());
-  eraseSortedSubRange(triples_, sortedTriples);
-  numItemsLargePart_ = triples_.size();
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedTriples));
+  numItemsLargePart_ -= eraseSortedSubRange(
+      triples_,
+      ql::ranges::subrange(triples_.begin(),
+                           triples_.begin() + numItemsLargePart_),
+      sortedTriples);
+  eraseSortedSubRange(
+      triples_,
+      ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
+                           triples_.end()),
+      sortedTriples);
 }
 
 // ____________________________________________________________________________
@@ -605,7 +620,7 @@ void LocatedTriplesPerBlock::erase(ql::span<LocatedTriple> sortedTriples) {
     AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                       " is not contained");
     auto& block = blockIter->second;
-    block.erase(ql::span(it, groupEnd));
+    block.eraseSorted(ql::span(it, groupEnd));
     if (block.empty()) {
       map_.erase(blockIndex);
     }

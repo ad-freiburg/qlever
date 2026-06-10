@@ -134,7 +134,7 @@ class SortedLocatedTriplesVector {
   ///  - [x] insert
   ///  - [x] iterators (begin/end, const/non-const)
   ///  - [x] back()
-  ///  - [ ] erase
+  ///  - [x] erase
   ///  - [x] size
   ///  - [x] sizeForTesting
   ///  - [x] empty
@@ -198,13 +198,10 @@ class SortedLocatedTriplesVector {
     return numItemsLargePart_ == triples_.size();
   }
 
-  friend class ad_benchmark::EnsureIntegrationBenchmark;
-  friend class ad_benchmark::ZipMergeIteratorBenchmark;
-  friend class ad_benchmark::InsertBatchBenchmark;
   template <size_t>
   friend class BlockSortedLocatedTriplesVectorImpl;
   FRIEND_TEST(SortedLocatedTriplesVectorTest, eraseSortedSubRange);
-  FRIEND_TEST(SortedLocatedTriplesVectorTest, sortedVector);
+  FRIEND_TEST(SortedLocatedTriplesVectorTest, sortAndRemoveDuplicates);
   FRIEND_TEST(SortedLocatedTriplesVectorTest, constructor);
   FRIEND_TEST(SortedLocatedTriplesVectorTest, insert);
 
@@ -236,42 +233,23 @@ class SortedLocatedTriplesVector {
 
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
-  void erase(ql::span<LocatedTriple> sortedTriples);
+  void eraseSorted(ql::span<LocatedTriple> sortedTriples);
 
  private:
-  CPP_template(typename R)(
-      requires ql::ranges::range<
-          R>) static void eraseSortedSubRange(std::vector<LocatedTriple>&
-                                                  triples,
-                                              R&& toDelete) {
-    auto out = triples.begin();
-    auto triple = triples.begin();
-    auto deletion = toDelete.begin();
-    LocatedTripleCompare comp;
-
-    while (triple != triples.end() && deletion != toDelete.end()) {
-      // triple < deletion
-      if (comp(*triple, *deletion)) {
-        if (out != triple) {
-          *out = std::move(*triple);
-        }
-        ++out;
-        ++triple;
-      }
-      // deletion < triple
-      else if (comp(*deletion, *triple)) {
-        // TODO: this would mean that on element is being deleted that is not in
-        // the list. see `erase` for consistency
-        ++deletion;
-        // triple == deletion
-      } else {
-        ++triple;
-        ++deletion;
-      }
-    }
-
-    auto newEnd = std::move(triple, triples.end(), out);
-    triples.erase(newEnd, triples.end());
+  // Let `r1` and `r2` contain sorted items. Let `r1` be contained in `triples`.
+  // Remove the items in `r2` from the subrange `r1` inside `triples`. Returns
+  // the number of items deleted.
+  CPP_template(typename R1, typename R2)(
+      requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
+          R1, LocatedTriple>&& ql::ranges::input_range<R2>) static size_t
+      eraseSortedSubRange(std::vector<LocatedTriple>& triples, R1&& r1,
+                          R2&& r2) {
+    auto [_, newEndOfSubrange] = ql::ranges::set_difference(
+        r1, r2, ql::ranges::begin(r1), {}, &LocatedTriple::triple_,
+        &LocatedTriple::triple_);
+    auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
+    triples.erase(newEndOfSubrange, ql::ranges::end(r1));
+    return numItemsErased;
   }
 
  public:
@@ -541,7 +519,7 @@ class BlockSortedLocatedTriplesVectorImpl {
 
       if (delIt != delEnd) {
         SortedLocatedTriplesVector::eraseSortedSubRange(
-            blocks_[i], ql::ranges::subrange(delIt, delEnd));
+            blocks_[i], blocks_[i], ql::ranges::subrange(delIt, delEnd));
       }
       delIt = delEnd;
     }
