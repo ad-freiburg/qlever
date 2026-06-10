@@ -121,7 +121,7 @@ ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
   {
     MessageSender messageSender{std::move(queryId), queryHub};
     auto handle = messageSender.sharedStatus();
-    ASSERT_NE(handle, nullptr);
+    EXPECT_NE(handle, nullptr);
     EXPECT_EQ(handle->load(), QueryStatus::Unknown);
 
     handle->store(QueryStatus::Ok);

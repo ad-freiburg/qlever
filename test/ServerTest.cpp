@@ -573,8 +573,8 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
 }
 
 // _____________________________________________________________________________
-// A query that throws during execution (Turtle is not a valid result format
-// for SELECT) writes an `end` event with status "failed".
+// A query that fails during planning writes an `end` event with status
+// "failed". It parses (so `start` is written), then planning throws.
 TEST(ServerTest, queryEventLogRecordsFailedStatus) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   auto base = qec->getIndex().getOnDiskBase();
@@ -584,9 +584,9 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
     log.setOutputFile(path);
     SimulateHttpRequest simulateHttpRequest{base, &log};
 
-    auto request = makePostRequest("/", "application/sparql-query",
-                                   "SELECT * WHERE { ?a ?b ?c }");
-    request.set(http::field::accept, "text/turtle");
+    auto request = makePostRequest(
+        "/", "application/sparql-query",
+        "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
     simulateHttpRequest.processRaw(request);
   }
 
