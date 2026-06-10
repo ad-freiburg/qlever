@@ -172,7 +172,7 @@ TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  EXPECT_EQ(iriV("http://valid-iri>").toStringRepresentation(),
+  EXPECT_EQ(iriV("<http://valid-iri>").toStringRepresentation(),
             "<http://valid-iri>");
 }
 
