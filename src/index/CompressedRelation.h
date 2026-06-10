@@ -870,6 +870,15 @@ class CompressedRelationReader {
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
 
+  // Allow to construct a `CompressedRelationReader` using a different
+  // allocator.
+  CompressedRelationReader makeReaderWithReboundAllocator(
+      Allocator allocator) const {
+    return CompressedRelationReader{std::move(allocator),
+                                    ad_utility::File{file_.name(), "r"},
+                                    useGraphPostProcessing_};
+  }
+
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
   // Only the columns specified by `columnIndices` are read.

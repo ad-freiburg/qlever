@@ -348,6 +348,16 @@ class Operation {
 
   const auto& getLimitOffset() const { return limitOffset_; }
 
+  // Directly set the `limitOffset_` without merging and without calling
+  // `onLimitOffsetChanged`. The only intended use case is to restore a
+  // previously set limit/offset that was removed by a cloning/rewriting
+  // operation (e.g. column stripping). In almost all other cases, use
+  // `applyLimitOffset` instead.
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    limitOffset_ = limitOffsetClause;
+  }
+
  private:
   // Actual implementation of `clone()` without extra checks.
   virtual std::unique_ptr<Operation> cloneImpl() const = 0;

@@ -170,8 +170,6 @@ class GroupByImpl : public Operation {
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
 
-  FRIEND_TEST(GroupByTest, doGroupBy);
-
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
   // of tests to write.

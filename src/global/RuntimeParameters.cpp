@@ -60,6 +60,13 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(reasonerMaxRounds_);
   add(autoMaterializeAfterUpdate_);
+  add(logLevel_);
+
+  // Propagate runtime log level changes immediately to the global atomic in
+  // Log.h. The action fires once immediately on registration, so the atomic is
+  // in sync with the parameter default from the start.
+  logLevel_.setOnUpdateAction(
+      [](LogLevel level) { ad_utility::setRuntimeLogLevel(level); });
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {
