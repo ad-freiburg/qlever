@@ -20,8 +20,8 @@
 #include "index/KeyOrder.h"
 #include "util/FlattenIterator.h"
 #include "util/HashMap.h"
-#include "util/MergeInputRange.h"
 #include "util/TimeTracer.h"
+#include "util/ZipMergeIterator.h"
 
 class Permutation;
 
@@ -127,7 +127,28 @@ struct LocatedTripleCompare {
 // inserted triples are sorted on access. Only the last inserted `LocatedTriple`
 // for a triple is retained, so the last operation for a triple is retained.
 class SortedLocatedTriplesVector {
-  using storage = std::vector<LocatedTriple>;
+  /// Public Interface:
+  ///  - [x] constructor
+  ///  - [x] fromSorted
+  ///  - [ ] consolidate
+  ///  - [x] insert
+  ///  - [x] iterators (begin/end, const/non-const)
+  ///  - [x] back()
+  ///  - [ ] erase
+  ///  - [x] size
+  ///  - [x] sizeForTesting
+  ///  - [x] empty
+  ///  - [x] clear
+  ///  - [ ] ==
+  ///  - [x] satisfies range concept
+
+ public:
+  // Some GTest matchers require `value_type`, also add it as a type for the
+  // `Container` requirement.
+  using value_type = LocatedTriple;
+
+ private:
+  using storage = std::vector<value_type>;
   storage triples_ = {};
   size_t numItemsLargePart_ = 0;
   bool smallPartIsSorted_ = true;
@@ -171,13 +192,21 @@ class SortedLocatedTriplesVector {
   bool isClean() const {
     return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
   }
+  // Whether the small part is empty.
+  // ToDo: get rid of methods that require this
+  bool isSinglePartOnly() const {
+    return numItemsLargePart_ == triples_.size();
+  }
 
   friend class ad_benchmark::EnsureIntegrationBenchmark;
   friend class ad_benchmark::ZipMergeIteratorBenchmark;
   friend class ad_benchmark::InsertBatchBenchmark;
   template <size_t>
   friend class BlockSortedLocatedTriplesVectorImpl;
-  FRIEND_TEST(SortedVectorTest, sortedVector);
+  FRIEND_TEST(SortedLocatedTriplesVectorTest, eraseSortedSubRange);
+  FRIEND_TEST(SortedLocatedTriplesVectorTest, sortedVector);
+  FRIEND_TEST(SortedLocatedTriplesVectorTest, constructor);
+  FRIEND_TEST(SortedLocatedTriplesVectorTest, insert);
 
  public:
   SortedLocatedTriplesVector() = default;
@@ -196,7 +225,6 @@ class SortedLocatedTriplesVector {
       storage::iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
   using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
       storage::const_iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
-  using const_reverse_iterator = storage::const_reverse_iterator;
 
   iterator begin();
   const_iterator begin() const;
@@ -209,6 +237,8 @@ class SortedLocatedTriplesVector {
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
   void erase(ql::span<LocatedTriple> sortedTriples);
+
+ private:
   CPP_template(typename R)(
       requires ql::ranges::range<
           R>) static void eraseSortedSubRange(std::vector<LocatedTriple>&
@@ -244,11 +274,16 @@ class SortedLocatedTriplesVector {
     triples.erase(newEnd, triples.end());
   }
 
+ public:
   size_t size() const;
   size_t sizeForTesting() const;
   bool empty() const;
+  void clear();
 
   bool operator==(const SortedLocatedTriplesVector& other) const {
+    // TODO: think more about equality. How it is currently SLTVs with the same
+    // effective elements but also (a weaker condition) the same elements that
+    // are distributed differently over the parts can be unequal.
     AD_CONTRACT_CHECK(isClean());
     AD_CONTRACT_CHECK(other.isClean());
     return triples_ == other.triples_;

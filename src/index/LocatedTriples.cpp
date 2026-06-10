@@ -103,6 +103,10 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
     std::vector<LocatedTriple> sortedTriples) {
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(sortedTriples, LocatedTripleCompare{}));
+  // No duplicate elements (`LocatedTriple`s with the same `triple_`).
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::adjacent_find(sortedTriples, {}, &LocatedTriple::triple_) ==
+      sortedTriples.end());
   SortedLocatedTriplesVector vec;
   vec.numItemsLargePart_ = sortedTriples.size();
   vec.triples_ = std::move(sortedTriples);
@@ -172,8 +176,9 @@ SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::end()
 
 // ____________________________________________________________________________
 LocatedTriple& SortedLocatedTriplesVector::back() {
-  AD_CONTRACT_CHECK(!triples_.empty());
+  AD_CONTRACT_CHECK(!empty());
   AD_CONTRACT_CHECK(isClean());
+  // The small part is empty
   if (numItemsLargePart_ == triples_.size()) {
     return triples_.back();
   }
@@ -185,24 +190,22 @@ LocatedTriple& SortedLocatedTriplesVector::back() {
 
 // ____________________________________________________________________________
 const LocatedTriple& SortedLocatedTriplesVector::back() const {
-  AD_CONTRACT_CHECK(!triples_.empty());
+  AD_CONTRACT_CHECK(!empty());
   AD_CONTRACT_CHECK(isClean());
+  // The small part is empty
   if (numItemsLargePart_ == triples_.size()) {
-    // The small part is empty
     return triples_.back();
   }
   auto& lastLargePart = triples_.at(numItemsLargePart_ - 1);
   auto& lastSmallPart = triples_.back();
-  if (lastLargePart.triple_ > lastSmallPart.triple_) {
-    return lastLargePart;
-  } else {
-    return lastSmallPart;
-  }
+  return lastLargePart.triple_ > lastSmallPart.triple_ ? lastLargePart
+                                                       : lastSmallPart;
 }
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
   AD_CONTRACT_CHECK(isClean());
+  AD_CONTRACT_CHECK(isSinglePartOnly());
   auto iter = ql::ranges::lower_bound(triples_, elem);
   AD_CONTRACT_CHECK(iter != triples_.end() && *iter == elem);
   triples_.erase(iter);
@@ -212,6 +215,7 @@ void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
   AD_CONTRACT_CHECK(isClean());
+  AD_CONTRACT_CHECK(isSinglePartOnly());
   ql::ranges::sort(toDelete, {}, &LocatedTriple::triple_);
   eraseSortedSubRange(triples_, toDelete);
   numItemsLargePart_ = triples_.size();
@@ -220,6 +224,7 @@ void SortedLocatedTriplesVector::erase(std::vector<LocatedTriple> toDelete) {
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::erase(ql::span<LocatedTriple> sortedTriples) {
   AD_CONTRACT_CHECK(isClean());
+  AD_CONTRACT_CHECK(isSinglePartOnly());
   eraseSortedSubRange(triples_, sortedTriples);
   numItemsLargePart_ = triples_.size();
 }
@@ -242,6 +247,13 @@ bool SortedLocatedTriplesVector::empty() const {
   // `LocatedTriple` for each triple. So the triples cannot get empty through
   // sorting.
   return triples_.empty();
+}
+
+// ____________________________________________________________________________
+void SortedLocatedTriplesVector::clear() {
+  triples_.clear();
+  numItemsLargePart_ = 0;
+  smallPartIsSorted_ = true;
 }
 
 // ____________________________________________________________________________

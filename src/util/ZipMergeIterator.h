@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2026 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -120,18 +120,19 @@ CPP_template(typename It, typename Compare = std::less<>,
   }
 };
 
-}  // namespace detail
-
 struct ZipIteratorStruct {
   CPP_template(typename It, typename Compare = std::less<>,
-               typename Projection = ql::identity)(
-      requires true) detail::ZipMergeIteratorImpl<It, Compare, Projection>
-  operator()(It begin1, It end1, It begin2, It end2, Compare cmp = {},
-             Projection proj = {}) const {
-    return detail::ZipMergeIteratorImpl<It, Compare, Projection>(
+               typename Projection = ql::identity)(requires true)
+      ZipMergeIteratorImpl<It, Compare, Projection>
+      operator()(It begin1, It end1, It begin2, It end2, Compare cmp = {},
+                 Projection proj = {}) const {
+    return ZipMergeIteratorImpl<It, Compare, Projection>(
         begin1, end1, begin2, end2, std::move(cmp), std::move(proj));
   }
 };
 
-constexpr ZipIteratorStruct zipIterator;
+}  // namespace detail
+
+constexpr detail::ZipIteratorStruct zipIterator;
+
 }  // namespace ad_utility
