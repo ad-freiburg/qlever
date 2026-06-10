@@ -479,12 +479,13 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 namespace {
-// The concrete types used by the parse-and-map pipeline below. One triple
-// (and the possibly added language tag triples) is mapped to IDs on each
-// mapper thread (and per `ItemMapManager`, see `getIdMapLambdas`).
-using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
+// Queue type that stores batches of parsed triples that are not yet mapped to
+// IDs.
 using ParsedTripleQueue =
     ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>;
+
+// A row with the components already mapped to IDs.
+using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
 
 // A batch of triples that have already been mapped to IDs by one mapper thread,
 // together with the number of input triples it was created from.
@@ -492,6 +493,9 @@ struct TransformedTripleBatch {
   size_t numInputTriples_;
   std::vector<IdTriple> idTriples_;
 };
+
+// Queue type that stores batches of triples that have already been mapped to
+// IDs.
 using ResultTripleQueue =
     ad_utility::data_structures::ThreadSafeQueue<TransformedTripleBatch>;
 

@@ -191,14 +191,17 @@ class TaskQueue {
 // `queue` is closed from the consuming side. Exceptions thrown by a `producer`
 // are propagated to `queue`, and `queue` is closed once all producers are done.
 // Returns an `absl::Cleanup` that closes `queue` and waits for the threads, so
-// the `queue` and the `producers` must outlive it.
+// the `queue` and the `producers` must outlive it. The caller must ensure the
+// passed `pool` has enough threads to run all producers, otherwise there might
+// be less parallelism than expected. The `pool` can be re-used after that. The
+// threads become available again once the producers are done.
 template <typename Queue, typename... Producers>
 auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
                   Producers... producers) {
-  auto activeThreads =
+  auto numActiveProducers =
       std::make_shared<std::atomic<size_t>>(sizeof...(Producers));
-  std::array futures{
-      pool.submit([&queue, producer = std::move(producers), activeThreads]() {
+  std::array futures{pool.submit(
+      [&queue, producer = std::move(producers), numActiveProducers]() {
         try {
           while (auto value = producer()) {
             if (!queue.push(std::move(value.value()))) {
@@ -208,13 +211,13 @@ auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
         } catch (...) {
           queue.pushException(std::current_exception());
         }
-        if (activeThreads->fetch_sub(1) == 1) {
+        if (numActiveProducers->fetch_sub(1) == 1) {
           queue.finish();
         }
       })...};
   return absl::Cleanup{[&queue, futures = std::move(futures)]() {
-    // Finish the queue first, so a thread blocked on a full queue unblocks and
-    // can be joined.
+    // Finish the queue first, so a producer task blocked on a full queue
+    // unblocks and can be joined.
     queue.finish();
     for (auto& future : futures) {
       future.wait();
