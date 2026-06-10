@@ -21,6 +21,14 @@
 
 using namespace std::string_view_literals;
 
+namespace {
+// CTRE pattern for the SPARQL/Turtle `IRIREF` production used by
+// `Iri::fromIrirefValidated` (see its documentation in `Iri.h` for a full
+// explanation). `\0- ` matches every byte in the range `#x00`-`#x20` (control
+// chars and space).
+constexpr ctll::fixed_string irirefRegex = "<[^<>\"{}|^\\\\`\\0- ]*>";
+}  // namespace
+
 namespace ad_utility::triple_component {
 
 // ____________________________________________________________________________
@@ -64,11 +72,6 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefValidated(std::string_view stringWithBrackets) {
-  // CTRE pattern for the SPARQL/Turtle `IRIREF` production (see the
-  // documentation of `fromIrirefValidated` in `Iri.h` for a full explanation).
-  // `\0- ` matches every byte in the range `#x00`-`#x20` (control chars and
-  // space).
-  static constexpr ctll::fixed_string irirefRegex = "<[^<>\"{}|^\\\\`\\0- ]*>";
   if (!ctre::match<irirefRegex>(stringWithBrackets)) {
     AD_THROW(absl::StrCat("The string \"", stringWithBrackets,
                           "\" is not a valid IRI reference (IRIREF)."
