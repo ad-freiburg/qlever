@@ -59,7 +59,19 @@ class BasicIri {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
 
-  // expects `s` to be in QLeveres internal normalized format.
+  // Build an `Iri` from a string that is already in QLever's internal
+  // normalized format. The string is stored verbatim (no validation, no
+  // transformation), so it must satisfy exactly the following:
+  //   1. It includes the surrounding angle brackets, i.e. it has the form
+  //      `<...>`.
+  //   2. The part between the brackets contains no `\u`/`\U` (or any other)
+  //      escape sequences: every character is stored as its literal UTF-8
+  //      byte(s). For example the IRI written as `<http://x/é>` in SPARQL
+  //      is stored here as `<http://x/é>`.
+  // This is precisely the format produced by `toStringRepresentation`, so the
+  // intended use is to round-trip a value obtained from there. To build an
+  // `Iri` from a raw (possibly escaped) SPARQL/Turtle IRI instead, use
+  // `fromIriref`.
   static BasicIri fromStringRepresentation(StorageType s);
 
   // Return the full string representation of the IRI in QLever's internal

@@ -2317,7 +2317,7 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri::fromIriref(std::move(iri))};
+    return GraphTerm{Iri::fromIrirefValidated(std::move(iri))};
   });
 }
 
@@ -2370,7 +2370,8 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
     // TODO<joka921> Unify.
     return visit(ctx->iri());
   } else if (ctx->NIL()) {
-    return Iri::fromIriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    return Iri::fromIrirefValidated(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
   } else {
     return visitAlternative<Literal>(ctx->numericLiteral(),
                                      ctx->booleanLiteral(), ctx->rdfLiteral());
