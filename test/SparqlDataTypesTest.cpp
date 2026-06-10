@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -18,6 +19,7 @@
 #include "engine/Result.h"
 #include "index/Index.h"
 #include "parser/data/Types.h"
+#include "rdfTypes/Iri.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -25,6 +27,7 @@ using enum PositionInTriple;
 
 namespace {
 
+using Iri = ad_utility::triple_component::Iri;
 auto iri = ad_utility::testing::iri;
 
 struct ContextWrapper {
@@ -166,39 +169,39 @@ TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  Iri iri = iri("<http://valid-iri>");
-  EXPECT_EQ(iri.toStringRepresentation(), "<http://valid-iri>");
+  EXPECT_EQ(iri("http://valid-iri>").toStringRepresentation(),
+            "<http://valid-iri>");
 }
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
-  Iri iri = iri(iriString);
+  Iri iriVal = iri(iriString);
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, OBJECT), Optional(iriString));
 
   ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Iri iri = iri("<http://some-iri>");
+  Iri iriVal = iri("<http://some-iri>");
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(evaluate(iri, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(iriVal, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
