@@ -66,6 +66,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
   // keeping the dedup key consistent.
   if (role == PositionInTriple::OBJECT) {
     TripleComponent parsedObject =
+        // TODO: Use only a single `Literal` class in all of QLever.
         RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             literal.toSparql());
     ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
