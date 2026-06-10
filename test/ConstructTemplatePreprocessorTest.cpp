@@ -71,7 +71,7 @@ auto Var = matchesPrecomputedVariable;
 auto Bnode = matchesPrecomputedBlankNode;
 auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
 
-TEST(ConstructTemplatePreprocessorTest, preprocessiriV) {
+TEST(ConstructTemplatePreprocessorTest, preprocessiri) {
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
@@ -341,8 +341,8 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
-  // Triple 1: iriV, iriV, Variable
-  // Triple 2: BlankNode, iriV, Literal
+  // Triple 1: iri, iri, Variable
+  // Triple 2: BlankNode, iri, Literal
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
@@ -369,7 +369,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 // Tests for ConstructTemplatePreprocessor::preprocessTerm()
 // =============================================================================
 
-TEST(ConstructTemplatePreprocessorTest, preprocessTermiriV) {
+TEST(ConstructTemplatePreprocessorTest, preprocessTermiri) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{iriV("<http://s>")}, SUBJECT, varMap);
