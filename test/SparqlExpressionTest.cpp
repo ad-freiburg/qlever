@@ -1744,6 +1744,13 @@ TEST(SparqlExpression, ifAndCoalesce) {
       std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                  IdOrLocalVocabEntry{lit("eins")}, Ids{U, U, U, U, U, D(5.0)}});
 
+  // If all children are constant, the result of COALESCE is also constant.
+  checkCoalesce(IdOrLocalVocabEntry{lit("eins")},
+                std::tuple{U, IdOrLocalVocabEntry{lit("eins")}, I(3)});
+  checkCoalesce(IdOrLocalVocabEntry{I(3)}, std::tuple{I(3), U});
+  // If all children are unbound constants, the result is a single UNDEF.
+  checkCoalesce(U, std::tuple{U, U});
+
   // Check COALESCE with no arguments or empty arguments.
   checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
   checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});

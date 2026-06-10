@@ -4,6 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <optional>
+
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -113,6 +115,7 @@ class CoalesceExpression : public VariadicExpression {
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
     // Arbitrarily chosen interval after which to check for cancellation.
     constexpr size_t CHUNK_SIZE = 1'000'000;
+
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
@@ -136,9 +139,16 @@ class CoalesceExpression : public VariadicExpression {
     ctx->cancellationHandle_->throwIfCancelled();
 
     auto isUnbound = [](const IdOrLocalVocabEntry& x) {
-      return (std::holds_alternative<Id>(x) &&
-              std::get<Id>(x) == Id::makeUndefined());
+      return std::holds_alternative<Id>(x) && std::get<Id>(x).isUndefined();
     };
+
+    // The visitors below return an engaged optional iff the whole `COALESCE`
+    // can be short-circuited to a single constant value (see below). Note: we
+    // cannot use a trailing return type together with the `CPP_template_lambda`
+    // macro (the constraint expands to a trailing `requires`-clause, which has
+    // to come after the return type), so we let the return type be deduced and
+    // make every `return` yield this exact type.
+    using OptResult = std::optional<IdOrLocalVocabEntry>;
 
     auto visitConstantExpressionResult =
         CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
@@ -147,7 +157,12 @@ class CoalesceExpression : public VariadicExpression {
       IdOrLocalVocabEntry constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
-        return;
+        return OptResult{};
+      }
+      // If we have a constant value and no other values are bound so far, we
+      // can directly return the constant value.
+      if (unboundIndices.size() == ctx->size()) {
+        return OptResult{std::move(constantResult)};
       }
       ad_utility::chunkedForLoop<CHUNK_SIZE>(
           0, unboundIndices.size(),
@@ -161,6 +176,7 @@ class CoalesceExpression : public VariadicExpression {
             result[unboundIndices[idx]] = constantResult;
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
+      return OptResult{};
     };
     GCC_REENABLE_WARNINGS
 
@@ -208,16 +224,21 @@ class CoalesceExpression : public VariadicExpression {
       // If the previous expression result is a constant, we can skip the
       // loop.
       if constexpr (isConstantResult<T>) {
-        visitConstantExpressionResult(AD_FWD(childResult));
+        return visitConstantExpressionResult(AD_FWD(childResult));
       } else {
         visitVectorExpressionResult(AD_FWD(childResult));
+        return OptResult{};
       }
     };
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
     for (const auto& child : childrenVec()) {
-      std::visit(visitExpressionResult, child->evaluate(ctx));
+      std::optional<IdOrLocalVocabEntry> constantValue =
+          std::visit(visitExpressionResult, child->evaluate(ctx));
+      if (constantValue.has_value()) {
+        return constantValue.value();
+      }
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
       ctx->cancellationHandle_->throwIfCancelled();
@@ -226,8 +247,11 @@ class CoalesceExpression : public VariadicExpression {
         break;
       }
     }
-    // TODO<joka921> The result is wrong in the case when all children are
-    // constants (see the implementation of `CONCAT`).
+    // Prefer returning a single UNDEF over a vector of UNDEFs if all results
+    // are unbound.
+    if (unboundIndices.size() == ctx->size()) {
+      return Id::makeUndefined();
+    }
     return result;
   }
 };
