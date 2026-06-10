@@ -886,6 +886,51 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
 }
 
 // _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsWhenReadingPastEnd) {
+  ByteBufferWriteSerializer writer;
+  int x = 42;
+  writer << x;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  // Reading the value succeeds.
+  int y;
+  reader >> y;
+  EXPECT_EQ(y, 42);
+
+  // Any further read past the end throws a contract-check failure.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader >> y, ::testing::HasSubstr("iterator_ + numBytes <= data_.end()"));
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsOnSkipPastEnd) {
+  ByteBufferWriteSerializer writer;
+  char c = 'Q';
+  writer << c;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader.skip(100),
+      ::testing::HasSubstr(
+          "Tried to read/access bytes in ByteBufferReadSerializer but not "
+          "enough bytes available"));
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsOnGetSpanPastEnd) {
+  ByteBufferWriteSerializer writer;
+  char c = 'Q';
+  writer << c;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader.getSpanToBytes(100),
+      ::testing::HasSubstr(
+          "Tried to read/access bytes in ByteBufferReadSerializer but not "
+          "enough bytes available"));
+}
+
+// _____________________________________________________________________________
 // Tests for the UsesAlignedSerialization trait and aligned serializers.
 // _____________________________________________________________________________
 
