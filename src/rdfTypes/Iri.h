@@ -90,15 +90,6 @@ class BasicIri {
     return std::move(iri_);
   }
 
-  std::conditional_t<isOwning, std::string, std::string_view> toSparql() && {
-    return toStringRepresentation();
-  }
-
-  std::conditional_t<isOwning, std::string, std::string_view> toSparql()
-      const& {
-    return toStringRepresentation();
-  }
-
   // Return true iff the IRI is empty.
   bool empty() const { return iri_.empty(); }
 
