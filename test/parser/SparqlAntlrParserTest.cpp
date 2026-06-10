@@ -31,10 +31,8 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 
 PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIrirefValidated(iri));
+      ad_utility::triple_component::Iri::fromIriref(iri));
 }
-
-auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
 
 const EncodedIriManager* encodedIriManager() {
   static EncodedIriManager encodedIriManager_;
