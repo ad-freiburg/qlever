@@ -501,9 +501,9 @@ using ResultTripleQueue =
 template <typename PB>
 auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
                           PB& parserBatcher, ParsedTripleQueue& parsedQueue) {
-  return ad_utility::runProducers(
-      parserPool, parsedQueue,
-      [&parserBatcher]() { return parserBatcher.getBatch(); });
+  return ad_utility::runProducers(parserPool, parsedQueue, [&parserBatcher]() {
+    return parserBatcher.getBatch();
+  });
 }
 
 // Start one thread per `mapper` on `transformPool`. Each thread repeatedly pops
