@@ -113,7 +113,7 @@ class AlignedAllocator {
       // Store `offset - 1` as a `uint8_t` in the byte immediately before the
       // aligned result, so that `deallocate` can recover the original start.
       auto offsetMinus1 = static_cast<uint8_t>(alignedAddr - rawAddr - 1);
-      static_assert(sizeof(offsetMinus1 == 1));
+      static_assert(sizeof(offsetMinus1) == 1);
       auto addrBefore = reinterpret_cast<char*>(result) - 1;
       memcpy(addrBefore, &offsetMinus1, 1);
 
