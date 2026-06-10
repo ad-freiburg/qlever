@@ -666,12 +666,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Grab the shared handle before `messageSender` is moved below.
     using ad_utility::websocket::QueryStatus;
     auto queryStatus = messageSender.sharedStatus();
+    // Outside the `try`: `qecPtr` owns the id whose destructor writes the
+    // `end` event, so the status must be set before it unwinds.
+    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
+        prepareOperation(operationName, operationString,
+                         std::move(messageSender), parameters,
+                         timeLimit.value(), accessTokenOk, clientIp);
+    auto& qec = *qecPtr;
     try {
-      auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-          prepareOperation(operationName, operationString,
-                           std::move(messageSender), parameters,
-                           timeLimit.value(), accessTokenOk, clientIp);
-      auto& qec = *qecPtr;
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(
             msg, ad_utility::truncateOperationString(operationString)));
