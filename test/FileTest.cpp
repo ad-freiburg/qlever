@@ -12,6 +12,7 @@ TEST(File, move) {
   File file1(filename, "w");
   ASSERT_TRUE(file1.isOpen());
   file1.write("aaa", 3);
+  EXPECT_EQ(file1.name(), "testFileMove.tmp");
 
   File file2;
   ASSERT_TRUE(file1.isOpen());
