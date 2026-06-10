@@ -8,10 +8,7 @@
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
-namespace {
-auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
-}
-
+using namespace ad_utility::testing;
 // _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =
@@ -37,19 +34,18 @@ TEST(QuadTest, getQuads) {
     return SparqlTripleSimpleWithGraph(c, c, c, g);
   };
   expectGetQuads({}, {}, {});
-  expectGetQuads({TripleOf(iriV("<a>"))}, {},
-                 {QuadOf(iriV("<a>"), std::monostate{})});
-  expectGetQuads({TripleOf(iriV("<a>"))},
-                 {{iriV("<b>"), {TripleOf(iriV("<a>"))}}},
-                 {QuadOf(iriV("<a>"), std::monostate{}),
-                  QuadOf(iriV("<a>"), iriV("<b>"))});
+  expectGetQuads({TripleOf(iri("<a>"))}, {},
+                 {QuadOf(iri("<a>"), std::monostate{})});
   expectGetQuads(
-      {TripleOf(iriV("<a>")), TripleOf(iriV("<d>"))},
-      {{iriV("<b>"), {TripleOf(iriV("<a>"))}},
-       {iriV("<b>"), {TripleOf(iriV("<b>")), TripleOf(iriV("<c>"))}}},
-      {QuadOf(iriV("<a>"), std::monostate{}),
-       QuadOf(iriV("<d>"), std::monostate{}), QuadOf(iriV("<a>"), iriV("<b>")),
-       QuadOf(iriV("<b>"), iriV("<b>")), QuadOf(iriV("<c>"), iriV("<b>"))});
+      {TripleOf(iri("<a>"))}, {{iri("<b>"), {TripleOf(iri("<a>"))}}},
+      {QuadOf(iri("<a>"), std::monostate{}), QuadOf(iri("<a>"), iri("<b>"))});
+  expectGetQuads(
+      {TripleOf(iri("<a>")), TripleOf(iri("<d>"))},
+      {{iri("<b>"), {TripleOf(iri("<a>"))}},
+       {iri("<b>"), {TripleOf(iri("<b>")), TripleOf(iri("<c>"))}}},
+      {QuadOf(iri("<a>"), std::monostate{}),
+       QuadOf(iri("<d>"), std::monostate{}), QuadOf(iri("<a>"), iri("<b>")),
+       QuadOf(iri("<b>"), iri("<b>")), QuadOf(iri("<c>"), iri("<b>"))});
 }
 
 // _____________________________________________________________________________
@@ -104,22 +100,22 @@ TEST(QuadTest, getOperations) {
                                                     matchers::Triples(triples));
       };
   expectGetQuads({}, {}, ElementsAre(matchers::Triples({})));
-  expectGetQuads({TripleOf(iriV("<a>"))}, {},
-                 ElementsAre(matchers::Triples({SparqlTriple(iriV("<a>"))})));
+  expectGetQuads({TripleOf(iri("<a>"))}, {},
+                 ElementsAre(matchers::Triples({SparqlTriple(iri("<a>"))})));
   expectGetQuads(
-      {TripleOf(iriV("<a>"))}, {{iriV("<b>"), {TripleOf(iriV("<a>"))}}},
-      ElementsAre(matchers::Triples({SparqlTriple(iriV("<a>"))}),
-                  GraphTriples({SparqlTriple(iriV("<a>"))}, iriV("<b>"))));
+      {TripleOf(iri("<a>"))}, {{iri("<b>"), {TripleOf(iri("<a>"))}}},
+      ElementsAre(matchers::Triples({SparqlTriple(iri("<a>"))}),
+                  GraphTriples({SparqlTriple(iri("<a>"))}, iri("<b>"))));
   expectGetQuads(
-      {TripleOf(iriV("<a>")), TripleOf(iriV("<d>"))},
-      {{iriV("<b>"), {TripleOf(iriV("<a>"))}},
-       {iriV("<b>"), {TripleOf(iriV("<b>")), TripleOf(iriV("<c>"))}}},
+      {TripleOf(iri("<a>")), TripleOf(iri("<d>"))},
+      {{iri("<b>"), {TripleOf(iri("<a>"))}},
+       {iri("<b>"), {TripleOf(iri("<b>")), TripleOf(iri("<c>"))}}},
       ElementsAre(
           matchers::Triples(
-              {SparqlTriple(iriV("<a>")), SparqlTriple(iriV("<d>"))}),
-          GraphTriples({SparqlTriple(iriV("<a>"))}, iriV("<b>")),
-          GraphTriples({SparqlTriple(iriV("<b>")), SparqlTriple(iriV("<c>"))},
-                       iriV("<b>"))));
+              {SparqlTriple(iri("<a>")), SparqlTriple(iri("<d>"))}),
+          GraphTriples({SparqlTriple(iri("<a>"))}, iri("<b>")),
+          GraphTriples({SparqlTriple(iri("<b>")), SparqlTriple(iri("<c>"))},
+                       iri("<b>"))));
 }
 
 TEST(QuadTest, forAllVariables) {
@@ -137,8 +133,8 @@ TEST(QuadTest, forAllVariables) {
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;
-  Triple noVars{GraphTerm(iriV("<a>")), GraphTerm(iriV("<b>")),
-                GraphTerm(iriV("<c>"))};
+  Triple noVars{GraphTerm(iri("<a>")), GraphTerm(iri("<b>")),
+                GraphTerm(iri("<c>"))};
   Triple differentVars{GraphTerm(Var("?a")), GraphTerm(Var("?b")),
                        GraphTerm(Var("?c"))};
   Triple sameVar{GraphTerm(Var("?a")), GraphTerm(Var("?a")),

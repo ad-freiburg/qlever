@@ -22,7 +22,7 @@ using Var = Variable;
 using iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iriV = ad_utility::testing::iriV;
+auto iri = ad_utility::testing::iri;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
@@ -73,7 +73,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", getIriString(triples[2].p_));
-    ASSERT_EQ(iriV("<http://abc.de>"), triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -103,7 +103,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", getIriString(triples[2].p_));
-    ASSERT_EQ(iriV("<http://abc.de>"), triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -270,12 +270,12 @@ TEST(ParserTest, testParse) {
 
     std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    std::vector<std::vector<TripleComponent>> vvals = {{iriV("<1>")}, {2}};
+    std::vector<std::vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{iriV("<1>"), iriV("<2>")}, {1, 2}};
+    vvals = {{iri("<1>"), iri("<2>")}, {1, 2}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -296,13 +296,13 @@ TEST(ParserTest, testParse) {
     std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
     std::vector<std::vector<TripleComponent>> vvals = {
-        {iriV("<Albert_Einstein>")}};
+        {iri("<Albert_Einstein>")}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{iriV("<Marie_Curie>"), iriV("<Joseph_Jacobson>")},
-             {iriV("<Freiherr>"), iriV("<Lord_of_the_Isles>")}};
+    vvals = {{iri("<Marie_Curie>"), iri("<Joseph_Jacobson>")},
+             {iri("<Freiherr>"), iri("<Lord_of_the_Isles>")}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -330,8 +330,8 @@ TEST(ParserTest, testParse) {
     std::vector<Variable> vvars = {Var{"?citytype"}};
     ASSERT_EQ(vvars, values1._variables);
     std::vector<std::vector<TripleComponent>> vvals = {
-        {iriV("<http://www.wikidata.org/entity/Q515>")},
-        {iriV("<http://www.wikidata.org/entity/Q262166>")}};
+        {iri("<http://www.wikidata.org/entity/Q515>")},
+        {iri("<http://www.wikidata.org/entity/Q262166>")}};
     ASSERT_EQ(vvals, values1._values);
   }
 
@@ -503,7 +503,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(getIriString(c._triples[0].p_), "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, iriV("<Scott%2C%20Ridley>"));
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -580,7 +580,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(getIriString(c._triples[0].p_), "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, iriV("<Scott%2C%20Ridley>"));
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -660,10 +660,10 @@ TEST(ParserTest, testParse) {
     EXPECT_THAT(
         pq_1,
         m::ConstructQuery(
-            {{Variable{"?x"}, iriV("<http://xmlns.com/foaf/0.1/name>"),
+            {{Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
               Variable{"?name"}}},
             m::GraphPattern(m::Triples({SparqlTriple{
-                Variable{"?x"}, iriV("<http://example.com/ns#employeeName>"),
+                Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
                 Variable{"?name"}}}))));
 
     // Check Parse Construct (2)
@@ -673,14 +673,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
         "WHERE       { ?x foaf:name ?name } ");
 
-    EXPECT_THAT(
-        pq_2, m::ConstructQuery(
-                  {{iriV("<http://example.org/person#Alice>"),
-                    iriV("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
-                    Variable{"?name"}}},
-                  m::GraphPattern(m::Triples({SparqlTriple{
-                      Variable{"?x"}, iriV("<http://xmlns.com/foaf/0.1/name>"),
-                      Variable{"?name"}}}))));
+    EXPECT_THAT(pq_2,
+                m::ConstructQuery(
+                    {{iri("<http://example.org/person#Alice>"),
+                      iri("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
+                        Variable{"?name"}}}))));
   }
 
   {
@@ -767,7 +767,7 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(Var{"?z"}, c._triples[1].o_);
   ASSERT_EQ(Var{"?y"}, c._triples[2].s_);
   ASSERT_EQ("<nsx:rel2>", getIriString(c._triples[2].p_));
-  ASSERT_EQ(iriV("<http://abc.de>"), c._triples[2].o_);
+  ASSERT_EQ(iri("<http://abc.de>"), c._triples[2].o_);
   ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
@@ -928,7 +928,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateYearOrDuration{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", getIriString(c._triples[1].p_));
-    ASSERT_EQ(iriV("<Scott%2C%20Ridley>"), c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -951,7 +951,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateYearOrDuration{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", getIriString(c._triples[1].p_));
-    ASSERT_EQ(iriV("<Scott%2C%20Ridley>"), c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -1188,7 +1188,7 @@ TEST(ParserTest, Group) {
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
     return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-        iriV(iriString), std::move(langTag)));
+        iri(iriString), std::move(langTag)));
   };
   {
     ParsedQuery q = parseQuery(
@@ -1209,7 +1209,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     EXPECT_THAT(triples, ::testing::ElementsAre(SparqlTriple{
-                             Var{"?x"}, PropertyPath::fromIri(iriV("<label>")),
+                             Var{"?x"}, PropertyPath::fromIri(iri("<label>")),
                              Var{"?y"}}));
   }
   {
@@ -1273,10 +1273,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
 
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     SparqlTriple tripleA{Var{"?y"},
-                         PropertyPath::fromIri(iriV(LANGUAGE_PREDICATE)),
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
                          ad_utility::convertLangtagToEntityUri("en")};
     SparqlTriple tripleB{Var{"?y"},
-                         PropertyPath::fromIri(iriV(LANGUAGE_PREDICATE)),
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
                          ad_utility::convertLangtagToEntityUri("de")};
 
     auto hasSingleTriple = [](const SparqlTriple& triple) {
@@ -1302,7 +1302,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             ::testing::VariantWith<parsedQuery::BasicGraphPattern>(AD_FIELD(
                 parsedQuery::BasicGraphPattern, _triples,
                 ::testing::ElementsAre(SparqlTriple{
-                    iriV("<somebody>"), Variable{"?p"}, Variable{"?y"}}))),
+                    iri("<somebody>"), Variable{"?p"}, Variable{"?y"}}))),
             ::testing::VariantWith<parsedQuery::Union>(
                 makeArbitraryUnionMatcher(hasSingleTriple(tripleA),
                                           hasSingleTriple(tripleB)))));
@@ -1314,13 +1314,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{iriV("<somebody>"), Var{"?p"}, Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{Var{"?y"},
-                            PropertyPath::fromIri(
-                                iriV("<http://qlever.cs.uni-freiburg.de/"
-                                     "builtin-functions/langtag>")),
-                            ad_utility::convertLangtagToEntityUri("en")}),
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?y"},
+                  PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                            "builtin-functions/langtag>")),
+                  ad_utility::convertLangtagToEntityUri("en")}),
               triples[1]);
   }
   {
@@ -1332,10 +1332,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(patterns.size(), 3);
     EXPECT_THAT(patterns[0].getBasic()._triples,
                 ::testing::ElementsAre(
-                    SparqlTriple{iriV("<somebody>"), Var{"?p"}, Var{"?y"}}));
+                    SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}));
     EXPECT_THAT(patterns[2].getBasic()._triples,
                 ::testing::ElementsAre(SparqlTriple{
-                    Var{"?y"}, PropertyPath::fromIri(iriV(LANGUAGE_PREDICATE)),
+                    Var{"?y"}, PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
                     ad_utility::convertLangtagToEntityUri("en")}));
   }
 
@@ -1354,7 +1354,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
         triples[0]);
     ASSERT_EQ(
         (SparqlTriple{Var{"?text"},
-                      PropertyPath::fromIri(iriV(CONTAINS_ENTITY_PREDICATE)),
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
                       Var{"?y"}}),
         triples[1]);
   }
@@ -1366,19 +1366,19 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(3u, triples.size());
-    ASSERT_EQ((SparqlTriple{iriV("<somebody>"), Var{"?p"}, Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
     ASSERT_EQ(
         (SparqlTriple{Var{"?text"},
-                      PropertyPath::fromIri(iriV(CONTAINS_ENTITY_PREDICATE)),
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
                       Var{"?y"}}),
         triples[1]);
     ASSERT_EQ(
         (SparqlTriple{
             Var{"?y"},
-            PropertyPath::fromIri(iriV("<http://qlever.cs.uni-freiburg.de/"
-                                       "builtin-functions/langtag>")),
-            iriV("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
+            PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                      "builtin-functions/langtag>")),
+            iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
   // Ensure filter is applied regularly if variable does not originate from
@@ -1563,19 +1563,18 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?s"), Var{"?p"}, Var("?o")}}));
   EXPECT_THAT(parseQuery(query, {}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher));
-  EXPECT_THAT(parseQuery(query, {{DatasetClause{iriV("<foo>"), true}}}),
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<foo>"), true}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                             noGraphs, {{iriV("<foo>")}}));
-  EXPECT_THAT(parseQuery(query, {{DatasetClause{iriV("<bar>"), false}}}),
+                             noGraphs, {{iri("<foo>")}}));
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<bar>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                             {{iriV("<bar>")}}, noGraphs));
-  EXPECT_THAT(
-      parseQuery(query, {{DatasetClause{iriV("<bar>"), false},
-                          DatasetClause{iriV("<foo>"), true},
-                          DatasetClause{iriV("<baz>"), false}}}),
-      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                     {{iriV("<bar>"), iriV("<baz>")}}, {{iriV("<foo>")}}));
-  parsedQuery::DatasetClauses::Graphs datasets{{iriV("<h>")}};
+                             {{iri("<bar>")}}, noGraphs));
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<bar>"), false},
+                                  DatasetClause{iri("<foo>"), true},
+                                  DatasetClause{iri("<baz>"), false}}}),
+              m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                             {{iri("<bar>"), iri("<baz>")}}, {{iri("<foo>")}}));
+  parsedQuery::DatasetClauses::Graphs datasets{{iri("<h>")}};
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
@@ -1588,7 +1587,7 @@ TEST(ParserTest, parseWithDatasets) {
       SparqlParser::parseUpdate(&bnm, &ev,
                                 "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
-                                {{{iriV("<h>"), false}}}),
+                                {{{iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1596,26 +1595,26 @@ TEST(ParserTest, parseWithDatasets) {
                                 "WITH <g> DELETE { ?x <b> <c> } WHERE { "
                                 "?x ?y ?z "
                                 "FILTER EXISTS {?a ?b ?c} }",
-                                {{{iriV("<h>"), false}}}),
+                                {{{iri("<h>"), false}}}),
       ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
       parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
-          {{{iriV("<h>"), false}}}),
+          {{{iri("<h>"), false}}}),
       m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets,
                      noGraphs));
   EXPECT_THAT(parseQuery("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-                         {{{iriV("<h>"), false}}}),
+                         {{{iri("<h>"), false}}}),
               m::AskQuery(filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { "
                          "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
-                         {{{iriV("<h>"), false}}}),
+                         {{{iri("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
-                                    iriV("<a>"), iriV("<b>"), iriV("<c>")}},
+                                    iri("<a>"), iri("<b>"), iri("<c>")}},
                                 filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(
       parseQuery("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-                 {{{iriV("<h>"), false}}}),
+                 {{{iri("<h>"), false}}}),
       m::DescribeQuery(
           m::Describe({Var("?x")}, {datasets, {}},
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
@@ -1628,20 +1627,20 @@ TEST(ParserTest, parseWithDatasets) {
   auto deleteWherePattern =
       m::GraphPattern(m::Triples({{Var("?s"), Var("?p"), Var("?o")}}));
   auto insertDataOp = m::GraphUpdate(
-      {}, {SparqlTripleSimpleWithGraph{iriV("<a>"), iriV("<b>"), iriV("<c>"),
+      {}, {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                        std::monostate{}}});
   EXPECT_THAT(
       SparqlParser::parseUpdate(
           &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-          {DatasetClause{iriV("<foo>"), false},
-           DatasetClause{iriV("<bar>"), true}}),
+          {DatasetClause{iri("<foo>"), false},
+           DatasetClause{iri("<bar>"), true}}),
       testing::ElementsAre(
           m::UpdateClause(
               deleteWhereOp, deleteWherePattern,
-              m::datasetClausesMatcher({{iriV("<foo>")}}, {{iriV("<bar>")}})),
+              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}})),
           m::UpdateClause(
               insertDataOp, m::GraphPattern(),
-              m::datasetClausesMatcher({{iriV("<foo>")}}, {{iriV("<bar>")}}))));
+              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}}))));
 }
 
 // _____________________________________________________________________________
@@ -1671,7 +1670,7 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
               PropertyPath::makeNegated({PropertyPath::fromIri(
-                  iriV("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
 
   // Other tests for similar variants.
@@ -1682,7 +1681,7 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
               PropertyPath::makeNegated({PropertyPath::fromIri(
-                  iriV("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !^a ?o }"),
@@ -1691,7 +1690,7 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
               PropertyPath::makeNegated({PropertyPath::makeInverse(
-                  PropertyPath::fromIri(iriV("<http://www.w3.org/1999/02/"
-                                             "22-rdf-syntax-ns#type>")))}),
+                  PropertyPath::fromIri(iri("<http://www.w3.org/1999/02/"
+                                            "22-rdf-syntax-ns#type>")))}),
               TripleComponent{Variable{"?o"}}}}))));
 }
