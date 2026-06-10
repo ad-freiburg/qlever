@@ -1610,7 +1610,7 @@ TEST(ParserTest, parseWithDatasets) {
                          "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
                          {{{iri("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
-                                    iri("<a>"), iri("<b>"), iri("<c>")}},
+                                    iriV("<a>"), iriV("<b>"), iriV("<c>")}},
                                 filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(
       parseQuery("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
