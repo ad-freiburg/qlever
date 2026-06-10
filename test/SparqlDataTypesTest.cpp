@@ -146,35 +146,24 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
-  EXPECT_THROW(Iri::fromIrirefValidated("http://linkwithoutangularbrackets"),
+  EXPECT_THROW(iriV("http://linkwithoutangularbrackets"),
                ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<<nestedangularbrackets>>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<duplicatedangularbracker>>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<<duplicatedangularbracker>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<noend"), ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("nostart>"), ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<\"withdoublequote>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<{withcurlybrace>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<}withcurlybrace>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<|withpipesymbol>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<^withcaret>"), ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<\\withbackslash>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<`withbacktick>"),
-               ad_utility::Exception);
+  EXPECT_THROW(iriV("<<nestedangularbrackets>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<duplicatedangularbracker>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<<duplicatedangularbracker>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<noend"), ad_utility::Exception);
+  EXPECT_THROW(iriV("nostart>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\"withdoublequote>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<{withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<}withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<|withpipesymbol>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<^withcaret>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\\withbackslash>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<`withbacktick>"), ad_utility::Exception);
   // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
   // but the following two are probably the most common cases
-  EXPECT_THROW(Iri::fromIrirefValidated("<with whitespace>"),
-               ad_utility::Exception);
-  EXPECT_THROW(Iri::fromIrirefValidated("<with\r\nnewline>"),
-               ad_utility::Exception);
+  EXPECT_THROW(iriV("<with whitespace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<with\r\nnewline>"), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
@@ -186,7 +175,7 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
-  Iri iri = Iri::fromIrirefValidated(iriString);
+  Iri iri = iriV(iriString);
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
@@ -203,7 +192,7 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Iri iri = Iri::fromIrirefValidated("<http://some-iri>");
+  Iri iri = iriV("<http://some-iri>");
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
