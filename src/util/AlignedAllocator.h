@@ -95,14 +95,25 @@ class AlignedAllocator {
       // Round up to the next `MinAlignment`-aligned address, leaving at least
       // one byte before it to store the offset metadata.
       auto rawAddr = reinterpret_cast<std::uintptr_t>(raw);
-      auto alignedAddr =
-          (rawAddr + MinAlignment) & ~(std::uintptr_t{MinAlignment - 1});
+
+      // `bitMask` has zeros in the lower bits where a properly aligned address
+      // needs to have zeros and ones in all other bits. A bitwise and with this
+      // mask will round down to the nearest aligned address.
+      static constexpr auto bitmask = ~(std::uintptr_t{MinAlignment - 1});
+
+      // We have to add at least one byte to our address for the offset storage.
+      // Adding `MinAlignment` and then rounding down to an aligned address
+      // gives us the smallest address that is 1. larger than `rawAddr` and 2.
+      // properly aligned.
+      auto alignedAddr = (rawAddr + MinAlignment) & bitmask;
       T* result = reinterpret_cast<T*>(alignedAddr);
 
       // Store `offset - 1` as a `uint8_t` in the byte immediately before the
       // aligned result, so that `deallocate` can recover the original start.
-      *(reinterpret_cast<uint8_t*>(result) - 1) =
-          static_cast<uint8_t>(alignedAddr - rawAddr - 1);
+      auto offsetMinus1 = static_cast<uint8_t>(alignedAddr - rawAddr - 1);
+      static_assert(sizeof(offsetMinus1 == 1));
+      auto addrBefore = reinterpret_cast<char*>(result) - 1;
+      memcpy(addrBefore, &offsetMinus1, 1);
 
       return result;
     }
@@ -117,9 +128,10 @@ class AlignedAllocator {
 
       // Recover the original allocation start from the offset byte stored by
       // `allocate`.
-      auto stored = *(reinterpret_cast<const uint8_t*>(p) - 1);
-      char* raw =
-          reinterpret_cast<char*>(p) - (static_cast<std::size_t>(stored) + 1);
+      auto addrBefore = reinterpret_cast<const char*>(p) - 1;
+      auto storedOffset = absl::bit_cast<std::uint8_t>(*addrBefore);
+      char* raw = reinterpret_cast<char*>(p) -
+                  (static_cast<std::size_t>(storedOffset) + 1);
 
       std::allocator_traits<ByteAlloc>::deallocate(allocator_, raw, totalBytes);
     }
