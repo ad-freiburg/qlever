@@ -497,10 +497,12 @@ using ResultTripleQueue =
 
 // Start a single thread on `parserPool` that repeatedly calls `getBatch` and
 // pushes the parsed batches to `parsedQueue`, until the input is exhausted or
-// `parsedQueue` is closed from the consuming side.
+// `parsedQueue` is closed from the consuming side. Return a lambda that waits
+// for all started tasks to finish on destruction (using `absl::Cleanup`).
 template <typename PB>
-auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
-                          PB& parserBatcher, ParsedTripleQueue& parsedQueue) {
+[[nodiscard]] auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
+                                        PB& parserBatcher,
+                                        ParsedTripleQueue& parsedQueue) {
   return ad_utility::runProducers(parserPool, parsedQueue, [&parserBatcher]() {
     return parserBatcher.getBatch();
   });
@@ -508,11 +510,13 @@ auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
 
 // Start one thread per `mapper` on `transformPool`. Each thread repeatedly pops
 // a batch of parsed triples from `parsedQueue`, converts all of them to IDs
-// using its dedicated `mapper`, and pushes the result to `resultQueue`.
+// using its dedicated `mapper`, and pushes the result to `resultQueue`. Return
+// a lambda that waits for all started tasks to finish on destruction (using
+// `absl::Cleanup`).
 template <typename Mappers>
-auto mapTriples(ad_utility::TaskQueue<>& transformPool, Mappers& mappers,
-                ParsedTripleQueue& parsedQueue,
-                ResultTripleQueue& resultQueue) {
+[[nodiscard]] auto mapTriples(ad_utility::TaskQueue<>& transformPool,
+                              Mappers& mappers, ParsedTripleQueue& parsedQueue,
+                              ResultTripleQueue& resultQueue) {
   // Turn a single `mapper` into a producer that pops one batch of parsed
   // triples and maps it to a `TransformedTripleBatch`.
   auto makeProducer = [&parsedQueue](auto& mapper) {
@@ -622,14 +626,13 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
       auto mapperCleanup =
           mapTriples(transformPool, mappers, parsedQueue, resultQueue);
 
-      // Collect the converted triples on this thread.
+      // Collect the mapped triples on this thread.
       while (auto result = resultQueue.pop()) {
         numTriplesParsedTimer.cont();
-        auto& transformed = result.value();
-        actualCurrentPartialSize += transformed.idTriples_.size();
-        localWriter.insert(localWriter.end(), transformed.idTriples_.begin(),
-                           transformed.idTriples_.end());
-        numTriplesParsed += transformed.numInputTriples_;
+        const auto& [numInputTriples, triples] = result.value();
+        actualCurrentPartialSize += triples.size();
+        localWriter.insert(localWriter.end(), triples.begin(), triples.end());
+        numTriplesParsed += numInputTriples;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
