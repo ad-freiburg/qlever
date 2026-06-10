@@ -68,9 +68,8 @@ class BasicIri {
   //      escape sequences: every character is stored as its literal UTF-8
   //      byte(s). For example the IRI written as `<http://x/é>` in SPARQL
   //      is stored here as `<http://x/é>`.
-  // This is precisely the format produced by `toStringRepresentation`, so the
-  // intended use is to round-trip a value obtained from there. To build an
-  // `Iri` from a raw (possibly escaped) SPARQL/Turtle IRI instead, use
+  // This is precisely the format produced by `toStringRepresentation`. To build
+  // an `Iri` from a raw (possibly escaped) SPARQL/Turtle IRI instead, use
   // `fromIriref`.
   static BasicIri fromStringRepresentation(StorageType s);
 

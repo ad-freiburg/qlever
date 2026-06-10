@@ -9,7 +9,7 @@
 #include "parser/Quads.h"
 
 namespace tc {
-auto Iri = ad_utility::triple_component::Iri::fromIriref;
+auto Iri = ad_utility::triple_component::Iri::fromIrirefValidated;
 }
 
 // _____________________________________________________________________________

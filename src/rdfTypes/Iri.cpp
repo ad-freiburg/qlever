@@ -36,6 +36,7 @@ NormalizedStringView BasicIri<isOwning>::getContent() const {
 // ____________________________________________________________________________
 template <bool isOwning>
 BasicIri<isOwning> BasicIri<isOwning>::fromStringRepresentation(StorageType s) {
+  AD_CORRECTNESS_CHECK(ql::starts_with(s, "<") || ql::starts_with(s, "@"));
   return BasicIri{std::move(s)};
 }
 
