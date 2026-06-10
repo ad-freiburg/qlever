@@ -495,51 +495,15 @@ struct TransformedTripleBatch {
 using ResultTripleQueue =
     ad_utility::data_structures::ThreadSafeQueue<TransformedTripleBatch>;
 
-// Start one thread per `producer` on `pool`. Each thread repeatedly calls its
-// `producer` (which returns a `std::optional`) and pushes the values to
-// `queue`, until the `producer` is exhausted (returns `std::nullopt`) or
-// `queue` is closed from the consuming side. Exceptions thrown by a `producer`
-// are propagated to `queue`, and `queue` is closed once all producers are done.
-// Returns an `absl::Cleanup` that closes `queue` and waits for the threads, so
-// the `queue` and the `producers` must outlive it.
-template <typename Queue, typename... Producers>
-auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
-                  Producers... producers) {
-  auto activeThreads =
-      std::make_shared<std::atomic<size_t>>(sizeof...(Producers));
-  std::array futures{
-      pool.submit([&queue, producer = std::move(producers), activeThreads]() {
-        try {
-          while (auto value = producer()) {
-            if (!queue.push(std::move(value.value()))) {
-              break;
-            }
-          }
-        } catch (...) {
-          queue.pushException(std::current_exception());
-        }
-        if (activeThreads->fetch_sub(1) == 1) {
-          queue.finish();
-        }
-      })...};
-  return absl::Cleanup{[&queue, futures = std::move(futures)]() {
-    // Finish the queue first, so a thread blocked on a full queue unblocks and
-    // can be joined.
-    queue.finish();
-    for (auto& future : futures) {
-      future.wait();
-    }
-  }};
-}
-
 // Start a single thread on `parserPool` that repeatedly calls `getBatch` and
 // pushes the parsed batches to `parsedQueue`, until the input is exhausted or
 // `parsedQueue` is closed from the consuming side.
 template <typename PB>
 auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
                           PB& parserBatcher, ParsedTripleQueue& parsedQueue) {
-  return runProducers(parserPool, parsedQueue,
-                      [&parserBatcher]() { return parserBatcher.getBatch(); });
+  return ad_utility::runProducers(
+      parserPool, parsedQueue,
+      [&parserBatcher]() { return parserBatcher.getBatch(); });
 }
 
 // Start one thread per `mapper` on `transformPool`. Each thread repeatedly pops
@@ -568,8 +532,8 @@ auto mapTriples(ad_utility::TaskQueue<>& transformPool, Mappers& mappers,
   };
   return std::apply(
       [&transformPool, &resultQueue, &makeProducer](auto&... mapper) {
-        return runProducers(transformPool, resultQueue,
-                            makeProducer(mapper)...);
+        return ad_utility::runProducers(transformPool, resultQueue,
+                                        makeProducer(mapper)...);
       },
       mappers);
 }

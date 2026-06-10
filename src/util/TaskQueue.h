@@ -7,7 +7,10 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/any_invocable.h>
 
+#include <array>
+#include <atomic>
 #include <future>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <string>
@@ -181,6 +184,43 @@ class TaskQueue {
   friend std::pair<size_t, size_t> getThreadCountAndTaskSize(
       const TaskQueue<false>&);
 };
+
+// Start one thread per `producer` on `pool`. Each thread repeatedly calls its
+// `producer` (which returns a `std::optional`) and pushes the values to
+// `queue`, until the `producer` is exhausted (returns `std::nullopt`) or
+// `queue` is closed from the consuming side. Exceptions thrown by a `producer`
+// are propagated to `queue`, and `queue` is closed once all producers are done.
+// Returns an `absl::Cleanup` that closes `queue` and waits for the threads, so
+// the `queue` and the `producers` must outlive it.
+template <typename Queue, typename... Producers>
+auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
+                  Producers... producers) {
+  auto activeThreads =
+      std::make_shared<std::atomic<size_t>>(sizeof...(Producers));
+  std::array futures{
+      pool.submit([&queue, producer = std::move(producers), activeThreads]() {
+        try {
+          while (auto value = producer()) {
+            if (!queue.push(std::move(value.value()))) {
+              break;
+            }
+          }
+        } catch (...) {
+          queue.pushException(std::current_exception());
+        }
+        if (activeThreads->fetch_sub(1) == 1) {
+          queue.finish();
+        }
+      })...};
+  return absl::Cleanup{[&queue, futures = std::move(futures)]() {
+    // Finish the queue first, so a thread blocked on a full queue unblocks and
+    // can be joined.
+    queue.finish();
+    for (auto& future : futures) {
+      future.wait();
+    }
+  }};
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_TASKQUEUE_H
