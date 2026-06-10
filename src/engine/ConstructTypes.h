@@ -122,7 +122,7 @@ struct PreprocessedConstructTemplate {
   // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
   // entry living in this vocab, so the `LocalVocab` must outlive every use of
   // those ids. Kept here so the lifetime is tied to the preprocessed template.
-  LocalVocab localVocabForConstantsInTemplate_;
+  LocalVocab localVocabForConstants_;
 };
 
 }  // namespace qlever::constructExport

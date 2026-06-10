@@ -64,10 +64,10 @@ std::optional<std::string> evaluate(
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
-  LocalVocab constantLocalVocab;
+  LocalVocab locaVocabForConstants;
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns, exportCtx._qecIndex,
-      constantLocalVocab);
+      localVocabForConstants);
   if (!preprocessed) return std::nullopt;
 
   BatchEvaluationResult batchResult;

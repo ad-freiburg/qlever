@@ -33,7 +33,8 @@ class ConstructTemplatePreprocessor {
   // triples for specific result-table rows. Constant terms (IRIs/literals) are
   // resolved to a stable `ValueId` (their full-triple deduplication key
   // component) using `index`; literals not present in the vocabulary are
-  // assigned a fresh id in the returned template's `constantLocalVocab_`.
+  // assigned a fresh id in the returned template's
+  // `localVocabForConstants_`.
   //
   // This is a thin factory over the internal single-use builder: it constructs
   // a `ConstructTemplatePreprocessor` and runs it once.
@@ -60,7 +61,7 @@ class ConstructTemplatePreprocessor {
   PreprocessedConstructTemplate result_;
   // The `LocalVocab` that backs constant `dedupId_` entries. In the full
   // `preprocess` flow this references
-  // `result_.localVocabForConstantsInTemplate_` (so it ships with the result);
+  // `result_.localVocabForConstants_` (so it ships with the result);
   // the per-term `preprocessTerm` entry points it at a caller-owned vocab
   // instead. Declared after `result_` so the self-reference in the constructor
   // is well-defined.
@@ -75,7 +76,7 @@ class ConstructTemplatePreprocessor {
                                 const Index& index)
       : variableColumns_{variableColumns},
         index_{index},
-        localVocab_{result_.localVocabForConstantsInTemplate_} {}
+        localVocab_{result_.localVocabForConstants_} {}
 
   // Constructor for the per-term flow: constants go into a caller-owned vocab.
   ConstructTemplatePreprocessor(const VariableToColumnMap& variableColumns,
