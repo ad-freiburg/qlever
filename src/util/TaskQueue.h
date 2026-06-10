@@ -193,7 +193,7 @@ class TaskQueue {
 // Returns an `absl::Cleanup` that closes `queue` and waits for the threads, so
 // the `queue` and the `producers` must outlive it. The caller must ensure the
 // passed `pool` has enough threads to run all producers, otherwise there might
-// be less parallelism than expected. The `pool` can be re-used after that. The
+// be less parallelism than expected. The `pool` can be reused after that. The
 // threads become available again once the producers are done.
 template <typename Queue, typename... Producers>
 auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
