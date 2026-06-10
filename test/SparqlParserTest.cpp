@@ -22,6 +22,7 @@ using Var = Variable;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
+auto iriV = ad_utility::testing::iri;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
@@ -659,7 +660,7 @@ TEST(ParserTest, testParse) {
     EXPECT_THAT(
         pq_1,
         m::ConstructQuery(
-            {{Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
+            {{Variable{"?x"}, iriV("<http://xmlns.com/foaf/0.1/name>"),
               Variable{"?name"}}},
             m::GraphPattern(m::Triples({SparqlTriple{
                 Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
@@ -674,8 +675,8 @@ TEST(ParserTest, testParse) {
 
     EXPECT_THAT(pq_2,
                 m::ConstructQuery(
-                    {{iri("<http://example.org/person#Alice>"),
-                      iri("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
+                    {{iriV("<http://example.org/person#Alice>"),
+                      iriV("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
                         Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),

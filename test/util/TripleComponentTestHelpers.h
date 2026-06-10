@@ -42,6 +42,9 @@ constexpr auto tripleComponentLiteral =
 constexpr auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+constexpr auto iriV = [](std::string_view s) {
+  return TripleComponent::Iri::fromIrirefValidated(s);
+};
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H

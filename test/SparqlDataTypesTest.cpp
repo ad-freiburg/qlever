@@ -172,7 +172,7 @@ TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  EXPECT_EQ(iri("http://valid-iri>").toStringRepresentation(),
+  EXPECT_EQ(iriV("http://valid-iri>").toStringRepresentation(),
             "<http://valid-iri>");
 }
 
@@ -180,7 +180,7 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
-  Iri iriVal = iri(iriString);
+  Iri iriVal = iriV(iriString);
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(evaluate(iriVal, context0, SUBJECT), Optional(iriString));
@@ -197,7 +197,7 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Iri iriVal = iri("<http://some-iri>");
+  Iri iriVal = iriV("<http://some-iri>");
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
