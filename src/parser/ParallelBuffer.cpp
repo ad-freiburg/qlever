@@ -49,37 +49,6 @@ std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   return stream_.get();
 }
 
-// ____________________________________________________________________________
-std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
-    const BufferType& vec, const re2::RE2& regex) {
-  size_t inputSize = vec.size();
-  AD_CORRECTNESS_CHECK(inputSize > 0);
-  size_t chunkSize = std::min(1000UL, inputSize);
-  re2::StringPiece regexResult;
-  bool match = false;
-  while (true) {
-    auto startIdx = inputSize - chunkSize;
-    auto regexInput = re2::StringPiece{vec.data() + startIdx, chunkSize};
-
-    match = RE2::PartialMatch(regexInput, regex, &regexResult);
-    if (match) {
-      break;
-    }
-
-    if (chunkSize == inputSize) {
-      break;
-    }
-    chunkSize = std::min(chunkSize * 2, inputSize);
-  }
-  if (!match) {
-    return std::nullopt;
-  }
-
-  // regexResult.data() is a pointer to the beginning of the match, vec.data()
-  // is a pointer to the beginning of the total input.
-  return regexResult.data() + regexResult.size() - vec.data();
-}
-
 // _____________________________________________________________________________
 std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
@@ -101,19 +70,16 @@ ParallelBufferWithEndRegex::getNextBlock() {
     return copy;
   }
 
-  // Find `endRegex_` in the data (searching from the back, in chunks of
-  // exponentially increasing size). Note that this does not necessarily
-  // find the last match of `endRegex_` in the data, but the first match in the
-  // last chunk (from the back), where there is a match.
-  auto endPosition = findRegexNearEnd(rawInput.value(), endRegex_);
+  auto endPosition =
+      findEndPosition_(std::string_view{rawInput->data(), rawInput->size()});
 
-  // If no match was found at all, report an error, except when this is the
-  // last block (then `getNextBlock` will return `std::nullopt`, and we simply
-  // concatenate it to the remainder).
+  // If no end of a statement was found at all, report an error, except when
+  // this is the last block (then `getNextBlock` will return `std::nullopt`, and
+  // we simply concatenate it to the remainder).
   if (!endPosition) {
     if (rawBuffer_->getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
-          "The regex ", endRegexAsString_,
+          "The pattern ", description_,
           " which marks the end of a statement was not found in the current "
           "input batch (that was not the last one) of size ",
           ad_utility::insertThousandSeparator(std::to_string(rawInput->size()),

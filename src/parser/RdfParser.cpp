@@ -32,6 +32,49 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+constexpr std::string_view newlines = "\r\n";
+
+// Find the end of the last run of newline characters in `sv`. Returns the
+// number of bytes up to and including that run, or `std::nullopt` if `sv`
+// contains no newline.
+std::optional<size_t> findEndOfLastNewline(std::string_view sv) {
+  size_t lastNewline = sv.find_last_of(newlines);
+  if (lastNewline == std::string_view::npos) {
+    return std::nullopt;
+  }
+  return lastNewline + 1;
+}
+
+// Find the end of the last occurrence of a dot, followed by optional spaces or
+// tabs, followed by one or more newlines (i.e. the end of a turtle statement).
+// Returns the number of bytes up to and including the trailing newlines, or
+// `std::nullopt` if there is no such occurrence.
+std::optional<size_t> findEndOfLastStatement(std::string_view sv) {
+  // Walk over the dots from the back; the rightmost dot that is part of a valid
+  // statement end also yields the rightmost statement end.
+
+  for (size_t dot = sv.rfind('.'); dot != std::string_view::npos;
+       dot = sv.rfind('.', dot - 1)) {
+    // The dot must be followed by optional spaces or tabs and then at least one
+    // newline.
+    size_t afterSpace = sv.find_first_not_of(" \t", dot + 1);
+    if (afterSpace != std::string_view::npos &&
+        newlines.find(sv[afterSpace]) != std::string_view::npos) {
+      // Return the position right after the run of newlines.
+      size_t afterNewlines = sv.find_first_not_of(newlines, afterSpace);
+      return afterNewlines == std::string_view::npos ? sv.size()
+                                                     : afterNewlines;
+    }
+    // Abort if we're at the start to prevent an underflow.
+    if (dot == 0) {
+      break;
+    }
+  }
+  return std::nullopt;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::clear() {
@@ -990,7 +1033,7 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "([\\r\\n]+)");
+      std::move(rawBuffer), findEndOfLastNewline, "a newline");
   // Read the first block and initialize the tokenizer.
   if (auto res = fileBuffer_->getNextBlock(); res) {
     byteVec_ = std::move(res.value());
@@ -1187,7 +1230,8 @@ template <typename T>
 void RdfParallelParser<T>::initialize(
     std::unique_ptr<ParallelBuffer> rawBuffer) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
+      std::move(rawBuffer), findEndOfLastStatement,
+      "a dot followed by a newline");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;

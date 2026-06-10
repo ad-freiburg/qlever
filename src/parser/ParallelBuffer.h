@@ -10,10 +10,11 @@
 #ifndef QLEVER_SRC_PARSER_PARALLELBUFFER_H
 #define QLEVER_SRC_PARSER_PARALLELBUFFER_H
 
-#include <re2/re2.h>
+#include <absl/functional/any_invocable.h>
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "util/Iterators.h"
@@ -76,36 +77,41 @@ class ParallelFileBuffer : public ParallelBuffer {
 };
 
 // A parallel buffer that reads input in blocks, where each block, except
-// possibly the last, ends with `endRegex`. It wraps any `ParallelBuffer` as
-// the underlying byte source.
+// possibly the last, ends at a position determined by `findEndPosition`. It
+// wraps any `ParallelBuffer` as the underlying byte source.
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
-  // Construct from an already-opened `rawBuffer` and a regex that marks the
-  // end of a statement. The blocksize is derived from `rawBuffer`.
+  // A function that, given a block, returns the number of bytes until the end
+  // of the last statement in the block (i.e. the position at which the block
+  // should be split), or `std::nullopt` if there is no such position. It is
+  // expected to scan the block from the back.
+  using EndPositionFinder =
+      absl::AnyInvocable<std::optional<size_t>(std::string_view)>;
+
+  // Construct from an already-opened `rawBuffer` and a function that finds the
+  // end of a statement near the end of a block. `description` is used in error
+  // messages to describe what marks the end of a statement. The blocksize is
+  // derived from `rawBuffer`.
   ParallelBufferWithEndRegex(std::unique_ptr<ParallelBuffer> rawBuffer,
-                             std::string endRegex)
+                             EndPositionFinder findEndPosition,
+                             std::string description)
       : ParallelBuffer{rawBuffer->getBlocksize()},
         rawBuffer_{std::move(rawBuffer)},
-        endRegex_{endRegex},
-        endRegexAsString_{std::move(endRegex)} {}
+        findEndPosition_{std::move(findEndPosition)},
+        description_{std::move(description)} {}
 
   // Get the data that was read asynchronously after the previous call to this
-  // function. Returns the part of the data until `endRegex` is found, with the
-  // part after `endRegex` from the previous call prepended. If `endRegex` is
-  // not found, simply return the rest of the data.
+  // function. Returns the part of the data until the end of the last statement
+  // (as determined by `findEndPosition`), with the part after the end of a
+  // statement from the previous call prepended. If no end of a statement is
+  // found, simply return the rest of the data.
   std::optional<BufferType> getNextBlock() override;
 
  private:
-  // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000,
-  // 4000... bytes. We have to do this, because "reverse" regex matching is not
-  // trivial. Returns the number of bytes in `vec` until the end of the regex
-  // match, or std::nullopt if the regex was not found at all.
-  static std::optional<size_t> findRegexNearEnd(const BufferType& vec,
-                                                const re2::RE2& regex);
   std::unique_ptr<ParallelBuffer> rawBuffer_;
   BufferType remainder_;
-  re2::RE2 endRegex_;
-  std::string endRegexAsString_;
+  EndPositionFinder findEndPosition_;
+  std::string description_;
   bool exhausted_ = false;
 };
 
