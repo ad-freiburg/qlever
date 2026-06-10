@@ -19,7 +19,6 @@ namespace m = matchers;
 namespace p = parsedQuery;
 
 using Var = Variable;
-using iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
