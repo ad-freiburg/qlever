@@ -38,7 +38,7 @@ PropertyPath PathIri(std::string_view iri) {
 }
 
 namespace tc {
-auto Iri = ad_utility::triple_component::Iri::fromIriref;
+auto Iri = ad_utility::triple_component::Iri::fromIrirefValidated;
 }
 
 const EncodedIriManager* encodedIriManager() {
