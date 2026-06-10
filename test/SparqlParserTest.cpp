@@ -10,7 +10,6 @@
 #include <variant>
 
 #include "./parser/SparqlAntlrParserTestHelpers.h"
-#include "./util/GTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/Conversions.h"
@@ -24,7 +23,7 @@ using Iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
-auto iriV = ad_utility::triple_component::iriVValidated;
+auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
@@ -1559,25 +1558,25 @@ TEST(ParserTest, parseWithDatasets) {
   // (datasets passed as URL parameters overwrite all datasets in the
   // operation). `SparqlParser::Datasets` tests that datasets set in the
   // operation are propagated correctly.
-  auto Iri = ad_utility::triple_component::iriV;
   auto query = "SELECT * WHERE { ?s ?p ?o }";
   auto noGraphs = m::Graphs{};
   auto queryGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var("?s"), Var{"?p"}, Var("?o")}}));
   EXPECT_THAT(parseQuery(query, {}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher));
-  EXPECT_THAT(parseQuery(query, {{DatasetClause{Iri("<foo>"), true}}}),
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iriV("<foo>"), true}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                             noGraphs, {{Iri("<foo>")}}));
-  EXPECT_THAT(parseQuery(query, {{DatasetClause{Iri("<bar>"), false}}}),
+                             noGraphs, {{iriV("<foo>")}}));
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iriV("<bar>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                             {{Iri("<bar>")}}, noGraphs));
-  EXPECT_THAT(parseQuery(query, {{DatasetClause{Iri("<bar>"), false},
-                                  DatasetClause{Iri("<foo>"), true},
-                                  DatasetClause{Iri("<baz>"), false}}}),
-              m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
-                             {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
-  parsedQuery::DatasetClauses::Graphs datasets{{Iri("<h>")}};
+                             {{iriV("<bar>")}}, noGraphs));
+  EXPECT_THAT(
+      parseQuery(query, {{DatasetClause{iriV("<bar>"), false},
+                          DatasetClause{iriV("<foo>"), true},
+                          DatasetClause{iriV("<baz>"), false}}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     {{iriV("<bar>"), iriV("<baz>")}}, {{iriV("<foo>")}}));
+  parsedQuery::DatasetClauses::Graphs datasets{{iriV("<h>")}};
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
@@ -1590,7 +1589,7 @@ TEST(ParserTest, parseWithDatasets) {
       SparqlParser::parseUpdate(&bnm, &ev,
                                 "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
-                                {{{Iri("<h>"), false}}}),
+                                {{{iriV("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1598,26 +1597,26 @@ TEST(ParserTest, parseWithDatasets) {
                                 "WITH <g> DELETE { ?x <b> <c> } WHERE { "
                                 "?x ?y ?z "
                                 "FILTER EXISTS {?a ?b ?c} }",
-                                {{{Iri("<h>"), false}}}),
+                                {{{iriV("<h>"), false}}}),
       ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
       parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
-          {{{Iri("<h>"), false}}}),
+          {{{iriV("<h>"), false}}}),
       m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets,
                      noGraphs));
   EXPECT_THAT(parseQuery("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-                         {{{Iri("<h>"), false}}}),
+                         {{{iriV("<h>"), false}}}),
               m::AskQuery(filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { "
                          "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
-                         {{{Iri("<h>"), false}}}),
+                         {{{iriV("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
-                                    Iri("<a>"), Iri("<b>"), Iri("<c>")}},
+                                    iriV("<a>"), iriV("<b>"), iriV("<c>")}},
                                 filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(
       parseQuery("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-                 {{{Iri("<h>"), false}}}),
+                 {{{iriV("<h>"), false}}}),
       m::DescribeQuery(
           m::Describe({Var("?x")}, {datasets, {}},
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
@@ -1630,20 +1629,20 @@ TEST(ParserTest, parseWithDatasets) {
   auto deleteWherePattern =
       m::GraphPattern(m::Triples({{Var("?s"), Var("?p"), Var("?o")}}));
   auto insertDataOp = m::GraphUpdate(
-      {}, {SparqlTripleSimpleWithGraph{Iri("<a>"), Iri("<b>"), Iri("<c>"),
+      {}, {SparqlTripleSimpleWithGraph{iriV("<a>"), iriV("<b>"), iriV("<c>"),
                                        std::monostate{}}});
   EXPECT_THAT(
       SparqlParser::parseUpdate(
           &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-          {DatasetClause{Iri("<foo>"), false},
-           DatasetClause{Iri("<bar>"), true}}),
+          {DatasetClause{iriV("<foo>"), false},
+           DatasetClause{iriV("<bar>"), true}}),
       testing::ElementsAre(
           m::UpdateClause(
               deleteWhereOp, deleteWherePattern,
-              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}})),
+              m::datasetClausesMatcher({{iriV("<foo>")}}, {{iriV("<bar>")}})),
           m::UpdateClause(
               insertDataOp, m::GraphPattern(),
-              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}}))));
+              m::datasetClausesMatcher({{iriV("<foo>")}}, {{iriV("<bar>")}}))));
 }
 
 // _____________________________________________________________________________
