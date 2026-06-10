@@ -23,27 +23,9 @@ using namespace std::string_view_literals;
 
 namespace ad_utility::triple_component {
 
-namespace {
-// CTRE regex (C++17-compatible) for QLever's internal IRI string
-// representation: an optional internal `@langtag@` prefix followed by an
-// angle-bracketed IRI whose content excludes control characters, spaces and the
-// characters disallowed in an IRI reference. This is the same validation that
-// the (now removed) `parser/data/Iri` constructor performed.
-constexpr ctll::fixed_string iriValidationRegex =
-    "(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
-    "<[^<>\"{}|^\\\\`\\0- ]*>";
-}  // namespace
-
 // ____________________________________________________________________________
 template <bool isOwning>
-BasicIri<isOwning>::BasicIri(StorageType iri) : iri_{std::move(iri)} {
-  // Validate that the stored string is a well-formed QLever-internal IRI
-  // representation. This is the single choke point for all factories
-  // (`fromStringRepresentation`, `fromIriref`, `fromIrirefWithoutBrackets`,
-  // `fromPrefixAndSuffix`), so the check applies once the internal form is
-  // finalized (in particular after `fromIriref` has normalized its input).
-  AD_CONTRACT_CHECK(ctre::match<iriValidationRegex>(iri_));
-}
+BasicIri<isOwning>::BasicIri(StorageType iri) : iri_{std::move(iri)} {}
 
 // ____________________________________________________________________________
 template <bool isOwning>
