@@ -71,7 +71,6 @@ static constexpr auto matchSingleTriple = [](const auto& s, const auto& p,
 auto Const = matchesPrecomputedConstant;
 auto Var = matchesPrecomputedVariable;
 auto Bnode = matchesPrecomputedBlankNode;
-auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
 
 TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   Triples triples;
