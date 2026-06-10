@@ -108,7 +108,6 @@ class Iri : public BasicIri<true> {
 
  public:
   using BasicIri<true>::toStringRepresentation;
-  using BasicIri<true>::toSparql;
 
   template <typename H>
   friend H AbslHashValue(H h, const Iri& iri) {
