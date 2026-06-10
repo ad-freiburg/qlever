@@ -9,6 +9,8 @@
 #ifndef QLEVER_ALIGNEDALLOCATOR_H
 #define QLEVER_ALIGNEDALLOCATOR_H
 
+#include <absl/base/casts.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
