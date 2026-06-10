@@ -148,7 +148,7 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
 
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
-    const Triples& templateTriples) {
+    const Triples& templateTriples) && {
   for (const auto& triple : templateTriples) {
     auto preprocessedTriple = preprocessTriple(triple);
     if (!preprocessedTriple) continue;
