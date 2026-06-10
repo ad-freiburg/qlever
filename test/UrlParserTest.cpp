@@ -114,25 +114,25 @@ TEST(UrlParserTest, parseDatasetClausesFrom) {
   EXPECT_THAT(
       parseDatasetClausesFrom({{"default-graph-uri", {"https://w3.org/1"}}},
                               "default-graph-uri", false),
-      IsDatasets({{iri("<https://w3.org/1>"), false}}));
+      IsDatasets({{iriV("<https://w3.org/1>"), false}}));
   EXPECT_THAT(
       parseDatasetClausesFrom({{"named-graph-uri", {"https://w3.org/1"}}},
                               "named-graph-uri", true),
-      IsDatasets({{iri("<https://w3.org/1>"), true}}));
+      IsDatasets({{iriV("<https://w3.org/1>"), true}}));
   EXPECT_THAT(
       parseDatasetClausesFrom({{"default-graph-uri", {"https://w3.org/1"}},
                                {"named-graph-uri", {"https://w3.org/2"}}},
                               "default-graph-uri", false),
       IsDatasets({
-          {iri("<https://w3.org/1>"), false},
+          {iriV("<https://w3.org/1>"), false},
       }));
   EXPECT_THAT(
       parseDatasetClausesFrom(
           {{"default-graph-uri", {"https://w3.org/1", "https://w3.org/2"}},
            {"named-graph-uri", {"https://w3.org/3", "https://w3.org/4"}}},
           "named-graph-uri", true),
-      IsDatasets({{iri("<https://w3.org/3>"), true},
-                  {iri("<https://w3.org/4>"), true}}));
+      IsDatasets({{iriV("<https://w3.org/3>"), true},
+                  {iriV("<https://w3.org/4>"), true}}));
 }
 
 TEST(UrlParserTest, checkParameter) {
