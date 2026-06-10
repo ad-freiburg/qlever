@@ -27,7 +27,7 @@ using Triples = ad_utility::sparql_types::Triples;
 // Build an `Iri` from an `<iriref>` (auto-converts to `GraphTerm`). Note this
 // differs from `ad_utility::testing::iri`, which returns a `TripleComponent`.
 constexpr auto iri = [](std::string_view s) {
-  return ad_utility::triple_component::Iri::fromIriref(s);
+  return ad_utility::triple_component::Iri::fromIrirefValidated(s);
 };
 
 static auto matchTriple(const std::string& s, const std::string& p,

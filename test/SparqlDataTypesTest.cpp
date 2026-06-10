@@ -24,6 +24,9 @@ using ::testing::Optional;
 using enum PositionInTriple;
 
 namespace {
+
+auto iriV = ad_utility::triple_component::Iri::fromIrirefValidated;
+
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
@@ -175,7 +178,7 @@ TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  Iri iri = Iri::fromIrirefValidated("<http://valid-iri>");
+  Iri iri = iriV("<http://valid-iri>");
   EXPECT_EQ(iri.toStringRepresentation(), "<http://valid-iri>");
 }
 
