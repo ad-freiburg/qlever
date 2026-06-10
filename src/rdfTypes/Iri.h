@@ -109,6 +109,10 @@ class Iri : public BasicIri<true> {
   static Iri fromStringRepresentation(std::string s);
 
   // Create a new `Iri` given an IRI string with brackets.
+  // As per https://www.ietf.org/rfc/rfc3987.txt: An IRI reference may be
+  // absolute or relative. However, the "IRI" that results from such a reference
+  // only includes absolute IRIs; any relative IRI references are resolved to
+  // their absolute form.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
   // Create a new `Iri` given an IRI string without brackets.
