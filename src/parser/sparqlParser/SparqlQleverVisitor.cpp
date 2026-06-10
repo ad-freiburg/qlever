@@ -1942,7 +1942,7 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
   /*
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable
-  `?ql_textscore_var`
+  // `?ql_textscore_var`
   // is implicitly created and visible in the query body.
   // Similarly if a triple `?var ql:contains-word "words"` is contained in the
   // query, then the variable `ql_matchingword_var` is implicitly created and
@@ -2313,9 +2313,10 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri::fromIrirefValidated(std::move(iri))};
-  });
+  return toRdfCollection(
+      visitVector(ctx->graphNode()), [](const std::string& iri) {
+        return GraphTerm{Iri::fromIrirefValidated(std::move(iri))};
+      });
 }
 
 // _____________________________________________________________________________

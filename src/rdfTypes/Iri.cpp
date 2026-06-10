@@ -26,7 +26,7 @@ namespace {
 // `Iri::fromIrirefValidated` (see its documentation in `Iri.h` for a full
 // explanation). `\0- ` matches every byte in the range `#x00`-`#x20` (control
 // chars and space).
-constexpr ctll::fixed_string irirefRegex = "<[^<>\"{}|^\\\\`\\0- ]*>";
+constexpr ctll::fixed_string irirefRegex = R"(<[^<>"{}|^\\`\0- ]*>)";
 }  // namespace
 
 namespace ad_utility::triple_component {
