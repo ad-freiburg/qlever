@@ -1273,7 +1273,7 @@ TEST(RdfParserTest, nQuadParser) {
         "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
         ".");
     auto triples = parser.parseAndReturnAllTriples();
-    auto iri = ad_utility::testing::iri;
+    auto iriV = ad_utility::testing::iriV;
     auto lit = ad_utility::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
