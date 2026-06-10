@@ -87,7 +87,7 @@ class ConstructTemplatePreprocessor {
 
   // Run the preprocessing over all template triples and return the (moved-out)
   // result. Single-shot: call exactly once per instance.
-  PreprocessedConstructTemplate run(const Triples& templateTriples);
+  PreprocessedConstructTemplate run(const Triples& templateTriples) &&;
 
   std::optional<PreprocessedTerm> preprocessTermImpl(const GraphTerm& term,
                                                      PositionInTriple role);
