@@ -12,7 +12,6 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
 #include "index/Index.h"
@@ -203,11 +202,11 @@ TEST(IndexTest, createFromTurtleTest) {
       // Relation b
       // Pair index
       auto testTwo = makeTestScanWidthTwo(index, qec);
-      testTwo(iri("<b>"), Permutation::PSO, {{a, c}, {a, c2}});
+      testTwo(iriV("<b>"), Permutation::PSO, {{a, c}, {a, c2}});
       std::vector<std::array<Id, 2>> buffer;
 
       // Relation b2
-      testTwo(iri("<b2>"), Permutation::PSO, {{a, c}, {a2, c2}});
+      testTwo(iriV("<b2>"), Permutation::PSO, {{a, c}, {a2, c2}});
 
       {
         // Test for a previous bug in the scan of two fixed elements: An
@@ -217,9 +216,9 @@ TEST(IndexTest, createFromTurtleTest) {
         // the largest predicate that occurs and <c2> is larger than the largest
         // subject that appears with <b2>.
         auto testOne = makeTestScanWidthOne(index, qec);
-        testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
+        testOne(iriV("<b2>"), iriV("<c2>"), Permutation::PSO, {});
         // An empty scan result must still have the correct number of columns.
-        testOne(iri("<notExisting>"), iri("<alsoNotExisting>"),
+        testOne(iriV("<notExisting>"), iriV("<alsoNotExisting>"),
                 Permutation::PSO, {},
                 {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN});
       }
@@ -259,7 +258,7 @@ TEST(IndexTest, createFromTurtleTest) {
           index.POS().getMetadata(isA, deltaTriples).value().isFunctional());
 
       auto testTwo = makeTestScanWidthTwo(index, qec);
-      testTwo(iri("<is-a>"), Permutation::PSO,
+      testTwo(iriV("<is-a>"), Permutation::PSO,
               {{a, zero},
                {a, one},
                {a, two},
@@ -269,7 +268,7 @@ TEST(IndexTest, createFromTurtleTest) {
                {c, two}});
 
       // is-a for POS
-      testTwo(iri("<is-a>"), Permutation::POS,
+      testTwo(iriV("<is-a>"), Permutation::POS,
               {{zero, a},
                {zero, b},
                {one, a},
@@ -354,19 +353,19 @@ TEST(IndexTest, scanTest) {
       Id c2 = getId("<c2>");
       auto testTwo = makeTestScanWidthTwo(index, qec);
 
-      testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
-      testTwo(iri("<x>"), PSO, {});
-      testTwo(iri("<c>"), PSO, {});
-      testTwo(iri("<b>"), POS, {{c, a}, {c2, a}});
-      testTwo(iri("<x>"), POS, {});
-      testTwo(iri("<c>"), POS, {});
+      testTwo(iriV("<b>"), PSO, {{a, c}, {a, c2}});
+      testTwo(iriV("<x>"), PSO, {});
+      testTwo(iriV("<c>"), PSO, {});
+      testTwo(iriV("<b>"), POS, {{c, a}, {c2, a}});
+      testTwo(iriV("<x>"), POS, {});
+      testTwo(iriV("<c>"), POS, {});
 
       auto testOne = makeTestScanWidthOne(index, qec);
 
-      testOne(iri("<b>"), iri("<a>"), PSO, {{c}, {c2}});
-      testOne(iri("<b>"), iri("<c>"), PSO, {});
-      testOne(iri("<b2>"), iri("<c2>"), POS, {{a2}});
-      testOne(iri("<notExisting>"), iri("<a>"), PSO, {});
+      testOne(iriV("<b>"), iriV("<a>"), PSO, {{c}, {c2}});
+      testOne(iriV("<b>"), iriV("<c>"), PSO, {});
+      testOne(iriV("<b2>"), iriV("<c2>"), POS, {{a2}});
+      testOne(iriV("<notExisting>"), iriV("<a>"), PSO, {});
     }
 
     {
@@ -392,7 +391,7 @@ TEST(IndexTest, scanTest) {
       Id three = getId("<3>");
 
       auto testTwo = makeTestScanWidthTwo(index, qec);
-      testTwo(iri("<is-a>"), PSO,
+      testTwo(iriV("<is-a>"), PSO,
               {{{a, zero},
                 {a, one},
                 {a, two},
@@ -400,7 +399,7 @@ TEST(IndexTest, scanTest) {
                 {b, three},
                 {c, one},
                 {c, two}}});
-      testTwo(iri("<is-a>"), POS,
+      testTwo(iriV("<is-a>"), POS,
               {{zero, a},
                {zero, b},
                {one, a},
@@ -411,13 +410,13 @@ TEST(IndexTest, scanTest) {
 
       auto testWidthOne = makeTestScanWidthOne(index, qec);
 
-      testWidthOne(iri("<is-a>"), iri("<0>"), POS, {{a}, {b}});
-      testWidthOne(iri("<is-a>"), iri("<1>"), POS, {{a}, {c}});
-      testWidthOne(iri("<is-a>"), iri("<2>"), POS, {{a}, {c}});
-      testWidthOne(iri("<is-a>"), iri("<3>"), POS, {{b}});
-      testWidthOne(iri("<is-a>"), iri("<a>"), PSO, {{zero}, {one}, {two}});
-      testWidthOne(iri("<is-a>"), iri("<b>"), PSO, {{zero}, {three}});
-      testWidthOne(iri("<is-a>"), iri("<c>"), PSO, {{one}, {two}});
+      testWidthOne(iriV("<is-a>"), iriV("<0>"), POS, {{a}, {b}});
+      testWidthOne(iriV("<is-a>"), iriV("<1>"), POS, {{a}, {c}});
+      testWidthOne(iriV("<is-a>"), iriV("<2>"), POS, {{a}, {c}});
+      testWidthOne(iriV("<is-a>"), iriV("<3>"), POS, {{b}});
+      testWidthOne(iriV("<is-a>"), iriV("<a>"), PSO, {{zero}, {one}, {two}});
+      testWidthOne(iriV("<is-a>"), iriV("<b>"), PSO, {{zero}, {three}});
+      testWidthOne(iriV("<is-a>"), iriV("<c>"), PSO, {{one}, {two}});
     }
   };
   testWithAndWithoutPrefixCompression(true);
@@ -437,7 +436,7 @@ TEST(IndexTest, emptyIndex) {
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
   auto test = makeTestScanWidthTwo(emptyIndexWithCompression, qec);
   // Test that scanning an empty index works, but yields an empty permutation.
-  test(iri("<x>"), Permutation::PSO, {});
+  test(iriV("<x>"), Permutation::PSO, {});
 }
 
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
@@ -473,14 +472,14 @@ auto IsPossiblyExternalString = [](const TripleComponent& content,
 TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
-    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+    TurtleTriple turtleTriple{iriV("<subject>"), iriV("<predicate>"),
                               lit("\"literal\"")};
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
     EXPECT_TRUE(result.langtag_.empty());
     EXPECT_THAT(result.triple_[0],
-                IsPossiblyExternalString(iri("<subject>"), true));
+                IsPossiblyExternalString(iriV("<subject>"), true));
     EXPECT_THAT(result.triple_[1],
-                IsPossiblyExternalString(iri("<predicate>"), true));
+                IsPossiblyExternalString(iriV("<predicate>"), true));
     EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
@@ -488,21 +487,21 @@ TEST(IndexTest, processTriple) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
-    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+    TurtleTriple turtleTriple{iriV("<subject>"), iriV("<predicate>"),
                               lit("\"literal\"", "@fr")};
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
     EXPECT_EQ(result.langtag_, "fr");
     EXPECT_THAT(result.triple_[0],
-                IsPossiblyExternalString(iri("<subject>"), true));
+                IsPossiblyExternalString(iriV("<subject>"), true));
     EXPECT_THAT(result.triple_[1],
-                IsPossiblyExternalString(iri("<predicate>"), false));
+                IsPossiblyExternalString(iriV("<predicate>"), false));
     // By default all languages other than English are externalized.
     EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
-    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
+    TurtleTriple turtleTriple{iriV("<subject>"), iriV("<predicate>"), 42.0};
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
@@ -559,7 +558,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
   multiplicities = index.getMultiplicities(
-      iri("<x>"), index.getPermutation(Permutation::SPO),
+      iriV("<x>"), index.getPermutation(Permutation::SPO),
       qec.locatedTriplesState());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
