@@ -24,6 +24,7 @@ using Iri = ad_utility::triple_component::Iri;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
+auto iriV = ad_utility::triple_component::iriVValidated;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
@@ -661,8 +662,7 @@ TEST(ParserTest, testParse) {
     EXPECT_THAT(
         pq_1,
         m::ConstructQuery(
-            {{Variable{"?x"},
-              Iri::fromIriref("<http://xmlns.com/foaf/0.1/name>"),
+            {{Variable{"?x"}, iriV("<http://xmlns.com/foaf/0.1/name>"),
               Variable{"?name"}}},
             m::GraphPattern(m::Triples({SparqlTriple{
                 Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
@@ -675,15 +675,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
         "WHERE       { ?x foaf:name ?name } ");
 
-    EXPECT_THAT(
-        pq_2,
-        m::ConstructQuery(
-            {{Iri::fromIriref("<http://example.org/person#Alice>"),
-              Iri::fromIriref("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
-              Variable{"?name"}}},
-            m::GraphPattern(m::Triples({SparqlTriple{
-                Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
-                Variable{"?name"}}}))));
+    EXPECT_THAT(pq_2,
+                m::ConstructQuery(
+                    {{iriV("<http://example.org/person#Alice>"),
+                      iriV("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
+                        Variable{"?name"}}}))));
   }
 
   {
@@ -1560,7 +1559,7 @@ TEST(ParserTest, parseWithDatasets) {
   // (datasets passed as URL parameters overwrite all datasets in the
   // operation). `SparqlParser::Datasets` tests that datasets set in the
   // operation are propagated correctly.
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::triple_component::iriV;
   auto query = "SELECT * WHERE { ?s ?p ?o }";
   auto noGraphs = m::Graphs{};
   auto queryGraphPatternMatcher =
@@ -1673,8 +1672,8 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
-              PropertyPath::makeNegated({PropertyPath::fromIri(Iri::fromIriref(
-                  "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              PropertyPath::makeNegated({PropertyPath::fromIri(
+                  iriV("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
 
   // Other tests for similar variants.
@@ -1684,17 +1683,17 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
-              PropertyPath::makeNegated({PropertyPath::fromIri(Iri::fromIriref(
-                  "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              PropertyPath::makeNegated({PropertyPath::fromIri(
+                  iriV("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
               TripleComponent{Variable{"?o"}}}}))));
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !^a ?o }"),
-      m::SelectQuery(m::AsteriskSelect(),
-                     m::GraphPattern(m::Triples({SparqlTriple{
-                         TripleComponent{Variable{"?s"}},
-                         PropertyPath::makeNegated(
-                             {PropertyPath::makeInverse(PropertyPath::fromIri(
-                                 Iri::fromIriref("<http://www.w3.org/1999/02/"
-                                                 "22-rdf-syntax-ns#type>")))}),
-                         TripleComponent{Variable{"?o"}}}}))));
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::makeInverse(
+                  PropertyPath::fromIri(iriV("<http://www.w3.org/1999/02/"
+                                             "22-rdf-syntax-ns#type>")))}),
+              TripleComponent{Variable{"?o"}}}}))));
 }
