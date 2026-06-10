@@ -69,12 +69,12 @@ static constexpr auto matchSingleTriple = [](const auto& s, const auto& p,
 auto Const = matchesPrecomputedConstant;
 auto Var = matchesPrecomputedVariable;
 auto Bnode = matchesPrecomputedBlankNode;
+auto Iri = ad_utility::triple_component::Iri::fromIrirefValidated;
 
 TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   Triples triples;
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s>")},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+  triples.push_back({GraphTerm{Iri("<http://s>")}, GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -88,8 +88,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   Triples triples;
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s>")},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Iri("<http://s>")}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Literal{"hello"}}});
 
   VariableToColumnMap varMap;
@@ -108,8 +107,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
   // preprocessedTriples do not contain that template triple.
   Triples triples;
   triples.push_back({GraphTerm{Literal{"invalid"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+                     GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -120,9 +119,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
@@ -142,8 +140,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
   // A triple with an unbound variable is dropped entirely.
   Triples triples;
   triples.push_back({GraphTerm{Variable{"?unbound"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+                     GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;  // ?unbound is not in the map
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -155,8 +153,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
   Triples triples;
   triples.push_back({GraphTerm{BlankNode{false, "myNode"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+                     GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -171,8 +169,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
   Triples triples;
   triples.push_back({GraphTerm{BlankNode{true, "gen"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+                     GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -197,8 +195,7 @@ TEST(ConstructTemplatePreprocessorTest,
      sameVariableWithinSingleTripleDeduplicates) {
   // ?x appears in subject and object of the same triple: one unique column.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Variable{"?x"}}});
 
   VariableToColumnMap varMap;
@@ -216,12 +213,10 @@ TEST(ConstructTemplatePreprocessorTest,
      sameVariableAcrossMultipleTriplesDeduplicates) {
   // ?x appears in two different triples: still one unique column.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p1>")},
-                     GraphTerm{Iri::fromIriref("<http://o1>")}});
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s2>")},
-                     GraphTerm{Iri::fromIriref("<http://p2>")},
-                     GraphTerm{Variable{"?x"}}});
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p1>")},
+                     GraphTerm{Iri("<http://o1>")}});
+  triples.push_back({GraphTerm{Iri("<http://s2>")},
+                     GraphTerm{Iri("<http://p2>")}, GraphTerm{Variable{"?x"}}});
 
   VariableToColumnMap varMap;
   varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(2);
@@ -241,8 +236,7 @@ TEST(ConstructTemplatePreprocessorTest,
      differentVariablesCollectMultipleColumns) {
   // ?x and ?y are different variables with different columns.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Variable{"?y"}}});
 
   VariableToColumnMap varMap;
@@ -261,14 +255,11 @@ TEST(ConstructTemplatePreprocessorTest,
   // Three triples with ?x, ?y, ?z. ?x appears in two triples.
   // Expected: 3 unique columns (for ?x, ?y, ?z).
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p1>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p1>")},
                      GraphTerm{Variable{"?y"}}});
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p2>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p2>")},
                      GraphTerm{Variable{"?z"}}});
-  triples.push_back({GraphTerm{Variable{"?y"}},
-                     GraphTerm{Iri::fromIriref("<http://p3>")},
+  triples.push_back({GraphTerm{Variable{"?y"}}, GraphTerm{Iri("<http://p3>")},
                      GraphTerm{Variable{"?z"}}});
 
   VariableToColumnMap varMap;
@@ -290,8 +281,7 @@ TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
   // ?x is bound (column 0), ?unbound is not in the map.
   // The entire triple is dropped because ?unbound is undefined.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Variable{"?unbound"}}});
 
   VariableToColumnMap varMap;
@@ -308,12 +298,10 @@ TEST(ConstructTemplatePreprocessorTest,
   // Triple 2 has ?x (bound, column 0) -> kept.
   // ?x should still appear in uniqueVariableColumns_.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Variable{"?unbound"}}});
-  triples.push_back({GraphTerm{Variable{"?x"}},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
-                     GraphTerm{Iri::fromIriref("<http://o>")}});
+  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{Iri("<http://p>")},
+                     GraphTerm{Iri("<http://o>")}});
 
   VariableToColumnMap varMap;
   varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
@@ -329,12 +317,12 @@ TEST(ConstructTemplatePreprocessorTest,
 
 TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
   Triples triples;
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s1>")},
-                     GraphTerm{Iri::fromIriref("<http://p1>")},
-                     GraphTerm{Iri::fromIriref("<http://o1>")}});
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s2>")},
-                     GraphTerm{Iri::fromIriref("<http://p2>")},
-                     GraphTerm{Iri::fromIriref("<http://o2>")}});
+  triples.push_back({GraphTerm{Iri("<http://s1>")},
+                     GraphTerm{Iri("<http://p1>")},
+                     GraphTerm{Iri("<http://o1>")}});
+  triples.push_back({GraphTerm{Iri("<http://s2>")},
+                     GraphTerm{Iri("<http://p2>")},
+                     GraphTerm{Iri("<http://o2>")}});
 
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
@@ -353,12 +341,10 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
   // Triple 1: IRI, IRI, Variable
   // Triple 2: BlankNode, IRI, Literal
   Triples triples;
-  triples.push_back({GraphTerm{Iri::fromIriref("<http://s>")},
-                     GraphTerm{Iri::fromIriref("<http://p>")},
+  triples.push_back({GraphTerm{Iri("<http://s>")}, GraphTerm{Iri("<http://p>")},
                      GraphTerm{Variable{"?val"}}});
   triples.push_back({GraphTerm{BlankNode{false, "b1"}},
-                     GraphTerm{Iri::fromIriref("<http://q>")},
-                     GraphTerm{Literal{"text"}}});
+                     GraphTerm{Iri("<http://q>")}, GraphTerm{Literal{"text"}}});
 
   VariableToColumnMap varMap;
   varMap[Variable{"?val"}] = makeAlwaysDefinedColumn(4);
@@ -381,7 +367,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
-      GraphTerm{Iri::fromIriref("<http://s>")}, SUBJECT, varMap);
+      GraphTerm{Iri("<http://s>")}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
   EXPECT_THAT(result.value(), Const("<http://s>"));
