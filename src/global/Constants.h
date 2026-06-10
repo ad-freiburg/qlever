@@ -99,10 +99,8 @@ constexpr inline std::string_view DEFAULT_GRAPH_IRI =
 namespace string_constants::detail {
 constexpr inline std::string_view inferred_graph = "inferred-graph";
 }  // namespace string_constants::detail
-// The default named graph used when CONSTRUCT queries are executed with the
-// `construct-insert` parameter but no explicit `construct-insert-graph` is
-// specified. Using a dedicated graph (rather than the default graph) provides
-// built-in provenance separation between base data and inferred triples.
+// Default named graph for materialized (inferred) triples. Using a dedicated
+// named graph keeps derived triples provenance-separate from base data.
 constexpr inline std::string_view QLEVER_INFERRED_GRAPH_IRI =
     makeQleverInternalIriConst<string_constants::detail::inferred_graph>();
 namespace string_constants::detail {
