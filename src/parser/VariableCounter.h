@@ -32,7 +32,7 @@ struct VariableCounter {
 
   // Count variables from a view or range, e.g. `std::vector<GraphPattern>`.
   CPP_template(typename T)(
-      requires ql::ranges::input_range<std::remove_cvref_t<T>>) void
+      requires ql::ranges::input_range<ql::remove_cvref_t<T>>) void
   operator()(T&& range) {
     for (const auto& elem : range) {
       (*this)(elem);
