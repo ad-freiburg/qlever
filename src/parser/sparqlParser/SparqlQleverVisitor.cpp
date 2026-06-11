@@ -1981,8 +1981,8 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
       };
       */
 
-  // Assemble the final result from a set of given `triples` and possibly
-  // empty `additionalTriples`, the given `subject` and the given pairs of
+  // Assemble the final result from a set of given `triples` and possibly empty
+  // `additionalTriples`, the given `subject` and the given pairs of
   // `[predicate, object]`
   using TripleVec = std::vector<TripleWithPropertyPath>;
   auto assembleResult = [this, ctx](TripleVec triples, GraphTerm subject,
