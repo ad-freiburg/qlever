@@ -230,6 +230,11 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
+void Qlever::unloadMaterializedView(const std::string& name) const {
+  materializedViewsManager_->unloadViewIfLoaded(name);
+}
+
+// ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
   QueryExecutionContext qec{index_,
                             &cache_,
