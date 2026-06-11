@@ -1864,9 +1864,8 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    return std::visit(
-        ad_utility::OverloadCallOperator{ad_utility::staticCast<GraphTerm>},
-        visit(ctx->varOrIri()));
+    return std::visit(ad_utility::staticCast<GraphTerm>,
+                      visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
@@ -2237,8 +2236,8 @@ PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
 // ____________________________________________________________________________________
 uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
   try {
-    // unsigned long long int might be larger than 8 bytes as per the
-    // standard. If that were the case this could lead to overflows.
+    // unsigned long long int might be larger than 8 bytes as per the standard.
+    // If that were the case this could lead to overflows.
     // TODO<joka921> Use `std::from_chars` but first check for the compiler
     //  support.
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t));
@@ -2661,10 +2660,10 @@ ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   } else if (ctx->notExistsFunc()) {
     return visit(ctx->notExistsFunc());
   }
-  // Get the function name and the arguments. Note that we do not have to
-  // check the number of arguments like for `processIriFunctionCall`, since
-  // the number of arguments is fixed by the grammar and we wouldn't even get
-  // here if the number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
+  // Get the function name and the arguments. Note that we do not have to check
+  // the number of arguments like for `processIriFunctionCall`, since the number
+  // of arguments is fixed by the grammar and we wouldn't even get here if the
+  // number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
   AD_CONTRACT_CHECK(!ctx->children.empty());
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
@@ -2871,16 +2870,16 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   // the current group.
   selectClause.setAsterisk();
   // `ExistsExpression`s are not parsed like regular `SparqlExpression`s, so
-  // they don't have a proper hierarchy of dependent variables. Because of
-  // that, we need to manually add all variables that are visible after
-  // parsing the body of `EXISTS`.
+  // they don't have a proper hierarchy of dependent variables. Because of that,
+  // we need to manually add all variables that are visible after parsing the
+  // body of `EXISTS`.
   for (const Variable& variable : visibleVariables_) {
     selectClause.addVisibleVariable(variable);
   }
   argumentOfExists._rootGraphPattern = std::move(group);
 
-  // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses
-  // from the outer query.
+  // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
+  // the outer query.
   argumentOfExists.datasetClauses_ = activeDatasetClauses_;
   visibleVariables_ = std::move(visibleVariablesBackup);
   auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
