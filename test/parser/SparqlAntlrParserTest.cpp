@@ -1527,19 +1527,16 @@ TEST(SparqlParser, Exists) {
 TEST(SparqlParser, Quads) {
   auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
   auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return iri(stringWithBrackets);
-  };
 
   expectQuads("?a <b> <c>",
               m::Quads({{Var("?a"), iri("<b>"), iri("<c>")}}, {}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> }",
-      m::Quads({}, {{Iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}}}));
+      m::Quads({}, {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
-      m::Quads({}, {{Iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}},
-                    {Iri("<bar>"), {{iri("<d>"), iri("<e>"), Var("?f")}}}}));
+      m::Quads({}, {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}},
+                    {iri("<bar>"), {{iri("<d>"), iri("<e>"), Var("?f")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
       m::Quads({{iri("<d>"), iri("<e>"), iri("<f>")},
