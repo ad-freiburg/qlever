@@ -11,6 +11,7 @@
 
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/ThreadSafeQueue.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/WebSocketSession.h"
@@ -23,6 +24,17 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 // Including the `RuntimeParameters` header is expensive. Move functions that
 // require it into an implementation file.
 ad_utility::MemorySize getRequestBodyLimit();
+
+// Selects whether an HttpServer reads the full request body into memory before
+// calling the handler (Eager) or streams it to the handler chunk by chunk
+// while sending the response (Lazy).
+enum class BodyReadMode { Eager, Lazy };
+
+// Type aliases for the lazy-mode chunk queue shared between the HTTP session
+// (producer) and the HttpBodyParallelBuffer (consumer).
+using LazyChunkQueue =
+    ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
+using SharedLazyChunkQueue = std::shared_ptr<LazyChunkQueue>;
 
 /*
  * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
@@ -50,7 +62,8 @@ ad_utility::MemorySize getRequestBodyLimit();
  * a `net::awaitable<void>`. It is only called if the request is a valid
  * websocket upgrade request and the URL represents a valid path.
  */
-CPP_template(typename HttpHandler, typename WebSocketHandler)(
+CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
+             typename WebSocketHandler)(
     requires ad_utility::InvocableWithExactReturnType<
         WebSocketHandler, net::awaitable<void>,
         const http::request<http::string_body>&,
@@ -249,43 +262,107 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
       // the `catch`.
       std::optional<http::response<http::string_body>> errorResponse;
 
+      // In lazy mode, the chunk queue for the current request body. Null until
+      // the lazy branch initialises it; accessible in the catch block so that
+      // network errors can be forwarded to the parser thread.
+      SharedLazyChunkQueue chunkQueue;
+
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
 
-        // Read a request. Use a parser so that we can control the limit of the
-        // request size.
-        http::request_parser<http::string_body> requestParser;
-        auto bodyLimit = getRequestBodyLimit().getBytes();
-        requestParser.body_limit(bodyLimit == 0
-                                     ? boost::none
-                                     : boost::optional<uint64_t>(bodyLimit));
-        co_await http::async_read(stream, buffer, requestParser,
-                                  boost::asio::use_awaitable);
-        http::request<http::string_body> req = requestParser.release();
+        if constexpr (bodyReadMode == BodyReadMode::Eager) {
+          // ===== EAGER MODE =====
+          // Read a request. Use a parser so that we can control the limit of
+          // the request size.
+          http::request_parser<http::string_body> requestParser;
+          auto bodyLimit = getRequestBodyLimit().getBytes();
+          requestParser.body_limit(bodyLimit == 0
+                                       ? boost::none
+                                       : boost::optional<uint64_t>(bodyLimit));
+          co_await http::async_read(stream, buffer, requestParser,
+                                    boost::asio::use_awaitable);
+          http::request<http::string_body> req = requestParser.release();
 
-        // Let request be handled by `WebSocketSession` if the HTTP
-        // request is a WebSocket handshake
-        if (beast::websocket::is_upgrade(req)) {
-          auto websocketErrorResponse = ad_utility::websocket::
-              WebSocketSession::getErrorResponseIfPathIsInvalid(req);
-          if (websocketErrorResponse.has_value()) {
-            co_await sendMessage(std::move(websocketErrorResponse.value()));
+          // Let request be handled by `WebSocketSession` if the HTTP
+          // request is a WebSocket handshake.
+          if (beast::websocket::is_upgrade(req)) {
+            auto websocketErrorResponse = ad_utility::websocket::
+                WebSocketSession::getErrorResponseIfPathIsInvalid(req);
+            if (websocketErrorResponse.has_value()) {
+              co_await sendMessage(std::move(websocketErrorResponse.value()));
+            } else {
+              // Prevent cleanup after socket has been moved from.
+              releaseConnection.cancel();
+              co_await std::invoke(webSocketHandler_, req,
+                                   std::move(stream.socket()));
+              co_return;
+            }
           } else {
-            // prevent cleanup after socket has been moved from
-            releaseConnection.cancel();
-            co_await std::invoke(webSocketHandler_, req,
-                                 std::move(stream.socket()));
-            co_return;
+            // Currently there is no timeout on the server side, this is
+            // handled by QLever's timeout mechanism.
+            stream.expires_never();
+
+            // Handle the http request. Note that `httpHandler_` is also
+            // responsible for sending the message via the `sendMessage` lambda.
+            co_await httpHandler_(std::move(req), sendMessage);
           }
         } else {
-          // Currently there is no timeout on the server side, this is handled
-          // by QLever's timeout mechanism.
-          stream.expires_never();
+          // ===== LAZY MODE =====
+          // Read only the request headers first; the body is streamed to the
+          // handler's chunk queue after the response is sent.
+          // Note: WebSocket upgrades are not supported in lazy mode.
+          http::request_parser<http::buffer_body> requestParser;
+          requestParser.body_limit(boost::none);
+          co_await http::async_read_header(stream, buffer, requestParser,
+                                           boost::asio::use_awaitable);
 
-          // Handle the http request. Note that `httpHandler_` is also
-          // responsible for sending the message via the `sendMessage` lambda.
-          co_await httpHandler_(std::move(req), sendMessage);
+          // Build a header-only request to pass to the handler.
+          http::request<http::empty_body> headersReq;
+          headersReq.method(requestParser.get().method());
+          headersReq.target(std::string(requestParser.get().target()));
+          headersReq.version(requestParser.get().version());
+          headersReq.keep_alive(requestParser.get().keep_alive());
+          for (auto const& f : requestParser.get()) {
+            headersReq.insert(f.name_string(), f.value());
+          }
+
+          // Create the chunk queue and call the handler. The handler sends
+          // the response; body bytes arrive afterwards.
+          chunkQueue = std::make_shared<LazyChunkQueue>(4);
+          stream.expires_never();
+          co_await httpHandler_(std::move(headersReq), chunkQueue, sendMessage);
+
+          // Stream the remaining body bytes into the chunk queue.
+          constexpr size_t kChunkSize = 1 << 20;  // 1 MB per chunk
+          while (!requestParser.is_done()) {
+            std::vector<char> chunk(kChunkSize);
+            requestParser.get().body().data = chunk.data();
+            requestParser.get().body().size = chunk.size();
+            boost::system::error_code ec;
+            co_await http::async_read_some(
+                stream, buffer, requestParser,
+                boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+            if (ec && ec != http::error::need_buffer) {
+              // Propagate the network error to the parser thread, then rethrow
+              // so the catch block handles connection teardown.
+              chunkQueue->pushException(
+                  std::make_exception_ptr(boost::system::system_error{ec}));
+              chunkQueue = nullptr;  // prevent double-push in catch block
+              throw boost::system::system_error{ec};
+            }
+            size_t bytesRead = kChunkSize - requestParser.get().body().size;
+            if (bytesRead > 0) {
+              chunk.resize(bytesRead);
+              // May briefly block if the queue is full (parser thread is slow),
+              // which is acceptable for InputFileServer's single-upload model.
+              chunkQueue->push(std::move(chunk));
+            }
+          }
+          chunkQueue->finish();
+          // Lazy mode always closes the connection after each request because
+          // the stream is occupied by body streaming until the body is done.
+          streamNeedsClosing = true;
         }
 
         // The closing of the stream is done in the exception handler.
@@ -293,19 +370,29 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           throw beast::system_error{http::error::end_of_stream};
         }
       } catch (const boost::system::system_error& error) {
+        // In lazy mode, forward unexpected network errors to the parser thread
+        // so it can terminate cleanly instead of blocking forever.
+        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
+          if (chunkQueue && error.code() != http::error::end_of_stream) {
+            chunkQueue->pushException(std::current_exception());
+          }
+        }
+
         if (error.code() == http::error::end_of_stream) {
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else if (error.code() == http::error::body_limit) {
-          errorResponse = ad_utility::httpUtils::createHttpResponseFromString(
-              absl::StrCat(
-                  "Request body size exceeds the allowed size (",
-                  getRequestBodyLimit().asString(),
-                  "), send a smaller request or set the allowed size via the ",
-                  "runtime parameter `request-body-limit`"),
-              http::status::payload_too_large, ad_utility::MediaType::textPlain,
-              std::nullopt, 11);
+          if constexpr (bodyReadMode == BodyReadMode::Eager) {
+            errorResponse = ad_utility::httpUtils::createHttpResponseFromString(
+                absl::StrCat(
+                    "Request body size exceeds the allowed size (",
+                    getRequestBodyLimit().asString(),
+                    "), send a smaller request or set the allowed size "
+                    "via the runtime parameter `request-body-limit`"),
+                http::status::payload_too_large,
+                ad_utility::MediaType::textPlain, std::nullopt, 11);
+          }
         } else {
           // This is the error "The socket was closed due to a timeout" or if
           // the client stream ended unexpectedly.
@@ -318,15 +405,25 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           }
         }
         // If we have an error response send it outside the `catch` block. (We
-        // can not `co_await` in the `catch` block) Otherwise close the
+        // can not `co_await` in the `catch` block.) Otherwise close the
         // session by returning.
         if (!errorResponse) {
           co_return;
         }
       } catch (const std::exception& error) {
+        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
+          if (chunkQueue) {
+            chunkQueue->pushException(std::current_exception());
+          }
+        }
         AD_LOG_ERROR << error.what() << std::endl;
         co_return;
       } catch (...) {
+        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
+          if (chunkQueue) {
+            chunkQueue->pushException(std::current_exception());
+          }
+        }
         AD_LOG_ERROR << "Weird exception not inheriting from std::exception, "
                         "this shouldn't happen"
                      << std::endl;
@@ -342,12 +439,13 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
   }
 };
 
-/// Deduction guide, so you don't have to specify the types explicitly
-/// when creating an instance of this class.
+/// Deduction guide for eager mode (the default). Specify BodyReadMode::Lazy
+/// explicitly when creating a lazy-mode server.
 template <typename HttpHandler, typename WebSocketHandlerSupplier>
 HttpServer(unsigned short, const std::string&, int, HttpHandler,
            WebSocketHandlerSupplier)
-    -> HttpServer<HttpHandler, std::invoke_result_t<WebSocketHandlerSupplier,
-                                                    net::io_context&>>;
+    -> HttpServer<
+        BodyReadMode::Eager, HttpHandler,
+        std::invoke_result_t<WebSocketHandlerSupplier, net::io_context&>>;
 
 #endif  // QLEVER_HTTPSERVER_H
