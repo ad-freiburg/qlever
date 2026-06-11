@@ -75,7 +75,7 @@ Iri Iri::fromIrirefValidated(std::string_view stringWithBrackets) {
   if (!ctre::match<irirefRegex>(stringWithBrackets)) {
     AD_THROW(absl::StrCat("The string \"", stringWithBrackets,
                           "\" is not a valid IRI reference (IRIREF)."
-                          "See https://www.ietf.org/rfc/rfc3987.txt:"));
+                          "See https://www.ietf.org/rfc/rfc3987.txt"));
   }
   return fromIriref(stringWithBrackets);
 }

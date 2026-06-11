@@ -28,6 +28,12 @@ namespace ad_utility::triple_component {
 // is `std::string`. When `isOwning = false`, storage is `std::string_view` and
 // all mutating/allocating functions are disabled. Use the `Iri` and `IriView`
 // wrapper classes for the concrete owning and non-owning variants.
+//
+// The IRI is stored in QLever's internal normalized format: the full IRI
+// including the surrounding angle brackets, with all `\u`/`\U` escape
+// sequences resolved to their literal UTF-8 characters (see `fromIriref`).
+// For example, the IRI written as `<http://x/\u00E9>` in SPARQL is stored
+// as `<http://x/é>`.
 template <bool isOwning = true>
 class BasicIri {
  public:
@@ -60,26 +66,16 @@ class BasicIri {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
 
   // Build an `Iri` from a string that is already in QLever's internal
-  // normalized format. The string is stored verbatim (no validation, no
-  // transformation), so it must satisfy exactly the following:
-  //   1. It includes the surrounding angle brackets, i.e. it has the form
-  //      `<...>`.
-  //   2. The part between the brackets contains no `\u`/`\U` (or any other)
-  //      escape sequences: every character is stored as its literal UTF-8
-  //      byte(s). For example the IRI written as `<http://x/é>` in SPARQL
-  //      is stored here as `<http://x/é>`.
-  // This is precisely the format produced by `toStringRepresentation`. To build
-  // an `Iri` from a raw (possibly escaped) SPARQL/Turtle IRI instead, use
-  // `fromIriref`.
+  // normalized format (see the class comment). The string is stored verbatim
+  // (no validation, no transformation); this is the exact inverse of
+  // `toStringRepresentation`. To build an `Iri` from a raw (possibly escaped)
+  // SPARQL/Turtle IRI instead, use `fromIriref`.
   static BasicIri fromStringRepresentation(StorageType s);
 
-  // Return the full string representation of the IRI in QLever's internal
-  // normalized format, i.e. the IRI *including* the surrounding angle brackets,
-  // e.g. `<http://www.wikidata.org/entity/Q3138>`. "Normalized" means that any
-  // `\u`/`\U` escape sequences from the original input have been resolved to
-  // their UTF-8 characters (see `fromIriref`); the exact escape spelling of the
-  // original input is therefore not preserved. This is the inverse of
-  // `fromStringRepresentation`.
+  // Return the IRI in QLever's internal normalized format (see the class
+  // comment). This is the exact inverse of `fromStringRepresentation`. Code
+  // that uses the IRI semantically (e.g. for RDF/SPARQL output) should use
+  // `toSparql()` instead.
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
     return iri_;
@@ -90,15 +86,14 @@ class BasicIri {
     return std::move(iri_);
   }
 
-  // return a valid RDF/SPARQL representation of the IRI. Note: this is equal to
-  // the internal string representation.
+  // return a valid RDF/SPARQL representation of the IRI. Note: currently this
+  // is equal to the internal string representation. Should this ever change,
+  // all call sites that rely on this equality have to be inspected.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql()
       const& {
     return toStringRepresentation();
   }
 
-  // return a valid RDF/SPARQL representation of the IRI. Note: this is equal to
-  // the internal string representation.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql() && {
     return std::move(*this).toStringRepresentation();
   }
