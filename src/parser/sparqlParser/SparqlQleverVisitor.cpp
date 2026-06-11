@@ -1896,10 +1896,10 @@ template <typename Context>
 void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
     // <entity>` is contained in the query, then the variable
-    // `?ql_textscore_var` is implicitly created and visible in the query
-    // body. Similarly, if a triple `?var ql:contains-word "words"` is
-    // contained in the query, then the variable `ql_matchingword_var` is
-    // implicitly created and visible in the query body.
+    // `?ql_textscore_var` is implicitly created and visible in the query body.
+    // Similarly, if a triple `?var ql:contains-word "words"` is contained in
+    // the query, then the variable `ql_matchingword_var` is implicitly created
+    // and visible in the query body.
     Context* ctx, const TripleWithPropertyPath& triple) {
   const auto& [subject, predicate, object] = triple;
 
