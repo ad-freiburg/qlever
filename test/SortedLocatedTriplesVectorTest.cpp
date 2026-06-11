@@ -47,6 +47,21 @@ auto AssertionFailed = [](const std::string& assertion) {
 };
 auto NotClean = AssertionFailed("isClean()");
 auto Empty = AssertionFailed("!empty()");
+
+// Runs `testLamda` on with `const SV&` and `SV&` to test the const overloads.
+auto testConstOverloads = [](SV& initial, auto testLambda,
+                             ad_utility::source_location l =
+                                 AD_CURRENT_SOURCE_LOC()) {
+  {
+    auto trace = generateLocationTrace(l, "During execution of const overload");
+    testLambda(std::as_const(initial));
+  }
+  {
+    auto trace =
+        generateLocationTrace(l, "During execution of non-const overload");
+    testLambda(initial);
+  }
+};
 }  // namespace
 
 using namespace ad_utility::testing;
@@ -222,55 +237,40 @@ TEST(SortedLocatedTriplesVectorTest, insert) {
 }
 
 TEST(SortedLocatedTriplesVectorTest, back) {
-  // Runs `testLamda` on with `const SV&` and `SV&` to test the const overloads.
-  auto testOverloads = [](SV& initial, auto testLambda,
-                          ad_utility::source_location l =
-                              AD_CURRENT_SOURCE_LOC()) {
-    {
-      auto trace =
-          generateLocationTrace(l, "During execution of const overload");
-      testLambda(std::as_const(initial));
-    }
-    {
-      auto trace =
-          generateLocationTrace(l, "During execution of non-const overload");
-      testLambda(initial);
-    }
-  };
   {
     SV s{};
-    testOverloads(
+    testConstOverloads(
         s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), Empty); });
   }
   {
     SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5});
-    testOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5); });
+    // small part is empty
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5); });
+    s.insert(lt2I);
+    s.consolidate();
+    // The small part is non-empty but the large part has the largest element.
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5); });
     s.insert(lt5I);  // `lt5I` will be in the small part
-    testOverloads(
+    testConstOverloads(
         s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), NotClean); });
     s.consolidate();
-    testOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5I); });
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5I); });
     s.insert(lt6);  // `lt6` will be in the small part
     s.consolidate();
-    testOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt6); });
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt6); });
   }
 }
 
 TEST(SortedLocatedTriplesVectorTest, iteration) {
   auto expectElements =
-      [](SV& sv, const std::vector<LocatedTriple>& expectedTriples,
-         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        {
-          auto trace =
-              generateLocationTrace(l, "During execution of const overload");
-          EXPECT_THAT(std::as_const(sv),
-                      testing::ElementsAreArray(expectedTriples));
-        }
-        {
-          auto trace = generateLocationTrace(
-              l, "During execution of non-const overload");
-          EXPECT_THAT(sv, testing::ElementsAreArray(expectedTriples));
-        }
+      [&](SV& sv, const std::vector<LocatedTriple>& expectedTriples,
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        testConstOverloads(
+            sv,
+            [&expectedTriples](auto& sv) {
+              EXPECT_THAT(sv, testing::ElementsAreArray(expectedTriples));
+            },
+            l);
       };
   {
     SV s{};
@@ -289,6 +289,14 @@ TEST(SortedLocatedTriplesVectorTest, iteration) {
     s.clear();
     expectElements(s, {});
   }
+  {
+    SV s{};
+    s.insert(lt1);
+    testConstOverloads(
+        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.begin(), NotClean); });
+    testConstOverloads(
+        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.end(), NotClean); });
+  }
 }
 
 TEST(SortedLocatedTriplesVectorTest, erase) {
@@ -300,8 +308,11 @@ TEST(SortedLocatedTriplesVectorTest, erase) {
     EXPECT_THAT(s, testing::ElementsAre(lt1, lt3));
     s.erase(lt1);
     EXPECT_THAT(s, testing::ElementsAre(lt3));
+    s.insert(lt2);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(lt3), NotClean);
+    s.consolidate();
     s.erase(lt3);
-    EXPECT_THAT(s, testing::ElementsAre());
+    EXPECT_THAT(s, testing::ElementsAre(lt2));
   }
   {
     SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5, lt6});
@@ -311,8 +322,11 @@ TEST(SortedLocatedTriplesVectorTest, erase) {
     EXPECT_THAT(s, testing::ElementsAre(lt1, lt3, lt5, lt6));
     s.erase(std::vector{lt1, lt2});  // `lt2` is no longer contained.
     EXPECT_THAT(s, testing::ElementsAre(lt3, lt5, lt6));
-    s.erase(std::vector{lt6, lt3,
-                        lt5});  // this `erase` overload sorts the elements
+    s.insert(lt1);
+    // this `erase` overload sorts the elements
+    AD_EXPECT_THROW_WITH_MESSAGE(s.erase({lt6, lt3, lt5, lt1}), NotClean);
+    s.consolidate();
+    s.erase(std::vector{lt6, lt3, lt5, lt1});
     EXPECT_THAT(s, testing::ElementsAre());
   }
   {
@@ -324,7 +338,10 @@ TEST(SortedLocatedTriplesVectorTest, erase) {
     EXPECT_THAT(s, testing::ElementsAre(lt1, lt2, lt3, lt4, lt5, lt6));
     erase({lt2, lt4});
     EXPECT_THAT(s, testing::ElementsAre(lt1, lt3, lt5, lt6));
-    erase({lt1, lt2});  // `lt2` is no longer contained.
+    s.insert(lt4);
+    AD_EXPECT_THROW_WITH_MESSAGE(erase({lt1, lt2, lt4}), NotClean);
+    s.consolidate();
+    erase({lt1, lt2, lt4});  // `lt2` is no longer contained.
     EXPECT_THAT(s, testing::ElementsAre(lt3, lt5, lt6));
     if (ad_utility::areExpensiveChecksEnabled) {
       AD_EXPECT_THROW_WITH_MESSAGE(
@@ -404,8 +421,10 @@ TEST(SortedLocatedTriplesVectorTest, equality) {
     s2.insert(lt2);
     s2.insert(lt1);
 
-    AD_EXPECT_THROW_WITH_MESSAGE(s1 == s2, NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(s1 == s2), NotClean);
     s1.consolidate();
+    AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(s1 == s2),
+                                 AssertionFailed("other.isClean()"));
     s2.consolidate();
 
     EXPECT_EQ(s1, s2);

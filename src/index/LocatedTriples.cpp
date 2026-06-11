@@ -729,14 +729,6 @@ void to_json(nlohmann::json& j, const VacuumStatistics& stats) {
 }
 
 // ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
-  os << "{ ";
-  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
-  os << "}";
-  return os;
-}
-
-// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
   ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;

@@ -12,13 +12,20 @@
 
 namespace {
 template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
-auto zipMerge(std::vector<T> first, std::vector<T> last, Comp comp = {},
-              Proj proj = {}) {
-  return std::vector(
+auto makeZipRange(std::vector<T>& first, std::vector<T>& last, Comp comp = {},
+                  Proj proj = {}) {
+  return std::make_pair(
       ad_utility::zipIterator(first.begin(), first.end(), last.begin(),
                               last.end(), comp, proj),
       ad_utility::zipIterator(first.end(), first.end(), last.end(), last.end(),
                               comp, proj));
+}
+
+template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
+auto zipMerge(std::vector<T> first, std::vector<T> last, Comp comp = {},
+              Proj proj = {}) {
+  auto [begin, end] = makeZipRange(first, last, comp, proj);
+  return std::vector(begin, end);
 }
 }  // namespace
 
@@ -51,4 +58,32 @@ TEST(ZipMergeIteratorTest, intPairZip) {
   EXPECT_THAT(zipMerge<Pair>({{1, 1}, {2, 1}, {3, 1}}, {{1, 2}, {3, 2}}, {},
                              &Pair::first),
               testing::ElementsAre(Pair(1, 2), Pair(2, 1), Pair(3, 2)));
+}
+
+TEST(ZipMergeIteratorTest, MultiPass) {
+  std::vector<int> a{1, 3, 5}, b{0, 2, 4};
+  auto [begin, end] = makeZipRange(a, b);
+  auto beginCopy = begin;
+  EXPECT_THAT(std::vector(begin, end), testing::ElementsAre(0, 1, 2, 3, 4, 5));
+  EXPECT_THAT(std::vector(beginCopy, end),
+              testing::ElementsAre(0, 1, 2, 3, 4, 5));
+}
+
+TEST(ZipMergeIterator, Equality) {
+  {
+    std::vector<int> a, b;
+    auto [begin, end] = makeZipRange(a, b);
+    EXPECT_EQ(begin, end);
+  }
+  {
+    std::vector<int> a{1, 3, 5}, b{0, 2, 4};
+    auto [begin, end] = makeZipRange<int>(b, a);
+    EXPECT_NE(begin, end);
+    auto beginCopy = begin;
+    EXPECT_EQ(begin, beginCopy);
+    ++begin;
+    EXPECT_NE(begin, beginCopy);
+    ++beginCopy;
+    EXPECT_EQ(begin, beginCopy);
+  }
 }

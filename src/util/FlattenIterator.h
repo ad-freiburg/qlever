@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2026 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -15,7 +15,7 @@ namespace ad_utility::detail {
 
 // A forward iterator that flattens a nested container (e.g., vector of vectors)
 // into a single sequential iteration. Elements are yielded in order: all
-// elements of the first inner container, then all of the second, etc.
+// elements from the first inner container, then all from the second, etc.
 //
 // `OuterIt` iterates over inner containers. `InnerIt` iterates within them.
 // The inner containers must support `.begin()` and `.end()` returning

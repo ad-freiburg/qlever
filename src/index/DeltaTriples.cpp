@@ -105,55 +105,59 @@ nlohmann::json DeltaTriples::vacuum(
         locatedTriples_->getLocatedTriplesForPermutation<isInternal>(perm);
     return ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
   };
+  auto removeTriples = [this](const std::vector<IdTriple<0>>& triples,
+                              bool insertOrDelete, auto& triplesToHandlesMap,
+                              auto isInternal) {
+    // This operation must not be interrupted so we ignore the
+    // CancellationHandle.
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    // Erase located triples
+    for (auto permutation : Permutation::all<isInternal>()) {
+      const auto& perm = index_.getPermutation(permutation);
+      // `LocatedTriple`s are compared only by their `triple_` so
+      // `insertOrDelete` could also be a fixed value.
+      auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+          triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
+          cancellationHandle);
+      ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
+      LocatedTriplesPerBlock& lts =
+          locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
+              permutation);
+      lts.erase(ql::span{locatedTriples});
+    }
+
+    // Remove from handles map.
+    for (const auto& triple : triples) {
+      AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triple) == 1);
+    }
+  };
   auto removeIdentifiedTriples =
-      [this](auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
-             const std::vector<IdTriple<0>>& insertionsToRemove) {
+      [this, &removeTriples](
+          auto isInternal, const std::vector<IdTriple<0>>& deletionsToRemove,
+          const std::vector<IdTriple<0>>& insertionsToRemove) {
         auto& state = getState<isInternal>();
-        auto removeTriples = [this, &isInternal](
-                                 const std::vector<IdTriple<0>>& triples,
-                                 auto& triplesToHandlesMap) {
-          // This operation must not be interrupted so we ignore the
-          // CancellationHandle.
-          auto cancellationHandle =
-              std::make_shared<ad_utility::CancellationHandle<>>();
-          // Erase located triples
-          for (auto permutation : Permutation::all<isInternal>()) {
-            const auto& perm = index_.getPermutation(permutation);
-            // ToDo: insertOrDelete doesn't matter
-            auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-                triples, perm.metaData().blockData(), perm.keyOrder(), true,
-                cancellationHandle);
-            ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
-            LocatedTriplesPerBlock& lts =
-                locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-                    permutation);
-            lts.erase(ql::span{locatedTriples});
-          }
 
-          // Remove from handles map.
-          for (const auto& triple : triples) {
-            AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triple) == 1);
-          }
-        };
-
-        removeTriples(deletionsToRemove, state.triplesDeleted_);
-        removeTriples(insertionsToRemove, state.triplesInserted_);
+        removeTriples(deletionsToRemove, false, state.triplesDeleted_,
+                      isInternal);
+        removeTriples(insertionsToRemove, true, state.triplesInserted_,
+                      isInternal);
       };
 
   nlohmann::json result = nlohmann::json::object();
-  auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
-  auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
+  auto [externalDeletions, externalInsertions, externalStats] =
+      identifyTriplesToVacuum(vi<false>);
+  auto [internalDeletions, internalInsertions, internalStats] =
+      identifyTriplesToVacuum(vi<true>);
 
   // For a consistent state this block must be executed fully.
   // CancellationHandle's must be ignored inside this block.
   {
-    removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove_,
-                            toRemoveInExternal.insertionsToRemove_);
-    result["external"] = toRemoveInExternal.stats_;
+    removeIdentifiedTriples(vi<false>, externalDeletions, externalInsertions);
+    result["external"] = externalStats;
 
-    removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove_,
-                            toRemoveInInternal.insertionsToRemove_);
-    result["internal"] = toRemoveInInternal.stats_;
+    removeIdentifiedTriples(vi<true>, internalDeletions, internalInsertions);
+    result["internal"] = internalStats;
   }
 
   return result;
@@ -419,11 +423,8 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.endTrace("removeExistingTriples");
   tracer.beginTrace("removeInverseTriples");
   ql::ranges::for_each(triples, [&inverseMap](const IdTriple<0>& triple) {
-    // TODO: can we collapse this into a single erase?
-    auto handle = inverseMap.find(triple);
-    if (handle != inverseMap.end()) {
-      inverseMap.erase(triple);
-    }
+    // If the element does not exist erase does nothing.
+    inverseMap.erase(triple);
   });
   tracer.endTrace("removeInverseTriples");
   tracer.beginTrace("locatedAndAdd");

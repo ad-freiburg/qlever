@@ -43,16 +43,16 @@ CPP_template(typename It, typename Compare = std::less<>,
   It end1_;
   It it2_;
   It end2_;
-  Compare comp;
+  [[no_unique_address]] Compare comp_;
   Projection proj_;
 
  public:
   explicit ZipMergeIteratorImpl(It b1, It e1, It b2, It e2, Compare cmp = {},
                                 Projection proj = {})
-      : it1_(b1), end1_(e1), it2_(b2), end2_(e2), comp(cmp), proj_(proj) {
+      : it1_(b1), end1_(e1), it2_(b2), end2_(e2), comp_(cmp), proj_(proj) {
     if constexpr (std::is_pointer_v<Compare> ||
                   std::is_member_pointer_v<Compare>) {
-      AD_CONTRACT_CHECK(comp != nullptr);
+      AD_CONTRACT_CHECK(comp_ != nullptr);
     }
     if constexpr (std::is_pointer_v<Projection> ||
                   std::is_member_pointer_v<Projection>) {
@@ -78,8 +78,8 @@ CPP_template(typename It, typename Compare = std::less<>,
     if (it1_ == end1_) return Decision::UseSecond;
     const auto& p1 = std::invoke(proj_, *it1_);
     const auto& p2 = std::invoke(proj_, *it2_);
-    if (std::invoke(comp, p1, p2)) return Decision::UseFirst;
-    if (std::invoke(comp, p2, p1)) return Decision::UseSecond;
+    if (std::invoke(comp_, p1, p2)) return Decision::UseFirst;
+    if (std::invoke(comp_, p2, p1)) return Decision::UseSecond;
     return Decision::UseSecondSkipFirst;
   }
 
@@ -117,6 +117,10 @@ CPP_template(typename It, typename Compare = std::less<>,
   bool operator==(const ZipMergeIteratorImpl& o) const {
     return std::tie(it1_, end1_, it2_, end2_) ==
            std::tie(o.it1_, o.end1_, o.it2_, o.end2_);
+  }
+  // An explicit definition is required for C++17 compatibility.
+  bool operator!=(const ZipMergeIteratorImpl& other) const {
+    return !(*this == other);
   }
 };
 

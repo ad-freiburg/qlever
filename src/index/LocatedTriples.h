@@ -25,12 +25,6 @@
 
 class Permutation;
 
-namespace ad_benchmark {
-class EnsureIntegrationBenchmark;
-class ZipMergeIteratorBenchmark;
-class InsertBatchBenchmark;
-}  // namespace ad_benchmark
-
 struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
@@ -192,11 +186,6 @@ class SortedLocatedTriplesVector {
   bool isClean() const {
     return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
   }
-  // Whether the small part is empty.
-  // ToDo: get rid of methods that require this
-  bool isSinglePartOnly() const {
-    return numItemsLargePart_ == triples_.size();
-  }
 
   template <size_t>
   friend class BlockSortedLocatedTriplesVectorImpl;
@@ -266,9 +255,13 @@ class SortedLocatedTriplesVector {
     AD_CONTRACT_CHECK(other.isClean());
     return triples_ == other.triples_;
   }
-  // An explicit definition is required for C++17 compaitiblity.
-  bool operator!=(const SortedLocatedTriplesVector& other) const {
-    return !(*this == other);
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const SortedLocatedTriplesVector& lts) {
+    os << "{ ";
+    ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
+    os << "}";
+    return os;
   }
 };
 static_assert(ql::ranges::range<SortedLocatedTriplesVector>);
@@ -360,9 +353,6 @@ class BlockSortedLocatedTriplesVectorImpl {
 
   bool isClean() const { return pending_.empty(); }
 
-  friend class ad_benchmark::EnsureIntegrationBenchmark;
-  friend class ad_benchmark::ZipMergeIteratorBenchmark;
-  friend class ad_benchmark::InsertBatchBenchmark;
   FRIEND_TEST(BlockSortedVectorTest, internals);
 
  public:
@@ -554,10 +544,6 @@ using BlockSortedLocatedTriplesVector =
 static_assert(ql::ranges::range<BlockSortedLocatedTriplesVector>);
 
 using LocatedTriples = SortedLocatedTriplesVector;
-
-// This operator is only for debugging and testing. It returns a
-// human-readable representation.
-std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 
 // Sorted sets of located triples, grouped by block. We use this to store all
 // located triples for a permutation.
