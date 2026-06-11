@@ -50,6 +50,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Disable nlohmann implicit conversions (e.g. json → std::string) globally so
+# all TUs, including those compiled via PCH, see the same flag value.
+add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
@@ -141,6 +145,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -153,6 +158,7 @@ FetchContent_Declare(
         nlohmann-json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -166,6 +172,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -180,6 +187,7 @@ FetchContent_Declare(
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -190,6 +198,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
@@ -286,6 +295,18 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
+# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# that cross the system-header boundary (e.g. absl containers instantiated with
+# user types, std::variant). Suppress for the affected version range so the
+# flag can be re-enabled easily once GCC fixes the false-positive behavior.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    # False positives from template instantiation crossing system-header boundaries.
+    add_compile_options(-Wno-maybe-uninitialized)
+    # Unreliable on large translation units; formatting is enforced by clang-format anyway.
+    add_compile_options(-Wno-misleading-indentation)
+endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
@@ -297,7 +318,7 @@ endif ()
 
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
 
 if (${PERFTOOLS_PROFILER})
@@ -322,6 +343,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -396,6 +418,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -410,6 +433,7 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -423,11 +447,11 @@ target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
-include_directories(${ctre_SOURCE_DIR}/single-header)
+include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
-include_directories(${fsst_SOURCE_DIR})
-include_directories(${range-v3_SOURCE_DIR}/include)
+include_directories(SYSTEM ${fsst_SOURCE_DIR})
+include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
@@ -471,11 +495,9 @@ set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
-if (CMAKE_BUILD_TYPE MATCHES DEBUG)
-    set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
-else ()
-    set(LOGLEVEL INFO CACHE STRING "The loglevel")
-endif ()
+set(LOGLEVEL DEBUG CACHE STRING
+    "The maximum log level QLever is compiled with. Less verbose log levels can be chosen at runtime via the 'log-level' runtime parameter."
+)
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 

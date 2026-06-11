@@ -205,9 +205,10 @@ class Qlever {
   mutable QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  std::shared_ptr<Index> index_;
   mutable NamedResultCache namedResultCache_;
-  mutable MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
 
@@ -289,11 +290,11 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_, index_);
+    namedResultCache_.readFromSerializer(serializer, allocator_, index());
   }
 
   // Low-level access to the QLever API, use with care.
-  Index& index() { return index_; }
+  Index& index() { return *index_; }
 };
 }  // namespace qlever
 
