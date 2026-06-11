@@ -1370,7 +1370,7 @@ RdfMultifileParser::RdfMultifileParser(
     for (auto& file : files) {
       bool active = parsingQueue_.push(
           absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches, this,
-                           file, bufferSize));
+                           std::move(file), bufferSize));
       if (!active) {
         // The queue was finished prematurely; stop to avoid deadlocks.
         break;
