@@ -9,12 +9,17 @@
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
+#include "parser/VariableCounter.h"
 
 using namespace graphPatternAnalysis;
+using parsedQuery::VariableCounter;
+using V = Variable;
 
 // _____________________________________________________________________________
 TEST(BasicGraphPatternsInvariantToTest, Bind) {
-  BasicGraphPatternsInvariantTo invariantTo{{Variable{"?x"}, Variable{"?y"}}};
+  VariableCounter counter;
+  counter(std::vector{V{"?x"}, V{"?y"}});
+  BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test that BIND is invariant when its target variable is not in our set.
   parsedQuery::Bind bind1{
@@ -32,7 +37,7 @@ TEST(BasicGraphPatternsInvariantToTest, Bind) {
   EXPECT_FALSE(invariantTo(bind2));
 
   // Test that BIND is invariant when we have no variables to check.
-  BasicGraphPatternsInvariantTo invariantTo2{{}};
+  BasicGraphPatternsInvariantTo invariantTo2{VariableCounter{}};
   parsedQuery::Bind bind{
       sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
           Variable{"?a"}),
@@ -42,7 +47,9 @@ TEST(BasicGraphPatternsInvariantToTest, Bind) {
 
 // _____________________________________________________________________________
 TEST(BasicGraphPatternsInvariantToTest, Values) {
-  BasicGraphPatternsInvariantTo invariantTo{{Variable{"?x"}, Variable{"?y"}}};
+  VariableCounter counter;
+  counter(std::vector{V{"?x"}, V{"?y"}});
+  BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test VALUES with exactly one row and no variable overlap.
   parsedQuery::Values values;
@@ -79,7 +86,9 @@ TEST(BasicGraphPatternsInvariantToTest, Values) {
 // _____________________________________________________________________________
 TEST(BasicGraphPatternsInvariantToTest, NotInvariant) {
   // Test the base case: is not invariant.
-  BasicGraphPatternsInvariantTo invariantTo{{Variable{"?x"}}};
+  VariableCounter counter;
+  counter(V{"?x"});
+  BasicGraphPatternsInvariantTo invariantTo{counter};
 
   SparqlTripleSimple example{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
   auto triple = SparqlTriple::fromSimple(example);
