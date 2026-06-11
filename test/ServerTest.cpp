@@ -344,31 +344,51 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, true, *qec);
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
   EXPECT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_FALSE(qec->pinResultWithName()
+                   .value()
+                   .geoIndexSimplificationInMeters_.has_value());
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
   // Test with pinNamed AND pinned geo Var.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", std::nullopt,
+                                        true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
               ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_FALSE(qec->pinResultWithName()
+                   .value()
+                   .geoIndexSimplificationInMeters_.has_value());
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed, geo var, AND simplification.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", 10.0, true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+              ::testing::Optional(10.0));
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt, false,
-                                            *qec),
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
+                                            std::nullopt, false, *qec),
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 

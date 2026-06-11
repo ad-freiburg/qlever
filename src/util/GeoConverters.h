@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_UTIL_GEOCONVERTERS_H
 #define QLEVER_SRC_UTIL_GEOCONVERTERS_H
 
+#include <s2/s2earth.h>
 #include <s2/s2latlng.h>
 #include <s2/s2loop.h>
 #include <s2/s2point.h>
@@ -15,10 +16,12 @@
 #include <s2/s2polyline.h>
 #include <util/geo/Geo.h>
 
+#include <memory>
+#include <vector>
+
 #include "backports/algorithm.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "rdfTypes/GeometryInfoHelpersImpl.h"
 
 // Several helpers to convert geometry representations between `S2` and
 // `libspatialjoin`.
@@ -91,6 +94,76 @@ inline std::unique_ptr<S2Polygon> makeS2Polygon(
     throw ad_utility::InvalidPolygonError();
   }
   return std::make_unique<S2Polygon>(std::move(s2polygon));
+}
+
+// Simplify an `S2Polyline` using the Douglas-Peucker algorithm via
+// `S2Polyline::SubsampleVertices`. The first and last vertices are always kept.
+// The `metersError` parameter is the maximum allowed deviation from the
+// original polyline in meters. A non-positive value returns a copy.
+inline S2Polyline simplifyPolyline(const S2Polyline& polyline,
+                                   double metersError) {
+  std::vector<S2Point> selected;
+  if (metersError > 0.0) {
+    auto tolerance = S2Earth::MetersToAngle(metersError);
+    std::vector<int> indices;
+    polyline.SubsampleVertices(tolerance, &indices);
+    selected.reserve(indices.size());
+    for (int idx : indices) {
+      selected.push_back(polyline.vertex(idx));
+    }
+  } else {
+    selected.reserve(polyline.num_vertices());
+    for (int i = 0; i < polyline.num_vertices(); ++i) {
+      selected.push_back(polyline.vertex(i));
+    }
+  }
+  return S2Polyline{absl::MakeSpan(selected)};
+}
+
+// Simplify each loop of an `S2Polygon` by applying the Douglas-Peucker
+// algorithm (via `S2Polyline::SubsampleVertices`) to each loop's vertices.
+// The `metersError` parameter is the maximum allowed deviation in meters.
+// A non-positive value returns a copy of the original polygon.
+// Falls back to the original loop vertices if simplification would reduce a
+// loop below three vertices.
+inline S2Polygon simplifyPolygon(const S2Polygon& polygon, double metersError) {
+  if (metersError <= 0.0) {
+    S2Polygon copy;
+    copy.Copy(polygon);
+    return copy;
+  }
+  auto tolerance = S2Earth::MetersToAngle(metersError);
+  std::vector<std::unique_ptr<S2Loop>> simplifiedLoops;
+  simplifiedLoops.reserve(polygon.num_loops());
+  for (int i = 0; i < polygon.num_loops(); ++i) {
+    const S2Loop* loop = polygon.loop(i);
+    int n = loop->num_vertices();
+    std::vector<S2Point> points;
+    points.reserve(n);
+    for (int j = 0; j < n; ++j) {
+      points.push_back(loop->vertex(j));
+    }
+    // Treat the loop as an open polyline to apply `SubsampleVertices`.
+    // The first and last vertices are always preserved, so the ring remains
+    // closable.
+    S2Polyline polyline{absl::MakeConstSpan(points)};
+    std::vector<int> indices;
+    polyline.SubsampleVertices(tolerance, &indices);
+    std::vector<S2Point> simplified;
+    simplified.reserve(indices.size());
+    for (int idx : indices) {
+      simplified.push_back(points[idx]);
+    }
+    // A valid S2Loop requires at least three distinct vertices.
+    if (simplified.size() < 3) {
+      simplified = std::move(points);
+    }
+    auto newLoop =
+        std::make_unique<S2Loop>(std::move(simplified), S2Debug::DISABLE);
+    newLoop->Normalize();
+    simplifiedLoops.push_back(std::move(newLoop));
+  }
+  return S2Polygon{std::move(simplifiedLoops), S2Debug::DISABLE};
 }
 
 }  // namespace geometryConverters

@@ -5,27 +5,11 @@
 #include "engine/SpatialJoinCachedIndex.h"
 
 #include <s2/mutable_s2shape_index.h>
-#include <s2/s2earth.h>
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
 #include "engine/SpatialJoinAlgorithms.h"
-
-static constexpr auto SubsamplePolyline = [](const S2Polyline& original,
-                                             S1Angle tolerance) {
-  std::vector<int> indices;
-  original.SubsampleVertices(tolerance, &indices);
-
-  // Build new polyline from the selected vertices
-  std::vector<S2Point> subsampled_vertices;
-  subsampled_vertices.reserve(indices.size());
-
-  for (int idx : indices) {
-    subsampled_vertices.push_back(original.vertex(idx));
-  }
-
-  return S2Polyline(subsampled_vertices);
-};
+#include "util/GeoConverters.h"
 
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
@@ -39,16 +23,20 @@ class SpatialJoinCachedIndexImpl {
   using ShapeIndexToRow = SpatialJoinCachedIndex::ShapeIndexToRow;
 
   // Construct the index, and return the mapping from shape indices to rows.
+  // If `simplificationErrorInMeters` has a value, polyline geometries are
+  // simplified before indexing; `std::nullopt` skips simplification.
   ShapeIndexToRow populate(ColumnIndex col, const IdTable& restable,
-                           const Index& index) {
+                           const Index& index,
+                           std::optional<double> simplificationErrorInMeters) {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
-    // Populate the index from the given `IdTable`
-    const auto tolerance = S2Earth::MetersToAngle(10);
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
       if (p.has_value()) {
-        p.value() = SubsamplePolyline(p.value(), tolerance);
+        if (simplificationErrorInMeters.has_value()) {
+          p.value() = geometryConverters::simplifyPolyline(
+              std::move(p.value()), simplificationErrorInMeters.value());
+        }
         auto shapeIndex =
             s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
                 std::make_unique<S2Polyline>(std::move(p.value()))));
@@ -63,13 +51,13 @@ class SpatialJoinCachedIndexImpl {
 };
 
 // ____________________________________________________________________________
-SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
-                                               ColumnIndex col,
-                                               const IdTable& restable,
-                                               const Index& index)
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(
+    Variable geometryColumn, ColumnIndex col, const IdTable& restable,
+    const Index& index, std::optional<double> simplificationErrorInMeters)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
-  shapeIndexToRow_ = pimpl_->populate(col, restable, index);
+  shapeIndexToRow_ =
+      pimpl_->populate(col, restable, index, simplificationErrorInMeters);
 }
 
 // ____________________________________________________________________________

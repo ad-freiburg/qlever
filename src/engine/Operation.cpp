@@ -454,7 +454,7 @@ std::chrono::milliseconds Operation::remainingTime() const {
 // _____________________________________________________________________________
 void Operation::storeToNamedResultCache(const Result& result) {
   // The query result is to be pinned in the named query cache.
-  const auto& [name, geoIndexVar] =
+  const auto& [name, geoIndexVar, simplificationInMeters] =
       _executionContext->pinResultWithName().value();
   AD_CORRECTNESS_CHECK(result.isFullyMaterialized());
 
@@ -467,9 +467,9 @@ void Operation::storeToNamedResultCache(const Result& result) {
     auto colIndex = getExternallyVisibleVariableColumns()
                         .at(geoIndexVar.value())
                         .columnIndex_;
-    return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                  result.idTable(),
-                                  _executionContext->getIndex()};
+    return SpatialJoinCachedIndex{
+        geoIndexVar.value(), colIndex, result.idTable(),
+        _executionContext->getIndex(), simplificationInMeters};
   };
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
