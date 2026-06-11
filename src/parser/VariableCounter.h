@@ -47,10 +47,10 @@ struct VariableCounter {
     }
   }
 
-  // `GraphPatternOperation` is a `std::variant`. The individual operations are
-  // handled by the overloads below. We want to prevent implicit conversion here
-  // and generate a compiler error when an overload is missing, not a runtime
-  // stack overflow .
+  // `GraphPatternOperation` is a `std::variant`, which we visit. If an overload
+  // for one of the variant types were missing, the compiler would implicitly
+  // convert it to `GraphPatternOperation` and we would have a stack overflow.
+  // Therefore we prevent implicit conversion here.
   CPP_template(typename T)(
       requires std::is_same_v<T, GraphPatternOperation>) void
   operator()(const T& gpo) {
