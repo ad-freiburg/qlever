@@ -14,6 +14,7 @@
 
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
