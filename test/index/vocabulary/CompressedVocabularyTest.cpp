@@ -189,7 +189,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LookupBatch) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  auto createVocab = this->createCompressedVocabulary("lookupBatchFsst");
+  auto createVocab = this->createCompressedVocabulary();
   auto vocab = createVocab(words);
 
   // Batch lookup in non-sequential order.
