@@ -106,9 +106,9 @@ inline auto makeHashJoinLambdaNew() {
           rightVariables.resize(b.numColumns());
           auto* qec = ad_utility::testing::getQec();
           auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-              qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
+              qec, a.clone(), std::move(leftVariables), false, std::vector<ColumnIndex>{});
           auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-              qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
+              qec, b.clone(), std::move(rightVariables), false, std::vector<ColumnIndex>{});
           HashJoin hashJoin{qec, leftTree, rightTree, jc1, jc2, true, false};
           auto joinResult = hashJoin.hashJoin(leftTree->getResult(), rightTree->getResult(), leftIsSmaller);
           *result = joinResult.idTable().clone();

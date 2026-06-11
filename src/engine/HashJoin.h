@@ -31,6 +31,9 @@ class HashJoin : public Operation {
   // If set to false, the join column will not be part of the result.
   bool keepJoinColumn_ = true;
 
+  // Offset for cost estimation to ensure a greater value than the Join Class
+  static constexpr size_t VETO_COST_OFFSET = 1;
+
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   HashJoin(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
@@ -129,6 +132,25 @@ class HashJoin : public Operation {
   // Helper function to create the commonly used instance of this class.
   ad_utility::AddCombinedRowToIdTable makeRowAdder(
       std::function<void(IdTable&, LocalVocab&)> callback) const;
+
+  // Value to return, if hash join is not applicable and merge join is to be
+  // preferred by the Query Planner. This function returns a value that is
+  // greater than the cost of the Join Class, but doesn't exceed the maximum
+  // value of size_t, to avoid overflow issues.
+  size_t vetoCostEstimate();
+
+  // Uses hashMapFitsInMemory and biggerInputSortedOnJoinCol to check if hash
+  // join is applicable for given inputs.
+  bool hashJoinIsApplicable() const;
+
+  // estimates if smaller side of join inputs still fits into memory when
+  // building the hash map.
+  bool hashMapFitsInMemory() const;
+
+  // checks if the bigger input (probe side) is already sorted on the join
+  // column.
+  bool biggerInputSortedOnJoinCol() const;
+  bool eitherSideIsIndexScan() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_HASHJOIN_H

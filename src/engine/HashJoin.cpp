@@ -77,7 +77,7 @@ HashJoin::HashJoin(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTre
 // _____________________________________________________________________________
 string HashJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "JOIN\n"
+  os << "HASHJOIN\n"
      << left_->getCacheKey() << " join-column: [" << leftJoinCol_ << "]\n";
   os << "|X|\n"
      << right_->getCacheKey() << " join-column: [" << rightJoinCol_ << "]";
@@ -202,70 +202,63 @@ float HashJoin::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t HashJoin::getCostEstimate() {
-  // 1. Fetch necessary information
-  // Set cost estimate to infinity if hash join is not supported due to:
-  // compare estimated size of hash map with available memory.
+  if (!hashJoinIsApplicable()) {
+    return vetoCostEstimate();
+  } else {
+    // Cost Calculation: Build HashMap + Probe HashMap + Cost of Subtrees
+    return
+      left_->getSizeEstimate() + right_->getSizeEstimate() +
+      left_->getCostEstimate() + right_->getCostEstimate();
+  }
+}
+
+// _____________________________________________________________________________
+bool HashJoin::hashJoinIsApplicable() const {
+  return hashMapFitsInMemory() && !biggerInputSortedOnJoinCol() && !eitherSideIsIndexScan();
+}
+
+// _____________________________________________________________________________
+bool HashJoin::hashMapFitsInMemory() const {
   auto leftSize = left_->getSizeEstimate();
   auto rightSize = right_->getSizeEstimate();
-  auto leftCost = left_->getCostEstimate();
-  auto rightCost = right_->getCostEstimate();
   bool leftIsSmaller = leftSize <= rightSize;
   size_t buildSize = leftIsSmaller ? leftSize : rightSize;
   size_t numCols = leftIsSmaller ? 
                    left_->getResultWidth() : right_->getResultWidth();
   ad_utility::MemorySize estimatedHashMapSize = 
     ad_utility::MemorySize::bytes(buildSize * numCols * sizeof(Id));
+  return (estimatedHashMapSize <= allocator().amountMemoryLeft());
+}
 
-  // Max value to return for excludes.
-  // We want to return a value, that is bigger than any possible combination
-  // of Sort + Join of children, but not bigger than `std::numeric_limits<size_t>::max()`, because then we can get an
-  // overflow.
-  auto calculateMaxSize = [this, leftSize, rightSize, leftCost, rightCost]() {
-    size_t sortCost = leftSize * log(leftSize) + rightSize * log(rightSize);
-    size_t joinCost = getSizeEstimateBeforeLimit() + leftCost + rightCost;
-    return sortCost + joinCost + 1;
-  };
-  size_t maxSize = calculateMaxSize();
-
-  // 2. Excludes
-  if (estimatedHashMapSize > allocator().amountMemoryLeft()) {
-    return maxSize;
-  }
-
-  // If both sides are sorted on the join column, prefer the merge join (Join
-  // class) which can exploit the sortedness for free.
-  auto isSortedOnJoinCol = [](const auto& tree, ColumnIndex joinCol) {
-    auto sorted = tree->resultSortedOn();
-    return !sorted.empty() && sorted[0] == joinCol;
-  };
-  if (isSortedOnJoinCol(left_, leftJoinCol_) &&
-      isSortedOnJoinCol(right_, rightJoinCol_)) {
-    return maxSize;
-  }
-
-  // If the bigger side is already sorted on the join column, a merge join is
-  // more efficient than hashing.
+// _____________________________________________________________________________
+bool HashJoin::biggerInputSortedOnJoinCol() const {
+  bool leftIsSmaller = left_->getSizeEstimate() <= right_->getSizeEstimate();
   auto biggerResultSortedOn =
-      leftIsSmaller ? right_->resultSortedOn() : left_->resultSortedOn();
+    leftIsSmaller ? right_->resultSortedOn() : left_->resultSortedOn();
   if (!biggerResultSortedOn.empty()) {
     auto biggerJoinCol = leftIsSmaller ? rightJoinCol_ : leftJoinCol_;
     if (biggerResultSortedOn[0] == biggerJoinCol) {
-      return maxSize;
+      return true;
     }
   }
+  return false;
+}
 
-  // Exclude if both sides are IndexScans
-  if (std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation()) &&
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation())) {
-    return maxSize;
-  }
+// _____________________________________________________________________________
+bool HashJoin::eitherSideIsIndexScan() const {
+  return std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation()) ||
+         std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation());
+}
 
-  // 3. Actual calculation of cost estimate
-  // Build HashMap + Probe HashMap + Cost of Subtrees
-  size_t costBuild = leftSize;
-  size_t costProbe = rightSize;
-  size_t costSubtrees = left_->getCostEstimate() + right_->getCostEstimate();
-  return costBuild + costProbe + costSubtrees;
+// _____________________________________________________________________________
+size_t HashJoin::vetoCostEstimate() {
+  auto leftSize = left_->getSizeEstimate();
+  auto rightSize = right_->getSizeEstimate();
+  auto leftCost = left_->getCostEstimate();
+  auto rightCost = right_->getCostEstimate();
+  size_t sortCost = leftSize * log(leftSize) + rightSize * log(rightSize);
+  size_t joinCost = getSizeEstimateBeforeLimit() + leftCost + rightCost;
+  return sortCost + joinCost + VETO_COST_OFFSET;
 }
 
 // _____________________________________________________________________________
