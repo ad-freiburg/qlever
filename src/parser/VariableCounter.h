@@ -43,6 +43,7 @@ struct VariableCounter {
   void operator()(const GraphPattern& gp);
   void operator()(const SparqlFilter& filter);
   void operator()(const GraphPatternOperation& gpo);
+  void operator()(const Subquery& op);
   void operator()(const Optional& op);
   void operator()(const Union& op);
   void operator()(const TransPath& op);
