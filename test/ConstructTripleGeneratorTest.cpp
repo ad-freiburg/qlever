@@ -25,7 +25,6 @@ using ::testing::Field;
 using ::testing::ResultOf;
 using Triples = ad_utility::sparql_types::Triples;
 
-auto iri = ad_utility::testing::iri;
 auto iriV = ad_utility::testing::iriV;
 
 static auto matchTriple(const std::string& s, const std::string& p,
