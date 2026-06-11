@@ -30,6 +30,7 @@
 #include "parser/data/BlankNode.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
 #include "util/TaskQueue.h"
@@ -721,10 +722,10 @@ class RdfMultifileParser : public RdfParserBase {
   explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {};
 
-  // Construct the parser from a vector of file specifications and eagerly start
-  // parsing them on background threads.
+  // Construct the parser from a type-erased input range of file specifications
+  // and eagerly start parsing them on background threads.
   RdfMultifileParser(
-      const std::vector<qlever::InputFileSpecification>& files,
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
@@ -766,6 +767,11 @@ class RdfMultifileParser : public RdfParserBase {
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
+
+  // Parse a single file and push all resulting triple batches (and any
+  // exception) into `finishedBatchQueue_`.
+  void parseFileAndPushBatches(const qlever::InputFileSpecification& file,
+                               ad_utility::MemorySize bufferSize);
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H
