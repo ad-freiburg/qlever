@@ -90,13 +90,17 @@ class BasicIri {
     return std::move(iri_);
   }
 
+  // return a valid RDF/SPARQL representation of the IRI. Note: this is equal to
+  // the internal string representation.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql()
       const& {
     return toStringRepresentation();
   }
 
+  // return a valid RDF/SPARQL representation of the IRI. Note: this is equal to
+  // the internal string representation.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql() && {
-    return toStringRepresentation();
+    return std::move(*this).toStringRepresentation();
   }
 
   // Return true iff the IRI is empty.
@@ -138,9 +142,7 @@ class Iri : public BasicIri<true> {
   // which the regex below encodes: a `<`, then zero or more characters that are
   // none of `<>"{}|^`\` and not a control character or space (the `\0- ` range
   // covers all bytes from `#x00` to `#x20` inclusive), then a closing `>`. The
-  // body may be empty (`<>` is valid). Unlike the historical
-  // `parser/data/Iri` constructor, the optional leading `@lang@` prefix from
-  // QLever's internal normalized format is deliberately NOT accepted here.
+  // body may be empty (`<>` is valid).
   static Iri fromIrirefValidated(std::string_view stringWithBrackets);
 
   // Create a new `Iri` given an IRI string without brackets.
