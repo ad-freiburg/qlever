@@ -2851,10 +2851,10 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
 // ____________________________________________________________________________
 ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
                                    bool negate) {
-  // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent
-  // from the rest of the query (except for the `FROM` and `FROM NAMED`
-  // clauses, which also apply to the argument of `EXISTS`). We therefore have
-  // to back up and restore all global state when parsing `EXISTS`.
+  // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
+  // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
+  // which also apply to the argument of `EXISTS`). We therefore have to back up
+  // and restore all global state when parsing `EXISTS`.
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
   auto visibleVariablesBackup = std::move(visibleVariables_);
   visibleVariables_.clear();
@@ -2865,8 +2865,8 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
       std::exchange(parsedQuery_, std::move(queryBackup));
   SelectClause& selectClause = argumentOfExists.selectClause();
   // Even though we set the `SELECT` clause to `*`, we will limit the visible
-  // variables to a potentially smaller subset when finishing the parsing of
-  // the current group.
+  // variables to a potentially smaller subset when finishing the parsing of the
+  // current group.
   selectClause.setAsterisk();
   // `ExistsExpression`s are not parsed like regular `SparqlExpression`s, so
   // they don't have a proper hierarchy of dependent variables. Because of that,
