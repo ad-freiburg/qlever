@@ -1947,9 +1947,9 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
   // query, then the variable `ql_matchingword_var` is implicitly created and
   // visible in the query body.
   auto setMatchingWordAndScoreVisibleIfPresent =
-      [this, ctx](GraphTerm& subject, VarOrPath& predicate, GraphTerm& object)
-  { auto* var = std::get_if<Variable>(&subject); auto* propertyPath =
-  std::get_if<PropertyPath>(&predicate);
+      [this, ctx](GraphTerm& subject, VarOrPath& predicate, GraphTerm& object) {
+        auto* var = std::get_if<Variable>(&subject);
+        auto* propertyPath = std::get_if<PropertyPath>(&predicate);
 
         if (!var || !propertyPath) {
           return;
