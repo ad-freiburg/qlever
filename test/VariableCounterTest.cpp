@@ -109,6 +109,11 @@ TEST(VariableCounterTest, VariableCounts) {
   // Transitive path.
   EXPECT_THAT(parseAndCount("SELECT ?x ?y WHERE { ?x <p>+ ?y }"),
               counts({{V{"?x"}, 1}, {V{"?y"}, 1}}));
+
+  // Subquery.
+  EXPECT_THAT(
+      parseAndCount("SELECT * { ?x <p> ?y . { SELECT * { ?y <q> ?z } } }"),
+      counts({{V{"?x"}, 1}, {V{"?y"}, 2}, {V{"?z"}, 1}}));
 }
 
 }  // namespace

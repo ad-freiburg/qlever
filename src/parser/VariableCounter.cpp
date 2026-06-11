@@ -21,9 +21,9 @@ void VariableCounter::operator()(const GraphPattern& gp) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(
-    requires ql::ranges::input_range<
-        std::remove_cvref_t<T>>) void VariableCounter::operator()(T && range) {
+CPP_template_def(typename T)(requires ql::ranges::input_range<
+                             std::remove_cvref_t<T>>) void VariableCounter::
+operator()(T&& range) {
   for (const auto& elem : range) {
     (*this)(elem);  // dispatch each element to existing overloads
   }
@@ -46,6 +46,11 @@ void VariableCounter::operator()(const SparqlFilter& filter) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const GraphPatternOperation& gpo) {
   std::visit(*this, gpo);
+}
+
+// _____________________________________________________________________________
+void VariableCounter::operator()(const Subquery& op) {
+  (*this)(op.get()._rootGraphPattern);
 }
 
 // _____________________________________________________________________________
