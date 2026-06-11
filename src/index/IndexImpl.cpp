@@ -489,6 +489,8 @@ using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
 
 // A batch of triples that have already been mapped to IDs by one mapper thread,
 // together with the number of input triples it was created from.
+// `numInputTriples_` is not redundant, as additional internal triples might be
+// added for language filters, text indices, etc.
 struct TransformedTripleBatch {
   size_t numInputTriples_;
   std::vector<IdTriple> idTriples_;
