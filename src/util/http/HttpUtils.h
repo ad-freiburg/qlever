@@ -93,6 +93,18 @@ static constexpr bool isHttpRequest<http::request<Body, Fields>> = true;
 template <typename T>
 CPP_concept HttpRequest = detail::isHttpRequest<T>;
 
+// Extract the header fields (method, target, version, and all header fields)
+// from any Beast HTTP request into a new `http::request<http::empty_body>`.
+// Beast provides no built-in facility for cross-body-type conversion, so we
+// copy via the shared `http::header` base.
+template <typename Body, typename Fields>
+http::request<http::empty_body, Fields> getHeaderOnlyRequest(
+    const http::request<Body, Fields>& req) {
+  http::request<http::empty_body, Fields> result;
+  result.base() = req.base();
+  return result;
+}
+
 // The response type used for almost all cases. Only when there is an error
 // parsing the request, then another response type is used.
 using ResponseT = http::response<streamable_body>;

@@ -19,8 +19,9 @@
 
 using namespace std::literals;
 
-// Test HTTP Server.
-template <typename HttpHandler>
+// Test HTTP Server, parameterised on the body-read mode. Defaults to
+// `BodyReadMode::Eager` so existing tests are unaffected.
+template <typename HttpHandler, BodyReadMode readMode = BodyReadMode::Eager>
 class TestHttpServer {
  private:
   static constexpr auto webSocketSessionSupplier =
@@ -37,8 +38,7 @@ class TestHttpServer {
       decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
 
   // The server.
-  std::shared_ptr<
-      HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>
+  std::shared_ptr<HttpServer<readMode, HttpHandler, WebSocketHandlerType>>
       server_;
 
   // The own thread in which the server is running.
@@ -54,11 +54,14 @@ class TestHttpServer {
 
  public:
   // Create server on localhost. Port 0 instructs the operating system to choose
-  // a free port of its choice.
-  explicit TestHttpServer(HttpHandler httpHandler) {
+  // a free port of its choice. `lazyBodyChunkSize` controls the internal buffer
+  // size for lazy body streaming (ignored in eager mode).
+  explicit TestHttpServer(HttpHandler httpHandler,
+                          size_t lazyBodyChunkSize = 1u << 20u) {
     server_ = std::make_shared<
-        HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
+        HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
+        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier,
+        lazyBodyChunkSize);
   }
 
   // Get port on which this server is running.
@@ -109,69 +112,6 @@ class TestHttpServer {
   // Since we detach the server thread in `runInOwnThread`, we need to make sure
   // that the server is always shut down when this object does out of scope.
   ~TestHttpServer() { shutDown(); }
-};
-
-// Test HTTP server for lazy body streaming. The handler receives headers, a
-// `bodyGetter` callable (`() -> awaitable<optional<string_view>>`), and a
-// `send` callable, instead of a pre-read body string.
-template <typename HttpHandler>
-class TestLazyHttpServer {
- private:
-  static constexpr auto webSocketSessionSupplier =
-      [](net::io_context& ioContext) {
-        using namespace ad_utility::websocket;
-        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
-                   const http::request<http::string_body>& request,
-                   tcp::socket socket) mutable {
-          return WebSocketSession::handleSession(queryHub, registry, request,
-                                                 std::move(socket));
-        };
-      };
-  using WebSocketHandlerType =
-      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
-
-  std::shared_ptr<
-      HttpServer<BodyReadMode::Lazy, HttpHandler, WebSocketHandlerType>>
-      server_;
-
-  std::unique_ptr<ad_utility::JThread> serverThread_;
-  std::atomic<bool> hasBeenShutDown_ = false;
-
- public:
-  explicit TestLazyHttpServer(HttpHandler httpHandler) {
-    server_ = std::make_shared<
-        HttpServer<BodyReadMode::Lazy, HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
-  }
-
-  auto getPort() const { return server_->getPort(); }
-
-  void runInOwnThread() {
-    auto runnerTask =
-        std::packaged_task<void()>{[server = server_]() { server->run(); }};
-    auto runnerFuture = runnerTask.get_future();
-    serverThread_ =
-        std::make_unique<ad_utility::JThread>(std::move(runnerTask));
-    auto waitTimeUntilServerIsUp = 100ms;
-    auto status = runnerFuture.wait_for(waitTimeUntilServerIsUp);
-    if (status == std::future_status::ready) {
-      runnerFuture.get();
-    }
-    if (!server_->serverIsReady()) {
-      serverThread_->detach();
-      throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
-                                            waitTimeUntilServerIsUp.count(),
-                                            "ms, this should not happen"));
-    }
-  }
-
-  void shutDown() {
-    if (server_->serverIsReady() && !hasBeenShutDown_.exchange(true)) {
-      server_->shutDown();
-    }
-  }
-
-  ~TestLazyHttpServer() { shutDown(); }
 };
 
 #endif  // QLEVER_TEST_HTTPTESTHELPERS_H

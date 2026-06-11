@@ -70,6 +70,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   int numServerThreads_;
   net::io_context ioContext_;
   WebSocketHandler webSocketHandler_;
+  size_t lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
@@ -101,14 +102,17 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
                                                     HttpHandler{},
                                                 HandlerSupplier
                                                     webSocketHandlerSupplier =
-                                                        {})
+                                                        {},
+                                                size_t lazyBodyChunkSize =
+                                                    1u << 20u)
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
         webSocketHandler_{
-            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)} {
+            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)},
+        lazyBodyChunkSize_{lazyBodyChunkSize} {
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
@@ -179,6 +183,118 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // Format a boost/beast error and log it to console
   void logBeastError(beast::error_code ec, std::string_view message) {
     AD_LOG_ERROR << message << ": " << ec.message() << std::endl;
+  }
+
+  // Handle a WebSocket upgrade request: send an error response if the path is
+  // invalid, otherwise cancel `releaseConnection` and delegate to
+  // `webSocketHandler_`.
+  template <typename SendMessage, typename ReleaseConnection>
+  net::awaitable<void> handleWebsocketUpgrade(
+      beast::tcp_stream& stream, const http::request<http::string_body>& req,
+      SendMessage& sendMessage, ReleaseConnection& releaseConnection) {
+    auto websocketErrorResponse = ad_utility::websocket::WebSocketSession::
+        getErrorResponseIfPathIsInvalid(req);
+    if (websocketErrorResponse.has_value()) {
+      co_await sendMessage(std::move(websocketErrorResponse.value()));
+    } else {
+      // Prevent cleanup after socket has been moved from.
+      releaseConnection.cancel();
+      co_await std::invoke(webSocketHandler_, req, std::move(stream.socket()));
+    }
+  }
+
+  // Handle one eager-mode request: read the full body, then dispatch to
+  // `httpHandler_` (or `handleWebsocketUpgrade` for WebSocket upgrades).
+  // Returns true when the session should exit (WebSocket was handled), false
+  // when the session should continue accepting further requests.
+  template <typename SendMessage, typename ReleaseConnection>
+  net::awaitable<bool> handleEagerRequest(beast::tcp_stream& stream,
+                                          beast::flat_buffer& buffer,
+                                          SendMessage& sendMessage,
+                                          ReleaseConnection& releaseConnection)
+      requires(bodyReadMode == BodyReadMode::Eager) {
+    http::request_parser<http::string_body> requestParser;
+    auto bodyLimit = getRequestBodyLimit().getBytes();
+    requestParser.body_limit(
+        bodyLimit == 0 ? boost::none : boost::optional<uint64_t>(bodyLimit));
+    co_await http::async_read(stream, buffer, requestParser,
+                              boost::asio::use_awaitable);
+    http::request<http::string_body> req = requestParser.release();
+
+    if (beast::websocket::is_upgrade(req)) {
+      co_await handleWebsocketUpgrade(stream, req, sendMessage,
+                                      releaseConnection);
+      co_return true;
+    }
+    // Currently there is no timeout on the server side, this is handled by
+    // QLever's timeout mechanism.
+    stream.expires_never();
+    co_await httpHandler_(std::move(req), sendMessage);
+    co_return false;
+  }
+
+  // Handle one lazy-mode request: read only the headers, then pass a
+  // `bodyGetter` callable to `httpHandler_`. Each `co_await bodyGetter()` reads
+  // the next chunk (up to `lazyBodyChunkSize_` bytes) into a buffer that lives
+  // in this function's stack frame and returns a `string_view` into it. The
+  // view is valid only until the next call. Returns `nullopt` when the body is
+  // fully consumed; throws on network errors.
+  template <typename SendMessage>
+  net::awaitable<void> handleLazyRequest(beast::tcp_stream& stream,
+                                         beast::flat_buffer& buffer,
+                                         SendMessage& sendMessage)
+      requires(bodyReadMode == BodyReadMode::Lazy) {
+    http::request_parser<http::buffer_body> requestParser;
+    requestParser.body_limit(boost::none);
+    co_await http::async_read_header(stream, buffer, requestParser,
+                                     boost::asio::use_awaitable);
+
+    http::request<http::empty_body> headersReq =
+        ad_utility::httpUtils::getHeaderOnlyRequest(requestParser.get());
+
+    // Buffer for body chunks; its lifetime covers the entire handler
+    // invocation.
+    const size_t chunkSize = lazyBodyChunkSize_;
+    std::vector<char> chunkBuffer(chunkSize);
+
+    // Fills `chunkBuffer` with up to `chunkSize` bytes from the request body
+    // and returns a view into it, or `nullopt` when the body is exhausted.
+    // Loops internally until the buffer is completely full or the body ends, so
+    // callers always receive a maximally-sized chunk (except possibly the
+    // last).
+    auto bodyGetter =
+        [&stream, &buffer, &requestParser, &chunkBuffer,
+         chunkSize]() -> net::awaitable<std::optional<std::string_view>> {
+      size_t totalBytesRead = 0;
+      while (!requestParser.is_done() && totalBytesRead < chunkSize) {
+        requestParser.get().body().data = chunkBuffer.data() + totalBytesRead;
+        requestParser.get().body().size = chunkSize - totalBytesRead;
+        boost::system::error_code ec;
+        // `need_buffer` is returned when the provided buffer segment is
+        // completely full but more body data remains; it is not a real error.
+        co_await http::async_read_some(
+            stream, buffer, requestParser,
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if (ec && ec != http::error::need_buffer) {
+          throw boost::system::system_error{ec};
+        }
+        size_t bytesRead =
+            (chunkSize - totalBytesRead) - requestParser.get().body().size;
+        totalBytesRead += bytesRead;
+        if (ec == http::error::need_buffer) {
+          // Buffer segment is full; yield what we have.
+          break;
+        }
+      }
+      if (totalBytesRead > 0) {
+        co_return std::string_view{chunkBuffer.data(), totalBytesRead};
+      }
+      co_return std::nullopt;
+    };
+
+    stream.expires_never();
+    co_await httpHandler_(std::move(headersReq), std::move(bodyGetter),
+                          sendMessage);
   }
 
   // The loop which accepts TCP connections and delegates their handling
@@ -264,96 +380,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         stream.expires_after(std::chrono::seconds(30));
 
         if constexpr (bodyReadMode == BodyReadMode::Eager) {
-          // ===== EAGER MODE =====
-          // Read a request. Use a parser so that we can control the limit of
-          // the request size.
-          http::request_parser<http::string_body> requestParser;
-          auto bodyLimit = getRequestBodyLimit().getBytes();
-          requestParser.body_limit(bodyLimit == 0
-                                       ? boost::none
-                                       : boost::optional<uint64_t>(bodyLimit));
-          co_await http::async_read(stream, buffer, requestParser,
-                                    boost::asio::use_awaitable);
-          http::request<http::string_body> req = requestParser.release();
-
-          // Let request be handled by `WebSocketSession` if the HTTP
-          // request is a WebSocket handshake.
-          if (beast::websocket::is_upgrade(req)) {
-            auto websocketErrorResponse = ad_utility::websocket::
-                WebSocketSession::getErrorResponseIfPathIsInvalid(req);
-            if (websocketErrorResponse.has_value()) {
-              co_await sendMessage(std::move(websocketErrorResponse.value()));
-            } else {
-              // Prevent cleanup after socket has been moved from.
-              releaseConnection.cancel();
-              co_await std::invoke(webSocketHandler_, req,
-                                   std::move(stream.socket()));
-              co_return;
-            }
-          } else {
-            // Currently there is no timeout on the server side, this is
-            // handled by QLever's timeout mechanism.
-            stream.expires_never();
-
-            // Handle the http request. Note that `httpHandler_` is also
-            // responsible for sending the message via the `sendMessage` lambda.
-            co_await httpHandler_(std::move(req), sendMessage);
-          }
+          bool shouldExit = co_await handleEagerRequest(
+              stream, buffer, sendMessage, releaseConnection);
+          if (shouldExit) co_return;
         } else {
-          // ===== LAZY MODE =====
-          // Read only the request headers; the body is delivered to the handler
-          // chunk by chunk via a `bodyGetter` callable. Each `co_await` of
-          // `bodyGetter()` reads the next chunk from the socket into a buffer
-          // whose lifetime is tied to this coroutine frame. The returned
-          // `string_view` is valid only until the next call to `bodyGetter()`.
-          // Note: WebSocket upgrades are not supported in lazy mode.
-          http::request_parser<http::buffer_body> requestParser;
-          requestParser.body_limit(boost::none);
-          co_await http::async_read_header(stream, buffer, requestParser,
-                                           boost::asio::use_awaitable);
-
-          // Build a header-only request to pass to the handler.
-          http::request<http::empty_body> headersReq;
-          headersReq.method(requestParser.get().method());
-          headersReq.target(std::string(requestParser.get().target()));
-          headersReq.version(requestParser.get().version());
-          headersReq.keep_alive(requestParser.get().keep_alive());
-          for (auto const& f : requestParser.get()) {
-            headersReq.insert(f.name_string(), f.value());
-          }
-
-          // Buffer for body chunks. Lives in this coroutine frame, so its
-          // lifetime covers the entire handler invocation.
-          constexpr size_t kChunkSize = 1 << 20;  // 1 MB per chunk.
-          std::vector<char> chunkBuffer(kChunkSize);
-
-          // Callable that reads the next body chunk into `chunkBuffer` and
-          // returns a view into it. Returns `nullopt` when the body is fully
-          // consumed. Throws `boost::system::system_error` on network error.
-          // The returned view is valid only until the next invocation.
-          auto bodyGetter =
-              [&]() -> net::awaitable<std::optional<std::string_view>> {
-            while (!requestParser.is_done()) {
-              requestParser.get().body().data = chunkBuffer.data();
-              requestParser.get().body().size = chunkBuffer.size();
-              boost::system::error_code ec;
-              co_await http::async_read_some(
-                  stream, buffer, requestParser,
-                  boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-              if (ec && ec != http::error::need_buffer) {
-                throw boost::system::system_error{ec};
-              }
-              size_t bytesRead = kChunkSize - requestParser.get().body().size;
-              if (bytesRead > 0) {
-                co_return std::string_view{chunkBuffer.data(), bytesRead};
-              }
-            }
-            co_return std::nullopt;
-          };
-
-          stream.expires_never();
-          co_await httpHandler_(std::move(headersReq), std::move(bodyGetter),
-                                sendMessage);
+          co_await handleLazyRequest(stream, buffer, sendMessage);
           // Lazy mode always closes the connection after each request because
           // the stream is occupied by body streaming until the body is done.
           streamNeedsClosing = true;
