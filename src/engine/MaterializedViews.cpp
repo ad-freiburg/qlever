@@ -806,11 +806,7 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
 
   // Remove all `BIND`s that are invariant to the query.
   graphPatternAnalysis::BasicGraphPatternsInvariantTo invariantCheck{
-      // TODO for this check we need all variables that are contained in the
-      // query except for BIND target variables, not only from the first
-      // graph pattern.
-      getVariablesPresentInFirstBasicGraphPattern(
-          parsedQuery._rootGraphPattern._graphPatterns)};
+      parsedQuery._rootGraphPattern};
   ql::erase_if(parsedQuery.children(), [&invariantCheck](const auto& child) {
     return child.visit(invariantCheck);
   });

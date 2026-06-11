@@ -8,6 +8,7 @@
 #define QLEVER_SRC_PARSER_GRAPHPATTERNANALYSIS_H_
 
 #include "parser/GraphPatternOperation.h"
+#include "parser/VariableCounter.h"
 
 // This module contains helpers for analyzing the structure of graph patterns.
 
@@ -29,7 +30,13 @@ namespace graphPatternAnalysis {
 // NOTE: This does not guarantee completeness, so it might return `false` even
 // though we could be invariant to a `GraphPatternOperation`.
 struct BasicGraphPatternsInvariantTo {
-  ad_utility::HashSet<Variable> variables_;
+  parsedQuery::VariableCounter variableCounts_;
+
+  // Initialize with a `GraphPattern`.
+  explicit BasicGraphPatternsInvariantTo(const parsedQuery::GraphPattern& gp);
+
+  explicit BasicGraphPatternsInvariantTo(parsedQuery::VariableCounter vc)
+      : variableCounts_{std::move(vc)} {}
 
   bool operator()(const parsedQuery::Bind& bind) const;
   bool operator()(const parsedQuery::Values& values) const;
@@ -47,6 +54,9 @@ struct BasicGraphPatternsInvariantTo {
             pq::ExternalValuesQuery>);
     return false;
   }
+
+ private:
+  bool checkVariable(const Variable& var) const;
 };
 
 }  // namespace graphPatternAnalysis
