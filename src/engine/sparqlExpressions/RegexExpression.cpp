@@ -218,8 +218,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
   // constant within each group.
   if (context->_groupedVariables.contains(variable_) && !isInsideAggregate()) {
     return std::visit(
-        [this, context,
-         &matchesPrefix](auto&& childResult) -> ExpressionResult {
+        [context, &matchesPrefix](auto&& childResult) -> ExpressionResult {
           using T = std::decay_t<decltype(childResult)>;
           // Usually the child of a prefix-regex expression is a
           // `VariableExpression`, so the result is a single `ValueId`.
