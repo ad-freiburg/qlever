@@ -266,6 +266,10 @@ class SortedLocatedTriplesVector {
     AD_CONTRACT_CHECK(other.isClean());
     return triples_ == other.triples_;
   }
+  // An explicit definition is required for C++17 compaitiblity.
+  bool operator!=(const SortedLocatedTriplesVector& other) const {
+    return !(*this == other);
+  }
 };
 static_assert(ql::ranges::range<SortedLocatedTriplesVector>);
 
