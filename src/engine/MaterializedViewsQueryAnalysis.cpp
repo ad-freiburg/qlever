@@ -18,8 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/PropertyPath.h"
-#include "parser/SparqlParser.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
@@ -495,13 +494,9 @@ BindExpressionAndTargetCol extractBindExpressions(
 }
 
 // _____________________________________________________________________________
-std::optional<ByCacheKeyInfo> QueryPatternCache::lookupByCacheKey(
+boost::optional<const ByCacheKeyInfo&> QueryPatternCache::lookupByCacheKey(
     const std::string& cacheKey) const {
-  auto it = byCacheKey_.find(cacheKey);
-  if (it == byCacheKey_.end()) {
-    return std::nullopt;
-  }
-  return it->second;  // TODO dont copy
+  return ad_utility::findOptional(byCacheKey_, cacheKey);
 }
 
 }  // namespace materializedViewsQueryAnalysis

@@ -119,7 +119,7 @@ class QueryPatternCache {
       QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 
-  std::optional<ByCacheKeyInfo> lookupByCacheKey(
+  boost::optional<const ByCacheKeyInfo&> lookupByCacheKey(
       const std::string& cacheKey) const;
 
  private:
