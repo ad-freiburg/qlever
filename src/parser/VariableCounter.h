@@ -11,6 +11,7 @@
 #define QLEVER_SRC_PARSER_VARIABLECOUNTER_H
 
 #include <cstddef>
+#include <variant>
 
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
