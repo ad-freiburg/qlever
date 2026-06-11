@@ -456,10 +456,11 @@ void QueryPatternCache::removeView(ViewPtr view) {
   // Remove `view` from star cache.
   starCache_.erase(view);
 
-  // Remove `view` from cache key hash map.
-  // TODO
-  // ql::erase_if(byCacheKey_, [&view](ViewPtr pView) { return pView == view;
-  // });
+  // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
+  // works natively with our hash map unlike `ql::erase_if`.
+  absl::erase_if(byCacheKey_, [&view](const auto& pair) {
+    return pair.second.view_ == view;
+  });
 }
 
 // _____________________________________________________________________________
