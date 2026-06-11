@@ -60,8 +60,8 @@ TEST(RandomExpression, insideAggregateReturnsVector) {
   auto& evaluationContext = testContext.context;
   evaluationContext._isPartOfGroupBy = true;
   // Wrap expression in an aggregate.
-  auto aggregate =
-      std::make_unique<SampleExpression>(false, std::make_unique<RandomExpression>());
+  auto aggregate = std::make_unique<SampleExpression>(
+      false, std::make_unique<RandomExpression>());
   const auto* random = aggregate->children()[0].get();
   ASSERT_TRUE(random->isInsideAggregate());
   auto result = random->evaluate(&evaluationContext);
@@ -181,13 +181,14 @@ TEST(UuidExpression, insideAggregateReturnsVector) {
   auto& evaluationContext = testContext.context;
   evaluationContext._isPartOfGroupBy = true;
   // Wrap expression in an aggregate.
-  auto aggregate =
-      std::make_unique<SampleExpression>(false, std::make_unique<UuidExpression>());
+  auto aggregate = std::make_unique<SampleExpression>(
+      false, std::make_unique<UuidExpression>());
   const auto* uuid = aggregate->children()[0].get();
   ASSERT_TRUE(uuid->isInsideAggregate());
   auto result = uuid->evaluate(&evaluationContext);
   ASSERT_TRUE(
-      std::holds_alternative<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(result));
+      std::holds_alternative<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
+          result));
   EXPECT_EQ(std::get<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(result).size(),
             evaluationContext.size());
 }
