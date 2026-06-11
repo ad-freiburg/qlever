@@ -21,15 +21,6 @@ void VariableCounter::operator()(const GraphPattern& gp) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires ql::ranges::input_range<
-                             std::remove_cvref_t<T>>) void VariableCounter::
-operator()(T&& range) {
-  for (const auto& elem : range) {
-    (*this)(elem);  // dispatch each element to existing overloads
-  }
-}
-
-// _____________________________________________________________________________
 void VariableCounter::operator()(const Variable& var) { counts_[var]++; }
 
 // _____________________________________________________________________________
@@ -41,11 +32,6 @@ void VariableCounter::operator()(const Variable* var) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const SparqlFilter& filter) {
   (*this)(filter.expression_.containedVariables());
-}
-
-// _____________________________________________________________________________
-void VariableCounter::operator()(const GraphPatternOperation& gpo) {
-  std::visit(*this, gpo);
 }
 
 // _____________________________________________________________________________
@@ -188,14 +174,6 @@ void VariableCounter::operator()(const MaterializedViewQuery& op) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
-}
-
-// _____________________________________________________________________________
-template <typename T>
-void VariableCounter::operator()(const std::optional<T>& opt) {
-  if (opt.has_value()) {
-    (*this)(opt.value());
-  }
 }
 
 }  // namespace parsedQuery

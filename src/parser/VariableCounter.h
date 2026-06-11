@@ -29,20 +29,42 @@ struct VariableCounter {
  public:
   const Map& counts() const { return counts_; }
 
+  // Count variables from a view or range, e.g. `std::vector<GraphPattern>`.
   CPP_template(typename T)(
       requires ql::ranges::input_range<std::remove_cvref_t<T>>) void
-  operator()(T&& rng);
+  operator()(T&& range) {
+    for (const auto& elem : range) {
+      (*this)(elem);
+    }
+  }
 
+  // Unwrap a `std::optional<...>`.
   template <typename T>
-  void operator()(const std::optional<T>& opt);
+  void operator()(const std::optional<T>& opt) {
+    if (opt.has_value()) {
+      (*this)(opt.value());
+    }
+  }
 
+  // `GraphPatternOperation` is a `std::variant`. The individual operations are
+  // handled by the overloads below. We want to prevent implicit conversion here
+  // and generate a compiler error when an overload is missing, not a runtime
+  // stack overflow .
+  CPP_template(typename T)(
+      requires std::is_same_v<T, GraphPatternOperation>) void
+  operator()(const T& gpo) {
+    std::visit(*this, gpo);
+  }
+
+  // Overloads for helper types.
   void operator()(const Variable& var);
-  void operator()(const TripleComponent& var);
-  void operator()(const SparqlTriple& var);
   void operator()(const Variable* var);
-  void operator()(const GraphPattern& gp);
-  void operator()(const SparqlFilter& filter);
-  void operator()(const GraphPatternOperation& gpo);
+  void operator()(const TripleComponent& tc);
+  void operator()(const SparqlTriple& triple);
+
+  // Overloads for the individual operations.
+  void operator()(const GraphPattern& op);
+  void operator()(const SparqlFilter& op);
   void operator()(const Subquery& op);
   void operator()(const Optional& op);
   void operator()(const Union& op);
