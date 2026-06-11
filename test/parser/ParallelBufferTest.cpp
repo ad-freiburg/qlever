@@ -116,3 +116,44 @@ TEST(ParallelBuffer, ParallelBufferWithEndRegexLongLookahead) {
   }
   ad_utility::deleteFile(filename);
 }
+
+// Collect all blocks from `buf` into a single string for easy comparison.
+static std::string drainToString(ParallelBuffer& buf) {
+  std::string result;
+  while (auto block = buf.getNextBlock()) {
+    result.append(block->data(), block->size());
+  }
+  return result;
+}
+
+// ____________________________________________________________________________
+TEST(StringParallelBuffer, EmptyContent) {
+  StringParallelBuffer buf{"", 16};
+  EXPECT_EQ(buf.getNextBlock(), std::nullopt);
+}
+
+// ____________________________________________________________________________
+TEST(StringParallelBuffer, ContentSmallerThanBlocksize) {
+  std::string content = "hello";
+  StringParallelBuffer buf{content, 1024};
+  auto block = buf.getNextBlock();
+  ASSERT_TRUE(block.has_value());
+  EXPECT_EQ(std::string(block->data(), block->size()), content);
+  EXPECT_EQ(buf.getNextBlock(), std::nullopt);
+}
+
+// ____________________________________________________________________________
+TEST(StringParallelBuffer, ContentLargerThanBlocksize) {
+  std::string content = "abcdefghij";
+  StringParallelBuffer buf{content, 3};
+  EXPECT_EQ(drainToString(buf), content);
+}
+
+// ____________________________________________________________________________
+TEST(StringParallelBuffer, ContentExactMultipleOfBlocksize) {
+  std::string content = "abcdef";
+  StringParallelBuffer buf{content, 2};
+  EXPECT_EQ(drainToString(buf), content);
+  // After draining, a fresh call must still return nullopt.
+  EXPECT_EQ(buf.getNextBlock(), std::nullopt);
+}
