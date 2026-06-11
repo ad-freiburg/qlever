@@ -18,7 +18,7 @@ using V = Variable;
 // _____________________________________________________________________________
 TEST(BasicGraphPatternsInvariantToTest, Bind) {
   VariableCounter counter;
-  counter(std::vector{V{"?x"}, V{"?y"}});
+  counter(std::vector{V{"?x"}, V{"?x"}, V{"?y"}});
   BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test that BIND is invariant when its target variable is not in our set.
@@ -48,7 +48,7 @@ TEST(BasicGraphPatternsInvariantToTest, Bind) {
 // _____________________________________________________________________________
 TEST(BasicGraphPatternsInvariantToTest, Values) {
   VariableCounter counter;
-  counter(std::vector{V{"?x"}, V{"?y"}});
+  counter(std::vector{V{"?x"}, V{"?x"}, V{"?y"}});
   BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test VALUES with exactly one row and no variable overlap.
