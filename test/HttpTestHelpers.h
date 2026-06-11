@@ -111,4 +111,67 @@ class TestHttpServer {
   ~TestHttpServer() { shutDown(); }
 };
 
+// Test HTTP server for lazy body streaming. The handler receives headers, a
+// `bodyGetter` callable (`() -> awaitable<optional<string_view>>`), and a
+// `send` callable, instead of a pre-read body string.
+template <typename HttpHandler>
+class TestLazyHttpServer {
+ private:
+  static constexpr auto webSocketSessionSupplier =
+      [](net::io_context& ioContext) {
+        using namespace ad_utility::websocket;
+        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
+                   const http::request<http::string_body>& request,
+                   tcp::socket socket) mutable {
+          return WebSocketSession::handleSession(queryHub, registry, request,
+                                                 std::move(socket));
+        };
+      };
+  using WebSocketHandlerType =
+      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
+
+  std::shared_ptr<
+      HttpServer<BodyReadMode::Lazy, HttpHandler, WebSocketHandlerType>>
+      server_;
+
+  std::unique_ptr<ad_utility::JThread> serverThread_;
+  std::atomic<bool> hasBeenShutDown_ = false;
+
+ public:
+  explicit TestLazyHttpServer(HttpHandler httpHandler) {
+    server_ = std::make_shared<
+        HttpServer<BodyReadMode::Lazy, HttpHandler, WebSocketHandlerType>>(
+        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
+  }
+
+  auto getPort() const { return server_->getPort(); }
+
+  void runInOwnThread() {
+    auto runnerTask =
+        std::packaged_task<void()>{[server = server_]() { server->run(); }};
+    auto runnerFuture = runnerTask.get_future();
+    serverThread_ =
+        std::make_unique<ad_utility::JThread>(std::move(runnerTask));
+    auto waitTimeUntilServerIsUp = 100ms;
+    auto status = runnerFuture.wait_for(waitTimeUntilServerIsUp);
+    if (status == std::future_status::ready) {
+      runnerFuture.get();
+    }
+    if (!server_->serverIsReady()) {
+      serverThread_->detach();
+      throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
+                                            waitTimeUntilServerIsUp.count(),
+                                            "ms, this should not happen"));
+    }
+  }
+
+  void shutDown() {
+    if (server_->serverIsReady() && !hasBeenShutDown_.exchange(true)) {
+      server_->shutDown();
+    }
+  }
+
+  ~TestLazyHttpServer() { shutDown(); }
+};
+
 #endif  // QLEVER_TEST_HTTPTESTHELPERS_H

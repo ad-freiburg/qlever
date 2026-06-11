@@ -496,3 +496,102 @@ TEST(HttpClient, Redirects) {
   }
   server.shutDown();
 }
+
+// Shared lazy-mode handler: echoes "METHOD\nTARGET\nBODY" where BODY is
+// assembled by consuming all chunks from `bodyGetter`.
+auto makeEchoLazyHandler() {
+  return [](auto req, auto bodyGetter,
+            auto&& send) -> boost::asio::awaitable<void> {
+    std::string methodName;
+    switch (req.method()) {
+      case boost::beast::http::verb::get:
+        methodName = "GET";
+        break;
+      case boost::beast::http::verb::post:
+        methodName = "POST";
+        break;
+      default:
+        methodName = "OTHER";
+    }
+    std::string body;
+    while (auto chunk = co_await bodyGetter()) {
+      body += *chunk;
+    }
+    co_await send(createOkResponse(
+        methodName + "\n" + std::string(toStd(req.target())) + "\n" + body, req,
+        ad_utility::MediaType::textPlain));
+  };
+}
+
+// Test lazy mode with a small POST body and a bodyless GET request.
+TEST(HttpServer, LazyModeBasic) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  TestLazyHttpServer httpServer(makeEchoLazyHandler());
+  httpServer.runInOwnThread();
+
+  // POST with a small body.
+  {
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(httpServer.getPort()));
+    auto response =
+        HttpClient::sendRequest(std::move(httpClient), verb::post, "localhost",
+                                "/target", handle, "hello body");
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "POST\n/target\nhello body");
+  }
+
+  // GET with no body: `bodyGetter` should immediately yield nullopt.
+  {
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(httpServer.getPort()));
+    auto response = HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                            "localhost", "/other", handle);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "GET\n/other\n");
+  }
+}
+
+// Test lazy mode with a body that spans multiple 1 MB chunks.
+TEST(HttpServer, LazyModeMultipleChunks) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  TestLazyHttpServer httpServer(makeEchoLazyHandler());
+  httpServer.runInOwnThread();
+
+  // 3 MB body — forces at least 3 calls to the body getter.
+  std::string largeBody(3 * (1 << 20), 'x');
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(httpServer.getPort()));
+  auto response =
+      HttpClient::sendRequest(std::move(httpClient), verb::post, "localhost",
+                              "/large", handle, largeBody);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "POST\n/large\n" + largeBody);
+}
+
+// Test that the handler may send a response without consuming the body and
+// the server still closes the connection cleanly.
+TEST(HttpServer, LazyModeEarlyResponse) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  TestLazyHttpServer httpServer(
+      [](auto req, auto /*bodyGetter*/,
+         auto&& send) -> boost::asio::awaitable<void> {
+        // Deliberately do not consume the body.
+        co_await send(createOkResponse("ignored body", req,
+                                       ad_utility::MediaType::textPlain));
+      });
+  httpServer.runInOwnThread();
+
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(httpServer.getPort()));
+  auto response = HttpClient::sendRequest(std::move(httpClient), verb::post,
+                                          "localhost", "/skip", handle,
+                                          "some body that will not be read");
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "ignored body");
+}

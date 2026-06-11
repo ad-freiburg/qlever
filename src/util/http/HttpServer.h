@@ -11,7 +11,6 @@
 
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/ThreadSafeQueue.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/WebSocketSession.h"
@@ -30,29 +29,27 @@ ad_utility::MemorySize getRequestBodyLimit();
 // while sending the response (Lazy).
 enum class BodyReadMode { Eager, Lazy };
 
-// Type aliases for the lazy-mode chunk queue shared between the HTTP session
-// (producer) and the HttpBodyParallelBuffer (consumer).
-using LazyChunkQueue =
-    ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
-using SharedLazyChunkQueue = std::shared_ptr<LazyChunkQueue>;
-
 /*
  * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
  * the mandatory HttpHandler parameter.
  *
- * \tparam HttpHandler A callable type that takes two parameters, a
- * `http::request<...>` , and a `sendAction` and returns an awaitable<void>
- * type. sendAction always is a callable that takes a http::message, and returns
- * an awaitable<void>.
+ * \tparam HttpHandler A callable returning `net::awaitable<void>`. Its
+ * signature depends on `bodyReadMode`:
  *
- * The behavior is then as follows: as soon as the server receives a HTTP
- * request, co_await httpHandler_(move(request), sendAction) is called.
- * (httpHandler_ is a member of type HttpHandler). The expected behavior of this
- * call is that httpHandler_ takes the request, computes the corresponding
- * `response`, and calls co_await sendAction(response). The `sendAction` is
- * needed because the `response` can have different types (in beast, a
- * http::message is templated on the body type). For this reason, this approach
- * is more flexible, than having httpHandler_ simply return the response.
+ * - `BodyReadMode::Eager`: `handler(http::request<http::string_body>, send)`.
+ *   The full request body is read into memory before the handler is called.
+ *
+ * - `BodyReadMode::Lazy`: `handler(http::request<http::empty_body>, bodyGetter,
+ *   send)`. Only headers are read before the handler is called. `bodyGetter` is
+ *   a callable with signature `() ->
+ * net::awaitable<std::optional<std::string_view>>`. Each `co_await
+ * bodyGetter()` reads the next body chunk; the returned view is valid until the
+ * next call. `co_await bodyGetter()` returns `std::nullopt` when the body is
+ * fully consumed and throws on network errors.
+ *
+ * In both modes `send` is a callable that takes a `http::message` and returns
+ * `net::awaitable<void>`; the handler is responsible for sending the response
+ * via `co_await send(response)`.
  *
  * A very basic HttpHandler, which simply serves files from a directory, can be
  * obtained via `ad_utility::httpUtils::makeFileServer()`.
@@ -262,11 +259,6 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       // the `catch`.
       std::optional<http::response<http::string_body>> errorResponse;
 
-      // In lazy mode, the chunk queue for the current request body. Null until
-      // the lazy branch initialises it; accessible in the catch block so that
-      // network errors can be forwarded to the parser thread.
-      SharedLazyChunkQueue chunkQueue;
-
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
@@ -309,8 +301,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
           }
         } else {
           // ===== LAZY MODE =====
-          // Read only the request headers first; the body is streamed to the
-          // handler's chunk queue after the response is sent.
+          // Read only the request headers; the body is delivered to the handler
+          // chunk by chunk via a `bodyGetter` callable. Each `co_await` of
+          // `bodyGetter()` reads the next chunk from the socket into a buffer
+          // whose lifetime is tied to this coroutine frame. The returned
+          // `string_view` is valid only until the next call to `bodyGetter()`.
           // Note: WebSocket upgrades are not supported in lazy mode.
           http::request_parser<http::buffer_body> requestParser;
           requestParser.body_limit(boost::none);
@@ -327,39 +322,38 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
             headersReq.insert(f.name_string(), f.value());
           }
 
-          // Create the chunk queue and call the handler. The handler sends
-          // the response; body bytes arrive afterwards.
-          chunkQueue = std::make_shared<LazyChunkQueue>(4);
-          stream.expires_never();
-          co_await httpHandler_(std::move(headersReq), chunkQueue, sendMessage);
+          // Buffer for body chunks. Lives in this coroutine frame, so its
+          // lifetime covers the entire handler invocation.
+          constexpr size_t kChunkSize = 1 << 20;  // 1 MB per chunk.
+          std::vector<char> chunkBuffer(kChunkSize);
 
-          // Stream the remaining body bytes into the chunk queue.
-          constexpr size_t kChunkSize = 1 << 20;  // 1 MB per chunk
-          while (!requestParser.is_done()) {
-            std::vector<char> chunk(kChunkSize);
-            requestParser.get().body().data = chunk.data();
-            requestParser.get().body().size = chunk.size();
-            boost::system::error_code ec;
-            co_await http::async_read_some(
-                stream, buffer, requestParser,
-                boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-            if (ec && ec != http::error::need_buffer) {
-              // Propagate the network error to the parser thread, then rethrow
-              // so the catch block handles connection teardown.
-              chunkQueue->pushException(
-                  std::make_exception_ptr(boost::system::system_error{ec}));
-              chunkQueue = nullptr;  // prevent double-push in catch block
-              throw boost::system::system_error{ec};
+          // Callable that reads the next body chunk into `chunkBuffer` and
+          // returns a view into it. Returns `nullopt` when the body is fully
+          // consumed. Throws `boost::system::system_error` on network error.
+          // The returned view is valid only until the next invocation.
+          auto bodyGetter =
+              [&]() -> net::awaitable<std::optional<std::string_view>> {
+            while (!requestParser.is_done()) {
+              requestParser.get().body().data = chunkBuffer.data();
+              requestParser.get().body().size = chunkBuffer.size();
+              boost::system::error_code ec;
+              co_await http::async_read_some(
+                  stream, buffer, requestParser,
+                  boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+              if (ec && ec != http::error::need_buffer) {
+                throw boost::system::system_error{ec};
+              }
+              size_t bytesRead = kChunkSize - requestParser.get().body().size;
+              if (bytesRead > 0) {
+                co_return std::string_view{chunkBuffer.data(), bytesRead};
+              }
             }
-            size_t bytesRead = kChunkSize - requestParser.get().body().size;
-            if (bytesRead > 0) {
-              chunk.resize(bytesRead);
-              // May briefly block if the queue is full (parser thread is slow),
-              // which is acceptable for InputFileServer's single-upload model.
-              chunkQueue->push(std::move(chunk));
-            }
-          }
-          chunkQueue->finish();
+            co_return std::nullopt;
+          };
+
+          stream.expires_never();
+          co_await httpHandler_(std::move(headersReq), std::move(bodyGetter),
+                                sendMessage);
           // Lazy mode always closes the connection after each request because
           // the stream is occupied by body streaming until the body is done.
           streamNeedsClosing = true;
@@ -370,14 +364,6 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
           throw beast::system_error{http::error::end_of_stream};
         }
       } catch (const boost::system::system_error& error) {
-        // In lazy mode, forward unexpected network errors to the parser thread
-        // so it can terminate cleanly instead of blocking forever.
-        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
-          if (chunkQueue && error.code() != http::error::end_of_stream) {
-            chunkQueue->pushException(std::current_exception());
-          }
-        }
-
         if (error.code() == http::error::end_of_stream) {
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
@@ -411,19 +397,9 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
           co_return;
         }
       } catch (const std::exception& error) {
-        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
-          if (chunkQueue) {
-            chunkQueue->pushException(std::current_exception());
-          }
-        }
         AD_LOG_ERROR << error.what() << std::endl;
         co_return;
       } catch (...) {
-        if constexpr (bodyReadMode == BodyReadMode::Lazy) {
-          if (chunkQueue) {
-            chunkQueue->pushException(std::current_exception());
-          }
-        }
         AD_LOG_ERROR << "Weird exception not inheriting from std::exception, "
                         "this shouldn't happen"
                      << std::endl;
