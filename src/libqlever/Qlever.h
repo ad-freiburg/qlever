@@ -289,7 +289,31 @@ class Qlever {
   }
 
   // Low-level access to the QLever API, use with care.
+  std::shared_ptr<const Index> sharedIndex() const { return index_; }
   Index& index() { return *index_; }
+  const Index& index() const { return *index_; }
+
+  QueryResultCache& cache() { return cache_; }
+  const QueryResultCache& cache() const { return cache_; }
+
+  ad_utility::AllocatorWithLimit<Id>& allocator() { return allocator_; }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  }
+
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return sortPerformanceEstimator_;
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return sortPerformanceEstimator_;
+  }
+
+  NamedResultCache& namedResultCache() { return namedResultCache_; }
+  const NamedResultCache& namedResultCache() const { return namedResultCache_; }
+
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return materializedViewsManager_;
+  }
 };
 }  // namespace qlever
 

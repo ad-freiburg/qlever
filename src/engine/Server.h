@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
+#include "libqlever/Qlever.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -74,8 +76,14 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return *index_; }
-  const Index& index() const { return *index_; }
+  Index& index() {
+    AD_CONTRACT_CHECK(qlever_.has_value());
+    return qlever_->index();
+  }
+  const Index& index() const {
+    AD_CONTRACT_CHECK(qlever_.has_value());
+    return qlever_->index();
+  }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -116,19 +124,13 @@ class Server {
   };
 
  private:
+  std::optional<qlever::Qlever> qlever_;
+  ad_utility::MemorySize maxMem_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   bool noAccessCheck_;
-  QueryResultCache cache_;
-  NamedResultCache namedResultCache_;
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
-      std::make_shared<MaterializedViewsManager>();
-  ad_utility::AllocatorWithLimit<Id> allocator_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
-  std::shared_ptr<Index> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-
   bool enablePatternTrick_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
