@@ -21,9 +21,9 @@ using parsedQuery::VariableCounter;
 using V = Variable;
 
 // Apply `VariableCounter` to the root graph pattern of the given SPARQL query.
-VariableCounter parseAndCount(const std::string& sparql) {
+VariableCounter parseAndCount(std::string sparql) {
   static EncodedIriManager encodedIriManager;
-  auto pq = SparqlParser::parseQuery(&encodedIriManager, sparql);
+  auto pq = SparqlParser::parseQuery(&encodedIriManager, std::move(sparql));
   VariableCounter counter;
   counter(pq._rootGraphPattern);
   return counter;
