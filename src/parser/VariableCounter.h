@@ -13,6 +13,7 @@
 #include <cstddef>
 
 #include "parser/GraphPattern.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
