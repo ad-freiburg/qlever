@@ -119,6 +119,8 @@ class File {
 
   bool empty() { return sizeOfFile() == 0; }
 
+  const std::string& name() const { return name_; }
+
   // read from current file pointer position
   // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
