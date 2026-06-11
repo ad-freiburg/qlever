@@ -9,6 +9,8 @@
 
 #include "parser/VariableCounter.h"
 
+#include "util/VariantRangeFilter.h"
+
 namespace parsedQuery {
 
 // _____________________________________________________________________________
@@ -19,9 +21,9 @@ void VariableCounter::operator()(const GraphPattern& gp) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(
-    requires ql::ranges::input_range<T>) void VariableCounter::
-operator()(const T& range) {
+CPP_template_def(typename T)(requires ql::ranges::input_range<
+                             std::remove_cvref_t<T>>) void VariableCounter::
+operator()(T&& range) {
   for (const auto& elem : range) {
     (*this)(elem);  // dispatch each element to existing overloads
   }
@@ -77,8 +79,8 @@ void VariableCounter::operator()(const Bind& op) {
 }
 
 // _____________________________________________________________________________
-void VariableCounter::operator()(const SparqlTriple& var) {
-  var.forEachVariable(*this);
+void VariableCounter::operator()(const SparqlTriple& triple) {
+  triple.forEachVariable(*this);
 }
 
 // _____________________________________________________________________________
@@ -100,30 +102,74 @@ void VariableCounter::operator()(const Service& op) {
 void VariableCounter::operator()(const Minus& op) { (*this)(op._child); }
 
 // _____________________________________________________________________________
-void VariableCounter::operator()(const GroupGraphPattern& op) {
-  (*this)(op._child);
+void VariableCounter::operator()(const GroupGraphPattern& pattern) {
+  (*this)(pattern._child);
   // Graph variable.
-  std::visit(
-      [this](const auto& gs) {
-        using T = std::decay_t<decltype(gs)>;
-        if constexpr (std::is_same_v<
-                          T, std::pair<Variable, GroupGraphPattern::
-                                                     GraphVariableBehaviour>>) {
-          (*this)(gs.first);
-        }
-      },
-      op.graphSpec_);
+  if (std::holds_alternative<GroupGraphPattern::GraphVar>(pattern.graphSpec_)) {
+    (*this)(std::get<GroupGraphPattern::GraphVar>(pattern.graphSpec_).first);
+  }
 }
 
-// TODO
-void VariableCounter::operator()(const PathQuery& op) {}
-void VariableCounter::operator()(const SpatialQuery& op) {}
-void VariableCounter::operator()(const TextSearchQuery& op) {}
-void VariableCounter::operator()(const Describe& op) {}
-void VariableCounter::operator()(const Load& op) {}
+// _____________________________________________________________________________
+void VariableCounter::operator()(const PathQuery& op) {
+  (*this)(op.pathColumn_);
+  (*this)(op.edgeColumn_);
+  (*this)(op.edgeProperties_);
+  (*this)(op.end_);
+  (*this)(op.sources_);
+  (*this)(op.start_);
+  (*this)(op.targets_);
+  (*this)(op.childGraphPattern_);
+}
 
+// _____________________________________________________________________________
+void VariableCounter::operator()(const SpatialQuery& op) {
+  (*this)(op.distanceVariable_);
+  if (!op.payloadVariables_.isAll()) {
+    (*this)(op.payloadVariables_.getVariables());
+  }
+  (*this)(op.left_);
+  (*this)(op.right_);
+  (*this)(op.childGraphPattern_);
+}
+
+// _____________________________________________________________________________
+void VariableCounter::operator()(const TextSearchQuery& op) {
+  op.configVarToConfigs_.at(Variable{""});
+  (*this)(op.configVarToConfigs_ | ql::views::keys);
+  (*this)(op.configVarToConfigs_ | ql::views::values);
+  (*this)(op.childGraphPattern_);
+}
+
+// _____________________________________________________________________________
+void VariableCounter::operator()(const TextSearchConfig& op) {
+  (*this)(op.textVar_);
+  (*this)(op.matchVar_);
+  (*this)(op.scoreVar_);
+  if (op.entity_.has_value()) {
+    const auto& variant = op.entity_.value();
+    if (std::holds_alternative<Variable>(variant)) {
+      (*this)(std::get<Variable>(variant));
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void VariableCounter::operator()(const Describe& op) {
+  (*this)(op.whereClause_);
+  (*this)(ad_utility::filterRangeOfVariantsByType<Variable>(op.resources_));
+}
+
+// _____________________________________________________________________________
+void VariableCounter::operator()(const Load&) {
+  // `LOAD` does not have any variables.
+}
+
+// _____________________________________________________________________________
 void VariableCounter::operator()(const NamedCachedResult& op) {
-  // TODO
+  // `NamedCachedResult` does not know any variables at parsing time if the user
+  // does not fill in a no-op child graph pattern to make them visible.
+  (*this)(op.childGraphPattern_);
 }
 
 // _____________________________________________________________________________

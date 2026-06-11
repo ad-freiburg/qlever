@@ -17,33 +17,14 @@
 
 namespace parsedQuery {
 
-// Forward declarations.
-struct GraphPatternOperation;
-struct Optional;
-struct Union;
-struct TransPath;
-struct Bind;
-struct BasicGraphPattern;
-struct Values;
-struct Service;
-struct PathQuery;
-struct SpatialQuery;
-struct TextSearchQuery;
-struct Minus;
-struct GroupGraphPattern;
-struct Describe;
-struct Load;
-class NamedCachedResult;
-struct MaterializedViewQuery;
-struct ExternalValuesQuery;
-
 // Visits the various types of graph patterns to extract how often a variable
 // appears.
 struct VariableCounter {
   ad_utility::HashMap<Variable, size_t> count_;
 
-  CPP_template(typename T)(requires ql::ranges::input_range<T>) void operator()(
-      const T& rng);
+  CPP_template(typename T)(
+      requires ql::ranges::input_range<std::remove_cvref_t<T>>) void
+  operator()(T&& rng);
 
   template <typename T>
   void operator()(const std::optional<T>& opt);
@@ -65,6 +46,7 @@ struct VariableCounter {
   void operator()(const PathQuery& op);
   void operator()(const SpatialQuery& op);
   void operator()(const TextSearchQuery& op);
+  void operator()(const TextSearchConfig& op);
   void operator()(const Minus& op);
   void operator()(const GroupGraphPattern& op);
   void operator()(const Describe& op);
