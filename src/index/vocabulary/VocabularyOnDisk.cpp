@@ -276,32 +276,6 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
 }
 
 // _____________________________________________________________________________
-template <typename Iterable>
-void VocabularyOnDisk::buildFromIterable(Iterable&& it,
-                                         const std::string& fileName) {
-  {
-    file_.open(fileName.c_str(), "w");
-    ad_utility::MmapVector<Offset> offsets(fileName + offsetSuffix_,
-                                           ad_utility::CreateTag{});
-    uint64_t currentOffset = 0;
-    uint64_t nextId = 0;
-    for (const auto& [word, id] : it) {
-      AD_CONTRACT_CHECK(nextId == id);
-      ++nextId;
-      offsets.push_back(currentOffset);
-      currentOffset += file_.write(word.data(), word.size());
-    }
-
-    // End offset of last vocabulary entry, also consistent with the empty
-    // vocabulary.
-    offsets.push_back(currentOffset);
-    file_.close();
-  }  // After this close, the destructor of MmapVector is called, which dumps
-     // everything to disk.
-  open(fileName);
-}
-
-// _____________________________________________________________________________
 VocabularyOnDisk::WordWriter::WordWriter(const std::string& outFilename)
     : file_{outFilename, "w"},
       offsetsFile_{absl::StrCat(outFilename, offsetSuffix_), "w"} {}
