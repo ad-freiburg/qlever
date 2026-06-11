@@ -28,7 +28,6 @@ using enum PositionInTriple;
 namespace {
 
 using Iri = ad_utility::triple_component::Iri;
-auto iri = ad_utility::testing::iri;
 // Validating variant, used to test that invalid IRIs are rejected.
 auto iriV = Iri::fromIrirefValidated;
 
