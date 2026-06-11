@@ -18,7 +18,6 @@ using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 namespace {
-
 auto ParsedRequestIs =
     [](const std::string& path, const std::optional<std::string>& accessToken,
        const ParamValueMap& parameters,

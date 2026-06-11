@@ -43,7 +43,7 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
           out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-          out << "Iri " << object.toStringRepresentation();
+          out << "Iri " << object.toSparql();
         } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {

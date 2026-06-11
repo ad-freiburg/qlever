@@ -342,8 +342,8 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
-  // Triple 1: iri, iri, Variable
-  // Triple 2: BlankNode, iri, Literal
+  // Triple 1: IRI, IRI, Variable
+  // Triple 2: BlankNode, IRI, Literal
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
@@ -370,7 +370,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 // Tests for ConstructTemplatePreprocessor::preprocessTerm()
 // =============================================================================
 
-TEST(ConstructTemplatePreprocessorTest, preprocessTermiri) {
+TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{iriV("<http://s>")}, SUBJECT, varMap);
