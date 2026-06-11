@@ -16,7 +16,6 @@
 #include "util/Generator.h"
 #include "util/IoUringManager.h"
 #include "util/Iterators.h"
-#include "util/MmapVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/ThreadSafeQueue.h"
 
@@ -28,13 +27,14 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The offset of a word in the underlying file.
   using Offset = uint64_t;
   // The file in which the words are stored.
-  mutable ad_utility::File file_;
+  ad_utility::File file_;
 
-  // The .offsets file opened for io_uring reads in lookupBatch.
-  mutable ad_utility::File offsetsFile_;
-
-  // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<Offset> offsets_;
+  // The file in which the offsets of the words are stored. It contains one
+  // `Offset` per word, plus a final offset that marks the end of the last
+  // word, followed by an `MmapVectorMetaData` trailer at the end of the file
+  // that records the number of offsets. The number of words is therefore the
+  // number of stored offsets minus one.
+  ad_utility::File offsetsFile_;
 
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
@@ -57,8 +57,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   class WordWriter : public WordWriterBase {
    private:
     ad_utility::File file_;
-    ad_utility::MmapVector<Offset> offsets_;
+    ad_utility::File offsetsFile_;
     uint64_t currentOffset_ = 0;
+    uint64_t numWords_ = 0;
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
@@ -73,20 +74,15 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     void finishImpl() override;
   };
 
-  /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
-  /// be contiguous.
-  void buildFromStringsAndIds(
-      const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
-      const std::string& fileName);
-
-  /// Open the vocabulary from file. It must have been previously written to
-  /// this file, for example via `buildFromVector` or `buildFromTextFile`.
+  // Open the vocabulary from file. It must have been previously written to
+  // this file via a `WordWriter`.
   void open(const std::string& filename);
 
   // Return the word that is stored at the index. Throw an exception if `idx >=
   // size`.
   std::string operator[](uint64_t idx) const;
 
+  // Get the number of words in the vocabulary.
   // Look up multiple words by index in a single batch. Returns a shared_ptr
   // to a span of string_views, where result[i] = vocab[indices[i]]. The
   // underlying buffer is kept alive by the shared_ptr. Reads are performed in
@@ -100,10 +96,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
-  /// Default constructor for an empty vocabulary.
+  // Default constructor for an empty vocabulary.
   VocabularyOnDisk() = default;
 
-  /// `VocabularyOnDisk` is movable, but not copyable.
+  // `VocabularyOnDisk` is movable, but not copyable.
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
@@ -149,12 +145,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
-
-  // Build a vocabulary from any type that is forward-iterable and yields
-  // pairs of (string-like, ID). Used as the common implementation for
-  // the `buildFrom...` methods.
-  template <class Iterable>
-  void buildFromIterable(Iterable&& iterable, const std::string& filename);
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H
