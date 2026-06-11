@@ -20,7 +20,14 @@ namespace parsedQuery {
 // Visits the various types of graph patterns to extract how often a variable
 // appears.
 struct VariableCounter {
-  ad_utility::HashMap<Variable, size_t> count_;
+ public:
+  using Map = ad_utility::HashMap<Variable, size_t>;
+
+ private:
+  Map counts_;
+
+ public:
+  const Map& counts() const { return counts_; }
 
   CPP_template(typename T)(
       requires ql::ranges::input_range<std::remove_cvref_t<T>>) void

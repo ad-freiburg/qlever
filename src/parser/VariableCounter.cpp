@@ -30,7 +30,7 @@ operator()(T&& range) {
 }
 
 // _____________________________________________________________________________
-void VariableCounter::operator()(const Variable& var) { count_[var]++; }
+void VariableCounter::operator()(const Variable& var) { counts_[var]++; }
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const Variable* var) {
@@ -80,7 +80,9 @@ void VariableCounter::operator()(const Bind& op) {
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const SparqlTriple& triple) {
-  triple.forEachVariable(*this);
+  // `std::ref` is important here as we would otherwise pass a copy which would
+  // count on its own.
+  triple.forEachVariable(std::ref(*this));
 }
 
 // _____________________________________________________________________________
