@@ -230,13 +230,21 @@ class DeltaTriples {
   // form `<object> ql:langtag <@language>`.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
 
-  // Insert triples.
+  // Insert triples. If `materializedOut` is non-null, the triples that were
+  // genuinely inserted (Stage-2 delta: excluding triples already present in
+  // `triplesInserted_`) are written to `*materializedOut`. This is the set of
+  // triples that actually changed the store and can be used as seeds by an
+  // external reasoner. Zero-overhead when `materializedOut` is null (default).
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
+                     Triples* materializedOut = nullptr,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples.
+  // Delete triples. If `materializedOut` is non-null, the triples that were
+  // genuinely deleted (Stage-2 delta: excluding triples already present in
+  // `triplesDeleted_`) are written to `*materializedOut`.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
+                     Triples* materializedOut = nullptr,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -340,8 +348,16 @@ class DeltaTriples {
   // triples. When `insertOrDelete` is `false`, the triples are deleted, and it
   // is the other way around:. This is used to resolve insertions or deletions
   // that are idempotent or cancel each other out.
+  //
+  // When `materializedOut` is non-null AND `isInternal` is false, the triples
+  // that survive both deduplication stages (already-in-target and
+  // inverse-cancel) are copied into `*materializedOut` before being applied.
+  // These are the triples that actually change the external store.
+  // The parameter order (`materializedOut` before `tracer`) mirrors the public
+  // `insertTriples`/`deleteTriples` API for consistency.
   template <bool isInternal, bool insertOrDelete>
   void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
+                         Triples* materializedOut = nullptr,
                          ad_utility::timer::TimeTracer& tracer =
                              ad_utility::timer::DEFAULT_TIME_TRACER);
 

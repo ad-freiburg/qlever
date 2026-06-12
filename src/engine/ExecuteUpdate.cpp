@@ -6,13 +6,14 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/UpdateMetadata.h"
+#include "index/ExportIds.h"
 #include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
-    ad_utility::timer::TimeTracer& tracer) {
+    ad_utility::timer::TimeTracer& tracer, bool returnDeltaTriples) {
   UpdateMetadata metadata{};
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
@@ -24,21 +25,102 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
 
+  // Optionally capture the genuinely-changed triples (Stage-2 materialized
+  // delta) when the caller opts in via `return-delta=true`.
+  DeltaTriples::Triples insertedMat, deletedMat;
+
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
     deltaTriples.deleteTriples(cancellationHandle,
-                               std::move(toDelete.idTriples_), tracer);
+                               std::move(toDelete.idTriples_),
+                               returnDeltaTriples ? &deletedMat : nullptr,
+                               tracer);
   }
+  // When the triple set is empty, materializedOut stays as an empty vector —
+  // correct because nothing was applied to the store.
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   if (!toInsert.idTriples_.empty()) {
     deltaTriples.insertTriples(cancellationHandle,
-                               std::move(toInsert.idTriples_), tracer);
+                               std::move(toInsert.idTriples_),
+                               returnDeltaTriples ? &insertedMat : nullptr,
+                               tracer);
   }
+  // When the triple set is empty, materializedOut stays as an empty vector —
+  // correct because nothing was applied to the store.
   tracer.endTrace("insertTriples");
+
+  if (returnDeltaTriples) {
+    // NOTE: serialization runs while the DeltaTriples write lock is held (this
+    // function is called from inside `DeltaTriplesManager::modify`). For large
+    // deltas the vocab lookups / string building extend the lock-hold time.
+    // A future optimization could copy out the Id-triples and grab a
+    // `LocalVocab::LifetimeExtender`, then serialize after the lock is released.
+    metadata.delta_ = serializeMaterializedDelta(
+        index, insertedMat, deletedMat, deltaTriples.localVocab());
+  }
+
   return metadata;
+}
+
+// _____________________________________________________________________________
+std::string ExecuteUpdate::idToNQuadsTerm(const Index& index, Id id,
+                                          const LocalVocab& localVocab) {
+  auto opt = ql::exportIds::idToStringAndType(index, id, localVocab);
+  // An Undefined Id should never appear here: `computeAndAddQuadsForResultRow`
+  // filters out triples containing any Undefined component before they are
+  // stored in the delta. If this fires, the invariant was violated upstream.
+  AD_CORRECTNESS_CHECK(
+      opt.has_value(),
+      "idToNQuadsTerm called with an Undefined Id; this should have been "
+      "filtered out in computeAndAddQuadsForResultRow.");
+  auto& [str, datatype] = *opt;
+  if (datatype != nullptr) {
+    // Numeric value: reassemble as "lexicalForm"^^<datatypeUri>
+    return std::string("\"") + str + "\"^^<" + std::string(datatype) + ">";
+  }
+  // For IRIs and literals, `str` is already in N-Triples/N-Quads notation
+  // (e.g. `<http://example.org/foo>` or `"hello"@en`).
+  return str;
+}
+
+// _____________________________________________________________________________
+std::string ExecuteUpdate::tripleToNQuadsLine(const Index& index,
+                                              const IdTriple<0>& triple,
+                                              const LocalVocab& localVocab) {
+  const auto& ids = triple.ids();
+  std::string s = idToNQuadsTerm(index, ids[0], localVocab);
+  std::string p = idToNQuadsTerm(index, ids[1], localVocab);
+  std::string o = idToNQuadsTerm(index, ids[2], localVocab);
+  std::string g = idToNQuadsTerm(index, ids[3], localVocab);
+  // Default-graph triples are represented in N-Quads without a graph term
+  // (3-column N-Triples form: "s p o ."). QLever uses an internal IRI for the
+  // default graph; we must not expose that internal IRI to callers.
+  // `idToNQuadsTerm` returns IRIs including angle brackets (e.g. `<http://…>`),
+  // and DEFAULT_GRAPH_IRI is defined with angle brackets, so this string
+  // comparison correctly identifies default-graph triples.
+  if (g == DEFAULT_GRAPH_IRI) {
+    return s + " " + p + " " + o + " .";
+  }
+  return s + " " + p + " " + o + " " + g + " .";
+}
+
+// _____________________________________________________________________________
+UpdateDelta ExecuteUpdate::serializeMaterializedDelta(
+    const Index& index, const DeltaTriples::Triples& inserted,
+    const DeltaTriples::Triples& deleted, const LocalVocab& localVocab) {
+  UpdateDelta delta;
+  delta.inserted_.reserve(inserted.size());
+  delta.deleted_.reserve(deleted.size());
+  for (const auto& t : inserted) {
+    delta.inserted_.push_back(tripleToNQuadsLine(index, t, localVocab));
+  }
+  for (const auto& t : deleted) {
+    delta.deleted_.push_back(tripleToNQuadsLine(index, t, localVocab));
+  }
+  return delta;
 }
 
 // _____________________________________________________________________________

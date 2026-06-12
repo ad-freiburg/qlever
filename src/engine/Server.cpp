@@ -671,9 +671,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           msg, ad_utility::truncateOperationString(operationString)));
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+      bool returnDelta = checkParameter("return-delta", "true").has_value();
       co_return co_await processUpdate(
-          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
+          returnDelta, std::move(operations), requestTimer, tracer,
+          cancellationHandle, qec, std::move(request), send, timeLimit.value(),
+          plannedQuery);
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
       ParsedQuery query = std::move(operations[0]);
@@ -1149,6 +1151,13 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
         nlohmann::json(updateMetadata.countAfter_.value() -
                        updateMetadata.countBefore_.value());
   }
+  // When the client opts in via `return-delta=true`, include the materialized
+  // delta (Stage-2 N-Quads lines) for this operation in the per-operation JSON.
+  if (updateMetadata.delta_.has_value()) {
+    const auto& delta = updateMetadata.delta_.value();
+    response["delta-triples"]["materialized"]["inserted"] = delta.inserted_;
+    response["delta-triples"]["materialized"]["deleted"] = delta.deleted_;
+  }
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
@@ -1170,14 +1179,15 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+    DeltaTriples& deltaTriples, bool returnDeltaTriples,
+    ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata =
-      ExecuteUpdate::executeUpdate(index(), plannedUpdate.parsedQuery(), qet,
-                                   deltaTriples, cancellationHandle, tracer);
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index(), plannedUpdate.parsedQuery(), qet, deltaTriples,
+      cancellationHandle, tracer, returnDeltaTriples);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
@@ -1196,7 +1206,7 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        std::vector<ParsedQuery>&& updates,
+        bool returnDelta, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -1221,11 +1231,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, outerTracer, &metadatas]() {
+       &plannedUpdate, outerTracer, &metadatas, returnDelta]() {
         outerTracer->endTrace("waitingForUpdateThread");
         return index().deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
-             &timeLimit, &qec, &metadatas](DeltaTriples& deltaTriples) {
+             &timeLimit, &qec, &metadatas,
+             returnDelta](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
@@ -1251,7 +1262,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->processUpdateImpl(
                     plannedUpdate.value(), cancellationHandle, deltaTriples,
-                    tracer);
+                    returnDelta, tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
@@ -1282,6 +1293,27 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
   responseJson["time"] = outerTracer->getJSONShort()["update"];
+
+  // When `return-delta=true`, concatenate all per-operation materialized deltas
+  // into a top-level `"delta-triples-merged"` field for easy consumption by
+  // external reasoners performing semi-naive fixpoint evaluation.
+  if (returnDelta) {
+    nlohmann::json mergedInserted = nlohmann::json::array();
+    nlohmann::json mergedDeleted = nlohmann::json::array();
+    for (const auto& meta : metadatas) {
+      if (meta.delta_.has_value()) {
+        for (const auto& line : meta.delta_->inserted_) {
+          mergedInserted.push_back(line);
+        }
+        for (const auto& line : meta.delta_->deleted_) {
+          mergedDeleted.push_back(line);
+        }
+      }
+    }
+    responseJson["delta-triples-merged"]["inserted"] =
+        std::move(mergedInserted);
+    responseJson["delta-triples-merged"]["deleted"] = std::move(mergedDeleted);
+  }
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
