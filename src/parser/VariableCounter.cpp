@@ -128,7 +128,6 @@ void VariableCounter::operator()(const SpatialQuery& op) {
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const TextSearchQuery& op) {
-  op.configVarToConfigs_.at(Variable{""});
   (*this)(op.configVarToConfigs_ | ql::views::keys);
   (*this)(op.configVarToConfigs_ | ql::views::values);
   (*this)(op.childGraphPattern_);
