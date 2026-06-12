@@ -11,13 +11,14 @@
 #include <memory>
 #include <random>
 #include <string_view>
+#include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
-#include "util/QueryEventLog.h"
 #include "util/Synchronized.h"
 #include "util/UniqueCleanup.h"
 #include "util/json.h"
@@ -71,6 +72,14 @@ inline std::string_view toString(QueryStatus s) noexcept {
       return "unknown";
   }
   return "unknown";
+}
+
+// Unix-epoch milliseconds for a wall-clock instant; used to serialize
+// query-event timestamps.
+inline int64_t epochMillis(std::chrono::system_clock::time_point tp) noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             tp.time_since_epoch())
+      .count();
 }
 
 // This class is similar to QueryId, but it's instances are all unique within
@@ -135,9 +144,6 @@ class QueryRegistry {
   // sort of reference, which is safe when a shared ptr is used.
   std::shared_ptr<SynchronizedType> registry_{
       std::make_shared<SynchronizedType>()};
-  // Where start/end events are pushed. Non-owning; must outlive the
-  // registry. Tests inject a local instance.
-  QueryEventLog* eventLog_ = &QueryEventLog::instance();
 
  public:
   // Snapshot of a single active query. Returned from `getActiveQueries`.
@@ -150,21 +156,57 @@ class QueryRegistry {
     friend void to_json(nlohmann::json& json, const ActiveQueryInfo& info) {
       json = {
           {"query", info.query_},
-          {"started-at", std::chrono::duration_cast<std::chrono::milliseconds>(
-                             info.startedAt_.time_since_epoch())
-                             .count()},
+          {"started-at", epochMillis(info.startedAt_)},
       };
     }
   };
 
+  // What an `onStart` callback receives. The registry fills this in at
+  // registration; the callback frames it as a log line.
+  struct StartInfo {
+    const QueryId& queryId_;
+    std::string_view query_;
+    std::string_view clientIp_;
+    std::chrono::system_clock::time_point startedAt_;
+
+    // Field-by-field so `ordered_json` keeps insertion order (the on-disk
+    // contract); a brace-init can't mix the foreign `qid` json with the rest.
+    friend void to_json(nlohmann::ordered_json& json, const StartInfo& info) {
+      json["ts-ms"] = epochMillis(info.startedAt_);
+      json["event"] = "start";
+      json["qid"] = nlohmann::json(info.queryId_);
+      json["client-ip"] = info.clientIp_;
+      json["query"] = info.query_;
+    }
+  };
+
+  // What an `onEnd` callback receives, filled in when the query finishes.
+  struct EndInfo {
+    const QueryId& queryId_;
+    QueryStatus status_;
+    std::chrono::system_clock::time_point endedAt_;
+
+    // Field-by-field so `ordered_json` keeps insertion order (the on-disk
+    // contract); a brace-init can't mix the foreign `qid` json with the rest.
+    friend void to_json(nlohmann::ordered_json& json, const EndInfo& info) {
+      json["ts-ms"] = epochMillis(info.endedAt_);
+      json["event"] = "end";
+      json["qid"] = nlohmann::json(info.queryId_);
+      json["status"] = toString(info.status_);
+    }
+  };
+
+  // `const`-invocable so the same callback can run concurrently from many
+  // query threads without a lock.
+  using StartCallback = absl::AnyInvocable<void(const StartInfo&) const>;
+  using EndCallback = absl::AnyInvocable<void(const EndInfo&) const>;
+
   QueryRegistry() = default;
 
-  // Test-only constructor that redirects start/end events to a
-  // caller-owned `QueryEventLog`. The pointer is non-owning and must outlive
-  // the registry; it is dereferenced unconditionally when emitting events.
-  explicit QueryRegistry(QueryEventLog* eventLog) : eventLog_{eventLog} {
-    AD_CONTRACT_CHECK(eventLog_ != nullptr);
-  }
+  // Register a callback fired when a query is registered / unregistered.
+  // Call at setup (single-threaded); callbacks then run on the hot path.
+  void addOnStart(StartCallback cb) { onStart_.push_back(std::move(cb)); }
+  void addOnEnd(EndCallback cb) { onEnd_->push_back(std::move(cb)); }
 
   // Tries to create a new unique OwningQueryId object from the given string.
   // \param id The id representation of the potential candidate.
@@ -176,25 +218,9 @@ class QueryRegistry {
       std::string id, std::string_view query, std::string_view clientIp = {}) {
     auto queryId = QueryId::idFromString(std::move(id));
 
-    // Do all work that might throw (JSON, allocations) before inserting into
-    // the registry, so a failure here leaves no leftover entry. `startedAt` is
-    // computed once and used for both the entry and the start line, so both
-    // report the same time.
+    // Computed once and used for both the registry entry and the start
+    // event, so both report the same time.
     auto startedAt = std::chrono::system_clock::now();
-    auto startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           startedAt.time_since_epoch())
-                           .count();
-    // `ordered_json` so field order matches the on-disk contract
-    // (default `nlohmann::json` sorts keys).
-    nlohmann::ordered_json startLine = {
-        {"ts-ms", startedAtMs},
-        {"event", "start"},
-        {"qid", nlohmann::json(queryId)},
-        {"client-ip", clientIp},
-        {"query", query},
-    };
-    auto startPayload = startLine.dump();
-    startPayload.push_back('\n');
 
     // Created before the lambda so the lambda can capture it.
     auto status =
@@ -204,20 +230,12 @@ class QueryRegistry {
     // erase is best-effort.
     std::weak_ptr<SynchronizedType> weakRegistry = registry_;
     auto unregister = [weakRegistry = std::move(weakRegistry), status,
-                       eventLog = eventLog_](const QueryId& qid) {
+                       onEnd = onEnd_](const QueryId& qid) {
       AD_CORRECTNESS_CHECK(!qid.empty());
-      auto endedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-      nlohmann::ordered_json endLine = {
-          {"ts-ms", endedAtMs},
-          {"event", "end"},
-          {"qid", nlohmann::json(qid)},
-          {"status", toString(status->load())},
-      };
-      auto endPayload = endLine.dump();
-      endPayload.push_back('\n');
-      eventLog->push(std::move(endPayload));
+      EndInfo info{qid, status->load(), std::chrono::system_clock::now()};
+      for (const auto& cb : *onEnd) {
+        cb(info);
+      }
       if (auto registry = weakRegistry.lock()) {
         registry->wlock()->erase(qid);
       }
@@ -232,12 +250,15 @@ class QueryRegistry {
       }
     }
 
-    // Build the OwningQueryId first (only moves, never throws), then write the
-    // start event. If the write throws, the OwningQueryId is destroyed and
+    // Build the OwningQueryId first (only moves, never throws), then fire the
+    // start callbacks. If one throws, the OwningQueryId is destroyed and
     // removes the entry again.
     OwningQueryId owningQueryId{std::move(queryId), std::move(status),
                                 std::move(unregister)};
-    eventLog_->push(std::move(startPayload));
+    StartInfo info{owningQueryId.toQueryId(), query, clientIp, startedAt};
+    for (const auto& cb : onStart_) {
+      cb(info);
+    }
     return owningQueryId;
   }
 
@@ -277,6 +298,13 @@ class QueryRegistry {
       return it != map.end() ? it->second.cancellationHandle_ : nullptr;
     });
   }
+
+ private:
+  std::vector<StartCallback> onStart_;
+  // `shared_ptr` so the unregister lambda keeps these alive even if the
+  // registry dies first; the end event must always fire.
+  std::shared_ptr<std::vector<EndCallback>> onEnd_ =
+      std::make_shared<std::vector<EndCallback>>();
 };
 }  // namespace ad_utility::websocket
 

@@ -1,18 +1,16 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Tanmay Garg (gargt@cs.uni-freiburg.de)
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Tanmay Garg <gargt@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "util/QueryEventLog.h"
 
 #include "util/Exception.h"
 
 namespace ad_utility {
-
-// _____________________________________________________________________________
-QueryEventLog& QueryEventLog::instance() {
-  static QueryEventLog instance;
-  return instance;
-}
 
 // _____________________________________________________________________________
 QueryEventLog::~QueryEventLog() {
@@ -25,7 +23,7 @@ QueryEventLog::~QueryEventLog() {
 
 // _____________________________________________________________________________
 void QueryEventLog::setOutputFile(const std::filesystem::path& path) {
-  AD_CONTRACT_CHECK(!configured_.load(),
+  AD_CONTRACT_CHECK(!configured_.exchange(true),
                     "QueryEventLog::setOutputFile may only be called once.");
   // Open stream and construct queue before spawning the writer; it
   // captures `this` and starts popping immediately.
@@ -38,12 +36,9 @@ void QueryEventLog::setOutputFile(const std::filesystem::path& path) {
     // Flush per line so live readers see events promptly; `flush()` is
     // not `fsync`, so the cost is negligible.
     while (auto line = queue_->pop()) {
-      stream_ << *line;
-      stream_.flush();
+      stream_ << *line << std::flush;
     }
   }};
-  // Publish last so `push` only sees a fully set-up sink.
-  configured_.store(true);
 }
 
 // _____________________________________________________________________________

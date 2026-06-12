@@ -15,7 +15,6 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/QueryEventLog.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
@@ -552,9 +551,7 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
   auto base = qec->getIndex().getOnDiskBase();
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {
-    ad_utility::QueryEventLog log;
-    log.setOutputFile(path);
-    SimulateHttpRequest simulateHttpRequest{base, &log};
+    SimulateHttpRequest simulateHttpRequest{base, path};
 
     auto request = makePostRequest("/", "application/sparql-query",
                                    "SELECT * WHERE { ?a ?b ?c }");
@@ -562,14 +559,32 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
     request.set(http::field::accept, "application/sparql-results+json");
     EXPECT_THAT(simulateHttpRequest.processRaw(request),
                 StatusIs(http::status::ok));
-  }  // log destroyed → queue drained, file closed
+  }  // server (hence log) destroyed → queue drained, file closed
+
+  // The TUI byte-slices the timestamp, so every line must begin with
+  // `{"ts-ms":`.
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    EXPECT_THAT(line, ::testing::StartsWith("{\"ts-ms\":"));
+  }
 
   auto events = parseEventLog(path);
   ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.front().at("event").get<std::string>(), "start");
-  EXPECT_EQ(events.front().at("client-ip").get<std::string>(), "10.0.0.5");
-  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
-  EXPECT_EQ(events.back().at("status").get<std::string>(), "ok");
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_GT(start.at("ts-ms").get<int64_t>(), 0);
+  EXPECT_FALSE(start.at("qid").get<std::string>().empty());
+  EXPECT_EQ(start.at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?a ?b ?c }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "ok");
+  // One end per start: same qid, end not before start.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
+  EXPECT_GE(end.at("ts-ms").get<int64_t>(), start.at("ts-ms").get<int64_t>());
 }
 
 // _____________________________________________________________________________
@@ -580,9 +595,7 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
   auto base = qec->getIndex().getOnDiskBase();
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {
-    ad_utility::QueryEventLog log;
-    log.setOutputFile(path);
-    SimulateHttpRequest simulateHttpRequest{base, &log};
+    SimulateHttpRequest simulateHttpRequest{base, path};
 
     auto request = makePostRequest(
         "/", "application/sparql-query",
@@ -592,6 +605,16 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
 
   auto events = parseEventLog(path);
   ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
-  EXPECT_EQ(events.back().at("status").get<std::string>(), "failed");
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "failed");
+  // One end per start: same qid.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
 }

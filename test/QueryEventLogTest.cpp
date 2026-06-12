@@ -1,6 +1,10 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Tanmay Garg (gargt@cs.uni-freiburg.de)
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Tanmay Garg <gargt@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
@@ -26,7 +30,7 @@ using ad_utility::testing::readLines;
 // _____________________________________________________________________________
 TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  // Local instance (not the singleton) so the test is self-contained.
+  // Fresh local instance so the test is self-contained.
   QueryEventLog log;
   // No `setOutputFile` call. `push` must silently drop the line and not
   // create any file.

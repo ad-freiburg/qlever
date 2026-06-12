@@ -57,8 +57,12 @@ TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
 TEST(CancellationException, stateAccessorReturnsConstructorReason) {
   EXPECT_EQ(CancellationException{TIMEOUT}.state(), TIMEOUT);
   EXPECT_EQ(CancellationException{MANUAL}.state(), MANUAL);
-  // Message-only constructor: defaults to MANUAL.
-  EXPECT_EQ(CancellationException{"some message"}.state(), MANUAL);
+  // Message-only constructor: reason is genuinely unknown.
+  EXPECT_FALSE(CancellationException{"some message"}.state().has_value());
+  // Custom message paired with a known reason keeps both.
+  CancellationException withReason{TIMEOUT, "estimate exceeded remaining time"};
+  EXPECT_EQ(withReason.state(), TIMEOUT);
+  EXPECT_STREQ(withReason.what(), "estimate exceeded remaining time");
 }
 
 // _____________________________________________________________________________

@@ -4,15 +4,12 @@
 
 #include <gmock/gmock.h>
 
-#include <filesystem>
-#include <fstream>
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "./util/FileTestHelpers.h"
-#include "util/QueryEventLog.h"
 #include "util/http/websocket/QueryId.h"
 
 using ad_utility::websocket::OwningQueryId;
@@ -143,14 +140,6 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
 
 // _____________________________________________________________________________
 
-// The test-only constructor dereferences the `QueryEventLog` pointer
-// unconditionally when emitting events, so a null pointer must be rejected.
-TEST(QueryRegistry, nullEventLogIsRejected) {
-  EXPECT_ANY_THROW(QueryRegistry{nullptr});
-}
-
-// _____________________________________________________________________________
-
 TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
   QueryRegistry registry{};
   auto queryId = registry.uniqueId("my-query");
@@ -212,151 +201,6 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
 
 // _____________________________________________________________________________
 
-namespace {
-namespace fs = std::filesystem;
-using ad_utility::QueryEventLog;
-using ad_utility::testing::readLines;
-
-std::vector<nlohmann::json> parseAll(const std::vector<std::string>& lines) {
-  std::vector<nlohmann::json> out;
-  out.reserve(lines.size());
-  for (const auto& line : lines) {
-    out.push_back(nlohmann::json::parse(line));
-  }
-  return out;
-}
-
-// Acceptance invariant: every JSONL line begins with the literal
-// `{"ts-ms":` so the TUI can byte-slice the timestamp without a JSON
-// parse.
-void expectAllStartWithTsMs(const std::vector<std::string>& lines) {
-  static constexpr std::string_view kPrefix = "{\"ts-ms\":";
-  for (const auto& line : lines) {
-    EXPECT_EQ(line.rfind(kPrefix, 0), 0u) << "bad line: " << line;
-  }
-}
-}  // namespace
-
-// _____________________________________________________________________________
-
-TEST(QueryRegistry, registrationEmitsStartEventLine) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  int64_t expectedStartedAt = 0;
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      // Registry holds `&log` and must die before `log`.
-      QueryRegistry registry{&log};
-      auto owned = registry.uniqueIdFromString("01123581321345589144",
-                                               "SELECT * WHERE {}");
-      ASSERT_TRUE(owned.has_value());
-      auto active = registry.getActiveQueries();
-      auto activeIt = active.find(owned->toQueryId());
-      ASSERT_NE(activeIt, active.end());
-      expectedStartedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              activeIt->second.startedAt_.time_since_epoch())
-                              .count();
-    }  // OwningQueryId + registry destroyed → end event also pushed.
-  }  // log destroyed → queue drained, file closed.
-
-  auto lines = readLines(path);
-  expectAllStartWithTsMs(lines);
-  auto events = parseAll(lines);
-  ASSERT_EQ(events.size(), 2u);
-  const auto& start = events.front();
-  EXPECT_EQ(start.at("event").get<std::string>(), "start");
-  EXPECT_EQ(start.at("qid").get<std::string>(), "01123581321345589144");
-  EXPECT_EQ(start.at("ts-ms").get<int64_t>(), expectedStartedAt);
-  EXPECT_EQ(start.at("client-ip").get<std::string>(), "");
-  EXPECT_EQ(start.at("query").get<std::string>(), "SELECT * WHERE {}");
-}
-
-// _____________________________________________________________________________
-
-// If the registry dies before the `OwningQueryId`, the end event must still
-// be written (one end per start); only the registry erase is skipped.
-TEST(QueryRegistry, endEventWrittenWhenRegistryDestroyedFirst) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    std::optional<QueryRegistry> registry{std::in_place, &log};
-    auto owned = registry->uniqueIdFromString("01123581321345589144",
-                                              "SELECT * WHERE {}");
-    ASSERT_TRUE(owned.has_value());
-    registry.reset();  // weak_ptr in the unregister lambda now expired
-    owned.reset();     // fires the lambda: pushes end, skips erase, no crash
-  }
-
-  auto events = parseAll(readLines(path));
-  ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.front().at("event").get<std::string>(), "start");
-  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
-}
-
-// _____________________________________________________________________________
-
-// A non-empty client IP passed to `uniqueIdFromString` must appear verbatim
-// in the start event's `client-ip` field.
-TEST(QueryRegistry, startEventCarriesClientIp) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      auto owned = registry.uniqueIdFromString("01123581321345589144",
-                                               "SELECT * WHERE {}", "10.0.0.5");
-      ASSERT_TRUE(owned.has_value());
-    }
-  }
-
-  auto events = parseAll(readLines(path));
-  ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.front().at("client-ip").get<std::string>(), "10.0.0.5");
-}
-
-// _____________________________________________________________________________
-
-TEST(QueryRegistry, destructionEmitsEndEventLine) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  int64_t startedAtMs = 0;
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      {
-        auto owned = registry.uniqueIdFromString("01123581321345589144",
-                                                 "SELECT * WHERE {}");
-        ASSERT_TRUE(owned.has_value());
-        startedAtMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          registry.getActiveQueries()
-                              .at(owned->toQueryId())
-                              .startedAt_.time_since_epoch())
-                          .count();
-        // `owned` goes out of scope here, firing the unregister lambda
-        // which pushes the end event before the registry erases the entry.
-      }
-    }
-  }
-
-  auto lines = readLines(path);
-  expectAllStartWithTsMs(lines);
-  auto events = parseAll(lines);
-  ASSERT_EQ(events.size(), 2u);
-  const auto& end = events.back();
-  EXPECT_EQ(end.at("event").get<std::string>(), "end");
-  EXPECT_EQ(end.at("qid").get<std::string>(), "01123581321345589144");
-  EXPECT_GE(end.at("ts-ms").get<int64_t>(), startedAtMs);
-  // `setStatus` was never called, so the end event must carry the
-  // sentinel `"unknown"` rather than be missing the field.
-  EXPECT_EQ(end.at("status").get<std::string>(), "unknown");
-}
-
-// _____________________________________________________________________________
-
 TEST(QueryRegistry, statusDefaultsToUnknown) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
@@ -391,94 +235,6 @@ TEST(QueryRegistry, statusSurvivesMove) {
 
 // _____________________________________________________________________________
 
-TEST(QueryRegistry, duplicateIdDoesNotEmitStartEventLine) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      auto first =
-          registry.uniqueIdFromString("01123581321345589144", "first-query");
-      ASSERT_TRUE(first.has_value());
-      auto second =
-          registry.uniqueIdFromString("01123581321345589144", "second-query");
-      EXPECT_FALSE(second.has_value());
-      // `first` goes out of scope at the end of this block, producing
-      // one end event. Total events on disk: 1 start + 1 end = 2. If the
-      // failed registration had leaked a start, we'd see 3.
-    }
-  }
-
-  auto lines = readLines(path);
-  expectAllStartWithTsMs(lines);
-  auto events = parseAll(lines);
-  ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events[0].at("event").get<std::string>(), "start");
-  EXPECT_EQ(events[0].at("query").get<std::string>(), "first-query");
-  EXPECT_EQ(events[1].at("event").get<std::string>(), "end");
-}
-
-// _____________________________________________________________________________
-
-// Status set on `OwningQueryId` must reach the end event through the
-// shared-pointer indirection captured by the unregister lambda.
-TEST(QueryRegistry, endEventCarriesStatusSetByCaller) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      auto owned = registry.uniqueIdFromString("qid-with-status", "q");
-      ASSERT_TRUE(owned.has_value());
-      owned->setStatus(QueryStatus::Cancelled);
-    }
-  }
-
-  auto events = parseAll(readLines(path));
-  ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
-  EXPECT_EQ(events.back().at("status").get<std::string>(), "cancelled");
-}
-
-// _____________________________________________________________________________
-
-namespace {
-/// Drive one start/end cycle through a local `QueryEventLog` while
-/// applying `setStatus` to the `OwningQueryId`, then return the value of
-/// the `status` field on the resulting `end` event line.
-std::string runOneCycleAndReadEndStatus(QueryStatus status) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      auto owned = registry.uniqueIdFromString("qid", "q");
-      EXPECT_TRUE(owned.has_value());
-      owned->setStatus(status);
-    }
-  }
-  auto events = parseAll(readLines(path));
-  EXPECT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.back().at("event").get<std::string>(), "end");
-  return events.back().at("status").get<std::string>();
-}
-}  // namespace
-
-TEST(QueryRegistry, endEventStatusOk) {
-  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Ok), "ok");
-}
-
-TEST(QueryRegistry, endEventStatusFailed) {
-  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Failed), "failed");
-}
-
-TEST(QueryRegistry, endEventStatusTimeout) {
-  EXPECT_EQ(runOneCycleAndReadEndStatus(QueryStatus::Timeout), "timeout");
-}
-
 // An out-of-range value exercises the trailing fallback after the exhaustive
 // switch in `toString`, which is otherwise unreachable.
 TEST(QueryStatus, toStringFallbackForUnknownValue) {
@@ -488,29 +244,213 @@ TEST(QueryStatus, toStringFallbackForUnknownValue) {
 
 // _____________________________________________________________________________
 
-/// `sharedStatus()` returns a handle that writes through to the same
-/// atomic the unregister lambda will read. Simulates a third party (e.g.
-/// `Server::processOperation`'s catch block) publishing the status after
-/// the `OwningQueryId` has been moved out of its original scope.
-TEST(QueryRegistry, sharedStatusHandlePropagatesToEndEvent) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+// The registry fires registered callbacks; the tests below record what each
+// callback receives and assert on it directly.
+
+namespace {
+// `StartInfo`/`EndInfo` carry references/`string_view`s, so copy the values out
+// while the callback runs and they are still valid.
+struct StartRecord {
+  QueryId queryId_;
+  std::string query_;
+  std::string clientIp_;
+  std::chrono::system_clock::time_point startedAt_;
+};
+struct EndRecord {
+  QueryId queryId_;
+  QueryStatus status_;
+  std::chrono::system_clock::time_point endedAt_;
+};
+
+StartRecord toRecord(const QueryRegistry::StartInfo& info) {
+  return {info.queryId_, std::string{info.query_}, std::string{info.clientIp_},
+          info.startedAt_};
+}
+EndRecord toRecord(const QueryRegistry::EndInfo& info) {
+  return {info.queryId_, info.status_, info.endedAt_};
+}
+}  // namespace
+
+// _____________________________________________________________________________
+
+// A successful registration fires the start callback once with matching fields;
+// `startedAt_` equals the instant recorded for the active query.
+TEST(QueryRegistry, onStartFiresWithQueryDetails) {
+  QueryRegistry registry{};
+  std::vector<StartRecord> starts;
+  registry.addOnStart([&starts](const QueryRegistry::StartInfo& info) {
+    starts.push_back(toRecord(info));
+  });
+
+  auto owned = registry.uniqueIdFromString("01123581321345589144",
+                                           "SELECT * WHERE {}", "10.0.0.5");
+  ASSERT_TRUE(owned.has_value());
+
+  ASSERT_EQ(starts.size(), 1u);
+  EXPECT_EQ(starts.at(0).queryId_, owned->toQueryId());
+  EXPECT_EQ(starts.at(0).query_, "SELECT * WHERE {}");
+  EXPECT_EQ(starts.at(0).clientIp_, "10.0.0.5");
+  auto active = registry.getActiveQueries();
+  EXPECT_EQ(starts.at(0).startedAt_, active.at(owned->toQueryId()).startedAt_);
+}
+
+// _____________________________________________________________________________
+
+// A rejected duplicate id returns early, before firing the start callback.
+TEST(QueryRegistry, onStartNotFiredForDuplicateId) {
+  QueryRegistry registry{};
+  int starts = 0;
+  registry.addOnStart([&starts](const QueryRegistry::StartInfo&) { ++starts; });
+
+  auto first = registry.uniqueIdFromString("01123581321345589144", "first");
+  ASSERT_TRUE(first.has_value());
+  auto second = registry.uniqueIdFromString("01123581321345589144", "second");
+  EXPECT_FALSE(second.has_value());
+
+  EXPECT_EQ(starts, 1);
+}
+
+// _____________________________________________________________________________
+
+// Destroying the `OwningQueryId` fires the end callback once, with the qid and
+// the default `Unknown` status (no `setStatus` was called).
+TEST(QueryRegistry, onEndFiresAtDestructionWithDefaultStatus) {
+  QueryRegistry registry{};
+  std::vector<EndRecord> ends;
+  registry.addOnEnd([&ends](const QueryRegistry::EndInfo& info) {
+    ends.push_back(toRecord(info));
+  });
+
   {
-    QueryEventLog log;
-    log.setOutputFile(path);
-    {
-      QueryRegistry registry{&log};
-      auto owned = registry.uniqueIdFromString("qid-shared", "q");
-      ASSERT_TRUE(owned.has_value());
-      auto handle = owned->sharedStatus();
-      // Move the `OwningQueryId` into a different scope; the handle
-      // must still address the same atomic.
-      OwningQueryId movedAway = std::move(owned.value());
-      handle->store(QueryStatus::Failed);
-      // `movedAway` destroyed here → end event reads through `handle`.
-    }
+    auto owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    ASSERT_TRUE(owned.has_value());
+    EXPECT_THAT(ends, IsEmpty());
   }
 
-  auto events = parseAll(readLines(path));
-  ASSERT_EQ(events.size(), 2u);
-  EXPECT_EQ(events.back().at("status").get<std::string>(), "failed");
+  ASSERT_EQ(ends.size(), 1u);
+  EXPECT_EQ(ends.at(0).queryId_, QueryId::idFromString("01123581321345589144"));
+  EXPECT_EQ(ends.at(0).status_, QueryStatus::Unknown);
+}
+
+// _____________________________________________________________________________
+
+namespace {
+// Run one register -> setStatus -> destroy cycle; return the status the end
+// callback observed.
+QueryStatus runCycleCaptureEndStatus(QueryStatus toSet) {
+  QueryRegistry registry{};
+  std::optional<QueryStatus> captured;
+  registry.addOnEnd([&captured](const QueryRegistry::EndInfo& info) {
+    captured = info.status_;
+  });
+  {
+    auto owned = registry.uniqueIdFromString("qid", "q");
+    EXPECT_TRUE(owned.has_value());
+    owned->setStatus(toSet);
+  }
+  EXPECT_TRUE(captured.has_value());
+  return captured.value_or(QueryStatus::Unknown);
+}
+}  // namespace
+
+// The status set on the `OwningQueryId` reaches `EndInfo.status_`.
+TEST(QueryRegistry, onEndStatusReflectsSetStatusOk) {
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Ok), QueryStatus::Ok);
+}
+TEST(QueryRegistry, onEndStatusReflectsSetStatusFailed) {
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Failed), QueryStatus::Failed);
+}
+TEST(QueryRegistry, onEndStatusReflectsSetStatusCancelled) {
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Cancelled),
+            QueryStatus::Cancelled);
+}
+TEST(QueryRegistry, onEndStatusReflectsSetStatusTimeout) {
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Timeout),
+            QueryStatus::Timeout);
+}
+
+// _____________________________________________________________________________
+
+// The unregister lambda holds the end callbacks via `shared_ptr`, so the end
+// event fires even if the registry is destroyed before the `OwningQueryId`.
+TEST(QueryRegistry, onEndFiresEvenWhenRegistryDestroyedFirst) {
+  int ends = 0;
+  std::optional<QueryRegistry> registry{std::in_place};
+  registry->addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+
+  auto owned = registry->uniqueIdFromString("01123581321345589144", "q");
+  ASSERT_TRUE(owned.has_value());
+
+  registry.reset();  // registry gone; the weak_ptr in the lambda expires
+  EXPECT_EQ(ends, 0);
+  owned.reset();  // end callback still fires
+  EXPECT_EQ(ends, 1);
+}
+
+// _____________________________________________________________________________
+
+// `sharedStatus()` returns a handle to the same atomic the end callback reads,
+// so a write through it reaches the end event even after the id is moved.
+TEST(QueryRegistry, sharedStatusReachesEndCallback) {
+  QueryRegistry registry{};
+  std::optional<QueryStatus> captured;
+  registry.addOnEnd([&captured](const QueryRegistry::EndInfo& info) {
+    captured = info.status_;
+  });
+
+  {
+    auto owned = registry.uniqueIdFromString("qid-shared", "q");
+    ASSERT_TRUE(owned.has_value());
+    auto handle = owned->sharedStatus();
+    OwningQueryId movedAway = std::move(owned.value());
+    handle->store(QueryStatus::Failed);
+  }
+
+  ASSERT_TRUE(captured.has_value());
+  EXPECT_EQ(captured.value(), QueryStatus::Failed);
+}
+
+// _____________________________________________________________________________
+
+// All registered start and end callbacks fire, not just the first.
+TEST(QueryRegistry, multipleCallbacksAllFire) {
+  QueryRegistry registry{};
+  int starts = 0;
+  int ends = 0;
+  registry.addOnStart([&starts](const QueryRegistry::StartInfo&) { ++starts; });
+  registry.addOnStart([&starts](const QueryRegistry::StartInfo&) { ++starts; });
+  registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+  registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+
+  {
+    auto owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    ASSERT_TRUE(owned.has_value());
+    EXPECT_EQ(starts, 2);
+    EXPECT_EQ(ends, 0);
+  }
+  EXPECT_EQ(ends, 2);
+}
+
+// _____________________________________________________________________________
+
+// Two successful registrations produce two starts and two ends; the rejected
+// duplicate produces neither.
+TEST(QueryRegistry, exactlyOneEndPerStart) {
+  QueryRegistry registry{};
+  int starts = 0;
+  int ends = 0;
+  registry.addOnStart([&starts](const QueryRegistry::StartInfo&) { ++starts; });
+  registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+
+  {
+    auto a = registry.uniqueIdFromString("id-a", "q");
+    auto b = registry.uniqueIdFromString("id-b", "q");
+    auto dup = registry.uniqueIdFromString("id-a", "q");
+    ASSERT_TRUE(a.has_value());
+    ASSERT_TRUE(b.has_value());
+    ASSERT_FALSE(dup.has_value());
+  }
+
+  EXPECT_EQ(starts, 2);
+  EXPECT_EQ(ends, 2);
 }

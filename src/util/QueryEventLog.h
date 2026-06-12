@@ -1,6 +1,10 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Tanmay Garg (gargt@cs.uni-freiburg.de)
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Tanmay Garg <gargt@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_QUERYEVENTLOG_H
 #define QLEVER_SRC_UTIL_QUERYEVENTLOG_H
@@ -16,18 +20,15 @@
 
 namespace ad_utility {
 
-// Process-wide append-only sink for per-query start/end events.
+// Append-only sink for per-query start/end events.
 // Producers enqueue fully-formatted JSONL lines via `push`; one
 // background thread drains the queue and flushes after each line.
 // `push` is a silent no-op until `setOutputFile` has been called.
 class QueryEventLog {
  public:
   // Bound on the internal queue. `push` blocks when the queue is full.
-  static constexpr size_t maxQueueSize_ = 100'000;
-
-  // Singleton accessor for production callers. Tests construct their own
-  // local instance via the public default constructor.
-  static QueryEventLog& instance();
+  // Lines are flushed immediately, so this only absorbs transient bursts.
+  static constexpr size_t maxQueueSize_ = 1'000;
 
   QueryEventLog() = default;
   ~QueryEventLog();

@@ -19,7 +19,6 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
-#include "util/QueryEventLog.h"
 #include "util/ReadableNumberFacet.h"
 
 using std::size_t;
@@ -230,12 +229,10 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
-    // Per-query jsonl metrics log, written next to the index files.
-    ad_utility::QueryEventLog::instance().setOutputFile(
-        std::filesystem::path{indexBasename + ".metrics-log.jsonl"});
-
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
+    // Per-query jsonl metrics log, written next to the index files.
+    server.configureQueryEventLog(indexBasename + ".metrics-log.jsonl");
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {

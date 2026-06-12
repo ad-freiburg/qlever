@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
+#include <optional>
 
 #include "backports/type_traits.h"
 #include "global/Constants.h"
@@ -92,24 +93,32 @@ constexpr auto printNothing = []() constexpr { return ""; };
 /// An exception signalling an cancellation
 class CancellationException : public std::exception {
   std::string message_;
-  // Defaults to `MANUAL` because the string-message ctor carries no reason.
-  CancellationState state_{CancellationState::MANUAL};
+  // Empty when the reason is genuinely unknown (the message-only ctor); set by
+  // the ctors that are told a reason.
+  std::optional<CancellationState> state_;
 
  public:
   explicit CancellationException(std::string message)
       : message_{std::move(message)} {}
-  explicit CancellationException(CancellationState reason)
-      : message_{reason == CancellationState::TIMEOUT
-                     ? "Operation timed out."
-                     : "Operation was manually cancelled."},
-        state_{reason} {
+  // Custom message paired with a known reason (e.g. an operation that aborts
+  // itself because it cannot finish within the remaining time budget). This is
+  // the target ctor; the reason-only ctor below delegates to it.
+  CancellationException(CancellationState reason, std::string message)
+      : message_{std::move(message)}, state_{reason} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
+  // Known reason with the default message text for that reason.
+  explicit CancellationException(CancellationState reason)
+      : CancellationException(reason,
+                              reason == CancellationState::TIMEOUT
+                                  ? "Operation timed out."
+                                  : "Operation was manually cancelled.") {}
 
   const char* what() const noexcept override { return message_.c_str(); }
 
-  // Cancellation reason (`TIMEOUT`, `MANUAL`, or `CHECK_WINDOW_MISSED`).
-  CancellationState state() const noexcept { return state_; }
+  // Cancellation reason, or `std::nullopt` if unknown. When set, only ever
+  // `TIMEOUT` or `MANUAL`.
+  std::optional<CancellationState> state() const noexcept { return state_; }
 
   /// Set optional operation information, if not already set.
   void setOperation(std::string_view operation) {

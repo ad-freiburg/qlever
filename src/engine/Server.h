@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,10 @@ class Server {
            bool usePatterns = true, bool loadAllPermutations = true,
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
+
+  // Open `path` and register start/end callbacks on the query registry that
+  // write one JSONL line per query event to it. Call once, after construction.
+  void configureQueryEventLog(const std::filesystem::path& path);
 
   Index& index() { return *index_; }
   const Index& index() const { return *index_; }

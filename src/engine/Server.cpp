@@ -36,6 +36,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
+#include "util/QueryEventLog.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -77,6 +78,24 @@ Server::Server(unsigned short port, size_t numThreads,
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+}
+
+// _____________________________________________________________________________
+void Server::configureQueryEventLog(const std::filesystem::path& path) {
+  // One log, owned by a `shared_ptr` copied into both callbacks, so its
+  // lifetime follows the callbacks (and thus the registry).
+  auto log = std::make_shared<ad_utility::QueryEventLog>();
+  log->setOutputFile(path);
+  // One generic lambda for both events: serialize the info struct (via its
+  // `to_json`) and push it as a newline-terminated line.
+  auto logEvent = [log](const auto& info) {
+    nlohmann::ordered_json line = info;
+    auto s = line.dump();
+    s.push_back('\n');
+    log->push(std::move(s));
+  };
+  queryRegistry_.addOnStart(logEvent);
+  queryRegistry_.addOnEnd(std::move(logEvent));
 }
 
 // __________________________________________________________________________
@@ -694,7 +713,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       queryStatus->store(QueryStatus::Ok);
       co_return;
     } catch (const ad_utility::CancellationException& e) {
-      queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
+      auto reason = e.state();
+      queryStatus->store(!reason.has_value() ? QueryStatus::Unknown
+                         : reason == ad_utility::CancellationState::TIMEOUT
                              ? QueryStatus::Timeout
                              : QueryStatus::Cancelled);
       throw;
