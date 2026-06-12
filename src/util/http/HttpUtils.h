@@ -105,6 +105,18 @@ http::request<http::empty_body, Fields> getHeaderOnlyRequest(
   return result;
 }
 
+// Construct a `http::request<http::string_body>` from any Beast HTTP request by
+// copying all header fields and assigning `body` as the string body. Mirrors
+// `getHeaderOnlyRequest` but retains a non-empty body.
+template <typename Body, typename Fields>
+http::request<http::string_body, Fields> getStringBodyRequest(
+    const http::request<Body, Fields>& req, std::string body) {
+  http::request<http::string_body, Fields> result;
+  result.base() = req.base();
+  result.body() = std::move(body);
+  return result;
+}
+
 // The response type used for almost all cases. Only when there is an error
 // parsing the request, then another response type is used.
 using ResponseT = http::response<streamable_body>;

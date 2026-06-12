@@ -103,6 +103,12 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
                                                 HandlerSupplier
                                                     webSocketHandlerSupplier =
                                                         {},
+                                                // Only used in lazy mode: the
+                                                // body is read in chunks of
+                                                // this size; each chunk is
+                                                // filled completely before
+                                                // being yielded, trading
+                                                // latency for throughput.
                                                 size_t lazyBodyChunkSize =
                                                     1u << 20u)
       : httpHandler_{std::move(handler)},
@@ -233,16 +239,48 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     co_return false;
   }
 
-  // Handle one lazy-mode request: read only the headers, then pass a
-  // `bodyGetter` callable to `httpHandler_`. Each `co_await bodyGetter()` reads
-  // the next chunk (up to `lazyBodyChunkSize_` bytes) into a buffer that lives
-  // in this function's stack frame and returns a `string_view` into it. The
-  // view is valid only until the next call. Returns `nullopt` when the body is
-  // fully consumed; throws on network errors.
-  template <typename SendMessage>
-  net::awaitable<void> handleLazyRequest(beast::tcp_stream& stream,
+  // Read at most `bodyLimit` bytes from `requestParser` into a string and
+  // return it. If `bodyLimit` is 0 (unlimited), at most 100'000 bytes are
+  // consumed; WebSocket upgrade requests are never that large.
+  static net::awaitable<std::string> materializeBody(
+      beast::tcp_stream& stream, beast::flat_buffer& buffer,
+      http::request_parser<http::buffer_body>& requestParser,
+      size_t bodyLimit) {
+    const size_t effectiveLimit = (bodyLimit == 0) ? 100'000 : bodyLimit;
+    std::string result;
+    std::vector<char> chunk(std::min(effectiveLimit, size_t{4096}));
+    while (!requestParser.is_done() && result.size() < effectiveLimit) {
+      const size_t toRead =
+          std::min(effectiveLimit - result.size(), chunk.size());
+      requestParser.get().body().data = chunk.data();
+      requestParser.get().body().size = toRead;
+      boost::system::error_code ec;
+      co_await http::async_read_some(
+          stream, buffer, requestParser,
+          boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+      if (ec && ec != http::error::need_buffer) {
+        throw boost::system::system_error{ec};
+      }
+      const size_t bytesRead = toRead - requestParser.get().body().size;
+      result.append(chunk.data(), bytesRead);
+    }
+    co_return result;
+  }
+
+  // Handle one lazy-mode request: read only the headers, then check for a
+  // WebSocket upgrade or pass a `bodyGetter` callable to `httpHandler_`.
+  // For WebSocket upgrades the remaining body is materialized and
+  // `handleWebsocketUpgrade` is called; returns `true` so the caller exits
+  // the session loop. For normal requests each `co_await bodyGetter()` reads
+  // the next chunk (up to `lazyBodyChunkSize_` bytes) into a buffer that
+  // lives in this function's stack frame and returns a `string_view` into it;
+  // the view is valid only until the next call; `nullopt` signals end-of-body;
+  // throws on network errors. Returns `false` for normal requests.
+  template <typename SendMessage, typename ReleaseConnection>
+  net::awaitable<bool> handleLazyRequest(beast::tcp_stream& stream,
                                          beast::flat_buffer& buffer,
-                                         SendMessage& sendMessage)
+                                         SendMessage& sendMessage,
+                                         ReleaseConnection& releaseConnection)
       requires(bodyReadMode == BodyReadMode::Lazy) {
     http::request_parser<http::buffer_body> requestParser;
     requestParser.body_limit(boost::none);
@@ -252,49 +290,65 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     http::request<http::empty_body> headersReq =
         ad_utility::httpUtils::getHeaderOnlyRequest(requestParser.get());
 
+    if (beast::websocket::is_upgrade(headersReq)) {
+      std::string body = co_await materializeBody(
+          stream, buffer, requestParser, getRequestBodyLimit().getBytes());
+      auto stringReq = ad_utility::httpUtils::getStringBodyRequest(
+          headersReq, std::move(body));
+      co_await handleWebsocketUpgrade(stream, stringReq, sendMessage,
+                                      releaseConnection);
+      co_return true;
+    }
+
     // Buffer for body chunks; its lifetime covers the entire handler
     // invocation.
     const size_t chunkSize = lazyBodyChunkSize_;
     std::vector<char> chunkBuffer(chunkSize);
 
-    // Fills `chunkBuffer` with up to `chunkSize` bytes from the request body
-    // and returns a view into it, or `nullopt` when the body is exhausted.
-    // Loops internally until the buffer is completely full or the body ends, so
-    // callers always receive a maximally-sized chunk (except possibly the
-    // last).
+    // Yields up to `chunkSize` bytes from the request body as a `string_view`
+    // into `chunkBuffer`, or `nullopt` when the body is exhausted. Each chunk
+    // is filled completely before being returned (except possibly the last).
+    // The outer lambda is a plain factory (not a coroutine itself); the inner
+    // lambda is the coroutine and receives all state as arguments rather than
+    // captures, avoiding captures inside a coroutine context.
     auto bodyGetter =
         [&stream, &buffer, &requestParser, &chunkBuffer,
          chunkSize]() -> net::awaitable<std::optional<std::string_view>> {
-      size_t totalBytesRead = 0;
-      while (!requestParser.is_done() && totalBytesRead < chunkSize) {
-        requestParser.get().body().data = chunkBuffer.data() + totalBytesRead;
-        requestParser.get().body().size = chunkSize - totalBytesRead;
-        boost::system::error_code ec;
-        // `need_buffer` is returned when the provided buffer segment is
-        // completely full but more body data remains; it is not a real error.
-        co_await http::async_read_some(
-            stream, buffer, requestParser,
-            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-        if (ec && ec != http::error::need_buffer) {
-          throw boost::system::system_error{ec};
+      return [](auto& stream, auto& buffer, auto& requestParser,
+                auto& chunkBuffer, size_t chunkSize)
+                 -> net::awaitable<std::optional<std::string_view>> {
+        size_t totalBytesRead = 0;
+        while (!requestParser.is_done() && totalBytesRead < chunkSize) {
+          requestParser.get().body().data = chunkBuffer.data() + totalBytesRead;
+          requestParser.get().body().size = chunkSize - totalBytesRead;
+          boost::system::error_code ec;
+          // `need_buffer` is returned when the provided buffer segment is
+          // completely full but more body data remains; it is not a real error.
+          co_await http::async_read_some(
+              stream, buffer, requestParser,
+              boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+          if (ec && ec != http::error::need_buffer) {
+            throw boost::system::system_error{ec};
+          }
+          size_t bytesRead =
+              (chunkSize - totalBytesRead) - requestParser.get().body().size;
+          totalBytesRead += bytesRead;
+          if (ec == http::error::need_buffer) {
+            // Buffer segment is full; yield what we have.
+            break;
+          }
         }
-        size_t bytesRead =
-            (chunkSize - totalBytesRead) - requestParser.get().body().size;
-        totalBytesRead += bytesRead;
-        if (ec == http::error::need_buffer) {
-          // Buffer segment is full; yield what we have.
-          break;
+        if (totalBytesRead > 0) {
+          co_return std::string_view{chunkBuffer.data(), totalBytesRead};
         }
-      }
-      if (totalBytesRead > 0) {
-        co_return std::string_view{chunkBuffer.data(), totalBytesRead};
-      }
-      co_return std::nullopt;
+        co_return std::nullopt;
+      }(stream, buffer, requestParser, chunkBuffer, chunkSize);
     };
 
     stream.expires_never();
     co_await httpHandler_(std::move(headersReq), std::move(bodyGetter),
                           sendMessage);
+    co_return false;
   }
 
   // The loop which accepts TCP connections and delegates their handling
@@ -384,9 +438,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
               stream, buffer, sendMessage, releaseConnection);
           if (shouldExit) co_return;
         } else {
-          co_await handleLazyRequest(stream, buffer, sendMessage);
-          // Lazy mode always closes the connection after each request because
-          // the stream is occupied by body streaming until the body is done.
+          bool shouldExit = co_await handleLazyRequest(
+              stream, buffer, sendMessage, releaseConnection);
+          if (shouldExit) co_return;
+          // Non-WebSocket lazy requests always close the connection since body
+          // consumption by the handler is not guaranteed.
           streamNeedsClosing = true;
         }
 

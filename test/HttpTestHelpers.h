@@ -57,7 +57,7 @@ class TestHttpServer {
   // a free port of its choice. `lazyBodyChunkSize` controls the internal buffer
   // size for lazy body streaming (ignored in eager mode).
   explicit TestHttpServer(HttpHandler httpHandler,
-                          size_t lazyBodyChunkSize = 1u << 20u) {
+                          size_t lazyBodyChunkSize = 100u) {
     server_ = std::make_shared<
         HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
         0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier,
