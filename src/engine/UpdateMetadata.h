@@ -10,6 +10,9 @@
 #ifndef QLEVER_SRC_ENGINE_UPDATEMETADATA_H
 #define QLEVER_SRC_ENGINE_UPDATEMETADATA_H
 
+#include <string>
+#include <vector>
+
 #include "backports/three_way_comparison.h"
 #include "util/json.h"
 
@@ -32,12 +35,59 @@ struct DeltaTriplesCount {
                                               triplesInserted_, triplesDeleted_)
 };
 
+// The materialized delta for a single update operation: the N-Quads / N-Triples
+// lines for triples that were newly tracked by the `DeltaTriples` overlay.
+// Populated only when the client opts in via the `return-delta=true` URL
+// parameter.
+//
+// Semantics (important for consumers such as external reasoners):
+//   "Inserted" means: not previously in `triplesInserted_` AND not cancelled by
+//   `triplesDeleted_` within the same `DeltaTriples` session — i.e. new to the
+//   *overlay*, not necessarily new to the *logical dataset* (base + overlay).
+//
+// Known limitation — base-index overlap:
+//   A triple that already exists in the base materialized index but has NOT yet
+//   been inserted via the overlay will be reported as "inserted" here.
+//   `modifyTriplesImpl` only checks the overlay maps, not the base index (a
+//   base-index lookup per triple would be expensive).  For a semi-naive
+//   external reasoner this is a safe over-approximation: re-deriving a base
+//   triple produces a harmless extra seed, but the fixpoint still terminates.
+//   See `ExecuteUpdateTest.returnDeltaTriples` test case 9 for a concrete
+//   demonstration of this behavior.
+//
+// Default-graph triples are emitted as 3-column N-Triples ("s p o ."); named-
+// graph triples are emitted as 4-column N-Quads ("s p o g ."). The internal
+// QLever default-graph IRI is never exposed in the output.
+//
+// Blank-node round-trip trap:
+//   Blank-node subjects/objects are serialized with their QLever-internal label
+//   (e.g. `_:b0`).  Those labels are NOT re-addressable from outside QLever:
+//   SPARQL does not allow querying by blank-node ID, and re-inserting `_:b0`
+//   via a subsequent UPDATE mints a brand-new blank node with a different
+//   internal ID — the original triple is NOT referenced.  For a semi-naive
+//   external reasoner the practical consequence is:
+//     * Observing blank-node triples in the delta is safe (e.g., for counting).
+//     * Using them as seeds for further INSERT statements is NOT: each round
+//       would create fresh blank nodes, causing data bloat and incorrect
+//       reasoning.
+//   Consumers should treat blank-node triples in the delta as opaque /
+//   read-only evidence of what was stored, and should not attempt to re-insert
+//   them. See `ExecuteUpdateTest.returnDeltaTriples` test case 11 for a
+//   demonstration.
+struct UpdateDelta {
+  std::vector<std::string> inserted_;  // N-Quads/N-Triples lines for inserts
+  std::vector<std::string> deleted_;   // N-Quads/N-Triples lines for deletes
+};
+
 // Metadata of a single update operation: number of inserted and deleted triples
-// before the operation, of the operation, and after the operation.
+// before the operation, of the operation, and after the operation, and
+// optionally the materialized delta triples as N-Quads lines.
 struct UpdateMetadata {
   std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
   std::optional<DeltaTriplesCount> countAfter_;
+  // Populated only when the client requests `return-delta=true`.
+  std::optional<UpdateDelta> delta_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_UPDATEMETADATA_H

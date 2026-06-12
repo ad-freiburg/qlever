@@ -295,18 +295,18 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
 
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
-                                 Triples triples,
+                                 Triples triples, Triples* materializedOut,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("makeInternalTriples");
   auto internalTriples = makeInternalTriples(triples, true);
   tracer.endTrace("makeInternalTriples");
   tracer.beginTrace("externalPermutation");
   modifyTriplesImpl<false, true>(cancellationHandle, std::move(triples),
-                                 tracer);
+                                 materializedOut, tracer);
   tracer.endTrace("externalPermutation");
   tracer.beginTrace("internalPermutation");
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
-                                std::move(internalTriples), tracer);
+                                std::move(internalTriples), nullptr, tracer);
   tracer.endTrace("internalPermutation");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
@@ -314,18 +314,18 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
-                                 Triples triples,
+                                 Triples triples, Triples* materializedOut,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("makeInternalTriples");
   auto internalTriples = makeInternalTriples(triples, false);
   tracer.endTrace("makeInternalTriples");
   tracer.beginTrace("externalPermutation");
   modifyTriplesImpl<false, false>(cancellationHandle, std::move(triples),
-                                  tracer);
+                                  materializedOut, tracer);
   tracer.endTrace("externalPermutation");
   tracer.beginTrace("internalPermutation");
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),
-                                 std::move(internalTriples), tracer);
+                                 std::move(internalTriples), nullptr, tracer);
   tracer.endTrace("internalPermutation");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
@@ -336,7 +336,7 @@ void DeltaTriples::insertInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
-                                std::move(triples), tracer);
+                                std::move(triples), nullptr, tracer);
 }
 
 // ____________________________________________________________________________
@@ -344,7 +344,7 @@ void DeltaTriples::deleteInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),
-                                 std::move(triples), tracer);
+                                 std::move(triples), nullptr, tracer);
 }
 
 // ____________________________________________________________________________
@@ -405,7 +405,7 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 // ____________________________________________________________________________
 template <bool isInternal, bool insertOrDelete>
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
-                                     Triples triples,
+                                     Triples triples, Triples* materializedOut,
                                      ad_utility::timer::TimeTracer& tracer) {
   AD_LOG_DEBUG << (insertOrDelete ? "Inserting" : "Deleting") << " "
                << triples.size() << (isInternal ? " internal" : "")
@@ -438,6 +438,14 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
     }
   });
   tracer.endTrace("removeInverseTriples");
+  // Capture the surviving triples for the delta-returning feature if requested.
+  // Only relevant for the external permutation pass; the internal pass is an
+  // implementation detail (language-tag bookkeeping) that we do not expose.
+  if constexpr (!isInternal) {
+    if (materializedOut != nullptr) {
+      *materializedOut = triples;
+    }
+  }
   tracer.beginTrace("locatedAndAdd");
 
   auto handles = locateAndAddTriples<isInternal>(
@@ -705,7 +713,8 @@ void DeltaTriples::addFromSnapshotDiff(
                         auto isInternal, auto insertOrDelete) {
     modifyTriplesImpl<isInternal, insertOrDelete>(
         cancellationHandle,
-        std::move(difference.triples<isInternal, insertOrDelete>()), tracer);
+        std::move(difference.triples<isInternal, insertOrDelete>()), nullptr,
+        tracer);
   };
   using namespace ad_utility::use_value_identity;
   addTriples(vi<false>, vi<true>);

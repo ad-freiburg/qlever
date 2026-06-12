@@ -8,6 +8,8 @@
 #include <gtest/gtest_prod.h>
 
 #include "engine/UpdateMetadata.h"
+#include "global/IdTriple.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
@@ -20,13 +22,18 @@ class ExecuteUpdate {
   using TransformedTriple = std::array<IdOrVariableIndex, 4>;
 
   // Execute an update. This function is comparable to
-  // `ExportQueryExecutionTrees::computeResult` for queries.
+  // `ExportQueryExecutionTrees::computeResult` for queries. If
+  // `returnDeltaTriples` is true, the returned `UpdateMetadata::delta_` field
+  // is populated with the overlay-accepted delta (see `UpdateDelta` in
+  // `UpdateMetadata.h` for the precise semantics), serialized as N-Quads /
+  // N-Triples lines.
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
       const CancellationHandle& cancellationHandle,
       ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
+          ad_utility::timer::DEFAULT_TIME_TRACER,
+      bool returnDeltaTriples = false);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
@@ -75,6 +82,27 @@ class ExecuteUpdate {
   // elements.
   static void sortAndRemoveDuplicates(std::vector<IdTriple<>>& container);
   FRIEND_TEST(ExecuteUpdate, sortAndRemoveDuplicates);
+
+  // Convert a single `Id` to its N-Quads / N-Triples term representation.
+  // Triggers `AD_CORRECTNESS_CHECK` if `id` is `Undefined` (which should
+  // never occur for triples produced by `computeAndAddQuadsForResultRow`).
+  static std::string idToNQuadsTerm(const Index& index, Id id,
+                                    const LocalVocab& localVocab);
+
+  // Serialize a single `IdTriple<0>` as one N-Quads / N-Triples line. When
+  // the graph component is QLever's internal DEFAULT_GRAPH_IRI, a 3-column
+  // N-Triples line is emitted (no graph term); otherwise a 4-column N-Quads
+  // line is emitted. The internal default-graph IRI is never exposed to
+  // callers.
+  static std::string tripleToNQuadsLine(const Index& index,
+                                        const IdTriple<0>& triple,
+                                        const LocalVocab& localVocab);
+
+  // Build an `UpdateDelta` by serializing every triple in `inserted` and
+  // `deleted` to N-Quads lines using `localVocab` for ID resolution.
+  static UpdateDelta serializeMaterializedDelta(
+      const Index& index, const DeltaTriples::Triples& inserted,
+      const DeltaTriples::Triples& deleted, const LocalVocab& localVocab);
 
   // For two sorted vectors `A` and `B` return a new vector
   // that contains the element of `A\B`.

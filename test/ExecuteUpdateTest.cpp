@@ -654,3 +654,297 @@ TEST(ExecuteUpdate, setMinus) {
   expect({IdTriple(1, 2, 3)},
          {IdTriple(1, 2, 3), IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {});
 }
+
+// Test that `executeUpdate` with `returnDeltaTriples=true` returns the correct
+// overlay-accepted delta (post-DeltaTriples deduplication) as N-Quads/N-Triples
+// lines in `UpdateMetadata::delta_`.
+TEST(ExecuteUpdate, returnDeltaTriples) {
+  using testing::AllOf;
+  using testing::AnyOf;
+  using testing::EndsWith;
+  using testing::HasSubstr;
+  using testing::Not;
+
+  // Run a SPARQL update (optionally preceded by `priorSparql` in the same
+  // atomic DeltaTriples modification) and return the `UpdateMetadata` for the
+  // main update.  Each call creates a fresh index so the tests are independent.
+  auto runUpdate = [](const std::string& mainSparql, bool returnDelta = true,
+                      const std::string& priorSparql = "") -> UpdateMetadata {
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    ad_utility::testing::TestIndexConfig indexConfig{};
+    auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+        "ExecuteUpdate_returnDelta", indexConfig));
+    QueryResultCache cache;
+    NamedResultCache namedResultCache;
+    auto materializedViewsManager =
+        std::make_shared<MaterializedViewsManager>();
+    QueryExecutionContext qec(index, &cache,
+                              ad_utility::testing::makeAllocator(
+                                  ad_utility::MemorySize::megabytes(100)),
+                              SortPerformanceEstimator{}, &namedResultCache,
+                              materializedViewsManager);
+
+    UpdateMetadata result;
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      qec.setLocatedTriplesForEvaluation(
+          deltaTriples.getLocatedTriplesSharedStateReference());
+      ad_utility::BlankNodeManager bnm;
+
+      // Execute the prior update (without capturing the delta).
+      if (!priorSparql.empty()) {
+        auto pqs =
+            SparqlParser::parseUpdate(&bnm, encodedIriManager(), priorSparql);
+        for (auto& pq : pqs) {
+          deltaTriples.updateAugmentedMetadata();
+          QueryPlanner qp{&qec, handle};
+          const auto qet = qp.createExecutionTree(pq);
+          ExecuteUpdate::executeUpdate(*index, pq, qet, deltaTriples, handle);
+        }
+      }
+
+      // Execute the main update and capture the result.
+      auto pqs =
+          SparqlParser::parseUpdate(&bnm, encodedIriManager(), mainSparql);
+      ASSERT_EQ(pqs.size(), 1u);
+      auto& pq = pqs[0];
+      deltaTriples.updateAugmentedMetadata();
+      QueryPlanner qp{&qec, handle};
+      const auto qet = qp.createExecutionTree(pq);
+      result = ExecuteUpdate::executeUpdate(
+          *index, pq, qet, deltaTriples, handle,
+          ad_utility::timer::DEFAULT_TIME_TRACER, returnDelta);
+    });
+    return result;
+  };
+
+  // 1. Opt-out (returnDeltaTriples=false): delta_ must be nullopt.
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }",
+        false);
+    EXPECT_FALSE(meta.delta_.has_value());
+  }
+
+  // 2. New insert into default graph: inserted_ has 1 N-Triples line (3-column,
+  //    no graph term) containing all three IRIs; deleted_ is empty.
+  //    The internal QLever default-graph IRI must NOT appear in the output.
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    EXPECT_TRUE(meta.delta_->deleted_.empty());
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u);
+    EXPECT_THAT(
+        meta.delta_->inserted_[0],
+        AllOf(HasSubstr("<http://example.org/s>"),
+              HasSubstr("<http://example.org/p>"),
+              HasSubstr("<http://example.org/o>"),
+              // Default-graph triple: emitted as 3-column N-Triples (no graph
+              // term). The internal QLever default-graph IRI is not exposed.
+              Not(HasSubstr("qlever.cs.uni-freiburg.de")), EndsWith(" .")));
+  }
+
+  // 3. Re-insert dedup: inserting the same triple twice → empty inserted_ for
+  //    the second insertion (triple already in triplesInserted_).
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }",
+        /*returnDelta=*/true,
+        /*priorSparql=*/
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    EXPECT_TRUE(meta.delta_->inserted_.empty());
+    EXPECT_TRUE(meta.delta_->deleted_.empty());
+  }
+
+  // 4. Delete after insert: the prior INSERT added the triple to
+  //    triplesInserted_; the DELETE cancels it and adds it to triplesDeleted_.
+  //    deleted_ has 1 N-Triples line (3-column, no internal IRI).
+  {
+    auto meta = runUpdate(
+        "DELETE DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }",
+        /*returnDelta=*/true,
+        /*priorSparql=*/
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    EXPECT_TRUE(meta.delta_->inserted_.empty());
+    ASSERT_EQ(meta.delta_->deleted_.size(), 1u);
+    EXPECT_THAT(
+        meta.delta_->deleted_[0],
+        AllOf(HasSubstr("<http://example.org/s>"),
+              HasSubstr("<http://example.org/p>"),
+              HasSubstr("<http://example.org/o>"),
+              Not(HasSubstr("qlever.cs.uni-freiburg.de")), EndsWith(" .")));
+  }
+
+  // 5. Re-delete dedup: deleting the same triple twice → empty deleted_ for
+  //    the second deletion (triple already in triplesDeleted_).
+  {
+    auto meta = runUpdate(
+        "DELETE DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }",
+        /*returnDelta=*/true,
+        /*priorSparql=*/
+        "DELETE DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    EXPECT_TRUE(meta.delta_->inserted_.empty());
+    EXPECT_TRUE(meta.delta_->deleted_.empty());
+  }
+
+  // 6. Named graph: the N-Quads line for a graph-specific insert contains the
+  //    named graph IRI in the 4th position.
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { GRAPH <http://example.org/g> { "
+        "<http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> } }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u);
+    EXPECT_THAT(meta.delta_->inserted_[0],
+                AllOf(HasSubstr("<http://example.org/s>"),
+                      HasSubstr("<http://example.org/p>"),
+                      HasSubstr("<http://example.org/o>"),
+                      HasSubstr("<http://example.org/g>"), EndsWith(" .")));
+  }
+
+  // 7. Typed literal (xsd:integer): the `"lex"^^<datatype>` reassembly path
+  //    in `idToNQuadsTerm` must produce a valid N-Triples literal.
+  //    The output must contain the lexical form quoted, the ^^ separator,
+  //    and the datatype IRI in angle brackets.
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> 42 }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u);
+    const auto& line = meta.delta_->inserted_[0];
+    EXPECT_THAT(line, HasSubstr("<http://example.org/s>"));
+    EXPECT_THAT(line, HasSubstr("<http://example.org/p>"));
+    // The integer object must be serialised as a typed literal with ^^.
+    EXPECT_THAT(line, HasSubstr("\"42\"^^<"));
+    // QLever serializes integer literals with xsd:int or xsd:integer;
+    // "XMLSchema#int" is a common substring of both URIs.
+    EXPECT_THAT(line, HasSubstr("XMLSchema#int"));
+    EXPECT_THAT(line, EndsWith(" ."));
+  }
+
+  // 8. Language-tagged literal: `"text"@lang` must appear verbatim in the
+  //    output (already in N-Triples notation from `idToStringAndType`).
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "\"hello\"@en }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u);
+    const auto& line = meta.delta_->inserted_[0];
+    EXPECT_THAT(line, HasSubstr("<http://example.org/s>"));
+    EXPECT_THAT(line, HasSubstr("\"hello\"@en"));
+    EXPECT_THAT(line, EndsWith(" ."));
+  }
+
+  // 9. Base-index overlap: a triple that already exists in the base
+  //    materialized index (not yet in the DeltaTriples overlay).
+  //
+  //    `modifyTriplesImpl` deduplicates only against the *overlay* maps
+  //    (`triplesInserted_` / `triplesDeleted_`).  It does NOT consult the
+  //    base index (doing so on every write would be expensive).  Therefore a
+  //    triple that is already in the base but not yet tracked by the overlay
+  //    passes through both dedup passes and is reported as "inserted".
+  //
+  //    The default test index contains "<x> <is-a> <y>" in the base index.
+  //
+  //    DOCUMENTED SEMANTIC GAP: `inserted_` will be non-empty even though the
+  //    logical dataset (base + delta) did not change.  For the semi-naive
+  //    external reasoner this means a re-derived base triple would appear as a
+  //    "new seed" — it is *safe* (the fixpoint still terminates), but it
+  //    causes unnecessary re-evaluation work and violates the claim of
+  //    returning "only genuinely new triples."  A future PR may add a base-
+  //    index lookup on the write path to filter these out.
+  {
+    // <x> <is-a> <y> lives in the base index (line 186-189 of
+    // test/util/IndexTestHelpers.cpp — the default turtle input).
+    auto meta = runUpdate("INSERT DATA { <x> <is-a> <y> }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    // The triple is NOT in triplesInserted_ yet, so it is NOT filtered by the
+    // overlay dedup.  It appears in inserted_ despite being in the base.
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u)
+        << "Base-index overlap: <x> <is-a> <y> already exists in the base "
+           "index but modifyTriplesImpl does not consult the base, so it is "
+           "reported as inserted.";
+    EXPECT_THAT(meta.delta_->inserted_[0], HasSubstr("is-a"));
+    // deleted_ is empty.
+    EXPECT_TRUE(meta.delta_->deleted_.empty());
+  }
+
+  // 10. String literal with embedded double quote: QLever normalizes all
+  //     literals through `RdfEscaping::normalizeRDFLiteral` at ingest time, so
+  //     the stored form already uses the N-Triples backslash-escape `\"`.
+  //     `idToNQuadsTerm` returns it verbatim — no additional escaping needed.
+  {
+    auto meta = runUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "'say \"hello\"' }");
+    ASSERT_TRUE(meta.delta_.has_value());
+    ASSERT_EQ(meta.delta_->inserted_.size(), 1u);
+    const auto& line = meta.delta_->inserted_[0];
+    EXPECT_THAT(line, HasSubstr("<http://example.org/s>"));
+    EXPECT_THAT(line, HasSubstr("hello"));
+    // The embedded double-quote must appear as a backslash-escape in the
+    // N-Triples output (i.e. the 2-char sequence \" must be present).
+    EXPECT_THAT(line, HasSubstr("\\\""));
+    EXPECT_THAT(line, EndsWith(" ."));
+  }
+
+  // 11. Blank-node round-trip trap.
+  //
+  //     Blank nodes are serialized with their QLever-internal label (e.g.
+  //     `_:b0`).  Those labels are NOT re-addressable from outside QLever:
+  //     SPARQL does not allow querying by blank-node ID, and re-inserting
+  //     `_:b0` via a subsequent UPDATE mints a brand-new blank node with a
+  //     *different* internal ID — the original triple is NOT referenced.
+  //
+  //     DOCUMENTED HAZARD for external reasoners:
+  //       * Observing blank-node triples in the delta is safe.
+  //       * Using them as seeds for further INSERT statements is NOT: each
+  //         round creates fresh blank nodes, causing data bloat and
+  //         incorrect semi-naive evaluation.
+  //     Consumers should treat blank-node triples in the delta as opaque /
+  //     read-only evidence.  See `UpdateDelta` doc for details.
+  //
+  //     This test demonstrates both the serialization and the re-insertion
+  //     behaviour: two separate INSERT DATA rounds each get a distinct `_:`
+  //     label even though both write `_:b <p> <o>`.
+  {
+    // Part A: the first insert serializes the blank node with `_:`.
+    auto meta1 = runUpdate(
+        "INSERT DATA { _:b <http://example.org/p> <http://example.org/o> }");
+    ASSERT_TRUE(meta1.delta_.has_value());
+    ASSERT_EQ(meta1.delta_->inserted_.size(), 1u);
+    const auto& line1 = meta1.delta_->inserted_[0];
+    EXPECT_THAT(line1, HasSubstr("_:"));
+    EXPECT_THAT(line1, HasSubstr("<http://example.org/p>"));
+    EXPECT_THAT(line1, HasSubstr("<http://example.org/o>"));
+    EXPECT_THAT(line1, EndsWith(" ."));
+
+    // Part B: a second independent insert of the same `_:b` template produces
+    // a *different* internal blank-node label, proving that `_:b0` from the
+    // first delta cannot be used as a stable, re-insertable identifier.
+    auto meta2 = runUpdate(
+        "INSERT DATA { _:b <http://example.org/p> <http://example.org/o> }");
+    ASSERT_TRUE(meta2.delta_.has_value());
+    ASSERT_EQ(meta2.delta_->inserted_.size(), 1u);
+    const auto& line2 = meta2.delta_->inserted_[0];
+    EXPECT_THAT(line2, HasSubstr("_:"));
+    // The two blank-node labels must differ — each INSERT mints a fresh node.
+    EXPECT_NE(line1, line2)
+        << "Round-trip trap: both inserts of _:b should produce distinct "
+           "internal blank-node labels, confirming that label from the first "
+           "delta cannot be used to reference the second insert.";
+  }
+}

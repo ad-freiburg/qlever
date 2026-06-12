@@ -228,11 +228,14 @@ class Server {
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
-  // Do the actual execution of an update.
+  // Do the actual execution of an update. When `returnDelta` is true, each
+  // operation's `UpdateMetadata::delta_` is populated and the response JSON
+  // additionally contains a `"delta-triples-merged"` top-level field with the
+  // concatenation of all per-operation deltas.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          bool returnDelta, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -286,11 +289,12 @@ class Server {
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
           const RequestT& request, std::string_view operation);
   // Execute an update operation. The function must have exclusive access to the
-  // DeltaTriples object.
+  // DeltaTriples object. When `returnDeltaTriples` is true, the returned
+  // `UpdateMetadata::delta_` is populated with the materialized delta.
   UpdateMetadata processUpdateImpl(
       const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples,
+      DeltaTriples& deltaTriples, bool returnDeltaTriples = false,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 

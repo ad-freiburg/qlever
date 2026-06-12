@@ -529,3 +529,94 @@ TEST(ServerTest, gspPost) {
   expectPost("", StatusIs(http::status::no_content));
   expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
 }
+
+// _____________________________________________________________________________
+// Integration test for the `return-delta=true` URL parameter.
+// Verifies that `processUpdate` emits `delta-triples-merged` in the response
+// when opted in, and that the per-operation `delta-triples.materialized` field
+// is also present. Default-graph triples must be serialized as 3-column
+// N-Triples (no graph term); the QLever-internal default-graph IRI must not
+// appear in the output.
+TEST(ServerTest, returnDeltaParam) {
+  using namespace ad_utility::testing;
+  using ::testing::AllOf;
+  using ::testing::EndsWith;
+  using ::testing::HasSubstr;
+  using ::testing::Not;
+
+  // Create an empty test index and wrap it in a SimulateHttpRequest.
+  const auto baseName = std::string{"ServerTest_returnDeltaParam"};
+  makeTestIndex(baseName, "");
+  SimulateHttpRequest simulateHttpRequest{baseName};
+
+  // Send a SPARQL Update via `application/sparql-update` POST.
+  // `return-delta=true` is appended to the URL query string when requested.
+  auto sendUpdate = [&simulateHttpRequest](const std::string& sparql,
+                                           bool returnDelta = false) {
+    const std::string target = returnDelta ? "/?return-delta=true" : "/";
+    auto req =
+        makeRequest(http::verb::post, target,
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::content_type, "application/sparql-update"}},
+                    sparql);
+    auto response = simulateHttpRequest(req);
+    EXPECT_TRUE(response.has_value());
+    return response.value_or(nlohmann::json{});
+  };
+
+  // 1. Without return-delta=true: response has no "delta-triples-merged" key.
+  {
+    auto resp = sendUpdate(
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> "
+        "<http://example.org/o> }",
+        false);
+    EXPECT_FALSE(resp.contains("delta-triples-merged"));
+  }
+
+  // 2. With return-delta=true: "delta-triples-merged" is present.
+  //    Default-graph triple → 3-column N-Triples line (no internal IRI).
+  //    Per-operation "delta-triples.materialized" is also populated.
+  {
+    auto resp = sendUpdate(
+        "INSERT DATA { <http://example.org/s2> <http://example.org/p2> "
+        "<http://example.org/o2> }",
+        true);
+    ASSERT_TRUE(resp.contains("delta-triples-merged"));
+    ASSERT_TRUE(resp["delta-triples-merged"].contains("inserted"));
+    ASSERT_TRUE(resp["delta-triples-merged"].contains("deleted"));
+    ASSERT_EQ(resp["delta-triples-merged"]["inserted"].size(), 1u);
+    const auto line =
+        resp["delta-triples-merged"]["inserted"][0].get<std::string>();
+    EXPECT_THAT(line, AllOf(HasSubstr("<http://example.org/s2>"),
+                            HasSubstr("<http://example.org/p2>"),
+                            HasSubstr("<http://example.org/o2>"),
+                            // Default-graph: no 4th column, no internal IRI.
+                            Not(HasSubstr("qlever.cs.uni-freiburg.de")),
+                            EndsWith(" .")));
+    EXPECT_TRUE(resp["delta-triples-merged"]["deleted"].empty());
+    // Per-operation materialized delta is also present in the response.
+    ASSERT_TRUE(resp.contains("operations"));
+    ASSERT_GE(resp["operations"].size(), 1u);
+    ASSERT_TRUE(
+        resp["operations"][0]["delta-triples"].contains("materialized"));
+    EXPECT_EQ(resp["operations"][0]["delta-triples"]["materialized"]["inserted"]
+                  .size(),
+              1u);
+  }
+
+  // 3. Named graph: 4-column N-Quads line with the graph IRI in 4th position.
+  {
+    auto resp = sendUpdate(
+        "INSERT DATA { GRAPH <http://example.org/g> { "
+        "<http://example.org/s3> <http://example.org/p3> "
+        "<http://example.org/o3> } }",
+        true);
+    ASSERT_TRUE(resp.contains("delta-triples-merged"));
+    ASSERT_EQ(resp["delta-triples-merged"]["inserted"].size(), 1u);
+    const auto line =
+        resp["delta-triples-merged"]["inserted"][0].get<std::string>();
+    EXPECT_THAT(line,
+                AllOf(HasSubstr("<http://example.org/g>"),
+                      HasSubstr("<http://example.org/s3>"), EndsWith(" .")));
+  }
+}
