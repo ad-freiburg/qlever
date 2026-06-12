@@ -20,6 +20,7 @@
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
 #include "util/TimeTracer.h"
+#include "util/TypeTraits.h"
 #include "util/ZipMergeIterator.h"
 
 class Permutation;
@@ -120,9 +121,6 @@ struct LocatedTripleCompare {
 // inserted triples are sorted on access. Only the last inserted `LocatedTriple`
 // for a triple is retained, so the last operation for a triple is retained.
 class SortedLocatedTriplesVector {
-  auto smallPart();
-  auto largePart();
-
  public:
   // Some GTest matchers require `value_type`, also add it as a type for the
   // `Container` requirement.
@@ -134,10 +132,24 @@ class SortedLocatedTriplesVector {
   size_t numItemsLargePart_ = 0;
   bool smallPartIsSorted_ = true;
 
+  // Returns the subrange of the small/large part from the whole storage
+  // vector.
+  auto smallPart();
+  auto largePart();
+
   // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
   // triple.
   void sortAndMergeParts();
   void sortSmallPart();
+
+  // Whether the items are all sorted and deduplicated. Items can only be read
+  // if `isClean` is true. Also enforces the class invariant that the boundary
+  // index `numItemsLargePart_` lies within `triples_`; if it ever drifts out of
+  // range, sorted-access methods fail this check rather than silently UB'ing
+  // through `triples_.begin() + numItemsLargePart_`.
+  bool isClean() const {
+    return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
+  }
 
   // For the range `rangeToSort` contained in `triples` sort it by triple and
   // keep the last `LocatedTriple` for each triple.
@@ -165,17 +177,22 @@ class SortedLocatedTriplesVector {
     triples.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
-  // Whether the items are all sorted and deduplicated. Items can only be read
-  // if `isClean` is true. Also enforces the class invariant that the boundary
-  // index `numItemsLargePart_` lies within `triples_`; if it ever drifts out of
-  // range, sorted-access methods fail this check rather than silently UB'ing
-  // through `triples_.begin() + numItemsLargePart_`.
-  bool isClean() const {
-    return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
+  // Let `r1` and `r2` contain sorted items. Let `r1` be contained in `triples`.
+  // Remove the items in `r2` from the subrange `r1` inside `triples`. Returns
+  // the number of items deleted.
+  CPP_template(typename R1, typename R2)(
+      requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
+          R1, LocatedTriple>&& ql::ranges::input_range<R2>) static size_t
+      eraseSortedSubRange(std::vector<LocatedTriple>& triples, R1&& r1,
+                          R2&& r2) {
+    auto [_, newEndOfSubrange] = ql::ranges::set_difference(
+        r1, r2, ql::ranges::begin(r1), {}, &LocatedTriple::triple_,
+        &LocatedTriple::triple_);
+    auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
+    triples.erase(newEndOfSubrange, ql::ranges::end(r1));
+    return numItemsErased;
   }
 
-  template <size_t>
-  friend class BlockSortedLocatedTriplesVectorImpl;
   FRIEND_TEST(SortedLocatedTriplesVectorTest, eraseSortedSubRange);
   FRIEND_TEST(SortedLocatedTriplesVectorTest, sortAndRemoveDuplicates);
   FRIEND_TEST(SortedLocatedTriplesVectorTest, constructor);
@@ -195,9 +212,11 @@ class SortedLocatedTriplesVector {
   void insert(LocatedTriple lt);
 
   using iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      storage::iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
+      storage::iterator, std::less<>,
+      ad_utility::MemberProj<&LocatedTriple::triple_>>;
   using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      storage::const_iterator, std::less<>, decltype(&LocatedTriple::triple_)>;
+      storage::const_iterator, std::less<>,
+      ad_utility::MemberProj<&LocatedTriple::triple_>>;
 
   iterator begin();
   const_iterator begin() const;
@@ -207,30 +226,17 @@ class SortedLocatedTriplesVector {
   LocatedTriple& back();
   const LocatedTriple& back() const;
 
+  // Erase a single or multiple elements.
   void erase(const LocatedTriple& elem);
   void erase(std::vector<LocatedTriple> toDelete);
+  // Erase multiple elements that are already sorted.
   void eraseSorted(ql::span<LocatedTriple> sortedTriples);
 
- private:
-  // Let `r1` and `r2` contain sorted items. Let `r1` be contained in `triples`.
-  // Remove the items in `r2` from the subrange `r1` inside `triples`. Returns
-  // the number of items deleted.
-  CPP_template(typename R1, typename R2)(
-      requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
-          R1, LocatedTriple>&& ql::ranges::input_range<R2>) static size_t
-      eraseSortedSubRange(std::vector<LocatedTriple>& triples, R1&& r1,
-                          R2&& r2) {
-    auto [_, newEndOfSubrange] = ql::ranges::set_difference(
-        r1, r2, ql::ranges::begin(r1), {}, &LocatedTriple::triple_,
-        &LocatedTriple::triple_);
-    auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
-    triples.erase(newEndOfSubrange, ql::ranges::end(r1));
-    return numItemsErased;
-  }
-
- public:
+  // Returns an upper bound for the size. For an exact size `sizeForTesting`
+  // which reads the whole vector though.
   size_t size() const;
   size_t sizeForTesting() const;
+
   bool empty() const;
   void clear();
 
