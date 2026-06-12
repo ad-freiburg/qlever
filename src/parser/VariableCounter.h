@@ -11,6 +11,7 @@
 #define QLEVER_SRC_PARSER_VARIABLECOUNTER_H
 
 #include <cstddef>
+#include <variant>
 
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
@@ -55,7 +56,7 @@ struct VariableCounter {
   CPP_template(typename T)(
       requires std::is_same_v<T, GraphPatternOperation>) void
   operator()(const T& gpo) {
-    std::visit(*this, gpo);
+    gpo.visit(*this);
   }
 
   // Overloads for helper types.
