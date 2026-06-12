@@ -61,38 +61,11 @@ void SortedLocatedTriplesVector::sortAndMergeParts() {
     sortSmallPart();
   }
 
-  // End of the first sorted part. Re-create because it's invalidated by the
-  // erase.
-  auto sortedUntilIt = triples_.begin() + numItemsLargePart_;
-
-  // Merge the two sorted parts which contain up to one `LocatedTriple` per
-  // triple.
+  // We cannot merge in place, so the merged items are moved to a temporary
+  // vector which then replaces the (moved from) storage.
   storage merged;
   merged.reserve(triples_.capacity());
-
-  LocatedTripleCompare lt;
-
-  auto largeIt = triples_.begin();
-  auto smallIt = sortedUntilIt;
-
-  while (largeIt != sortedUntilIt && smallIt != triples_.end()) {
-    if (lt(*largeIt, *smallIt)) {
-      merged.push_back(std::move(*largeIt));
-      ++largeIt;
-    } else if (lt(*smallIt, *largeIt)) {
-      merged.push_back(std::move(*smallIt));
-      ++smallIt;
-    } else {
-      // For equal triples the new element overrides the old one.
-      merged.push_back(std::move(*smallIt));
-      ++smallIt;
-      ++largeIt;
-    }
-  }
-
-  std::move(largeIt, sortedUntilIt, std::back_inserter(merged));
-  std::move(smallIt, triples_.end(), std::back_inserter(merged));
-
+  ql::ranges::move(*this, std::back_insert_iterator(merged));
   triples_.swap(merged);
   numItemsLargePart_ = triples_.size();
   smallPartIsSorted_ = true;
@@ -114,10 +87,20 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
 }
 
 // ____________________________________________________________________________
+auto SortedLocatedTriplesVector::largePart() {
+  return ql::ranges::subrange(triples_.begin(),
+                              triples_.begin() + numItemsLargePart_);
+}
+
+// ____________________________________________________________________________
+auto SortedLocatedTriplesVector::smallPart() {
+  return ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
+                              triples_.end());
+}
+
+// ____________________________________________________________________________
 void SortedLocatedTriplesVector::sortSmallPart() {
-  auto unsorted = ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
-                                       triples_.end());
-  sortAndRemoveDuplicates(triples_, unsorted);
+  sortAndRemoveDuplicates(triples_, smallPart());
   smallPartIsSorted_ = true;
 }
 
@@ -143,8 +126,8 @@ void SortedLocatedTriplesVector::insert(LocatedTriple lt) {
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::begin() {
   AD_CONTRACT_CHECK(isClean());
-  return iterator(triples_.begin(), triples_.begin() + numItemsLargePart_,
-                  triples_.begin() + numItemsLargePart_, triples_.end(), {},
+  auto midpoint = triples_.begin() + numItemsLargePart_;
+  return iterator(triples_.begin(), midpoint, midpoint, triples_.end(), {},
                   &LocatedTriple::triple_);
 }
 
@@ -152,47 +135,32 @@ SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::begin() {
 SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::begin()
     const {
   AD_CONTRACT_CHECK(isClean());
-  return const_iterator(triples_.begin(), triples_.begin() + numItemsLargePart_,
-                        triples_.begin() + numItemsLargePart_, triples_.end(),
+  auto midpoint = triples_.begin() + numItemsLargePart_;
+  return const_iterator(triples_.begin(), midpoint, midpoint, triples_.end(),
                         {}, &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::iterator SortedLocatedTriplesVector::end() {
   AD_CONTRACT_CHECK(isClean());
-  return iterator(triples_.begin() + numItemsLargePart_,
-                  triples_.begin() + numItemsLargePart_, triples_.end(),
-                  triples_.end(), {}, &LocatedTriple::triple_);
+  auto midpoint = triples_.begin() + numItemsLargePart_;
+  return iterator(midpoint, midpoint, triples_.end(), triples_.end(), {},
+                  &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector::const_iterator SortedLocatedTriplesVector::end()
     const {
   AD_CONTRACT_CHECK(isClean());
-  return const_iterator(triples_.begin() + numItemsLargePart_,
-                        triples_.begin() + numItemsLargePart_, triples_.end(),
-                        triples_.end(), {}, &LocatedTriple::triple_);
-}
-
-// ____________________________________________________________________________
-LocatedTriple& SortedLocatedTriplesVector::back() {
-  AD_CONTRACT_CHECK(!empty());
-  AD_CONTRACT_CHECK(isClean());
-  // The small part is empty
-  if (numItemsLargePart_ == triples_.size()) {
-    return triples_.back();
-  }
-  auto& lastLargePart = triples_.at(numItemsLargePart_ - 1);
-  auto& lastSmallPart = triples_.back();
-  return lastLargePart.triple_ > lastSmallPart.triple_ ? lastLargePart
-                                                       : lastSmallPart;
+  auto midpoint = triples_.begin() + numItemsLargePart_;
+  return const_iterator(midpoint, midpoint, triples_.end(), triples_.end(), {},
+                        &LocatedTriple::triple_);
 }
 
 // ____________________________________________________________________________
 const LocatedTriple& SortedLocatedTriplesVector::back() const {
   AD_CONTRACT_CHECK(!empty());
   AD_CONTRACT_CHECK(isClean());
-  // The small part is empty
   if (numItemsLargePart_ == triples_.size()) {
     return triples_.back();
   }
@@ -200,6 +168,11 @@ const LocatedTriple& SortedLocatedTriplesVector::back() const {
   auto& lastSmallPart = triples_.back();
   return lastLargePart.triple_ > lastSmallPart.triple_ ? lastLargePart
                                                        : lastSmallPart;
+}
+
+// ____________________________________________________________________________
+LocatedTriple& SortedLocatedTriplesVector::back() {
+  return const_cast<LocatedTriple&>(std::as_const(*this).back());
 }
 
 // ____________________________________________________________________________
@@ -214,10 +187,8 @@ void SortedLocatedTriplesVector::erase(const LocatedTriple& elem) {
     }
     return 0;
   };
-  numItemsLargePart_ -= deleteInRange(ql::ranges::subrange(
-      triples_.begin(), triples_.begin() + numItemsLargePart_));
-  deleteInRange(ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
-                                     triples_.end()));
+  numItemsLargePart_ -= deleteInRange(largePart());
+  deleteInRange(smallPart());
 }
 
 // ____________________________________________________________________________
@@ -232,16 +203,9 @@ void SortedLocatedTriplesVector::eraseSorted(
     ql::span<LocatedTriple> sortedTriples) {
   AD_CONTRACT_CHECK(isClean());
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedTriples));
-  numItemsLargePart_ -= eraseSortedSubRange(
-      triples_,
-      ql::ranges::subrange(triples_.begin(),
-                           triples_.begin() + numItemsLargePart_),
-      sortedTriples);
-  eraseSortedSubRange(
-      triples_,
-      ql::ranges::subrange(triples_.begin() + numItemsLargePart_,
-                           triples_.end()),
-      sortedTriples);
+  numItemsLargePart_ -=
+      eraseSortedSubRange(triples_, largePart(), sortedTriples);
+  eraseSortedSubRange(triples_, smallPart(), sortedTriples);
 }
 
 // ____________________________________________________________________________

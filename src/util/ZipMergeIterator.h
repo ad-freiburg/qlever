@@ -133,6 +133,19 @@ struct ZipIteratorStruct {
     return ZipMergeIteratorImpl<It, Compare, Projection>(
         begin1, end1, begin2, end2, std::move(cmp), std::move(proj));
   }
+
+  CPP_template(typename Range1, typename Range2, typename Compare = std::less<>,
+               typename Projection = ql::identity)(
+      requires(ql::ranges::borrowed_range<std::remove_reference_t<Range1>> ||
+               std::is_lvalue_reference_v<Range1>) &&
+      (ql::ranges::borrowed_range<std::remove_reference_t<Range2>> ||
+       std::is_lvalue_reference_v<Range2>)) auto
+  operator()(Range1&& range1, Range2&& range2, Compare cmp = {},
+             Projection proj = {}) const {
+    return (*this)(ql::ranges::begin(range1), ql::ranges::end(range1),
+                   ql::ranges::begin(range2), ql::ranges::end(range2),
+                   std::move(cmp), std::move(proj));
+  }
 };
 
 }  // namespace detail
