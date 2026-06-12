@@ -56,7 +56,7 @@ struct VariableCounter {
   CPP_template(typename T)(
       requires std::is_same_v<T, GraphPatternOperation>) void
   operator()(const T& gpo) {
-    std::visit(*this, gpo);
+    gpo.visit(*this);
   }
 
   // Overloads for helper types.
