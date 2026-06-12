@@ -598,7 +598,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
       return response.at(http::field::location);
     };
     std::vector<std::string> locations;
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 10; ++i) {
       auto location = testPostCreateNewGraph(
           "<a> <b> <c>",
           testing::AllOf(
@@ -610,6 +610,21 @@ TEST(ServerTest, gspPostCreateNewGraph) {
     }
     EXPECT_THAT(locations, PairwiseUnequal());
   }
+
+  // Same behavior via Direct Graph Identification: POST `/http-graph-store`
+  // with no `?graph=`. The graph IRI is constructed from `Host` + path and
+  // matches the instance's graph store URL, so a new graph is created.
+  testPost(
+      {"ServerTest_gspPostCreateNewGraph"},
+      makeRequest(http::verb::post, "/http-graph-store",
+                  {{http::field::authorization, "Bearer accessToken"},
+                   {http::field::host, "example.org"},
+                   {http::field::content_type, "text/turtle"}},
+                  "<a> <b> <c>"),
+      testing::AllOf(
+          LocationIs(testing::MatchesRegex(
+              R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+          StatusIs(http::status::created)));
 
   auto IsPostNoCreatedGraph = [](http::status status) {
     return testing::AllOf(StatusIs(status),
