@@ -291,7 +291,8 @@ TEST(QueryRegistry, onStartFiresWithQueryDetails) {
   EXPECT_EQ(starts.at(0).query_, "SELECT * WHERE {}");
   EXPECT_EQ(starts.at(0).clientIp_, "10.0.0.5");
   auto active = registry.getActiveQueries();
-  EXPECT_EQ(starts.at(0).startedAt_, active.at(owned->toQueryId()).startedAt_);
+  EXPECT_EQ(epochMillis(starts.at(0).startedAt_),
+            epochMillis(active.at(owned->toQueryId()).startedAt_));
 }
 
 // _____________________________________________________________________________
