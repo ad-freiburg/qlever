@@ -24,8 +24,9 @@ class ExecuteUpdate {
   // Execute an update. This function is comparable to
   // `ExportQueryExecutionTrees::computeResult` for queries. If
   // `returnDeltaTriples` is true, the returned `UpdateMetadata::delta_` field
-  // is populated with the genuine materialized delta (Stage-2: triples that
-  // actually changed the store), serialized as N-Quads lines.
+  // is populated with the overlay-accepted delta (see `UpdateDelta` in
+  // `UpdateMetadata.h` for the precise semantics), serialized as N-Quads /
+  // N-Triples lines.
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,

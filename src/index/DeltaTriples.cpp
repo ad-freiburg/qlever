@@ -405,8 +405,7 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 // ____________________________________________________________________________
 template <bool isInternal, bool insertOrDelete>
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
-                                     Triples triples,
-                                     Triples* materializedOut,
+                                     Triples triples, Triples* materializedOut,
                                      ad_utility::timer::TimeTracer& tracer) {
   AD_LOG_DEBUG << (insertOrDelete ? "Inserting" : "Deleting") << " "
                << triples.size() << (isInternal ? " internal" : "")

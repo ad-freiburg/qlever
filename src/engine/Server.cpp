@@ -672,10 +672,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
       bool returnDelta = checkParameter("return-delta", "true").has_value();
-      co_return co_await processUpdate(
-          returnDelta, std::move(operations), requestTimer, tracer,
-          cancellationHandle, qec, std::move(request), send, timeLimit.value(),
-          plannedQuery);
+      co_return co_await processUpdate(returnDelta, std::move(operations),
+                                       requestTimer, tracer, cancellationHandle,
+                                       qec, std::move(request), send,
+                                       timeLimit.value(), plannedQuery);
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
       ParsedQuery query = std::move(operations[0]);
@@ -1152,7 +1152,8 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
                        updateMetadata.countBefore_.value());
   }
   // When the client opts in via `return-delta=true`, include the materialized
-  // delta (Stage-2 N-Quads lines) for this operation in the per-operation JSON.
+  // delta (overlay-accepted N-Quads/N-Triples lines) for this operation in the
+  // per-operation JSON.
   if (updateMetadata.delta_.has_value()) {
     const auto& delta = updateMetadata.delta_.value();
     response["delta-triples"]["materialized"]["inserted"] = delta.inserted_;

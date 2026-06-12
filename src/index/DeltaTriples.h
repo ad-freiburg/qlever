@@ -230,19 +230,23 @@ class DeltaTriples {
   // form `<object> ql:langtag <@language>`.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
 
-  // Insert triples. If `materializedOut` is non-null, the triples that were
-  // genuinely inserted (Stage-2 delta: excluding triples already present in
-  // `triplesInserted_`) are written to `*materializedOut`. This is the set of
-  // triples that actually changed the store and can be used as seeds by an
-  // external reasoner. Zero-overhead when `materializedOut` is null (default).
+  // Insert triples. If `materializedOut` is non-null, the triples that are
+  // newly tracked by the overlay (excluding triples already present in
+  // `triplesInserted_` or cancelled by `triplesDeleted_`) are written to
+  // `*materializedOut`. This is the *overlay-level* delta — triples that were
+  // accepted into the DeltaTriples store in this call. Note: it may include
+  // triples already present in the base materialized index (the overlay does
+  // not consult the base on the write path). Zero-overhead when
+  // `materializedOut` is null (default).
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      Triples* materializedOut = nullptr,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples. If `materializedOut` is non-null, the triples that were
-  // genuinely deleted (Stage-2 delta: excluding triples already present in
-  // `triplesDeleted_`) are written to `*materializedOut`.
+  // Delete triples. If `materializedOut` is non-null, the triples that are
+  // newly tracked as deleted by the overlay (excluding triples already present
+  // in `triplesDeleted_` or cancelled by `triplesInserted_`) are written to
+  // `*materializedOut`.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      Triples* materializedOut = nullptr,
                      ad_utility::timer::TimeTracer& tracer =
@@ -352,7 +356,8 @@ class DeltaTriples {
   // When `materializedOut` is non-null AND `isInternal` is false, the triples
   // that survive both deduplication stages (already-in-target and
   // inverse-cancel) are copied into `*materializedOut` before being applied.
-  // These are the triples that actually change the external store.
+  // These are the overlay-level delta (see `insertTriples` doc for the
+  // "base-index overlap" caveat — the base index is NOT consulted here).
   // The parameter order (`materializedOut` before `tracer`) mirrors the public
   // `insertTriples`/`deleteTriples` API for consistency.
   template <bool isInternal, bool insertOrDelete>

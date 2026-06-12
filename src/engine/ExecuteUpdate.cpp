@@ -8,6 +8,7 @@
 #include "engine/UpdateMetadata.h"
 #include "index/ExportIds.h"
 #include "index/IndexImpl.h"
+#include "rdfTypes/RdfEscaping.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
@@ -25,28 +26,45 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
 
-  // Optionally capture the genuinely-changed triples (Stage-2 materialized
-  // delta) when the caller opts in via `return-delta=true`.
+  // There are three levels of "delta" in this function; only the third is
+  // returned to the caller when `returnDeltaTriples` is true:
+  //
+  //   1. Query-computed delta  (`toInsert` / `toDelete` from
+  //      `computeGraphUpdateQuads`): the set of triples the UPDATE statement
+  //      wants to insert/delete, after intra-request `setMinus` dedup.
+  //      Counted in `metadata.inUpdate_`.
+  //
+  //   2. Overlay-accepted delta  (`insertedMat` / `deletedMat` below): the
+  //      subset of (1) that was actually accepted by the `DeltaTriples` store.
+  //      `modifyTriplesImpl` filters out triples already in the overlay
+  //      (`triplesInserted_` / `triplesDeleted_`) and cancels inverse pairs.
+  //      This is what `UpdateDelta::inserted_` / `deleted_` contains.
+  //      NOTE: it is an over-approximation of (3) — see `UpdateMetadata.h`.
+  //
+  //   3. Logical-dataset delta  (not implemented): overlay-accepted delta
+  //      further filtered against the base materialized index.  A triple
+  //      already in the base that is also in the overlay-accepted delta would
+  //      be excluded here.  Not currently computed (base-index lookup is
+  //      expensive; see `UpdateDelta` doc and test case 9 of
+  //      `ExecuteUpdateTest.returnDeltaTriples`).
   DeltaTriples::Triples insertedMat, deletedMat;
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
-    deltaTriples.deleteTriples(cancellationHandle,
-                               std::move(toDelete.idTriples_),
-                               returnDeltaTriples ? &deletedMat : nullptr,
-                               tracer);
+    deltaTriples.deleteTriples(
+        cancellationHandle, std::move(toDelete.idTriples_),
+        returnDeltaTriples ? &deletedMat : nullptr, tracer);
   }
   // When the triple set is empty, materializedOut stays as an empty vector —
   // correct because nothing was applied to the store.
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   if (!toInsert.idTriples_.empty()) {
-    deltaTriples.insertTriples(cancellationHandle,
-                               std::move(toInsert.idTriples_),
-                               returnDeltaTriples ? &insertedMat : nullptr,
-                               tracer);
+    deltaTriples.insertTriples(
+        cancellationHandle, std::move(toInsert.idTriples_),
+        returnDeltaTriples ? &insertedMat : nullptr, tracer);
   }
   // When the triple set is empty, materializedOut stays as an empty vector —
   // correct because nothing was applied to the store.
@@ -57,9 +75,11 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
     // function is called from inside `DeltaTriplesManager::modify`). For large
     // deltas the vocab lookups / string building extend the lock-hold time.
     // A future optimization could copy out the Id-triples and grab a
-    // `LocalVocab::LifetimeExtender`, then serialize after the lock is released.
-    metadata.delta_ = serializeMaterializedDelta(
-        index, insertedMat, deletedMat, deltaTriples.localVocab());
+    // `LocalVocab::LifetimeExtender`, then serialize after the lock is
+    // released.
+    metadata.delta_ =
+        serializeMaterializedDelta(index, insertedMat, deletedMat,
+                                   std::as_const(deltaTriples).localVocab());
   }
 
   return metadata;
@@ -81,8 +101,20 @@ std::string ExecuteUpdate::idToNQuadsTerm(const Index& index, Id id,
     // Numeric value: reassemble as "lexicalForm"^^<datatypeUri>
     return std::string("\"") + str + "\"^^<" + std::string(datatype) + ">";
   }
-  // For IRIs and literals, `str` is already in N-Triples/N-Quads notation
-  // (e.g. `<http://example.org/foo>` or `"hello"@en`).
+  // For IRIs (`<http://...>`) and blank nodes (`_:...`), `str` is already in
+  // valid N-Triples/N-Quads notation — return as-is.
+  //
+  // For non-numeric literals, `str` is in QLever's internal "normalized" form
+  // (produced by `RdfEscaping::normalizeRDFLiteral`): the content between the
+  // outer quotes is stored *unescaped* — e.g. `"say "hello""`  has a raw `"`
+  // inside rather than `\"`.  That normalized form is NOT valid N-Triples.
+  // `RdfEscaping::validRDFLiteralFromNormalized` converts it to the proper
+  // N-Triples escaped form, e.g. `"say \"hello\""` (and handles `@lang` /
+  // `^^<type>` suffixes).  See test cases 8 (language tag) and 10 (embedded
+  // quote) of `ExecuteUpdateTest.returnDeltaTriples` for concrete examples.
+  if (!str.empty() && str[0] == '"') {
+    return RdfEscaping::validRDFLiteralFromNormalized(str);
+  }
   return str;
 }
 

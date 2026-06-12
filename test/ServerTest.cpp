@@ -553,13 +553,12 @@ TEST(ServerTest, returnDeltaParam) {
   // `return-delta=true` is appended to the URL query string when requested.
   auto sendUpdate = [&simulateHttpRequest](const std::string& sparql,
                                            bool returnDelta = false) {
-    const std::string target =
-        returnDelta ? "/?return-delta=true" : "/";
-    auto req = makeRequest(
-        http::verb::post, target,
-        {{http::field::authorization, "Bearer accessToken"},
-         {http::field::content_type, "application/sparql-update"}},
-        sparql);
+    const std::string target = returnDelta ? "/?return-delta=true" : "/";
+    auto req =
+        makeRequest(http::verb::post, target,
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::content_type, "application/sparql-update"}},
+                    sparql);
     auto response = simulateHttpRequest(req);
     EXPECT_TRUE(response.has_value());
     return response.value_or(nlohmann::json{});
@@ -588,23 +587,21 @@ TEST(ServerTest, returnDeltaParam) {
     ASSERT_EQ(resp["delta-triples-merged"]["inserted"].size(), 1u);
     const auto line =
         resp["delta-triples-merged"]["inserted"][0].get<std::string>();
-    EXPECT_THAT(line,
-                AllOf(HasSubstr("<http://example.org/s2>"),
-                      HasSubstr("<http://example.org/p2>"),
-                      HasSubstr("<http://example.org/o2>"),
-                      // Default-graph: no 4th column, no internal IRI.
-                      Not(HasSubstr("qlever.cs.uni-freiburg.de")),
-                      EndsWith(" .")));
+    EXPECT_THAT(line, AllOf(HasSubstr("<http://example.org/s2>"),
+                            HasSubstr("<http://example.org/p2>"),
+                            HasSubstr("<http://example.org/o2>"),
+                            // Default-graph: no 4th column, no internal IRI.
+                            Not(HasSubstr("qlever.cs.uni-freiburg.de")),
+                            EndsWith(" .")));
     EXPECT_TRUE(resp["delta-triples-merged"]["deleted"].empty());
     // Per-operation materialized delta is also present in the response.
     ASSERT_TRUE(resp.contains("operations"));
     ASSERT_GE(resp["operations"].size(), 1u);
     ASSERT_TRUE(
         resp["operations"][0]["delta-triples"].contains("materialized"));
-    EXPECT_EQ(
-        resp["operations"][0]["delta-triples"]["materialized"]["inserted"]
-            .size(),
-        1u);
+    EXPECT_EQ(resp["operations"][0]["delta-triples"]["materialized"]["inserted"]
+                  .size(),
+              1u);
   }
 
   // 3. Named graph: 4-column N-Quads line with the graph IRI in 4th position.
@@ -618,8 +615,8 @@ TEST(ServerTest, returnDeltaParam) {
     ASSERT_EQ(resp["delta-triples-merged"]["inserted"].size(), 1u);
     const auto line =
         resp["delta-triples-merged"]["inserted"][0].get<std::string>();
-    EXPECT_THAT(line, AllOf(HasSubstr("<http://example.org/g>"),
-                            HasSubstr("<http://example.org/s3>"),
-                            EndsWith(" .")));
+    EXPECT_THAT(line,
+                AllOf(HasSubstr("<http://example.org/g>"),
+                      HasSubstr("<http://example.org/s3>"), EndsWith(" .")));
   }
 }
