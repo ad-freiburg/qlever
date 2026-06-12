@@ -80,8 +80,8 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  Index& index() { return *index_; }
+  const Index& index() const { return *index_; }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -129,10 +129,11 @@ class Server {
   ad_utility::MemorySize maxMem_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  std::shared_ptr<Index> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
@@ -165,8 +166,9 @@ class Server {
   class ServerMetrics {
    public:
     static std::shared_ptr<ServerMetrics> create(
-        Index& index, ad_utility::AllocatorWithLimit<Id>& allocator,
-        QueryResultCache& cache, ad_utility::MemorySize maxMem);
+        std::shared_ptr<Index> index,
+        ad_utility::AllocatorWithLimit<Id>& allocator, QueryResultCache& cache,
+        ad_utility::MemorySize maxMem);
     ~ServerMetrics();
     ServerMetrics(const ServerMetrics&) = delete;
     ServerMetrics& operator=(const ServerMetrics&) = delete;
@@ -188,7 +190,8 @@ class Server {
     std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
    private:
-    ServerMetrics(Index& index, ad_utility::AllocatorWithLimit<Id>& allocator,
+    ServerMetrics(std::shared_ptr<Index> index,
+                  ad_utility::AllocatorWithLimit<Id>& allocator,
                   QueryResultCache& cache, ad_utility::MemorySize maxMem);
     void registerCallbacks();
 
@@ -204,7 +207,7 @@ class Server {
     // References to Server state used by observable callbacks. Valid for the
     // entire lifetime of ServerMetrics because Server holds the shared_ptr and
     // its own members outlive it (declared earlier in Server).
-    Index& index_;
+    std::shared_ptr<Index> index_;
     ad_utility::AllocatorWithLimit<Id>& allocator_;
     QueryResultCache& cache_;
 

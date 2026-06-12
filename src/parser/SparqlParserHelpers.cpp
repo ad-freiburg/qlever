@@ -78,7 +78,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     auto hexValue = match.to_view();
     hexValue.remove_prefix(std::string_view{"\\U"}.size());
 
-    UChar32 codePoint;
+    UChar32 codePoint = 0;
     auto result = std::from_chars(
         hexValue.data(), hexValue.data() + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});

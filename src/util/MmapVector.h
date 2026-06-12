@@ -56,6 +56,59 @@ struct VecInfo {
   size_t _bytesize;
 };
 
+// The metadata trailer that an `MmapVector` stores at the very end of its
+// backing file. After the array data (and possibly some unused capacity) follow
+// the `size`, `capacity`, and `bytesize` of the array, plus a magic number and
+// a version that are used for validation when reading.
+struct MmapVectorMetaData {
+  uint64_t size_ = 0;
+  uint64_t capacity_ = 0;
+  uint64_t bytesize_ = 0;
+
+  static constexpr uint32_t magicNumber_ = 7601577;
+  static constexpr uint32_t version_ = 0;
+  // The total number of bytes that the trailer occupies on disk.
+  static constexpr off_t numBytes = 3 * sizeof(uint64_t) + 2 * sizeof(uint32_t);
+
+  // Append the trailer to the current write position of `file`, which has to be
+  // positioned at the end of the array data.
+  void writeToFile(File& file) const {
+    file.write(&size_, sizeof(size_));
+    file.write(&capacity_, sizeof(capacity_));
+    file.write(&bytesize_, sizeof(bytesize_));
+    file.write(&magicNumber_, sizeof(magicNumber_));
+    file.write(&version_, sizeof(version_));
+  }
+
+  // Read the trailer from the end of `file` and validate the magic number and
+  // the version. Throws an `InvalidFileException` if the file is too small or
+  // if the magic number or the version do not match. Note that the offsets
+  // themselves are read separately, so only the trailer is touched here.
+  static MmapVectorMetaData readFromFile(File& file) {
+    const off_t fileSize = file.sizeOfFile();
+    if (fileSize < numBytes) {
+      throw InvalidFileException();
+    }
+    off_t offset = fileSize - numBytes;
+    auto readField = [&file, &offset](auto& field) {
+      file.read(&field, sizeof(field), offset);
+      offset += static_cast<off_t>(sizeof(field));
+    };
+    MmapVectorMetaData metaData;
+    uint32_t magicNumber = 0;
+    uint32_t version = 0;
+    readField(metaData.size_);
+    readField(metaData.capacity_);
+    readField(metaData.bytesize_);
+    readField(magicNumber);
+    readField(version);
+    if (magicNumber != magicNumber_ || version != version_) {
+      throw InvalidFileException{};
+    }
+    return metaData;
+  }
+};
+
 // 2 tags to differentiate between different versions of the
 // setup / construction variants of Mmap Vector which only take a filename
 class CreateTag {};
@@ -274,8 +327,6 @@ class MmapVector {
   std::string _filename = "";
   AccessPattern _pattern = AccessPattern::None;
   static constexpr float ResizeFactor = 1.5;
-  static constexpr uint32_t MagicNumber = 7601577;
-  static constexpr uint32_t Version = 0;
 };
 
 // MmapVector variation that only supports read-access to a previously created
