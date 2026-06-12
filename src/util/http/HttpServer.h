@@ -267,6 +267,56 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     co_return result;
   }
 
+  // Callable passed to the lazy-mode `httpHandler_` as `bodyGetter`. Each
+  // call to `operator()` starts a fresh coroutine that reads the next body
+  // chunk (up to `chunkSize_` bytes) into `chunkBuffer_` and returns a
+  // `string_view` into it, or `nullopt` when the body is exhausted. The
+  // members are templated so that concrete types are deduced at the call
+  // site. `operator()` is not itself a coroutine; it immediately invokes a
+  // capture-free coroutine lambda with the members as arguments, avoiding
+  // an ICE in GCC 11 triggered by coroutine lambdas that have captures.
+  template <typename Stream, typename Buffer, typename RequestParser,
+            typename ChunkBuffer>
+  struct BodyChunkReader {
+    Stream& stream_;
+    Buffer& buffer_;
+    RequestParser& requestParser_;
+    ChunkBuffer& chunkBuffer_;
+    size_t chunkSize_;
+
+    net::awaitable<std::optional<std::string_view>> operator()() {
+      return [](auto& stream, auto& buffer, auto& requestParser,
+                auto& chunkBuffer, size_t chunkSize)
+                 -> net::awaitable<std::optional<std::string_view>> {
+        size_t totalBytesRead = 0;
+        while (!requestParser.is_done() && totalBytesRead < chunkSize) {
+          requestParser.get().body().data = chunkBuffer.data() + totalBytesRead;
+          requestParser.get().body().size = chunkSize - totalBytesRead;
+          boost::system::error_code ec;
+          // `need_buffer` is returned when the provided buffer segment is
+          // completely full but more body data remains; it is not a real error.
+          co_await http::async_read_some(
+              stream, buffer, requestParser,
+              boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+          if (ec && ec != http::error::need_buffer) {
+            throw boost::system::system_error{ec};
+          }
+          size_t bytesRead =
+              (chunkSize - totalBytesRead) - requestParser.get().body().size;
+          totalBytesRead += bytesRead;
+          if (ec == http::error::need_buffer) {
+            // Buffer segment is full; yield what we have.
+            break;
+          }
+        }
+        if (totalBytesRead > 0) {
+          co_return std::string_view{chunkBuffer.data(), totalBytesRead};
+        }
+        co_return std::nullopt;
+      }(stream_, buffer_, requestParser_, chunkBuffer_, chunkSize_);
+    }
+  };
+
   // Handle one lazy-mode request: read only the headers, then check for a
   // WebSocket upgrade or pass a `bodyGetter` callable to `httpHandler_`.
   // For WebSocket upgrades the remaining body is materialized and
@@ -308,42 +358,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     // Yields up to `chunkSize` bytes from the request body as a `string_view`
     // into `chunkBuffer`, or `nullopt` when the body is exhausted. Each chunk
     // is filled completely before being returned (except possibly the last).
-    // The outer lambda is a plain factory (not a coroutine itself); the inner
-    // lambda is the coroutine and receives all state as arguments rather than
-    // captures, avoiding captures inside a coroutine context.
-    auto bodyGetter =
-        [&stream, &buffer, &requestParser, &chunkBuffer,
-         chunkSize]() -> net::awaitable<std::optional<std::string_view>> {
-      return [](auto& stream, auto& buffer, auto& requestParser,
-                auto& chunkBuffer, size_t chunkSize)
-                 -> net::awaitable<std::optional<std::string_view>> {
-        size_t totalBytesRead = 0;
-        while (!requestParser.is_done() && totalBytesRead < chunkSize) {
-          requestParser.get().body().data = chunkBuffer.data() + totalBytesRead;
-          requestParser.get().body().size = chunkSize - totalBytesRead;
-          boost::system::error_code ec;
-          // `need_buffer` is returned when the provided buffer segment is
-          // completely full but more body data remains; it is not a real error.
-          co_await http::async_read_some(
-              stream, buffer, requestParser,
-              boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-          if (ec && ec != http::error::need_buffer) {
-            throw boost::system::system_error{ec};
-          }
-          size_t bytesRead =
-              (chunkSize - totalBytesRead) - requestParser.get().body().size;
-          totalBytesRead += bytesRead;
-          if (ec == http::error::need_buffer) {
-            // Buffer segment is full; yield what we have.
-            break;
-          }
-        }
-        if (totalBytesRead > 0) {
-          co_return std::string_view{chunkBuffer.data(), totalBytesRead};
-        }
-        co_return std::nullopt;
-      }(stream, buffer, requestParser, chunkBuffer, chunkSize);
-    };
+    // `BodyChunkReader` avoids captures inside a coroutine context (which
+    // trigger an ICE in GCC 11) by holding state as reference members and
+    // invoking a capture-free coroutine lambda from `operator()`.
+    BodyChunkReader bodyGetter{stream, buffer, requestParser, chunkBuffer,
+                               chunkSize};
 
     stream.expires_never();
     co_await httpHandler_(std::move(headersReq), std::move(bodyGetter),
