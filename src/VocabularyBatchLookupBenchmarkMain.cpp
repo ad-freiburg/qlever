@@ -8,6 +8,7 @@
 #include <iostream>
 #include <random>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -25,6 +26,7 @@ int main(int argc, char** argv) {
   size_t batchSize = 0;
   bool singleLookup = false;
   bool streamedLookup = false;
+  bool sorted = false;
 
   po::options_description options("Vocabulary batch lookup benchmark");
   auto add = [&options](auto&&... args) {
@@ -44,6 +46,11 @@ int main(int argc, char** argv) {
   add("streamed", po::bool_switch(&streamedLookup),
       "Use lookupBatchesStreamed (pipelined I/O) instead of per-batch "
       "lookupBatch");
+  add("sorted", po::bool_switch(&sorted),
+      "Sort the generated indices ascending before looking them up. This "
+      "matches the production case, where the input to lookupBatch is always "
+      "sorted (and unique). Without this flag the indices are uniform random "
+      "and unsorted, which is a worst-case bound only.");
 
   po::positional_options_description positional;
   positional.add("index-basename", 1);
@@ -106,7 +113,8 @@ int main(int argc, char** argv) {
       singleLookup ? "single" : (streamedLookup ? "streamed" : "batch");
   std::cout << "Num lookups: " << numLookups << ", mode: " << mode
             << (singleLookup ? "" : absl::StrCat(", batch size: ", batchSize))
-            << ", seed: " << seed << std::endl;
+            << ", seed: " << seed << ", sorted: " << (sorted ? "yes" : "no")
+            << std::endl;
 
   // Generate random indices.
   std::mt19937 rng(seed);
@@ -114,6 +122,20 @@ int main(int argc, char** argv) {
   std::vector<size_t> allIndices(numLookups);
   for (auto& idx : allIndices) {
     idx = dist(rng);
+  }
+
+  // In production, each batch handed to `lookupBatch` is sorted ascending on
+  // its own (the row-batch is sorted by VocabIndex before lookup), but
+  // consecutive batches are independent and not globally ordered. The
+  // `--sorted` flag reproduces this by sorting each batch-sized slice
+  // separately; the default (unsorted, uniform random) is a worst-case bound
+  // only.
+  if (sorted) {
+    for (size_t offset = 0; offset < allIndices.size(); offset += batchSize) {
+      size_t currentBatchSize = std::min(batchSize, allIndices.size() - offset);
+      ql::ranges::sort(
+          ql::span<size_t>(allIndices.data() + offset, currentBatchSize));
+    }
   }
 
   using Clock = std::chrono::high_resolution_clock;
