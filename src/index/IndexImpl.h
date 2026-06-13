@@ -290,15 +290,6 @@ class IndexImpl {
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesState&) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation,
-                        const LocatedTriplesState& locatedTriplesState) const;
-
-  // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
