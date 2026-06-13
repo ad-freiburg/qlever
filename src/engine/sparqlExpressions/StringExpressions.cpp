@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {
@@ -114,23 +115,22 @@ const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
 }
 
 struct ApplyBaseIfPresent {
-  IdOrLiteralOrIri operator()(IdOrLocalVocabEntry iri,
-                              const IdOrLocalVocabEntry& base) const {
+  IdOrLiteralOrIri operator()(
+      IdOrLocalVocabEntry iri,
+      const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
-    const auto& baseIri = extractIri(base);
-    if (baseIri.empty()) {
-      return std::get<LocalVocabEntry>(iri);
+    if (!base.has_value()) {
+      return std::get<LocalVocabEntry>(std::move(iri));
     }
-    // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
-        baseIri.getBaseIri(true))};
+        extractIri(iri).toStringRepresentation(), base.value())};
   }
 };
-using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
+using IriOrUriExpression =
+    NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter, ParsedUriGetter>>;
 
 // STRLEN
 struct Strlen {
