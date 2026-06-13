@@ -122,8 +122,6 @@ class Index {
   // Get a reference to the GraphNameManager of this Index.
   GraphNameManager& graphNameManager();
   const GraphNameManager& graphNameManager() const;
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
