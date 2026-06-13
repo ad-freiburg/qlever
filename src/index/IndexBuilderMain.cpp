@@ -192,6 +192,7 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  unsigned short inputServerPort = 0;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -214,6 +215,14 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
+  add("input-server-port", po::value(&inputServerPort),
+      "If set, the index builder receives RDF input data via an HTTP server "
+      "on the given port, instead of reading from files specified via "
+      "`--kg-input-file`. POST request bodies are parsed as RDF; the "
+      "Content-Type header selects the format (text/turtle, "
+      "application/n-triples, application/n-quads). Send a request with "
+      "the `Finish-Index-Building: true` header to signal that all data "
+      "has been uploaded.");
   add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "
@@ -307,6 +316,9 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (optionsMap.count("input-server-port")) {
+      config.inputServerPort_ = inputServerPort;
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << std::endl;
     std::cerr << boostOptions << std::endl;

@@ -37,7 +37,9 @@ class TestHttpServer {
       decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
 
   // The server.
-  std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> server_;
+  std::shared_ptr<
+      HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>
+      server_;
 
   // The own thread in which the server is running.
   //
@@ -54,7 +56,8 @@ class TestHttpServer {
   // Create server on localhost. Port 0 instructs the operating system to choose
   // a free port of its choice.
   explicit TestHttpServer(HttpHandler httpHandler) {
-    server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(
+    server_ = std::make_shared<
+        HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>(
         0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
   }
 

@@ -525,3 +525,5 @@ addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
 
 addLinkAndDiscoverTest(LogTest)
+
+addLinkAndDiscoverTestSerial(InputFileServerTest qlever)
