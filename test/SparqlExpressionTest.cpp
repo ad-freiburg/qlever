@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
 #include "rdfTypes/GeoPoint.h"
@@ -877,7 +878,14 @@ TEST(SparqlExpression, stringOperators) {
           IdOrLocalVocabEntryVec{U, lit("bimbim"), iriref("<bambim>"),
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
-          IdOrLocalVocabEntry{iriref("<http://example.com/hi>")}});
+          IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
+  // Mixin interface but logically unreachable (the base IRI is always a
+  // LocalVocabEntry). Verify it throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(sparqlExpression::detail::ParsedUriGetter{}(
+                                   ValueId::makeUndefined(), nullptr),
+                               ::testing::HasSubstr("unreachable"));
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))

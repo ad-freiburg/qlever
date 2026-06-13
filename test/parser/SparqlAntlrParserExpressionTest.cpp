@@ -66,6 +66,19 @@ TEST(SparqlParser, builtInCall) {
       matchNaryWithChildrenMatchers(
           &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
           matchLiteralExpression(ad_utility::triple_component::Iri{})));
+  // Repeat the tests with a BASE IRI.
+  expectBuiltInCall(
+      "IRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
+  expectBuiltInCall(
+      "URI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
