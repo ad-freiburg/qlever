@@ -579,7 +579,7 @@ class GroupByImpl : public Operation {
     // the JOIN, etc. `SPO` if the variable that joins the three variable triple
     // and the rest of the query body is the subject of the three variable
     // triple, `PSO` if it is the predicate, `OSP` if it is the object.
-    Permutation::Enum permutation_;
+    const Permutation& permutation_;
     // The column index wrt the `otherSubtree_` of the variable that joins the
     // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
@@ -594,12 +594,12 @@ class GroupByImpl : public Operation {
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
   // `variableThatMustBeContained`. (They might be the same). If this check
-  // fails, `std::nullopt` is returned. Else the permutation corresponding to
-  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // fails, an empty optional is returned. Else the permutation corresponding
+  // to `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
-  static std::optional<Permutation::Enum> getPermutationForThreeVariableTriple(
+  boost::optional<const Permutation&> getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-      const Variable& variableThatMustBeContained);
+      const Variable& variableThatMustBeContained) const;
 
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct
   // count of a single variable, return that variable. Else return
