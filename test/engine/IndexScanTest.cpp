@@ -1562,16 +1562,25 @@ TEST(IndexScanTest, StripColumns) {
       EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
     }
 
-    // Test functions whose results don't depend on column stripping
-    // These should return the same values for both base and stripped scan
     auto& strippedScanOp =
         dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
 
-    // Test accessor functions
+    // The descriptor reflects the stripping: each kept variable appears, each
+    // stripped one does not.
     const auto descriptor = strippedScanOp.getDescriptor();
     for (const auto& var : varsToKeep) {
       EXPECT_THAT(descriptor, ::testing::HasSubstr(var.name()));
     }
+    for (const auto& [var, _] :
+         baseScan.getExternallyVisibleVariableColumns()) {
+      if (ql::ranges::find(varsToKeep, var) == varsToKeep.end()) {
+        EXPECT_THAT(descriptor,
+                    ::testing::Not(::testing::HasSubstr(var.name())));
+      }
+    }
+
+    // Test accessor functions whose results don't depend on column stripping;
+    // these should return the same values for the base and the stripped scan.
     EXPECT_EQ(strippedScanOp.subject().toString(),
               baseScan.subject().toString());
     EXPECT_EQ(strippedScanOp.predicate().toString(),
