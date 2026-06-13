@@ -112,8 +112,9 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
-    EXPECT_THAT(qet->getRootOperation()->getDescriptor(),
-                ::testing::HasSubstr("?x"));
+    // The view's name is part of the descriptor and only the scanned columns.
+    EXPECT_EQ(qet->getRootOperation()->getDescriptor(),
+              "IndexScan testView1 ?s ?x");
     // For a full scan on a materialized view, the size estimate should be
     // exactly the number of rows in the view. This is also a regression test
     // for a bug introduced in #2680.
