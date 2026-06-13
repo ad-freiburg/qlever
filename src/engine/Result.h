@@ -90,6 +90,8 @@ class Result {
   // `idTableOrPtr_` and is kept in sync by the constructors and by
   // `applyLimitOffset()`. This invariant enables callers to take the address of
   // the view (e.g. for an alias `shared_ptr`) with a stable pointer.
+  // The spans inside `view_` survive moving this object because `IdTable` keeps
+  // its columns in heap-backed storage that the move only re-points to.
   class IdTableSharedLocalVocabPair {
     std::variant<IdTable, IdTablePtr> idTableOrPtr_;
     LocalVocabPtr localVocab_;
@@ -106,8 +108,9 @@ class Result {
                                 LocalVocabPtr localVocab);
 
     const IdTable& idTable() const;
-    // The returned reference remains valid until `applyLimitOffset()` is
-    // called on this object, or until this object is destroyed.
+    // The returned reference is stable for the lifetime of this object.
+    // `applyLimitOffset()` refreshes the view in place; copies of the view
+    // value taken before that call should not be reused afterwards.
     const IdTableView<0>& idTableView() const { return view_; }
     const LocalVocab& localVocab() const { return *localVocab_; }
     LocalVocabPtr localVocabPtr() const { return localVocab_; }
@@ -226,8 +229,9 @@ class Result {
   const IdTable& idTable() const;
 
   // Returns a non-owning view of the materialized `idTable()`. Throw if not
-  // fully materialized. The reference is stable until `applyLimitOffset()` is
-  // called or this `Result` is destroyed.
+  // fully materialized. The reference is stable for the lifetime of this
+  // `Result`; `applyLimitOffset()` refreshes the view in place, so copies of
+  // the view value taken before that call should not be reused afterwards.
   const IdTableView<0>& idTableView() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
