@@ -1809,7 +1809,7 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest,
-       GetPermutationForThreeVariableTripletMaterializedView) {
+       GetPermutationForThreeVariableTripleMaterializedView) {
   // Write and load a three-variable view.
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
   MaterializedViewsManager manager{testIndexBase_};

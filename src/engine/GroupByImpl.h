@@ -594,8 +594,8 @@ class GroupByImpl : public Operation {
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
   // `variableThatMustBeContained`. (They might be the same). If this check
-  // fails, `std::nullopt` is returned. Else the permutation corresponding to
-  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // fails, an empty optional is returned. Else the permutation corresponding
+  // to `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
   boost::optional<const Permutation&> getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
