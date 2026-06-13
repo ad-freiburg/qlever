@@ -108,7 +108,7 @@ class GroupByImpl : public Operation {
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
-      LocalVocab& localVocab, const IdTable& idTable) const;
+      LocalVocab& localVocab, const IdTableView<0>& idTable) const;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -163,14 +163,13 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTableView<0>& inTable,
+                    const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
-
-  FRIEND_TEST(GroupByTest, doGroupBy);
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set

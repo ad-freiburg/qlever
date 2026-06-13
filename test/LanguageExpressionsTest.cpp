@@ -106,6 +106,7 @@ struct TestContext {
     table.push_back({litId5, locVocIri1});
     table.push_back({litId6, locVocLit1});
 
+    context._inputTable = table.asStaticView<0>();
     context._beginIndex = 0;
     context._endIndex = table.size();
 

@@ -196,9 +196,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  auto fullScan = permutation.lazyScan(
-      scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, LimitOffsetClause{});
+  auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
+      scanSpecAndBlocks, additionalColumns, cancellationHandle,
+      *locatedTriplesSharedState);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -222,8 +222,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
-          std::move(fullScan),
-          [remapId = std::move(remapId)](IdTable& idTable) {
+          std::move(fullScan), [remapId = std::move(remapId),
+                                reader = std::move(reader)](IdTable& idTable) {
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
@@ -379,7 +379,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  IndexImpl newIndex{index.allocator()};
+  // Pass a 0-byte allocator as a sanity check: nothing below allocates
+  // through `newIndex`'s allocator, and if a future change ever does, this
+  // will throw immediately rather than silently using whatever allocator
+  // the source index happens to have.
+  IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;

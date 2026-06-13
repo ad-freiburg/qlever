@@ -25,7 +25,7 @@ namespace detail {
 template <typename Range, bool logTime>
 struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
-  using value_type = typename Range::value_type;
+  using value_type = ql::ranges::range_value_t<Range>;
 
   ad_utility::data_structures::ThreadSafeQueue<value_type> queue_;
   ad_utility::JThread thread_;

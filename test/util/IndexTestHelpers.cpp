@@ -176,7 +176,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
         ql::starts_with(name, indexBasename + ".index") ||
         ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
+        ql::starts_with(name, indexBasename + ".update-triples") ||
+        ql::starts_with(name, indexBasename + ".allocated-graphs-state")) {
       ad_utility::deleteFile(entry.path());
     }
   }
@@ -359,8 +361,12 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
   if (!contextMap.contains(c)) {
+    // We have to pass `false` to `gtestCurrentTestName` to make this work for
+    // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
+    // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        "_staticGlobalTestIndex" + std::to_string(contextMap.size());
+        absl::StrCat("_staticGlobalTestIndex", gtestCurrentTestName(false), "_",
+                     contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
                      for (const std::string& indexFilename :

@@ -51,7 +51,11 @@ class LazyGroupByRange
   bool singleIdTable_{false};
   // runtime state
   size_t inWidth_;
-  IdTable resultTable_;
+  // Keep the lazy result blocks as `IdTableStatic` (that is, with fixed width),
+  // to avoid a conversion for every block (this used to be a performance bug).
+  // The paths that need a (dynamic) `IdTable` are not performance-criticial
+  // and convert using `toDynamic()` explicitly.
+  IdTableStatic<OUT_WIDTH> resultTable_;
   std::unique_ptr<LazyGroupBy> lazyGroupBy_;
   LocalVocab currentLocalVocab_;
   std::vector<LocalVocab> storedLocalVocabs_;
@@ -119,17 +123,16 @@ class LazyGroupByRange
                      sparqlExpression::EvaluationContext& evaluationContext) {
     if (groupSplitAcrossTables_) {
       lazyGroupBy_->processBlock(evaluationContext, blockStart, blockEnd);
-      lazyGroupBy_->commitRow(resultTable_, evaluationContext,
+      IdTable resultTable = std::move(resultTable_).toDynamic();
+      lazyGroupBy_->commitRow(resultTable, evaluationContext,
                               currentGroupBlock_);
+      resultTable_ = std::move(resultTable).template toStatic<OUT_WIDTH>();
       groupSplitAcrossTables_ = false;
     } else {
       // This processes the whole block in batches if possible.
-      IdTableStatic<OUT_WIDTH> table{
-          std::move(resultTable_).template toStatic<OUT_WIDTH>()};
       parent_->template processBlock<OUT_WIDTH>(
-          table, aggregates_, evaluationContext, blockStart, blockEnd,
+          resultTable_, aggregates_, evaluationContext, blockStart, blockEnd,
           &currentLocalVocab_, groupByCols_);
-      resultTable_ = std::move(table).toDynamic();
     }
   }
 
@@ -153,8 +156,11 @@ class LazyGroupByRange
       }
     }
 
+    // `process()` is called once per lazy block, so `createEvaluationContext`
+    // (and thus `asStaticView<0>()`) runs once per block, not once per group.
     sparqlExpression::EvaluationContext evaluationContext =
-        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+        parent_->createEvaluationContext(currentLocalVocab_,
+                                         idTable.asStaticView<0>());
 
     size_t lastBlockStart = parent_->searchBlockBoundaries(
         [this, &evaluationContext](size_t a, size_t b) {
@@ -188,9 +194,10 @@ class LazyGroupByRange
       if (groupByCols_.empty()) {
         // If we have an implicit GROUP BY, where the entire input is a
         // single group, we need to produce one result row.
-        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable_, aggregates_,
+        IdTable resultTable = std::move(resultTable_).toDynamic();
+        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
                                                       &currentLocalVocab_);
-        return IdTableVocabPair{std::move(resultTable_),
+        return IdTableVocabPair{std::move(resultTable),
                                 std::move(currentLocalVocab_)};
       }
       if (singleIdTable_) {
@@ -214,12 +221,13 @@ class LazyGroupByRange
     }
 
     sparqlExpression::EvaluationContext evaluationContext =
-        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+        parent_->createEvaluationContext(currentLocalVocab_,
+                                         idTable.asStaticView<0>());
 
-    lazyGroupBy_->commitRow(resultTable_, evaluationContext,
-                            currentGroupBlock_);
+    IdTable resultTable = std::move(resultTable_).toDynamic();
+    lazyGroupBy_->commitRow(resultTable, evaluationContext, currentGroupBlock_);
     currentLocalVocab_.mergeWith(storedLocalVocabs_);
-    return IdTableVocabPair{std::move(resultTable_),
+    return IdTableVocabPair{std::move(resultTable),
                             std::move(currentLocalVocab_)};
   }
 };
@@ -458,7 +466,7 @@ void GroupByImpl::processGroup(
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
+IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
                                const vector<size_t>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
@@ -505,7 +513,7 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
 
 // _____________________________________________________________________________
 sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
-    LocalVocab& localVocab, const IdTable& idTable) const {
+    LocalVocab& localVocab, const IdTableView<0>& idTable) const {
   sparqlExpression::EvaluationContext evaluationContext{
       *getExecutionContext(),
       _subtree->getVariableColumns(),
@@ -612,9 +620,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // of results, so if the result is fully materialized, we create an array
     // with a single element.
     if (subresult->isFullyMaterialized()) {
-      return computeWithHashMap(
-          std::array{std::pair{std::cref(subresult->idTable()),
-                               std::cref(subresult->localVocab())}});
+      const auto idTableView = subresult->idTableView();
+      return computeWithHashMap(std::array{
+          std::pair{idTableView, std::cref(subresult->localVocab())}});
     } else {
       return computeWithHashMap(subresult->idTables());
     }
@@ -652,7 +660,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
       (std::array{inWidth, outWidth}),
       [&, self = this](auto inWidth, auto outWidth) {
         return self->doGroupBy<inWidth, outWidth>(
-            subresult->idTable(), groupByCols, aggregates, &localVocab);
+            subresult->idTableView(), groupByCols, aggregates, &localVocab);
       });
 
   AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
@@ -717,7 +725,7 @@ void GroupByImpl::processEmptyImplicitGroup(
   IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
 
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(*localVocab, idTable);
+      createEvaluationContext(*localVocab, idTable.asStaticView<0>());
   resultTable.emplace_back();
 
   IdTableStatic<OUT_WIDTH> table = std::move(resultTable).toStatic<OUT_WIDTH>();
@@ -1663,7 +1671,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(*localVocab, result);
+      createEvaluationContext(*localVocab, result.asStaticView<0>());
 
   ad_utility::Timer evaluationAndResultsTimer{ad_utility::Timer::Started};
   for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
@@ -1730,7 +1738,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
   for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
-    const IdTable& inputTable = inputTableRef;
+    const auto inputTable = inputTableRef.template asStaticView<0>();
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
     // Merge the local vocab of each input block.
