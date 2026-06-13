@@ -124,12 +124,7 @@ int main(int argc, char** argv) {
     idx = dist(rng);
   }
 
-  // In production, each batch handed to `lookupBatch` is sorted ascending on
-  // its own (the row-batch is sorted by VocabIndex before lookup), but
-  // consecutive batches are independent and not globally ordered. The
-  // `--sorted` flag reproduces this by sorting each batch-sized slice
-  // separately; the default (unsorted, uniform random) is a worst-case bound
-  // only.
+  // Sort each batch-sized slice separately.
   if (sorted) {
     for (size_t offset = 0; offset < allIndices.size(); offset += batchSize) {
       size_t currentBatchSize = std::min(batchSize, allIndices.size() - offset);
