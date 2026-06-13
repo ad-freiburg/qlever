@@ -218,15 +218,44 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
+  return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
+                      additionalColumns, cancellationHandle,
+                      locatedTriplesState, limitOffset);
+}
+
+// _____________________________________________________________________________
+CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
+    const CompressedRelationReader& reader,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+    ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState,
+    const LimitOffsetClause& limitOffset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader().lazyScan(
+  return reader.lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
       std::move(columns), cancellationHandle,
       getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+}
+
+// _____________________________________________________________________________
+Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState) const {
+  auto independentReader = std::make_unique<CompressedRelationReader>(
+      reader().makeReaderWithReboundAllocator(
+          ad_utility::makeUnlimitedAllocator<Id>()));
+  auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
+                             std::nullopt, additionalColumns,
+                             cancellationHandle, locatedTriplesState, {});
+  return {std::move(independentReader), std::move(blocks)};
 }
 
 // ______________________________________________________________________
