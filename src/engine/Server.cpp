@@ -309,9 +309,8 @@ auto Server::prepareOperation(
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
   auto qec = std::make_shared<QueryExecutionContext>(
-      qlever_->sharedIndex(), &qlever_->cache(), qlever_->allocator(),
-      qlever_->sortPerformanceEstimator(), &qlever_->namedResultCache(),
-      qlever_->materializedViewsManager(),
+      sharedIndex(), &cache(), allocator(), sortPerformanceEstimator(),
+      &namedResultCache(), materializedViewsManager(),
       [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
         (*sharedMessageSender)(std::move(json));
       },
@@ -412,17 +411,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
-    qlever_->cache().clearUnpinnedOnly();
+    cache().clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
-    qlever_->cache().clearAll();
+    cache().clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
-    qlever_->namedResultCache().clear();
+    namedResultCache().clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -572,7 +571,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
-    qlever_->materializedViewsManager()->loadView(name.value());
+    materializedViewsManager()->loadView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
@@ -819,59 +818,42 @@ nlohmann::json Server::composeErrorResponseJson(
 
 // _____________________________________________________________________________
 nlohmann::json Server::composeStatsJson() const {
-  // default settings needed because there is now a window between Server
-  // construction and the Qlever object construction in the Initialise() (index
-  // is now in the qlever_ member variable.
   json result;
+  result["name-index"] = index().getKbName();
+  result["git-hash-index"] = index().getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
-  result["name-index"] = "";
-  result["git-hash-index"] = "git short hash not set";
-  result["num-permutations"] = 2;
-  result["num-predicates-normal"] = 0;
-  result["num-predicates-internal"] = 0;
-  result["num-triples-normal"] = 0;
-  result["num-triples-internal"] = 0;
-  result["name-text-index"] = "";
-  result["num-text-records"] = 0;
-  result["num-word-occurrences"] = 0;
-  result["num-entity-occurrences"] = 0;
-
-  if (qlever_.has_value()) {
-    result["name-index"] = index().getKbName();
-    result["git-hash-index"] = index().getGitShortHash();
-    result["num-permutations"] = (index().hasAllPermutations() ? 6 : 2);
-    result["num-predicates-normal"] = index().numDistinctPredicates().normal;
-    result["num-predicates-internal"] =
-        index().numDistinctPredicates().internal;
-    if (index().hasAllPermutations()) {
-      result["num-subjects-normal"] = index().numDistinctSubjects().normal;
-      result["num-subjects-internal"] = index().numDistinctSubjects().internal;
-      result["num-objects-normal"] = index().numDistinctObjects().normal;
-      result["num-objects-internal"] = index().numDistinctObjects().internal;
-    }
-    auto numTriples = index().numTriples();
-    result["num-triples-normal"] = numTriples.normal;
-    result["num-triples-internal"] = numTriples.internal;
-    result["name-text-index"] = index().getTextName();
-    result["num-text-records"] = index().getNofTextRecords();
-    result["num-word-occurrences"] = index().getNofWordPostings();
-    result["num-entity-occurrences"] = index().getNofEntityPostings();
+  result["num-permutations"] = (index().hasAllPermutations() ? 6 : 2);
+  result["num-predicates-normal"] = index().numDistinctPredicates().normal;
+  result["num-predicates-internal"] = index().numDistinctPredicates().internal;
+  if (index().hasAllPermutations()) {
+    result["num-subjects-normal"] = index().numDistinctSubjects().normal;
+    result["num-subjects-internal"] = index().numDistinctSubjects().internal;
+    result["num-objects-normal"] = index().numDistinctObjects().normal;
+    result["num-objects-internal"] = index().numDistinctObjects().internal;
   }
+
+  auto numTriples = index().numTriples();
+  result["num-triples-normal"] = numTriples.normal;
+  result["num-triples-internal"] = numTriples.internal;
+  result["name-text-index"] = index().getTextName();
+  result["num-text-records"] = index().getNofTextRecords();
+  result["num-word-occurrences"] = index().getNofWordPostings();
+  result["num-entity-occurrences"] = index().getNofEntityPostings();
   return result;
 }
 
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-results-unpinned"] = qlever_->cache().numNonPinnedEntries();
-  result["num-results-pinned-unnamed"] = qlever_->cache().numPinnedEntries();
-  result["num-results-pinned-named"] = qlever_->namedResultCache().numEntries();
+  result["num-results-unpinned"] = cache().numNonPinnedEntries();
+  result["num-results-pinned-unnamed"] = cache().numPinnedEntries();
+  result["num-results-pinned-named"] = namedResultCache().numEntries();
 
   // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
   // converter.
-  result["cache-size-unpinned"] = qlever_->cache().nonPinnedSize().getBytes();
-  result["cache-size-pinned"] = qlever_->cache().pinnedSize().getBytes();
+  result["cache-size-unpinned"] = cache().nonPinnedSize().getBytes();
+  result["cache-size-pinned"] = cache().pinnedSize().getBytes();
   return result;
 }
 
@@ -1184,8 +1166,8 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
-  qlever_->cache().clearAll();
-  qlever_->namedResultCache().clear();
+  cache().clearAll();
+  namedResultCache().clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
@@ -1486,16 +1468,15 @@ void Server::writeMaterializedView(
   auto parsedQuery = SparqlParser::parseQuery(
       &index().encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
-      qlever_->sharedIndex(), &qlever_->cache(), qlever_->allocator(),
-      qlever_->sortPerformanceEstimator(), &qlever_->namedResultCache(),
-      qlever_->materializedViewsManager());
+      sharedIndex(), &cache(), allocator(), sortPerformanceEstimator(),
+      &namedResultCache(), materializedViewsManager());
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
       std::move(plan.queryExecutionTree()));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  qlever_->materializedViewsManager()->writeViewToDisk(
+  materializedViewsManager()->writeViewToDisk(
       name, {qet, qec, std::move(plan.parsedQuery())}, memoryLimit);
 }
 

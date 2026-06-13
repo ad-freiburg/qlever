@@ -170,19 +170,8 @@ TEST(ServerTest, getQueryId) {
 // _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  json expectedJson{{"git-hash-index", "git short hash not set"},
-                    {"git-hash-server", "git short hash not set"},
-                    {"name-index", ""},
-                    {"name-text-index", ""},
-                    {"num-entity-occurrences", 0},
-                    {"num-permutations", 2},
-                    {"num-predicates-internal", 0},
-                    {"num-predicates-normal", 0},
-                    {"num-text-records", 0},
-                    {"num-triples-internal", 0},
-                    {"num-triples-normal", 0},
-                    {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
+  AD_EXPECT_THROW_WITH_MESSAGE(server.composeStatsJson(),
+                               testing::HasSubstr("bad optional access"));
 }
 
 // _____________________________________________________________________________

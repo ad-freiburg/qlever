@@ -76,13 +76,36 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() {
-    AD_CONTRACT_CHECK(qlever_.has_value());
-    return qlever_->index();
+  // Getters for the Qlever instance (require initialize() to be called first)
+  qlever::Qlever& qlever() { return qlever_.value(); }
+  const qlever::Qlever& qlever() const { return qlever_.value(); }
+
+  Index& index() { return qlever().index(); }
+  const Index& index() const { return qlever().index(); }
+  std::shared_ptr<const Index> sharedIndex() const {
+    return qlever().sharedIndex();
   }
-  const Index& index() const {
-    AD_CONTRACT_CHECK(qlever_.has_value());
-    return qlever_->index();
+
+  QueryResultCache& cache() { return qlever().cache(); }
+  const QueryResultCache& cache() const { return qlever().cache(); }
+  ad_utility::AllocatorWithLimit<Id>& allocator() {
+    return qlever().allocator();
+  }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return qlever().allocator();
+  }
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return qlever().sortPerformanceEstimator();
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return qlever().sortPerformanceEstimator();
+  }
+  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
+  const NamedResultCache& namedResultCache() const {
+    return qlever().namedResultCache();
+  }
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return qlever().materializedViewsManager();
   }
 
   // Get server statistics.

@@ -19,7 +19,11 @@ namespace qlever {
 Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
+              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
+          [this](ad_utility::MemorySize numMemoryToAllocate) {
+            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                            numMemoryToAllocate);
+          }}},
       index_{std::make_shared<Index>(allocator_)},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
