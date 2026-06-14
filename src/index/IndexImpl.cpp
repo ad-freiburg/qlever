@@ -851,7 +851,6 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
     const std::string& fileName) const {
-  static_assert(IndexMetaDataMmapDispatcher::WriteType::isMmapBased_);
   metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
   auto writer = std::make_unique<CompressedRelationWriter>(

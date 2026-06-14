@@ -51,12 +51,10 @@ void Permutation::loadFromDisk(
         absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
-  if constexpr (MetaData::isMmapBased_) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-  }
+  auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
+  meta_.setup(filename + MMAP_FILE_SUFFIX, ad_utility::ReuseTag(),
+              ad_utility::AccessPattern::Random);
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");

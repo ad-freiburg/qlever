@@ -10,7 +10,6 @@
 #include <limits>
 #include <utility>
 
-#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
@@ -18,8 +17,8 @@
 #include "util/MmapVector.h"
 #include "util/Serializer/Serializer.h"
 
-// An exception is thrown when we want to construct mmap meta data from hmap
-// meta data or vice versa.
+// An exception is thrown when we want to construct mmap metadata from hmap
+// metadata or vice versa.
 class WrongFormatException : public std::exception {
  public:
   explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
@@ -35,33 +34,21 @@ struct VersionInfo {
   size_t nOfBytes_;
 };
 
-// Magic numbers to separate different types of meta data.
-const uint64_t MAGIC_NUMBER_MMAP_META_DATA =
-    std::numeric_limits<uint64_t>::max();
-const uint64_t MAGIC_NUMBER_SPARSE_META_DATA =
-    std::numeric_limits<uint64_t>::max() - 1;
-const uint64_t MAGIC_NUMBER_MMAP_META_DATA_VERSION =
+// Magic number to separate different types of metadata.
+constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
     std::numeric_limits<uint64_t>::max() - 2;
-const uint64_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
-    std::numeric_limits<uint64_t>::max() - 3;
-
-// Constants for meta data version to keep the different versions apart.
-constexpr uint64_t V_NO_VERSION = 0;  // this is  a dummy
-constexpr uint64_t V_BLOCK_LIST_AND_STATISTICS = 1;
-constexpr uint64_t V_SERIALIZATION_LIBRARY = 2;
 
 // Constant for the current version.
-constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
+constexpr uint64_t V_CURRENT = 2;
 
-// The meta data for an index permutation.
+// The metadata for an index permutation.
 //
 // TODO<C++20>: The datatype wrappers defined in MetaDataHandler.h all meet the
 // requirements of MapType. Write this down using a C++20 concept.
-template <class M>
+template <class MapType>
 class IndexMetaData {
   // Type definitions.
  public:
-  typedef M MapType;
   using value_type = typename MapType::value_type;
   using AddType = CompressedRelationMetadata;
   using GetType = const CompressedRelationMetadata&;
@@ -77,9 +64,9 @@ class IndexMetaData {
   // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
 
-  // For each relation, its meta data.
+  // For each relation, its metadata.
   MapType data_;
-  // For each compressed block, its meta data.
+  // For each compressed block, its metadata.
   std::shared_ptr<BlocksType> blockData_ = std::make_shared<BlocksType>();
 
   size_t totalElements_ = 0;
@@ -99,10 +86,10 @@ class IndexMetaData {
     data_.setup(std::forward<dataArgs>(args)...);
   }
 
-  // `isPersistentMetaData` is true when we do not need to add relation meta
-  // data to data_, but assume that it is already contained in data_. This must
-  // be a compile time parameter because we have to avoid instantiation of
-  // member function set() when `MapType` is read only  (e.g., when based on
+  // `isPersistentMetaData` is true when we do not need to add relation metadata
+  // to data_, but assume that it is already contained in data_. This must be a
+  // compile time parameter because we have to avoid instantiation of member
+  // function set() when `MapType` is read only  (e.g., when based on
   // MmapVectorView).
   template <bool isPersistentMetaData = false>
   void add(AddType addedValue);
@@ -111,29 +98,7 @@ class IndexMetaData {
 
   GetType getMetaData(Id col0Id) const;
 
-  // Persistent meta data MapTypes (called MmapBased here) have to be separated
-  // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
-  // done in the following block.
-  using MetaWrapperMmap =
-      MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
-  using MetaWrapperMmapView = MetaDataWrapperDense<
-      ad_utility::MmapVectorView<CompressedRelationMetadata>>;
-  template <typename T>
-  struct IsMmapBased {
-    static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
-                              std::is_same<MetaWrapperMmapView, T>::value;
-  };
-  // Compile time information whether this instantiation if MMapBased or not
-  static constexpr bool isMmapBased_ = IsMmapBased<MapType>::value;
-
-  // This magic number is written when serializing the IndexMetaData to a file.
-  // This is used to check whether this is a really old index that requires
-  // rebuilding.
-  static constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
-      isMmapBased_ ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
-                   : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
-
-  // Write meta data to file with given name (contents will be overwritten if
+  // Write metadata to file with given name (contents will be overwritten if the
   // file exists).
   void writeToFile(const std::string& filename) const;
 
@@ -144,7 +109,7 @@ class IndexMetaData {
   // Read from file with the given name.
   void readFromFile(const std::string& filename);
 
-  // Read from file, assuming that it is already open and has valid meta data at
+  // Read from file, assuming that it is already open and has valid metadata at
   // the end. The call will change the position in the file.
   void readFromFile(ad_utility::File* file);
 
@@ -179,7 +144,7 @@ class IndexMetaData {
   // stored in the metadata of the other permutation. The `PairMetadataWriter`
   // already does this for the `PermutationWriter<true>` but when both
   // permutations are written individually, we need to exchange the
-  // multiplicities of col 1 and col2 in post processing.
+  // multiplicities of col 1 and col2 in post-processing.
   void exchangeMultiplicities(IndexMetaData& other);
 
   // Symmetric serialization function for the ad_utility::serialization module.
@@ -188,13 +153,12 @@ class IndexMetaData {
     // After this magic number, an 8-byte version number follows. Both have to
     // match.
 
-    using T = IndexMetaData<M>;
-    uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
+    uint64_t magicNumber = MAGIC_NUMBER_FOR_SERIALIZATION;
 
     serializer | magicNumber;
 
     // This check might only become false, if we are reading from the serializer
-    if (magicNumber != T::MAGIC_NUMBER_FOR_SERIALIZATION) {
+    if (magicNumber != MAGIC_NUMBER_FOR_SERIALIZATION) {
       throw WrongFormatException(
           "The binary format of this index is no longer supported by QLever. "
           "Please rebuild the index.");
