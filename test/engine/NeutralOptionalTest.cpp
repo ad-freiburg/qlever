@@ -133,13 +133,13 @@ TEST(NeutralOptional, knownEmptyResult) {
 }
 
 // _____________________________________________________________________________
-TEST(NeutralOptional, supportsLimit) {
+TEST(NeutralOptional, handlesLimit) {
   auto* qec = ad_utility::testing::getQec();
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
-  EXPECT_TRUE(no.supportsLimitOffset());
+  EXPECT_EQ(no.handlesLimitOffset(), LimitOffsetHandling::FULL);
 }
 
 // _____________________________________________________________________________

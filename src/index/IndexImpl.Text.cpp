@@ -17,7 +17,6 @@
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/MmapVector.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
