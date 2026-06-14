@@ -52,8 +52,6 @@ void Permutation::loadFromDisk(
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
-  meta_.setup(filename + MMAP_FILE_SUFFIX, ad_utility::ReuseTag(),
-              ad_utility::AccessPattern::Random);
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
   ad_utility::File file;
   try {
@@ -65,7 +63,8 @@ void Permutation::loadFromDisk(
              "message was: " +
              e.what());
   }
-  meta_.readFromFile(&file);
+  ad_utility::File metaFile{filename + MMAP_FILE_SUFFIX, "r"};
+  meta_.readFromFile(&file, &metaFile);
   // Materialized views never use graph post-processing, while normal and
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;

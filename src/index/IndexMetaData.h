@@ -1,6 +1,12 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//  Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+//  2015 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_INDEXMETADATA_H
 #define QLEVER_SRC_INDEX_INDEXMETADATA_H
@@ -14,11 +20,10 @@
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
-#include "util/MmapVector.h"
 #include "util/Serializer/Serializer.h"
 
-// An exception is thrown when we want to construct mmap metadata from hmap
-// metadata or vice versa.
+// An exception is thrown when an index in an old, no longer supported binary
+// format is read.
 class WrongFormatException : public std::exception {
  public:
   explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
@@ -41,15 +46,14 @@ constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
 // Constant for the current version.
 constexpr uint64_t V_CURRENT = 2;
 
-// The metadata for an index permutation.
-//
-// TODO<C++20>: The datatype wrappers defined in MetaDataHandler.h all meet the
-// requirements of MapType. Write this down using a C++20 concept.
-template <class MapType>
+// The metadata for an index permutation. The per-relation metadata is held in
+// RAM by `MetaDataWrapperDense` (stored in a separate file next to the
+// permutation), the per-block metadata is part of this object's serialization
+// (stored at the end of the permutation file).
 class IndexMetaData {
   // Type definitions.
  public:
-  using value_type = typename MapType::value_type;
+  using value_type = CompressedRelationMetadata;
   using AddType = CompressedRelationMetadata;
   using GetType = const CompressedRelationMetadata&;
   using BlocksType = std::vector<CompressedBlockMetadata>;
@@ -59,13 +63,12 @@ class IndexMetaData {
   off_t offsetAfter_ = 0;
 
   std::string name_;
-  std::string filename_;
 
   // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
 
   // For each relation, its metadata.
-  MapType data_;
+  MetaDataWrapperDense data_;
   // For each compressed block, its metadata.
   std::shared_ptr<BlocksType> blockData_ = std::make_shared<BlocksType>();
 
@@ -75,16 +78,7 @@ class IndexMetaData {
 
   // Public methods.
  public:
-  // Some instantiations of `MapType` (the dense ones using mmap)
-  // require additional calls to setup() before being fully initialized.
   IndexMetaData() = default;
-
-  // Pass all arguments that are needed for initialization to the underlying
-  // implementation of `data_` (which is of type `MapType`).
-  template <typename... dataArgs>
-  void setup(dataArgs&&... args) {
-    data_.setup(std::forward<dataArgs>(args)...);
-  }
 
   void add(AddType addedValue);
 
@@ -92,20 +86,28 @@ class IndexMetaData {
 
   GetType getMetaData(Id col0Id) const;
 
-  // Write metadata to file with given name (contents will be overwritten if the
-  // file exists).
+  // Write the metadata to the file `filename` (for the per-block metadata,
+  // which is appended to the end of the file) and to `filename +
+  // MMAP_FILE_SUFFIX` (for the per-relation metadata). Existing contents are
+  // overwritten.
   void writeToFile(const std::string& filename) const;
 
-  // Write to the end of an already existing file. This will move the file
-  // pointer to the end of that file.
-  void appendToFile(ad_utility::File* file) const;
+  // Append the per-block metadata to the end of `permutationFile` (moving its
+  // file pointer to the end) and write the per-relation metadata to
+  // `metaFile` (overwriting it).
+  void appendToFile(ad_utility::File* permutationFile,
+                    ad_utility::File* metaFile) const;
 
-  // Read from file with the given name.
+  // Read the metadata written by `writeToFile` from `filename` and `filename +
+  // MMAP_FILE_SUFFIX`.
   void readFromFile(const std::string& filename);
 
-  // Read from file, assuming that it is already open and has valid metadata at
-  // the end. The call will change the position in the file.
-  void readFromFile(ad_utility::File* file);
+  // Read the metadata, assuming that `permutationFile` is already open and has
+  // valid per-block metadata at its end, and that `metaFile` holds the
+  // per-relation metadata. The call will change the position in
+  // `permutationFile`.
+  void readFromFile(ad_utility::File* permutationFile,
+                    ad_utility::File* metaFile);
 
   bool col0IdExists(Id col0Id) const;
 
@@ -122,8 +124,6 @@ class IndexMetaData {
   const std::string& getName() const { return name_; }
 
   size_t getVersion() const { return version_; }
-
-  const MapType& data() const { return data_; }
 
   BlocksType& blockData() { return *blockData_; }
   const BlocksType& blockData() const { return *blockData_; }
@@ -166,30 +166,15 @@ class IndexMetaData {
           "Please rebuild the index.");
     }
 
-    // Serialize the rest of the data members
+    // Serialize the rest of the data members. The per-relation metadata
+    // (`data_`) is not part of this serialization; it lives in its own file and
+    // is handled separately by `appendToFile` / `readFromFile`.
     serializer | arg.name_;
-    serializer | arg.data_;
     serializer | arg.blockData();
     serializer | arg.offsetAfter_;
     serializer | arg.totalElements_;
     serializer | arg.numDistinctCol0_;
   }
 };
-
-// ___________________________________________________________________________
-template <class MapType>
-ad_utility::File& operator<<(ad_utility::File& f,
-                             const IndexMetaData<MapType>& imd);
-
-// Aliases for easier use in classes that build or query permutations, like
-// `IndexImpl`.
-using MetaWrapperMmap =
-    MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
-using MetaWrapperMmapView = MetaDataWrapperDense<
-    ad_utility::MmapVectorView<CompressedRelationMetadata>>;
-using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
-using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
-
-#include "index/IndexMetaDataImpl.h"
 
 #endif  // QLEVER_SRC_INDEX_INDEXMETADATA_H

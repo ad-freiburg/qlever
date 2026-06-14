@@ -1,15 +1,23 @@
-// Copyright 2015, University of Freiburg, Chair of Algorithms and Data
-// Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//  Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+//  2015 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
 #include <fstream>
 
 #include "./util/IdTestHelpers.h"
+#include "global/Constants.h"
 #include "index/IndexMetaData.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
+#include "util/MmapVector.h"
 #include "util/Serializer/FileSerializer.h"
 
 namespace {
@@ -28,25 +36,30 @@ TEST(RelationMetaDataTest, writeReadTest) {
                                1039};
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
-  ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
+  std::string filename = gtestCurrentTestName() + ".rmd";
+  ad_utility::serialization::FileWriteSerializer f(filename);
   f << rmdF;
   f << rmdB;
   f.close();
 
-  ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
+  ad_utility::serialization::FileReadSerializer in(filename);
   CompressedRelationMetadata rmdF2;
   CompressedBlockMetadata rmdB2;
   in >> rmdF2;
   in >> rmdB2;
 
-  remove("_testtmp.rmd");
+  ad_utility::deleteFile(filename);
   ASSERT_EQ(rmdF, rmdF2);
   ASSERT_EQ(rmdB, rmdB2);
 }
 
-TEST(IndexMetaDataTest, writeReadTest2Mmap) {
-  std::string imdFilename = "_testtmp.imd";
-  std::string mmapFilename = imdFilename + ".mmap";
+TEST(IndexMetaDataTest, writeReadTest2) {
+  std::string imdFilename = gtestCurrentTestName() + ".imd";
+  std::string metaFilename = imdFilename + MMAP_FILE_SUFFIX;
+  absl::Cleanup cleanup{[&imdFilename, &metaFilename]() {
+    ad_utility::deleteFile(imdFilename);
+    ad_utility::deleteFile(metaFilename);
+  }};
   std::vector<CompressedBlockMetadata> bs;
   // A value for the Graph Id.
   bs.push_back(CompressedBlockMetadata{{{{{12, 34}, {42, 17}}},
@@ -65,11 +78,8 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
                                        18});
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
-  // The index MetaData does not have an explicit clear, so we
-  // force destruction to close and reopen the mmap-File
   {
-    IndexMetaDataMmap imd;
-    imd.setup(mmapFilename, ad_utility::CreateTag{});
+    IndexMetaData imd;
     imd.add(rmdF);
     imd.add(rmdF2);
     imd.blockData() = bs;
@@ -78,8 +88,7 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   }
 
   {
-    IndexMetaDataMmap imd2;
-    imd2.setup(mmapFilename, ad_utility::ReuseTag());
+    IndexMetaData imd2;
     imd2.readFromFile(imdFilename);
 
     auto rmdFn = imd2.getMetaData(V(1));
@@ -90,30 +99,61 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
 
     ASSERT_EQ(imd2.blockData(), bs);
   }
-  ad_utility::deleteFile(imdFilename);
-  ad_utility::deleteFile(mmapFilename);
+}
+
+// Check that the RAM-based `MetaDataWrapperDense` is on-disk compatible with
+// the legacy `MmapVector`-based format in both directions: it can read files
+// written by older QLever versions (which used `MmapVector`), and files it
+// writes can still be read by an `MmapVectorView` (as older versions would).
+TEST(IndexMetaDataTest, mmapFormatBackwardsCompatibility) {
+  std::string filename = gtestCurrentTestName() + ".meta";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+  CompressedRelationMetadata rmd1{V(1), 3, 2.0, 42.0, 16};
+  CompressedRelationMetadata rmd2{V(2), 5, 3.0, 43.0, 10};
+
+  // Reading a legacy file: write it using `MmapVector` (the page-aligned layout
+  // with the metadata trailer that older versions produced) and read it back
+  // with the new wrapper.
+  {
+    ad_utility::MmapVector<CompressedRelationMetadata> legacy{
+        filename, ad_utility::CreateTag{}};
+    legacy.push_back(rmd1);
+    legacy.push_back(rmd2);
+  }
+  MetaDataWrapperDense wrapper;
+  {
+    ad_utility::File file{filename, "r"};
+    wrapper.readFromFile(file);
+  }
+  ASSERT_EQ(wrapper.size(), 2u);
+  ASSERT_EQ(wrapper.getIfPresent(V(1)).value(), rmd1);
+  ASSERT_EQ(wrapper.getIfPresent(V(2)).value(), rmd2);
+
+  // Writing a file that older versions can still read: write it with the new
+  // wrapper and read it back with an `MmapVectorView`.
+  {
+    ad_utility::File file{filename, "w"};
+    wrapper.writeToFile(file);
+  }
+  ad_utility::MmapVectorView<CompressedRelationMetadata> view{
+      filename, ad_utility::ReuseTag{}};
+  ASSERT_EQ(view.size(), 2u);
+  ASSERT_EQ(view[0], rmd1);
+  ASSERT_EQ(view[1], rmd2);
 }
 
 // _____________________________________________________________________________
 TEST(IndexMetaDataTest, exchangeMultiplicities) {
-  std::string mmapFilenameA = "exchangeMultiplicities_tmp.imda.mmap";
-  std::string mmapFilenameB = "exchangeMultiplicities_tmp.imdb.mmap";
-  absl::Cleanup cleanup{[&mmapFilenameA, &mmapFilenameB]() {
-    ad_utility::deleteFile(mmapFilenameA);
-    ad_utility::deleteFile(mmapFilenameB);
-  }};
   CompressedRelationMetadata crm1a{V(1), 3, 2.0, 2.0, 16};
   CompressedRelationMetadata crm1b{V(1), 3, 3.0, 3.0, 16};
   CompressedRelationMetadata crm2a{V(2), 5, 4.0, 4.0, 10};
   CompressedRelationMetadata crm2b{V(2), 5, 5.0, 5.0, 10};
 
-  IndexMetaDataMmap imda;
-  imda.setup(mmapFilenameA, ad_utility::CreateTag{});
+  IndexMetaData imda;
   imda.add(crm1a);
   imda.add(crm2a);
 
-  IndexMetaDataMmap imdb;
-  imdb.setup(mmapFilenameB, ad_utility::CreateTag{});
+  IndexMetaData imdb;
   imdb.add(crm1b);
   imdb.add(crm2b);
 
@@ -132,31 +172,17 @@ TEST(IndexMetaDataTest, exchangeMultiplicities) {
 
 // _____________________________________________________________________________
 TEST(IndexMetaDataTest, exchangeMultiplicitiesFailsWhenIncompatible) {
-  std::string mmapFilenameA =
-      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imda.mmap";
-  std::string mmapFilenameB =
-      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imdb.mmap";
-  std::string mmapFilenameC =
-      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imdc.mmap";
-  absl::Cleanup cleanup{[&mmapFilenameA, &mmapFilenameB, &mmapFilenameC]() {
-    ad_utility::deleteFile(mmapFilenameA);
-    ad_utility::deleteFile(mmapFilenameB);
-    ad_utility::deleteFile(mmapFilenameC);
-  }};
   CompressedRelationMetadata crm1{V(1), 3, 2.0, 2.0, 16};
   CompressedRelationMetadata crm2{V(1), 3, 3.0, 3.0, 16};
   CompressedRelationMetadata crm3{V(2), 5, 4.0, 4.0, 10};
 
-  IndexMetaDataMmap imda;
-  imda.setup(mmapFilenameA, ad_utility::CreateTag{});
+  IndexMetaData imda;
   imda.add(crm1);
 
-  IndexMetaDataMmap imdb;
-  imdb.setup(mmapFilenameB, ad_utility::CreateTag{});
+  IndexMetaData imdb;
   imdb.add(crm3);
 
-  IndexMetaDataMmap imdc;
-  imdc.setup(mmapFilenameC, ad_utility::CreateTag{});
+  IndexMetaData imdc;
   imdc.add(crm2);
   imdc.add(crm3);
 
