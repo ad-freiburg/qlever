@@ -32,7 +32,7 @@ class Bind : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
-  LimitOffsetSupport supportsLimitOffset() const override;
+  LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:

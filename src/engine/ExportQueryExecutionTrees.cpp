@@ -844,7 +844,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimitOffset() != LimitOffsetSupport::NO) {
+  if (qet.handlesLimitOffset() != LimitOffsetHandling::NONE) {
     limitOffsetClause._offset = 0;
   }
 }

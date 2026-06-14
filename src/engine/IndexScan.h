@@ -188,9 +188,9 @@ class IndexScan final : public Operation {
                                          sizeof(Id)) > maxCacheableSize;
   }
 
-  // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] LimitOffsetSupport supportsLimitOffset() const override {
-    return LimitOffsetSupport::YES;
+  // An index scan applies LIMIT and OFFSET directly while scanning.
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
   }
 
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base

@@ -139,7 +139,7 @@ TEST(NeutralOptional, supportsLimit) {
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
-  EXPECT_EQ(no.supportsLimitOffset(), LimitOffsetSupport::YES);
+  EXPECT_EQ(no.handlesLimitOffset(), LimitOffsetHandling::FULL);
 }
 
 // _____________________________________________________________________________

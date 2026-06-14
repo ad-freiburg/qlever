@@ -84,8 +84,8 @@ class CartesianProductJoin : public Operation {
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] LimitOffsetSupport supportsLimitOffset() const override {
-    return LimitOffsetSupport::YES;
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
   }
 
  protected:

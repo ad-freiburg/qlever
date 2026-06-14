@@ -52,8 +52,8 @@ class OptionalJoin : public Operation {
   // potentially speed it up and save memory, but `OptionalJoin` does not
   // actually apply its own `LimitOffsetClause` to itself, this still needs to
   // be done by the `Operation` base class.
-  LimitOffsetSupport supportsLimitOffset() const override {
-    return LimitOffsetSupport::PARTIAL;
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::PARTIAL;
   }
 
   std::string getDescriptor() const override;

@@ -144,8 +144,9 @@ class ValuesForTesting : public Operation {
     cacheSizeStorage_ = cacheSizeStorage;
   }
 
-  LimitOffsetSupport supportsLimitOffset() const override {
-    return supportsLimit_ ? LimitOffsetSupport::YES : LimitOffsetSupport::NO;
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return supportsLimit_ ? LimitOffsetHandling::FULL
+                          : LimitOffsetHandling::NONE;
   }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }

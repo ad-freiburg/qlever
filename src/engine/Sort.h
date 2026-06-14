@@ -73,8 +73,8 @@ class Sort : public Operation {
   // sorted: there is no user-defined order that the `LIMIT` is taken against
   // (user-facing `ORDER BY` goes through `OrderBy`, not `Sort`). So we can
   // let the subtree compute only N rows and sort those.
-  LimitOffsetSupport supportsLimitOffset() const override {
-    return LimitOffsetSupport::YES;
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
   }
 
   [[nodiscard]] size_t getResultWidth() const override;

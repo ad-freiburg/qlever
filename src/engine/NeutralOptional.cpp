@@ -50,8 +50,8 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-LimitOffsetSupport NeutralOptional::supportsLimitOffset() const {
-  return LimitOffsetSupport::YES;
+LimitOffsetHandling NeutralOptional::handlesLimitOffset() const {
+  return LimitOffsetHandling::FULL;
 }
 
 // _____________________________________________________________________________

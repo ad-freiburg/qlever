@@ -222,11 +222,11 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   for (auto& plan : lastRow) {
     // For subqueries the limit has already been applied, for the root query the
-    // exporter will apply LIMIT and OFFSET if `supportsLimitOffset()` returns
-    // `NO` for the `Operation`. Check the documentation of
+    // exporter will apply LIMIT and OFFSET if `handlesLimitOffset()` returns
+    // `NONE` for the `Operation`. Check the documentation of
     // `ExportQueryExecutionTrees::compensateForLimitOffsetClause` to see how
     // this is handled in the exporter.
-    if (plan._qet->supportsLimitOffset() != LimitOffsetSupport::NO &&
+    if (plan._qet->handlesLimitOffset() != LimitOffsetHandling::NONE &&
         !isSubquery) {
       plan._qet->applyLimitOffset(pq._limitOffset);
     }

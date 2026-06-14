@@ -43,9 +43,9 @@ size_t Bind::getCostEstimate() {
   return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
 }
 
-// We delegate the limit to the child operation, so we always support it.
-LimitOffsetSupport Bind::supportsLimitOffset() const {
-  return LimitOffsetSupport::YES;
+// We delegate the limit to the child operation, so we always handle it.
+LimitOffsetHandling Bind::handlesLimitOffset() const {
+  return LimitOffsetHandling::FULL;
 }
 
 // _____________________________________________________________________________
