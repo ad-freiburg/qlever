@@ -318,9 +318,13 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename, "r");
   offsetsFile_.open(filename + offsetSuffix_, "r");
-  // Disable readahead for random lookups on both files.
+  // Disable readahead for random lookups on both files. `posix_fadvise` is a
+  // Linux/POSIX-advisory call that is not available on macOS; skipping it there
+  // is harmless (it is only a performance hint).
+#ifdef POSIX_FADV_RANDOM
   posix_fadvise(file_.fd(), 0, 0, POSIX_FADV_RANDOM);
   posix_fadvise(offsetsFile_.fd(), 0, 0, POSIX_FADV_RANDOM);
+#endif
 
   // Read the offset count from the `MmapVectorMetaData` trailer, which is
   // the canonical layout used by both old and new vocabulary files.

@@ -87,8 +87,9 @@ struct DecoderMultiplexer {
   size_t decompressInto(std::string_view compressed, size_t decoderIndex,
                         char* output, size_t outputCapacity,
                         Args&&... args) const {
-    return decoders_.at(decoderIndex).decompressInto(
-        compressed, output, outputCapacity, std::forward<Args>(args)...);
+    return decoders_.at(decoderIndex)
+        .decompressInto(compressed, output, outputCapacity,
+                        std::forward<Args>(args)...);
   }
 
   size_t numDecoders() const { return decoders_.size(); }

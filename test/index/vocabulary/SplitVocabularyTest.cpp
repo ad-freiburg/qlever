@@ -216,8 +216,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   {
     std::array<size_t, 3> indices{
         static_cast<size_t>(sv.addMarker(1, 0)),   // "\"xyz\""
-        static_cast<size_t>(sv.addMarker(0, 1)),    // "\"abc\""
-        static_cast<size_t>(sv.addMarker(0, 0))};   // "\"\""
+        static_cast<size_t>(sv.addMarker(0, 1)),   // "\"abc\""
+        static_cast<size_t>(sv.addMarker(0, 0))};  // "\"\""
     auto result = sv.lookupBatch(indices);
     ASSERT_EQ(result->size(), 3);
     EXPECT_EQ((*result)[0], "\"xyz\"");
