@@ -43,7 +43,9 @@ class MissSetSizeLogger {
       return;
     }
     std::lock_guard<std::mutex> lock{mutex_};
-    out_ << size << '\n';
+    // Flush each record: the server is long-running, so a buffered write would
+    // not reach disk until the stream is closed at program exit.
+    out_ << size << std::endl;
   }
 
  private:
