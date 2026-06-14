@@ -8,11 +8,54 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
+#include <cstdlib>
+#include <fstream>
+#include <mutex>
+
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "util/Views.h"
 
 namespace qlever::constructExport {
+
+namespace {
+// Diagnostic instrumentation for the evaluation of the batched vocabulary
+// lookup: when the environment variable `QLEVER_MISSSET_LOG` is set to a file
+// path, the size of every per-batch, per-column vocabulary miss set (i.e. the
+// number of indices passed to a single `lookupBatch` call) is appended to that
+// file, one integer per line. This characterizes the distribution of
+// `lookupBatch` request sizes for a given query. It is a no-op unless the
+// variable is set, so it does not affect timing measurements.
+//
+// The output file is owned by this RAII type: it is opened once when the single
+// static instance is constructed and closed when it is destroyed at program
+// exit.
+class MissSetSizeLogger {
+ public:
+  MissSetSizeLogger() {
+    if (const char* path = std::getenv("QLEVER_MISSSET_LOG")) {
+      out_.open(path, std::ios::app);
+    }
+  }
+
+  void log(size_t size) {
+    if (!out_.is_open()) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock{mutex_};
+    out_ << size << '\n';
+  }
+
+ private:
+  std::ofstream out_;
+  std::mutex mutex_;
+};
+
+void logMissSetSize(size_t size) {
+  static MissSetSizeLogger logger;
+  logger.log(size);
+}
+}  // namespace
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
@@ -80,6 +123,8 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       missRows.push_back({static_cast<size_t>(rowInBatch)});
     }
   }
+
+  logMissSetSize(missIds.size());
 
   // Phase 2: resolve cache misses. `missIds` is deduplicated and sorted
   // (inherited from `sortedIndices`), satisfying the `idsToStringAndType`
