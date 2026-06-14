@@ -8,6 +8,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <mutex>
@@ -20,32 +21,31 @@ namespace qlever::constructExport {
 
 namespace {
 // Diagnostic instrumentation for the evaluation of the batched vocabulary
-// lookup: when the environment variable `QLEVER_MISSSET_LOG` is set to a file
-// path, the size of every per-batch, per-column vocabulary miss set (i.e. the
-// number of indices passed to a single `lookupBatch` call) is appended to that
-// file, one integer per line. This characterizes the distribution of
-// `lookupBatch` request sizes for a given query. It is a no-op unless the
-// variable is set, so it does not affect timing measurements.
-//
-// The output file is owned by this RAII type: it is opened once when the single
-// static instance is constructed and closed when it is destroyed at program
-// exit.
-class MissSetSizeLogger {
+// lookup. When the given environment variable names a file path, one integer is
+// appended to that file per per-batch, per-column vocabulary lookup. Two
+// loggers use this:
+// - `QLEVER_MISSSET_LOG`: the miss-set size (indices passed to `lookupBatch`).
+// - `QLEVER_LOOKUP_TIME_LOG`: the wall-time of the Phase-2 resolution in
+//   microseconds, used to quantify the lookup's share of the total export time.
+// Each is a no-op unless its variable is set, so unset runs are unaffected. The
+// output file is owned by this RAII type: opened once when the single static
+// instance is constructed, closed at program exit.
+class EnvFileLogger {
  public:
-  MissSetSizeLogger() {
-    if (const char* path = std::getenv("QLEVER_MISSSET_LOG")) {
+  explicit EnvFileLogger(const char* envVar) {
+    if (const char* path = std::getenv(envVar)) {
       out_.open(path, std::ios::app);
     }
   }
 
-  void log(size_t size) {
+  void log(int64_t value) {
     if (!out_.is_open()) {
       return;
     }
     std::lock_guard<std::mutex> lock{mutex_};
     // Flush each record: the server is long-running, so a buffered write would
     // not reach disk until the stream is closed at program exit.
-    out_ << size << std::endl;
+    out_ << value << std::endl;
   }
 
  private:
@@ -54,8 +54,13 @@ class MissSetSizeLogger {
 };
 
 void logMissSetSize(size_t size) {
-  static MissSetSizeLogger logger;
-  logger.log(size);
+  static EnvFileLogger logger{"QLEVER_MISSSET_LOG"};
+  logger.log(static_cast<int64_t>(size));
+}
+
+void logLookupTimeMicros(int64_t micros) {
+  static EnvFileLogger logger{"QLEVER_LOOKUP_TIME_LOG"};
+  logger.log(micros);
 }
 }  // namespace
 
@@ -135,6 +140,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // per-ID baseline that resolves the very same misses one at a time; this
   // isolates the batched-disk-read contribution for the evaluation.
   std::vector<std::optional<std::pair<std::string, const char*>>> missResolved;
+  auto lookupStart = std::chrono::steady_clock::now();
   if (getRuntimeParameter<&RuntimeParameters::useBatchVocabLookup_>()) {
     missResolved =
         ql::exportIds::idsToStringAndType(index, missIds, localVocab);
@@ -145,6 +151,9 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
           ql::exportIds::idToStringAndType(index, id, localVocab));
     }
   }
+  logLookupTimeMicros(std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - lookupStart)
+                          .count());
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
