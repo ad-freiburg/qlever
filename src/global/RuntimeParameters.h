@@ -128,8 +128,7 @@ struct RuntimeParameters {
   // If set, the CONSTRUCT export resolves vocabulary cache-misses with a single
   // batched (and, where available, io_uring-backed) vocabulary lookup. If
   // unset, the same deduplicated+sorted misses are resolved one ID at a time
-  // via `idToStringAndType`. This isolates the batched-disk-read contribution
-  // for the evaluation without confounding it with the other branch changes.
+  // via `idToStringAndType`.
   Bool useBatchVocabLookup_{true, "use-batch-vocab-lookup"};
 
   // If set, the query `SELECT * { GRAPH ?g { ?s ?p ?o } }` will return
