@@ -1331,7 +1331,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 namespace ad_utility {
 std::pair<size_t, size_t> getThreadCountAndTaskSize(
     const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queueMaxSize_};
+  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
 }
 }  // namespace ad_utility
 
