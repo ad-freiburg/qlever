@@ -400,48 +400,6 @@ class MmapVectorView : private MmapVector<T> {
   std::string getFilename() const { return this->_filename; }
 };
 
-// MmapVector that deletes the underlying file on destruction.
-// This is the only difference to the ordinary MmapVector(which is persistent)
-template <class T>
-class MmapVectorTmp : public MmapVector<T> {
- public:
-  void open(std::string filename) {
-    MmapVector<T>::open(std::move(filename), CreateTag());
-  }
-
-  MmapVectorTmp<T>& operator=(MmapVectorTmp<T>&& rhs) noexcept {
-    MmapVector<T>::operator=(std::move(rhs));
-    return *this;
-  }
-
-  MmapVectorTmp& operator=(const MmapVectorTmp<T>&) = delete;
-
-  MmapVectorTmp(MmapVectorTmp<T>&& rhs) noexcept
-      : MmapVector<T>(std::move(rhs)) {}
-  MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
-
-  CPP_template(class Arg, typename... Args)(requires CPP_NOT(
-      ql::concepts::derived_from<
-          ql::remove_cvref_t<Arg>,
-          MmapVectorTmp>)) explicit MmapVectorTmp(Arg&& arg, Args&&... args)
-      : MmapVector<T>() {
-    this->open(AD_FWD(arg), AD_FWD(args)...);
-  }
-
-  // If we still own a file, delete it after cleaning up
-  // everything else
-  ~MmapVectorTmp() override {
-    // if the filename is not empty, we still own a file
-    std::string oldFilename = this->_filename;
-    std::string message = absl::StrCat(
-        "Error while unmapping a file with name \"", oldFilename, "\"");
-    ad_utility::terminateIfThrows([this]() { this->close(); }, message);
-    if (!oldFilename.empty()) {
-      ad_utility::deleteFile(oldFilename);
-    }
-  }
-};
-
 }  // namespace ad_utility
 #include "util/MmapVectorImpl.h"
 

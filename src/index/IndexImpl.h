@@ -37,7 +37,6 @@
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "util/BufferedVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
