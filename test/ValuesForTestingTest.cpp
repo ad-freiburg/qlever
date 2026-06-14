@@ -28,7 +28,7 @@ TEST(ValuesForTesting, valuesForTesting) {
   ASSERT_THAT(v.getCacheKey(),
               ::testing::StartsWith(
                   "Values for testing with 2 columns and 3 rows. V:3 V:12"));
-  ASSERT_THAT(v.getCacheKey(), ::testing::EndsWith("Supports limit: 0"));
+  ASSERT_THAT(v.getCacheKey(), ::testing::EndsWith("Handles limit: 0"));
   ASSERT_EQ(v.getDescriptor(), "explicit values for testing");
   ASSERT_TRUE(v.resultSortedOn().empty());
   ASSERT_TRUE(v.getChildren().empty());

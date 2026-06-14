@@ -724,22 +724,33 @@ CompressedRelationReader::getBlocksForJoin(
   auto blocksWithFirstAndLastId2 =
       getBlocksWithFirstAndLastId(metadataAndBlocks2);
 
-  // Find the matching blocks on each side by performing binary search on the
-  // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
-  // routine, but this doesn't work because the implicit equality defined by
-  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
+  // Find the matching blocks on each side using a linear-time merge zipper.
+  // Both sequences are sorted by `first_` with non-overlapping intervals
+  // (i.e. consecutive blocks `b1, b2` from the same side satisfy
+  // `b1.last_ < b2.first_`; invariant enforced above by the
+  // `AD_CORRECTNESS_CHECK` on `is_sorted` under `blockLessThanBlock`). The
+  // stateful pointer into `otherBlocks` never moves backward because
+  // `a.first_` is non-decreasing, giving O(n + m) total.
+  //
+  // NOTE: it is tempting to reuse the `zipperJoinWithUndef` routine, but this
+  // doesn't work because the implicit equality defined by `!lessThan(a,b) &&
+  // !lessThan(b, a)` is not transitive.
   auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
                                                   const auto& otherBlocks) {
     std::vector<CompressedBlockMetadata> result;
-    for (const auto& block : blocks) {
-      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
-               .empty()) {
-        result.push_back(block.block_);
+    auto [it, end] = getBeginAndEnd(otherBlocks);
+    for (const auto& a : blocks) {
+      it = ql::ranges::find_if_not(it, end,
+                                   [&blockLessThanBlock, &a](const auto& b) {
+                                     return blockLessThanBlock(b, a);
+                                   });
+      if (it == end) {
+        break;
+      }
+      if (!blockLessThanBlock(a, *it)) {
+        result.push_back(a.block_);
       }
     }
-    // The following check isn't expensive as there are only few blocks.
-    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
-                         result.end());
     return result;
   };
 
@@ -1042,13 +1053,13 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
     // The `numRows_` metadata shortcut is safe iff all rows of the block
-    // agree on the grouped column. Because triples within a block are sorted
-    // lexicographically by `(col0Id, col1Id, col2Id)`, that is equivalent to
-    // `firstTriple_` and `lastTriple_` agreeing on the first `columnIndex + 1`
-    // columns.
-    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1)) {
-      // The whole block has the same `colId` -> we get all the information
-      // from the metadata.
+    // agree on the grouped column AND the block has no delta triples. The
+    // column uniformity is equivalent to `firstTriple_` and `lastTriple_`
+    // agreeing on the first `columnIndex + 1` columns.
+    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1) &&
+        !locatedTriplesPerBlock.containsTriples(blockMetadata.blockIndex_)) {
+      // The whole block has the same `colId` and no delta triples ->
+      // we get all the information from the metadata.
       Id colId = getMaskedTriple(blockMetadata.firstTriple_)[columnIndex];
       bool abort = processColId(colId, blockMetadata.numRows_);
       if (abort) {

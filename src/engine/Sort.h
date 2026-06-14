@@ -46,6 +46,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
  public:
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
@@ -65,6 +67,14 @@ class Sort : public Operation {
 
   virtual bool knownEmptyResult() override {
     return subtree_->knownEmptyResult();
+  }
+
+  // For a `Sort` with `LIMIT N`, any N rows are fine as long as they are
+  // sorted: there is no user-defined order that the `LIMIT` is taken against
+  // (user-facing `ORDER BY` goes through `OrderBy`, not `Sort`). So we can
+  // let the subtree compute only N rows and sort those.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
   }
 
   [[nodiscard]] size_t getResultWidth() const override;

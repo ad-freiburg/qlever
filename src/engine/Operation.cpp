@@ -232,16 +232,18 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
-  // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-  // already perform it. An example for an operation that directly computes
-  // the Limit is a full index scan with three variables. Note that the
-  // `QueryPlanner` does currently only set the limit for operations that
-  // support it natively, except for operations in subqueries. This means
-  // that a lot of the time the limit is only artificially applied during
-  // export, allowing the cache to reuse the same operation for different
-  // limits and offsets.
-  if (!supportsLimitOffset()) {
+  // Apply LIMIT and OFFSET unless the operation already handled it itself
+  // (`handlesLimitOffset() == FULL`). An example of an operation that handles
+  // it directly is a full index scan with three variables. Note that the
+  // `QueryPlanner` only forwards the limit to operations that handle it at
+  // all (`FULL` or `PARTIAL`), except for operations in subqueries. This
+  // means that a lot of the time the limit is only artificially applied
+  // during export, allowing the cache to reuse the same operation for
+  // different limits and offsets.
+  if (handlesLimitOffset() == LimitOffsetHandling::NONE) {
     runtimeInfo().addLimitOffsetRow(limitOffset_, true);
+  }
+  if (handlesLimitOffset() != LimitOffsetHandling::FULL) {
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(

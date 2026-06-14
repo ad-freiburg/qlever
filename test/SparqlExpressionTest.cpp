@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
 #include "rdfTypes/GeoPoint.h"
@@ -507,7 +508,9 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
   testMinus(dMinusB, d, b);
+  testPlus(dMinusDat, d, dat);
   testMinus(dMinusDat, d, dat);
+  testPlus(datMinusD, dat, d);
   testMinus(datMinusD, dat, d);
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
@@ -548,15 +551,30 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
   V<Id> undefined{{U, U, U, U}, alloc};
   testMinus(undefined, dat, createDat("2013-02-30T00:00:00Z"));
+  // Test for `DayTimeDuration` + `DayTimeDuration`.
+  V<Id> dat2{
+      {createDat("P340DT3H15M20S", false), createDat("P20DT5H1M9S", false),
+       createDat("P10DT3H50M9S", false), createDat("P256DT9H11M40S", false)},
+      alloc};
+  V<Id> plus20Days{
+      {createDat("P360DT8H16M29S", false), createDat("P40DT10H2M18S", false),
+       createDat("P30DT8H51M18S", false), createDat("P276DT14H12M49S", false)},
+      alloc};
+  testPlus(plus20Days, dat2, createDat("P20DT5H1M9S", false));
+  testPlus(undefined, dat, createDat("2013-02-30T00:00:00Z"));
 #else
   V<Id> undefined{{U, U, U, U}, alloc};
   testMinus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
+  testPlus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
 #endif
 
   V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
   V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
+  V<Id> mixed2PlusDat{{U, U, U, U}, alloc};
   testMinus(mixed2MinusDat, dat, mixed2);
   testMinus(mixed2MinusDat, mixed2, dat);
+  testPlus(mixed2PlusDat, dat, mixed2);
+  testPlus(mixed2PlusDat, mixed2, dat);
 
   // For division, all results are doubles, so there is no difference between
   // int and double inputs.
@@ -820,7 +838,14 @@ TEST(SparqlExpression, stringOperators) {
           IdOrLocalVocabEntryVec{U, lit("bimbim"), iriref("<bambim>"),
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
-          IdOrLocalVocabEntry{iriref("<http://example.com/hi>")}});
+          IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
+  // Mixin interface but logically unreachable (the base IRI is always a
+  // LocalVocabEntry). Verify it throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(sparqlExpression::detail::ParsedUriGetter{}(
+                                   ValueId::makeUndefined(), nullptr),
+                               ::testing::HasSubstr("unreachable"));
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
