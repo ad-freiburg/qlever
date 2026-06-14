@@ -1612,8 +1612,8 @@ TEST(IndexScanTest, StripColumns) {
               baseScan.isIndexScanWithNumVariables(3));
 
     // Test optimization functions
-    EXPECT_EQ(strippedScanOp.supportsLimitOffset(),
-              baseScan.supportsLimitOffset());
+    EXPECT_EQ(strippedScanOp.handlesLimitOffset(),
+              baseScan.handlesLimitOffset());
 
     // Test specification functions
     EXPECT_EQ(strippedScanOp.getScanSpecification().col0Id(),
