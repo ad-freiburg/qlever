@@ -19,7 +19,7 @@ class ValuesForTesting : public Operation {
  private:
   std::vector<Result::IdTableVocabPair> tables_;
   std::vector<std::optional<Variable>> variables_;
-  bool supportsLimit_;
+  bool handlesLimit_;
   // Those can be manually overwritten for testing using the respective getters.
   size_t sizeEstimate_;
   size_t costEstimate_;
@@ -39,7 +39,7 @@ class ValuesForTesting : public Operation {
   // of columns in the table.
   explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
                             std::vector<std::optional<Variable>> variables,
-                            bool supportsLimit = false,
+                            bool handlesLimit = false,
                             std::vector<ColumnIndex> sortedColumns = {},
                             LocalVocab localVocab = LocalVocab{},
                             std::optional<float> multiplicity = std::nullopt,
@@ -47,7 +47,7 @@ class ValuesForTesting : public Operation {
       : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
-        supportsLimit_{supportsLimit},
+        handlesLimit_{handlesLimit},
         sizeEstimate_{table.numRows()},
         costEstimate_{table.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
@@ -72,7 +72,7 @@ class ValuesForTesting : public Operation {
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
-        supportsLimit_{false},
+        handlesLimit_{false},
         sizeEstimate_{0},
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
@@ -111,7 +111,7 @@ class ValuesForTesting : public Operation {
   Result computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
-      AD_CORRECTNESS_CHECK(!supportsLimit_);
+      AD_CORRECTNESS_CHECK(!handlesLimit_);
       auto lazyRange =
           tables_ | ql::views::transform([](const auto& tableAndVocab) {
             return Result::IdTableVocabPair{tableAndVocab.idTable_.clone(),
@@ -125,7 +125,7 @@ class ValuesForTesting : public Operation {
       table.insertAtEnd(idTable);
       aggregateLocalVocab.mergeWith(localVocab);
     }
-    if (supportsLimit_) {
+    if (handlesLimit_) {
       table.erase(table.begin() + getLimitOffset().upperBound(table.size()),
                   table.end());
       table.erase(table.begin(),
@@ -145,8 +145,8 @@ class ValuesForTesting : public Operation {
   }
 
   LimitOffsetHandling handlesLimitOffset() const override {
-    return supportsLimit_ ? LimitOffsetHandling::FULL
-                          : LimitOffsetHandling::NONE;
+    return handlesLimit_ ? LimitOffsetHandling::FULL
+                         : LimitOffsetHandling::NONE;
   }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
@@ -171,7 +171,7 @@ class ValuesForTesting : public Operation {
         }
       }
     }
-    str << " Supports limit: " << supportsLimit_;
+    str << " Handles limit: " << handlesLimit_;
     return std::move(str).str();
   }
 
@@ -234,7 +234,7 @@ class ValuesForTesting : public Operation {
   ValuesForTesting(const ValuesForTesting& other)
       : Operation{other._executionContext},
         variables_{other.variables_},
-        supportsLimit_{other.supportsLimit_},
+        handlesLimit_{other.handlesLimit_},
         sizeEstimate_{other.sizeEstimate_},
         costEstimate_{other.costEstimate_},
         unlikelyToFitInCache_{other.unlikelyToFitInCache_},
