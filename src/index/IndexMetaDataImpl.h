@@ -16,13 +16,9 @@
 
 // _____________________________________________________________________________
 template <class MapType>
-template <bool isPersistentMetaData>
 void IndexMetaData<MapType>::add(AddType addedValue) {
-  // only add rmd to _data if it's not already present there
-  if constexpr (!isPersistentMetaData) {
-    totalElements_ += addedValue.getNofElements();
-    data_.set(addedValue.col0Id_, addedValue);
-  }
+  totalElements_ += addedValue.getNofElements();
+  data_.set(addedValue.col0Id_, addedValue);
 }
 
 // _____________________________________________________________________________
