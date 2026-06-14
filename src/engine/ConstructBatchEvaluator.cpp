@@ -8,6 +8,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
+#include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "util/Views.h"
 
@@ -80,11 +81,23 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     }
   }
 
-  // Phase 2: batch-resolve cache misses. `missIds` is deduplicated and sorted
+  // Phase 2: resolve cache misses. `missIds` is deduplicated and sorted
   // (inherited from `sortedIndices`), satisfying the `idsToStringAndType`
-  // precondition for sequential VocabIndex I/O.
-  auto missResolved =
-      ql::exportIds::idsToStringAndType(index, missIds, localVocab);
+  // precondition for sequential VocabIndex I/O. The `use-batch-vocab-lookup`
+  // parameter selects between the single batched (io_uring-backed) lookup and a
+  // per-ID baseline that resolves the very same misses one at a time; this
+  // isolates the batched-disk-read contribution for the evaluation.
+  std::vector<std::optional<std::pair<std::string, const char*>>> missResolved;
+  if (getRuntimeParameter<&RuntimeParameters::useBatchVocabLookup_>()) {
+    missResolved =
+        ql::exportIds::idsToStringAndType(index, missIds, localVocab);
+  } else {
+    missResolved.reserve(missIds.size());
+    for (const Id& id : missIds) {
+      missResolved.push_back(
+          ql::exportIds::idToStringAndType(index, id, localVocab));
+    }
+  }
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {

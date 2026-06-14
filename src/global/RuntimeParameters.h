@@ -125,6 +125,13 @@ struct RuntimeParameters {
   // cost-estimate.
   Bool enableDistributiveUnion_{true, "enable-distributive-union"};
 
+  // If set, the CONSTRUCT export resolves vocabulary cache-misses with a single
+  // batched (and, where available, io_uring-backed) vocabulary lookup. If
+  // unset, the same deduplicated+sorted misses are resolved one ID at a time
+  // via `idToStringAndType`. This isolates the batched-disk-read contribution
+  // for the evaluation without confounding it with the other branch changes.
+  Bool useBatchVocabLookup_{true, "use-batch-vocab-lookup"};
+
   // If set, the query `SELECT * { GRAPH ?g { ?s ?p ?o } }` will return
   // triples from the default graph, otherwise it will follow the
   // behaviour defined by the SPARQL standard which filters them out.
