@@ -109,8 +109,12 @@ struct SortByColumns {
 // `TU` that includes `IndexImpl.h` or `PatternCreator.h` would instantiate all
 // member functions of each specialisation (~100 s cumulative per ftime-trace).
 // The corresponding explicit instantiation definitions live in
-// `CompressedExternalIdTableSorterInstantiations.cpp`
-// .
+// `CompressedExternalIdTableSorterInstantiations.cpp`.
+//
+// NOTE: If you add a new `CompressedExternalIdTableSorter` specialisation used
+// by index building, you must add a matching explicit instantiation in
+// `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
+// fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
 namespace ad_utility {
 
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,

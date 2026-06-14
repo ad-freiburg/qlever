@@ -11,6 +11,12 @@
 // every TU gets the inline definition and the call can be inlined by the
 // compiler. Under QLEVER_CHEAPER_COMPILATION this file is only included in the
 // corresponding .cpp, providing a single out-of-line definition.
+//
+// Do NOT include this header directly. Include
+// `SparqlExpressionGenerators.h` instead. The dual-mode setup works only when
+// `SparqlExpressionGenerators.h` mediates inclusion; a direct include from a
+// third file under `QLEVER_CHEAPER_COMPILATION` produces a non-`inline`
+// definition that breaks linking.
 
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORSIMPL_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORSIMPL_H
