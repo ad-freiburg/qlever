@@ -3038,7 +3038,7 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
                   hasLimit({std::nullopt, 3})));
   // Last offset should only be applied by exporter since VALUES does not
-  // support OFFSET natively
+  // handle OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} OFFSET 1 } OFFSET 2 } OFFSET 5",
@@ -3047,8 +3047,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
   h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
-  // Last limit should only be applied by exporter since VALUES does not support
-  // OFFSET natively
+  // Last limit should only be applied by exporter since VALUES does not handle
+  // OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} LIMIT 3 } LIMIT 2 } LIMIT 1",

@@ -1218,7 +1218,8 @@ auto parse =
     [](const std::string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+       std::string_view baseIri = "") {
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
@@ -1228,6 +1229,9 @@ auto parse =
           std::move(prefixes), std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
+      }
+      if (!baseIri.empty()) {
+        p.visitor_.setBaseIriForTesting(baseIri);
       }
       return p.parseTypesafe(F);
     };
@@ -1298,6 +1302,19 @@ struct ExpectCompleteParse {
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
               input, {}, std::move(activeDatasetClauses), disableSomeChecks),
+          matcher, l);
+    });
+  }
+
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      std::string_view baseIri,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, prefixMap_, std::nullopt, disableSomeChecks, baseIri),
           matcher, l);
     });
   }

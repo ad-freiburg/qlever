@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
+#include "util/ParsedUri.h"
 #undef EOF
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
@@ -104,7 +105,7 @@ class SparqlQleverVisitor {
   PrefixMap prefixMap_{};
 
   // The `BASE` IRI of the query if any.
-  ad_utility::triple_component::Iri baseIri_{};
+  std::optional<qlever::util::ParsedUri> baseIri_{};
 
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
@@ -180,6 +181,10 @@ class SparqlQleverVisitor {
 
   void setParseModeToInsideConstructTemplateForTesting() {
     treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
+  }
+
+  void setBaseIriForTesting(std::string_view uri) {
+    baseIri_ = qlever::util::ParsedUri{uri};
   }
 
   // ___________________________________________________________________________
