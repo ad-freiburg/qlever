@@ -8,6 +8,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <charconv>
 #include <filesystem>
 
 #include "index/Postings.h"
