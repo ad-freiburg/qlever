@@ -86,3 +86,16 @@ const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
 }
 
 }  // namespace sparqlExpression
+
+namespace sparqlExpression::detail {
+
+// _____________________________________________________________________________
+bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
+}  // namespace sparqlExpression::detail
