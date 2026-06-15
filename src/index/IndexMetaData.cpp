@@ -42,7 +42,7 @@ bool IndexMetaData::col0IdExists(Id col0Id) const {
 // ____________________________________________________________________________
 void IndexMetaData::writeToFile(const std::string& filename) const {
   ad_utility::File permutationFile{filename, "w"};
-  ad_utility::File metaFile{filename + MMAP_FILE_SUFFIX, "w"};
+  ad_utility::File metaFile{filename + META_FILE_SUFFIX, "w"};
   appendToFile(&permutationFile, &metaFile);
 }
 
@@ -65,7 +65,7 @@ void IndexMetaData::appendToFile(ad_utility::File* permutationFile,
 // _________________________________________________________________________
 void IndexMetaData::readFromFile(const std::string& filename) {
   ad_utility::File permutationFile{filename, "r"};
-  ad_utility::File metaFile{filename + MMAP_FILE_SUFFIX, "r"};
+  ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
   readFromFile(&permutationFile, &metaFile);
 }
 

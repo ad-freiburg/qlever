@@ -36,7 +36,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
                                1039};
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
-  std::string filename = gtestCurrentTestName() + ".rmd";
+  std::string filename = gtestCurrentTestName();
   ad_utility::serialization::FileWriteSerializer f(filename);
   f << rmdF;
   f << rmdB;
@@ -54,8 +54,8 @@ TEST(RelationMetaDataTest, writeReadTest) {
 }
 
 TEST(IndexMetaDataTest, writeReadTest2) {
-  std::string imdFilename = gtestCurrentTestName() + ".imd";
-  std::string metaFilename = imdFilename + MMAP_FILE_SUFFIX;
+  std::string imdFilename = gtestCurrentTestName();
+  std::string metaFilename = imdFilename + META_FILE_SUFFIX;
   absl::Cleanup cleanup{[&imdFilename, &metaFilename]() {
     ad_utility::deleteFile(imdFilename);
     ad_utility::deleteFile(metaFilename);
@@ -106,7 +106,7 @@ TEST(IndexMetaDataTest, writeReadTest2) {
 // written by older QLever versions (which used `MmapVector`), and files it
 // writes can still be read by an `MmapVectorView` (as older versions would).
 TEST(IndexMetaDataTest, mmapFormatBackwardsCompatibility) {
-  std::string filename = gtestCurrentTestName() + ".meta";
+  std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
   CompressedRelationMetadata rmd1{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmd2{V(2), 5, 3.0, 43.0, 10};

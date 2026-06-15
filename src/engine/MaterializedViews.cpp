@@ -278,7 +278,7 @@ IndexMetaData MaterializedViewWriter::writePermutation(
   spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
-    ad_utility::File spoMetaFile(spoFilename + ".meta", "w");
+    ad_utility::File spoMetaFile(spoFilename + META_FILE_SUFFIX, "w");
     spoMetaData.appendToFile(&spoFile, &spoMetaFile);
   }
 

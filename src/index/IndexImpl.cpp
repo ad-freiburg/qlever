@@ -936,7 +936,7 @@ void IndexImpl::writeMetaData(IndexMetaData& metaData,
                               const std::string& filename) const {
   metaData.setName(getKbName());
   ad_utility::File f(filename, "r+");
-  ad_utility::File metaFile(filename + MMAP_FILE_SUFFIX, "w");
+  ad_utility::File metaFile(filename + META_FILE_SUFFIX, "w");
   metaData.appendToFile(&f, &metaFile);
 }
 
