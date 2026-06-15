@@ -524,8 +524,8 @@ TEST(RegexExpression, prefixRegexOnGroupedVariableWithUnexpectedChildResult) {
   auto expression = makeRegexExpression("?vocab", "^al");
   ASSERT_TRUE(isPrefixExpression(expression));
   expression->replaceChild(
-      0, std::make_unique<SingleUseExpression>(ExpressionResult{
-             IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
+      0, std::make_unique<SingleUseExpression>(
+             ExpressionResult{IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
 
   TestContext ctx;
   ctx.context._groupedVariables = {Variable{"?vocab"}};
