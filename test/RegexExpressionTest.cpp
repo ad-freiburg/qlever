@@ -514,6 +514,29 @@ TEST(RegexExpression, prefixRegexInsideAggregateIsNotFolded) {
 }
 
 // _____________________________________________________________________________
+TEST(RegexExpression, prefixRegexOnGroupedVariableWithUnexpectedChildResult) {
+  // The child of a `PrefixRegexExpression` is always a single variable, so when
+  // the variable is grouped, the child evaluates either to a single `ValueId`
+  // or (for hash-map/lazy GROUP BY) to a `VectorWithMemoryLimit<ValueId>`. Here
+  // we force an unexpected result type by replacing the child with an
+  // expression that yields an `IdOrLocalVocabEntry`, which must trigger the
+  // `AD_FAIL()` in the otherwise unreachable `else` branch.
+  auto expression = makeRegexExpression("?vocab", "^al");
+  ASSERT_TRUE(isPrefixExpression(expression));
+  expression->replaceChild(
+      0, std::make_unique<SingleUseExpression>(ExpressionResult{
+             IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
+
+  TestContext ctx;
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
+  ctx.context._isPartOfGroupBy = true;
+  ctx.context._beginIndex = 0;
+  ctx.context._endIndex = 1;
+  AD_EXPECT_THROW_WITH_MESSAGE(expression->evaluate(&ctx.context),
+                               ::testing::HasSubstr("unreachable"));
+}
+
+// _____________________________________________________________________________
 TEST(RegexExpression, getCacheKey) {
   using namespace ::testing;
   auto exp0 = makeRegexExpression("?first", "^alp");

@@ -176,13 +176,14 @@ TEST(UuidExpression, evaluateUuidExpression) {
 }
 
 // _____________________________________________________________________________
-TEST(UuidExpression, insideAggregateReturnsVector) {
+template <typename Expression>
+void testInsideAggregateReturnsVector() {
   TestContext testContext{};
   auto& evaluationContext = testContext.context;
   evaluationContext._isPartOfGroupBy = true;
   // Wrap expression in an aggregate.
-  auto aggregate = std::make_unique<SampleExpression>(
-      false, std::make_unique<UuidExpression>());
+  auto aggregate =
+      std::make_unique<SampleExpression>(false, std::make_unique<Expression>());
   const auto* uuid = aggregate->children()[0].get();
   ASSERT_TRUE(uuid->isInsideAggregate());
   auto result = uuid->evaluate(&evaluationContext);
@@ -191,6 +192,16 @@ TEST(UuidExpression, insideAggregateReturnsVector) {
           result));
   EXPECT_EQ(std::get<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(result).size(),
             evaluationContext.size());
+}
+
+// _____________________________________________________________________________
+TEST(UuidExpression, insideAggregateReturnsVector) {
+  testInsideAggregateReturnsVector<UuidExpression>();
+}
+
+// _____________________________________________________________________________
+TEST(UuidExpression, insideAggregateReturnsVectorStrUuid) {
+  testInsideAggregateReturnsVector<StrUuidExpression>();
 }
 
 // _____________________________________________________________________________
