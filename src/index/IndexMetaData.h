@@ -56,10 +56,7 @@ class IndexMetaData {
  public:
   using BlocksType = std::vector<CompressedBlockMetadata>;
 
-  // Private member variables.
  private:
-  off_t offsetAfter_ = 0;
-
   std::string name_;
 
   // TODO: For each of the following two (data_ and blockData_), both the type
@@ -79,8 +76,6 @@ class IndexMetaData {
   IndexMetaData() = default;
 
   void add(CompressedRelationMetadata addedValue);
-
-  off_t getOffsetAfter() const;
 
   std::optional<CompressedRelationMetadata> getMetaDataIfPresent(
       Id col0Id) const;
@@ -120,8 +115,6 @@ class IndexMetaData {
 
   const std::string& getName() const { return name_; }
 
-  size_t getVersion() const { return version_; }
-
   BlocksType& blockData() { return *blockData_; }
   const BlocksType& blockData() const { return *blockData_; }
   std::shared_ptr<const BlocksType> blockDataShared() const {
@@ -157,7 +150,7 @@ class IndexMetaData {
 
     serializer | arg.version_;
     // This check might only become false, if we are reading from the serializer
-    if (arg.getVersion() != V_CURRENT) {
+    if (arg.version_ != V_CURRENT) {
       throw WrongFormatException(
           "The binary format of this index is no longer supported by QLever. "
           "Please rebuild the index.");
@@ -168,7 +161,10 @@ class IndexMetaData {
     // is handled separately by `appendToFile` / `readFromFile`.
     serializer | arg.name_;
     serializer | arg.blockData();
-    serializer | arg.offsetAfter_;
+    // This class no longer needs this member but to keep the format compatible
+    // we need to consume/write this value here.
+    [[maybe_unused]] off_t offsetAfter = 0;
+    serializer | offsetAfter;
     serializer | arg.totalElements_;
     serializer | arg.numDistinctCol0_;
   }

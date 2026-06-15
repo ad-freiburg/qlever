@@ -25,9 +25,6 @@ void IndexMetaData::add(CompressedRelationMetadata addedValue) {
 }
 
 // _____________________________________________________________________________
-off_t IndexMetaData::getOffsetAfter() const { return offsetAfter_; }
-
-// _____________________________________________________________________________
 std::optional<CompressedRelationMetadata> IndexMetaData::getMetaDataIfPresent(
     Id col0Id) const {
   return data_.getIfPresent(col0Id);
