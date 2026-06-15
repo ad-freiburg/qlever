@@ -76,37 +76,6 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  // Getters for the Qlever instance (require initialize() to be called first)
-  qlever::Qlever& qlever() { return qlever_.value(); }
-  const qlever::Qlever& qlever() const { return qlever_.value(); }
-
-  Index& index() { return qlever().index(); }
-  const Index& index() const { return qlever().index(); }
-  std::shared_ptr<const Index> sharedIndex() const {
-    return qlever().sharedIndex();
-  }
-
-  QueryResultCache& cache() { return qlever().cache(); }
-  const QueryResultCache& cache() const { return qlever().cache(); }
-  ad_utility::AllocatorWithLimit<Id>& allocator() {
-    return qlever().allocator();
-  }
-  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
-    return qlever().allocator();
-  }
-  SortPerformanceEstimator& sortPerformanceEstimator() {
-    return qlever().sortPerformanceEstimator();
-  }
-  const SortPerformanceEstimator& sortPerformanceEstimator() const {
-    return qlever().sortPerformanceEstimator();
-  }
-  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
-  const NamedResultCache& namedResultCache() const {
-    return qlever().namedResultCache();
-  }
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return qlever().materializedViewsManager();
-  }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -414,6 +383,39 @@ class Server {
   // index. This assumes that the access token has already been checked and no
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+
+ private:
+  // Getters for the `Qlever` instance, as well as its data members. (require `initialize()` to be called first).
+  qlever::Qlever& qlever() { return qlever_.value(); }
+  const qlever::Qlever& qlever() const { return qlever_.value(); }
+
+  Index& index() { return qlever().index(); }
+  const Index& index() const { return qlever().index(); }
+  std::shared_ptr<const Index> sharedIndex() const {
+    return qlever().sharedIndex();
+  }
+
+  QueryResultCache& cache() { return qlever().cache(); }
+  const QueryResultCache& cache() const { return qlever().cache(); }
+  ad_utility::AllocatorWithLimit<Id>& allocator() {
+    return qlever().allocator();
+  }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return qlever().allocator();
+  }
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return qlever().sortPerformanceEstimator();
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return qlever().sortPerformanceEstimator();
+  }
+  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
+  const NamedResultCache& namedResultCache() const {
+    return qlever().namedResultCache();
+  }
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return qlever().materializedViewsManager();
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H
