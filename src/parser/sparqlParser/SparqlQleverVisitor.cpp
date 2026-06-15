@@ -2310,10 +2310,10 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  return toRdfCollection(
-      visitVector(ctx->graphNode()), [](const std::string& iri) {
-        return GraphTerm{Iri::fromIrirefValidated(std::move(iri))};
-      });
+  return toRdfCollection(visitVector(ctx->graphNode()),
+                         [](const std::string& iri) {
+                           return GraphTerm{Iri::fromIrirefValidated(iri)};
+                         });
 }
 
 // _____________________________________________________________________________
