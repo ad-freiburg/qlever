@@ -19,9 +19,9 @@
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/SortedVector.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
-#include "util/ZipMergeIterator.h"
 
 class Permutation;
 
@@ -105,155 +105,9 @@ struct LocatedTriple {
   }
 };
 
-// A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
-// this to store all located triples with the same `blockIndex_`.
-//
-// NOTE: We could also overload `std::less` here, but the explicit specification
-// of the order makes it clearer.
-struct LocatedTripleCompare {
-  bool operator()(const LocatedTriple& x, const LocatedTriple& y) const {
-    return x.triple_ < y.triple_;
-  }
-};
-
-// Data structure for `LocatedTriples` optimized for sorted access.
-// The `LocatedTriples` are stored in a vector sorted by the triple. Newly
-// inserted triples are sorted on access. Only the last inserted `LocatedTriple`
-// for a triple is retained, so the last operation for a triple is retained.
-class SortedLocatedTriplesVector {
- public:
-  // Some GTest matchers require `value_type`, also add it as a type for the
-  // `Container` requirement.
-  using value_type = LocatedTriple;
-
- private:
-  using Storage = std::vector<value_type>;
-  Storage triples_ = {};
-  size_t numItemsLargePart_ = 0;
-  bool smallPartIsSorted_ = true;
-
-  // Returns the subrange of the small/large part from the whole storage
-  // vector.
-  auto smallPart();
-  auto largePart();
-
-  // Sort the `LocatedTriple`s and only keep the last `LocatedTriples` for each
-  // triple.
-  void sortAndMergeParts();
-  void sortSmallPart();
-
-  // Whether the items are all sorted and deduplicated. Items can only be read
-  // if `isClean` is true. Also enforces the class invariant that the boundary
-  // index `numItemsLargePart_` lies within `triples_`; if it ever drifts out of
-  // range, sorted-access methods fail this check rather than silently UB'ing
-  // through `triples_.begin() + numItemsLargePart_`.
-  bool isClean() const {
-    return smallPartIsSorted_ && numItemsLargePart_ <= triples_.size();
-  }
-
-  // For the range `rangeToSort` contained in `triples` sort it by triple and
-  // keep the last `LocatedTriple` for each triple.
-  CPP_template(typename R)(
-      requires ql::ranges::range<
-          R>) static void sortAndRemoveDuplicates(Storage& triples,
-                                                  R&& rangeToSort) {
-    // Stable sort ensures that the operations for each triple are not
-    // reordered. Older `LocatedTriple`s are before newer ones.
-    ql::ranges::stable_sort(rangeToSort, {}, &LocatedTriple::triple_);
-    // We want to keep the last `LocatedTriple` for consecutive groups with the
-    // same triple. `unique` keeps the first element for consecutive groups with
-    // the same element. So `unique(reverse)` does exactly what we want.
-    auto freedReverse = ql::ranges::unique(ql::views::reverse(rangeToSort), {},
-                                           &LocatedTriple::triple_);
-    // std::ranges and ranges-v3 have different return types for `unique`. The
-    // `#ifdef` below accommodates the differences.
-#ifdef QLEVER_CPP_17
-    auto eraseEnd = freedReverse.base();
-#else
-    auto eraseEnd = freedReverse.begin().base();
-#endif
-    // Delete the freed up space which is at the beginning of `rangeToSort`.
-    triples.erase(ql::ranges::begin(rangeToSort), eraseEnd);
-  }
-
-  // Removes everything in `r1` that is contained in `r2`. Returns the number of
-  // items deleted. NOTE: `r1` must be a subrange of `triples`.
-  CPP_template(typename R1, typename R2)(
-      requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
-          R1, LocatedTriple>&& ql::ranges::input_range<R2>) static size_t
-      eraseSortedSubRange(Storage& triples, R1&& r1, R2&& r2) {
-    auto [_, newEndOfSubrange] = ql::ranges::set_difference(
-        r1, r2, ql::ranges::begin(r1), {}, &LocatedTriple::triple_,
-        &LocatedTriple::triple_);
-    auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
-    triples.erase(newEndOfSubrange, ql::ranges::end(r1));
-    return numItemsErased;
-  }
-
-  FRIEND_TEST(SortedLocatedTriplesVectorTest, eraseSortedSubRange);
-  FRIEND_TEST(SortedLocatedTriplesVectorTest, sortAndRemoveDuplicates);
-  FRIEND_TEST(SortedLocatedTriplesVectorTest, constructor);
-  FRIEND_TEST(SortedLocatedTriplesVectorTest, insert);
-
- public:
-  SortedLocatedTriplesVector() = default;
-
-  static SortedLocatedTriplesVector fromSorted(
-      std::vector<LocatedTriple> sortedTriples);
-
-  // Consolidates the stored items after inserts. `consolidate` must be called
-  // before any access after inserting new items. After calling `consolidate`
-  // `isClean` will be true.
-  void consolidate(double threshold = 0.25);
-
-  void insert(LocatedTriple lt);
-
-  using iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      Storage::iterator, std::less<>,
-      ad_utility::MemberProj<&LocatedTriple::triple_>>;
-  using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      Storage::const_iterator, std::less<>,
-      ad_utility::MemberProj<&LocatedTriple::triple_>>;
-
-  iterator begin();
-  const_iterator begin() const;
-  iterator end();
-  const_iterator end() const;
-
-  LocatedTriple& back();
-  const LocatedTriple& back() const;
-
-  // Erase a single or multiple elements.
-  void erase(const LocatedTriple& elem);
-  void erase(std::vector<LocatedTriple> toDelete);
-  // Erase multiple elements that are already sorted.
-  void eraseSorted(ql::span<LocatedTriple> sortedTriples);
-
-  // Returns an upper bound for the size. For an exact size `sizeForTesting`
-  // which reads the whole vector though.
-  size_t size() const;
-  size_t sizeForTesting() const;
-
-  bool empty() const;
-  void clear();
-
-  bool operator==(const SortedLocatedTriplesVector& other) const {
-    // TODO: think more about equality. How it is currently SLTVs with the same
-    // effective elements but also (a weaker condition) the same elements that
-    // are distributed differently over the parts can be unequal.
-    AD_CONTRACT_CHECK(isClean());
-    AD_CONTRACT_CHECK(other.isClean());
-    return triples_ == other.triples_;
-  }
-
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const SortedLocatedTriplesVector& lts) {
-    os << "{ ";
-    ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
-    os << "}";
-    return os;
-  }
-};
+using SortedLocatedTriplesVector =
+    ad_utility::SortedVector<LocatedTriple, std::less<>,
+                             ad_utility::MemberProj<&LocatedTriple::triple_>>;
 
 using LocatedTriples = SortedLocatedTriplesVector;
 
