@@ -16,12 +16,11 @@
 #include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeString.h"
 
 // _____________________________________________________________________________
-void IndexMetaData::add(CompressedRelationMetadata addedValue) {
+void IndexMetaData::add(const CompressedRelationMetadata& addedValue) {
   totalElements_ += addedValue.getNofElements();
-  data_.add(std::move(addedValue));
+  data_.add(addedValue);
 }
 
 // _____________________________________________________________________________
@@ -48,7 +47,7 @@ void IndexMetaData::appendToFile(ad_utility::File* permutationFile,
   off_t startOfMeta = permutationFile->tell();
   ad_utility::serialization::FileWriteSerializer serializer{
       std::move(*permutationFile)};
-  serializer << (*this);
+  serializer << *this;
   *permutationFile = std::move(serializer).file();
   permutationFile->write(&startOfMeta, sizeof(startOfMeta));
 }
@@ -75,7 +74,7 @@ void IndexMetaData::readFromFile(ad_utility::File* permutationFile,
   ad_utility::serialization::ByteBufferReadSerializer serializer{
       std::move(buf)};
 
-  serializer >> (*this);
+  serializer >> *this;
 }
 
 // _____________________________________________________________________________

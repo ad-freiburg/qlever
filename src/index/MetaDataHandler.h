@@ -50,7 +50,7 @@ class MetaDataWrapperDense {
 
   // Add a metadata object. The objects have to be added in strictly ascending
   // order of their `col0Id_`, so that `vec_` stays sorted.
-  void add(CompressedRelationMetadata value);
+  void add(const CompressedRelationMetadata& value);
 
   // Return the metadata for the given `col0Id`, or `std::nullopt` if there is
   // no metadata for it.

@@ -15,9 +15,11 @@
 #include "./util/IdTestHelpers.h"
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "index/MetaDataHandler.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/MmapVector.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 
 namespace {
@@ -200,4 +202,67 @@ TEST(IndexMetaDataTest, exchangeMultiplicitiesFailsWhenIncompatible) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(imda.exchangeMultiplicities(imdc),
                                         ::testing::HasSubstr("length"),
                                         ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, addRejectsNonAscendingCol0Id) {
+  MetaDataWrapperDense wrapper;
+  CompressedRelationMetadata rmd1{V(2), 3, 2.0, 42.0, 16};
+  CompressedRelationMetadata rmd2{V(1), 5, 3.0, 43.0, 10};
+  wrapper.add(rmd1);
+  // `rmd2` has a smaller `col0Id_` than the previously added `rmd1`.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(wrapper.add(rmd2),
+                                        ::testing::HasSubstr("col0Id_"),
+                                        ad_utility::Exception);
+  // Adding with an equal `col0Id_` (not strictly ascending) is also rejected.
+  CompressedRelationMetadata rmd3{V(2), 5, 3.0, 43.0, 10};
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(wrapper.add(rmd3),
+                                        ::testing::HasSubstr("col0Id_"),
+                                        ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, deserializationRejectsWrongFormat) {
+  using ad_utility::serialization::ByteBufferReadSerializer;
+  using ad_utility::serialization::ByteBufferWriteSerializer;
+
+  // A wrong magic number is rejected before anything else is read.
+  {
+    ByteBufferWriteSerializer writer;
+    uint64_t wrongMagicNumber = MAGIC_NUMBER_FOR_SERIALIZATION - 1;
+    writer | wrongMagicNumber;
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    IndexMetaData imd;
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        reader >> imd, ::testing::HasSubstr("no longer supported"),
+        WrongFormatException);
+  }
+
+  // The magic number matches, but the version does not.
+  {
+    ByteBufferWriteSerializer writer;
+    uint64_t magicNumber = MAGIC_NUMBER_FOR_SERIALIZATION;
+    uint64_t wrongVersion = V_CURRENT - 1;
+    writer | magicNumber;
+    writer | wrongVersion;
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    IndexMetaData imd;
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        reader >> imd, ::testing::HasSubstr("no longer supported"),
+        WrongFormatException);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, appendToFileRejectsClosedFile) {
+  IndexMetaData imd;
+  imd.add(CompressedRelationMetadata{V(1), 3, 2.0, 42.0, 16});
+
+  // A default-constructed `File` is not open.
+  ad_utility::File permutationFile;
+  ad_utility::File metaFile;
+  ASSERT_FALSE(permutationFile.isOpen());
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      imd.appendToFile(&permutationFile, &metaFile),
+      ::testing::HasSubstr("isOpen"), ad_utility::Exception);
 }

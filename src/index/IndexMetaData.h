@@ -52,7 +52,6 @@ constexpr uint64_t V_CURRENT = 2;
 // permutation), the per-block metadata is part of this object's serialization
 // (stored at the end of the permutation file).
 class IndexMetaData {
-  // Type definitions.
  public:
   using BlocksType = std::vector<CompressedBlockMetadata>;
 
@@ -71,12 +70,12 @@ class IndexMetaData {
   size_t numDistinctCol0_ = 0;
   uint64_t version_ = V_CURRENT;
 
-  // Public methods.
  public:
   IndexMetaData() = default;
 
-  void add(CompressedRelationMetadata addedValue);
+  void add(const CompressedRelationMetadata& addedValue);
 
+  // Return the metadata for this id if it has been stored.
   std::optional<CompressedRelationMetadata> getMetaDataIfPresent(
       Id col0Id) const;
 
