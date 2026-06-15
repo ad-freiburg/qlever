@@ -184,8 +184,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id, const LocatedTriplesState& locatedTriplesState) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+  auto optionalMetadata = meta_.getMetaDataIfPresent(col0Id);
+  if (optionalMetadata.has_value()) {
+    return optionalMetadata.value();
   }
   return reader().getMetadataForSmallRelation(
       getScanSpecAndBlocks(

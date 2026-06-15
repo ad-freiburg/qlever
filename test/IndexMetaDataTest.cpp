@@ -91,8 +91,8 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     IndexMetaData imd2;
     imd2.readFromFile(imdFilename);
 
-    auto rmdFn = imd2.getMetaData(V(1));
-    auto rmdFn2 = imd2.getMetaData(V(2));
+    auto rmdFn = imd2.getMetaDataIfPresent(V(1)).value();
+    auto rmdFn2 = imd2.getMetaDataIfPresent(V(2)).value();
 
     ASSERT_EQ(rmdF, rmdFn);
     ASSERT_EQ(rmdF2, rmdFn2);
@@ -159,15 +159,23 @@ TEST(IndexMetaDataTest, exchangeMultiplicities) {
 
   imda.exchangeMultiplicities(imdb);
 
-  EXPECT_FLOAT_EQ(imda.getMetaData(V(1)).multiplicityCol1_, 2.0);
-  EXPECT_FLOAT_EQ(imda.getMetaData(V(1)).multiplicityCol2_, 3.0);
-  EXPECT_FLOAT_EQ(imda.getMetaData(V(2)).multiplicityCol1_, 4.0);
-  EXPECT_FLOAT_EQ(imda.getMetaData(V(2)).multiplicityCol2_, 5.0);
+  EXPECT_FLOAT_EQ(imda.getMetaDataIfPresent(V(1)).value().multiplicityCol1_,
+                  2.0);
+  EXPECT_FLOAT_EQ(imda.getMetaDataIfPresent(V(1)).value().multiplicityCol2_,
+                  3.0);
+  EXPECT_FLOAT_EQ(imda.getMetaDataIfPresent(V(2)).value().multiplicityCol1_,
+                  4.0);
+  EXPECT_FLOAT_EQ(imda.getMetaDataIfPresent(V(2)).value().multiplicityCol2_,
+                  5.0);
 
-  EXPECT_FLOAT_EQ(imdb.getMetaData(V(1)).multiplicityCol1_, 3.0);
-  EXPECT_FLOAT_EQ(imdb.getMetaData(V(1)).multiplicityCol2_, 2.0);
-  EXPECT_FLOAT_EQ(imdb.getMetaData(V(2)).multiplicityCol1_, 5.0);
-  EXPECT_FLOAT_EQ(imdb.getMetaData(V(2)).multiplicityCol2_, 4.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaDataIfPresent(V(1)).value().multiplicityCol1_,
+                  3.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaDataIfPresent(V(1)).value().multiplicityCol2_,
+                  2.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaDataIfPresent(V(2)).value().multiplicityCol1_,
+                  5.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaDataIfPresent(V(2)).value().multiplicityCol2_,
+                  4.0);
 }
 
 // _____________________________________________________________________________

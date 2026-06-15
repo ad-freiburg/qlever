@@ -12,7 +12,7 @@
 #ifndef QLEVER_SRC_INDEX_METADATAHANDLER_H
 #define QLEVER_SRC_INDEX_METADATAHANDLER_H
 
-#include <boost/optional.hpp>
+#include <optional>
 #include <vector>
 
 #include "index/CompressedRelation.h"
@@ -50,11 +50,11 @@ class MetaDataWrapperDense {
 
   // Add a metadata object. The objects have to be added in strictly ascending
   // order of their `col0Id_`, so that `vec_` stays sorted.
-  void add(const CompressedRelationMetadata& value);
+  void add(CompressedRelationMetadata value);
 
-  // Return the metadata for the given `col0Id`, or `boost::none` if there is no
-  // metadata for it.
-  [[nodiscard]] boost::optional<const CompressedRelationMetadata&> getIfPresent(
+  // Return the metadata for the given `col0Id`, or `std::nullopt` if there is
+  // no metadata for it.
+  [[nodiscard]] std::optional<CompressedRelationMetadata> getIfPresent(
       Id col0Id) const;
 
   // Exchange the multiplicities of the last column with those of `other` (see

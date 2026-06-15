@@ -19,24 +19,18 @@
 #include "util/Serializer/SerializeString.h"
 
 // _____________________________________________________________________________
-void IndexMetaData::add(AddType addedValue) {
+void IndexMetaData::add(CompressedRelationMetadata addedValue) {
   totalElements_ += addedValue.getNofElements();
-  data_.add(addedValue);
+  data_.add(std::move(addedValue));
 }
 
 // _____________________________________________________________________________
 off_t IndexMetaData::getOffsetAfter() const { return offsetAfter_; }
 
 // _____________________________________________________________________________
-IndexMetaData::GetType IndexMetaData::getMetaData(Id col0Id) const {
-  auto metaData = data_.getIfPresent(col0Id);
-  AD_CONTRACT_CHECK(metaData.has_value());
-  return metaData.value();
-}
-
-// _____________________________________________________________________________
-bool IndexMetaData::col0IdExists(Id col0Id) const {
-  return data_.getIfPresent(col0Id).has_value();
+std::optional<CompressedRelationMetadata> IndexMetaData::getMetaDataIfPresent(
+    Id col0Id) const {
+  return data_.getIfPresent(col0Id);
 }
 
 // ____________________________________________________________________________

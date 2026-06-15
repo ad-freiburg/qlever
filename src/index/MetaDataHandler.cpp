@@ -53,19 +53,19 @@ void MetaDataWrapperDense::writeToFile(ad_utility::File& file) const {
 }
 
 // _____________________________________________________________________________
-void MetaDataWrapperDense::add(const CompressedRelationMetadata& value) {
+void MetaDataWrapperDense::add(CompressedRelationMetadata value) {
   AD_CONTRACT_CHECK(vec_.empty() || vec_.back().col0Id_ < value.col0Id_);
-  vec_.push_back(value);
+  vec_.push_back(std::move(value));
 }
 
 // _____________________________________________________________________________
-boost::optional<const CompressedRelationMetadata&>
-MetaDataWrapperDense::getIfPresent(Id col0Id) const {
+std::optional<CompressedRelationMetadata> MetaDataWrapperDense::getIfPresent(
+    Id col0Id) const {
   auto it = lower_bound(col0Id);
   if (it != vec_.end() && it->col0Id_ == col0Id) {
     return *it;
   }
-  return boost::none;
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

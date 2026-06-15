@@ -14,6 +14,7 @@
 #include <cmath>
 #include <exception>
 #include <limits>
+#include <optional>
 #include <utility>
 
 #include "global/Id.h"
@@ -53,9 +54,6 @@ constexpr uint64_t V_CURRENT = 2;
 class IndexMetaData {
   // Type definitions.
  public:
-  using value_type = CompressedRelationMetadata;
-  using AddType = CompressedRelationMetadata;
-  using GetType = const CompressedRelationMetadata&;
   using BlocksType = std::vector<CompressedBlockMetadata>;
 
   // Private member variables.
@@ -80,11 +78,12 @@ class IndexMetaData {
  public:
   IndexMetaData() = default;
 
-  void add(AddType addedValue);
+  void add(CompressedRelationMetadata addedValue);
 
   off_t getOffsetAfter() const;
 
-  GetType getMetaData(Id col0Id) const;
+  std::optional<CompressedRelationMetadata> getMetaDataIfPresent(
+      Id col0Id) const;
 
   // Write the metadata to the file `filename` (for the per-block metadata,
   // which is appended to the end of the file) and to `filename +
@@ -108,8 +107,6 @@ class IndexMetaData {
   // `permutationFile`.
   void readFromFile(ad_utility::File* permutationFile,
                     ad_utility::File* metaFile);
-
-  bool col0IdExists(Id col0Id) const;
 
   // Calculate and save statistics that are expensive to calculate so we only
   // have to do this once during the index build and not at server start.
