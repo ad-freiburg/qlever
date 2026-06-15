@@ -25,12 +25,13 @@ namespace ad_utility {
 
 // Data structure optimized for sorted access. Elements are stored in a vector
 // sorted by the `Projection` applied to each element and compared using
-// `Compare`. Newly inserted elements are sorted lazily on access. Only the last
-// inserted element for each projected key is retained.
+// `Compare`. After inserting elements `consolidate` must be called before
+// reading. Only the last inserted element for each projected key is retained.
 //
-// Two-part structure: a large sorted part and a small unsorted part. Elements
-// are appended to the small part and merged into the large part during
-// `consolidate`.
+// Internally the elements are stored in two-parts - a large and a small part.
+// Newly inserted elements are first inserted into the small part. `consolidate`
+// sorts the small part. Once the small parts get large it is merged into the
+// large part which is always sorted.
 CPP_template(typename ValueType, typename Compare = std::less<>,
              typename Projection = ql::identity)(
     requires true) class SortedVector {
@@ -57,11 +58,10 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
                                 elements_.begin() + numItemsLargePart_);
   }
 
-  // Sort the elements and only keep the last element for each projected key.
-  void sortAndMergeParts() {
-    if (!smallPartIsSorted_) {
-      sortSmallPart();
-    }
+  // Merge the elements of the small part into the large part. The small part
+  // must be sorted before.
+  void mergeParts() {
+    AD_CORRECTNESS_CHECK(smallPartIsSorted_);
     Storage merged;
     merged.reserve(elements_.capacity());
     ql::ranges::move(*this, std::back_insert_iterator(merged));
@@ -87,6 +87,7 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
   FRIEND_TEST(SortedVectorTest, sortAndRemoveDuplicates);
   FRIEND_TEST(SortedVectorTest, constructor);
   FRIEND_TEST(SortedVectorTest, insert);
+  friend struct SortedVectorPairsTestHelper;
 
  public:
   SortedVector() = default;
@@ -149,12 +150,11 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
   void consolidate(double threshold = 0.25) {
     if (smallPartIsSorted_) return;
 
+    sortSmallPart();
     if (static_cast<double>(elements_.size() - numItemsLargePart_) /
             elements_.size() >
         threshold) {
-      sortAndMergeParts();
-    } else {
-      sortSmallPart();
+      mergeParts();
     }
   }
 
@@ -217,17 +217,16 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     AD_CONTRACT_CHECK(isClean());
     auto deleteInRange = [this, &elem](auto subrange) {
       auto iter = ql::ranges::lower_bound(subrange, elem);
-      if (iter == subrange.end()) {
+      if (iter == ql::ranges::end(subrange) || *iter != elem) {
         return 0;
       }
-      AD_CORRECTNESS_CHECK(*iter == elem);
       elements_.erase(iter);
       return 1;
     };
     numItemsLargePart_ -= deleteInRange(largePart());
     deleteInRange(smallPart());
   }
-  void erase(std::vector<ValueType> toDelete) {
+  void eraseUnsorted(std::vector<ValueType> toDelete) {
     AD_CONTRACT_CHECK(isClean());
     ql::ranges::sort(toDelete, comp_, proj_);
     eraseSorted(ql::span(toDelete));
@@ -241,12 +240,14 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     eraseSortedSubRange(elements_, smallPart(), sortedElems);
   }
 
-  // Returns an upper bound for the size. For an exact size `sizeForTesting`
-  // which reads the whole vector though.
-  size_t size() const {
+  // Returns an upper bound of the size. Without actually reading all items the
+  // size is not known because items might be duplicated between the small and
+  // large parts.
+  size_t sizeUpperBound() const {
     AD_CONTRACT_CHECK(isClean());
     return elements_.size();
   }
+  // Returns an exact size but reads the whole vector for this.
   size_t sizeForTesting() const {
     AD_CONTRACT_CHECK(isClean());
     return std::distance(begin(), end());
@@ -261,12 +262,6 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     elements_.clear();
     numItemsLargePart_ = 0;
     smallPartIsSorted_ = true;
-  }
-
-  bool operator==(const SortedVector& other) const {
-    AD_CONTRACT_CHECK(isClean());
-    AD_CONTRACT_CHECK(other.isClean());
-    return elements_ == other.elements_;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const SortedVector& sv) {

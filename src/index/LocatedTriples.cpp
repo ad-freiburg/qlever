@@ -77,7 +77,8 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   if (auto blockUpdateTriples = getUpdatesIfPresent(blockIndex)) {
     // Simply return the number of located triples twice. See the comment in the
     // header file for the reasons and potential improvements.
-    return {blockUpdateTriples->size(), blockUpdateTriples->size()};
+    return {blockUpdateTriples->sizeUpperBound(),
+            blockUpdateTriples->sizeUpperBound()};
   }
   return {0, 0};
 }
@@ -300,9 +301,11 @@ VacuumStatistics processBlockForVacuum(
   auto deletionsRemovedInBlock =
       processTriples(false, ql::ranges::set_difference, allDeletionsToRemove);
 
+  // TODO: `sizeUpperBound` is wrong here, but we can also get both counts from
+  // the scan below
   auto insertionsInBlock =
       ql::ranges::count_if(locatedTriples, &LocatedTriple::insertOrDelete_);
-  auto deletionsInBlock = locatedTriples.size() - insertionsInBlock;
+  auto deletionsInBlock = locatedTriples.sizeUpperBound() - insertionsInBlock;
 
   return {deletionsRemovedInBlock, insertionsRemovedInBlock,
           deletionsInBlock - deletionsRemovedInBlock,
@@ -318,7 +321,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
       getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>();
   auto blocksToVacuum = map_ |
                         ql::views::filter([minimumBlockSize](const auto& e) {
-                          return e.second.size() >= minimumBlockSize;
+                          return e.second.sizeUpperBound() >= minimumBlockSize;
                         }) |
                         ql::views::keys;
 

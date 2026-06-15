@@ -102,14 +102,14 @@ class LocatedTriplesTest : public ::testing::Test {
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto locatedTriplesInBlock = [](const size_t blockIndex,
-                                  const LocatedTriples& expectedLTs)
+                                  const std::vector<LocatedTriple>& expectedLTs)
       -> testing::Matcher<const LocatedTriplesPerBlock&> {
     return testing::ResultOf(
         absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
         [blockIndex](const LocatedTriplesPerBlock& ltpb) {
           return ltpb.map_.at(blockIndex);
         },
-        testing::Eq(expectedLTs));
+        testing::ElementsAreArray(expectedLTs));
   };
 
   auto locatedTriplesAre =
@@ -121,8 +121,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
             [&locatedTriplesInBlock](
                 auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
               auto [blockIndex, expectedLTs] = p;
-              return locatedTriplesInBlock(
-                  blockIndex, LocatedTriples::fromSorted(expectedLTs));
+              return locatedTriplesInBlock(blockIndex, expectedLTs);
             });
         // The macro does not work with templated types.
         using HashMapType = ad_utility::HashMap<size_t, LocatedTriples>;

@@ -187,7 +187,7 @@ class LocatedTriplesPerBlock {
     return map_.contains(blockIndex);
   }
 
-  // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
+  // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
   void add(std::vector<LocatedTriple> locatedTriples,
            ad_utility::timer::TimeTracer& tracer =
                ad_utility::timer::DEFAULT_TIME_TRACER);

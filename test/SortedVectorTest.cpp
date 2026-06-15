@@ -32,15 +32,16 @@ auto p50 = Pair{5, 0};
 auto p51 = Pair{5, 1};
 auto p60 = Pair{6, 0};
 
-auto SizesAre = [](size_t size, size_t sizeForTesting) {
-  return AllOf(AD_PROPERTY(SV, size, Eq(size)),
+auto SizesAre = [](size_t sizeUpperBound, size_t sizeForTesting) {
+  return AllOf(AD_PROPERTY(SV, sizeUpperBound, Eq(sizeUpperBound)),
                AD_PROPERTY(SV, sizeForTesting, Eq(sizeForTesting)));
 };
 auto AssertionFailed = [](const std::string& assertion) {
   return HasSubstr("Assertion `" + assertion + "` failed");
 };
 auto NotClean = AssertionFailed("isClean()");
-auto Empty = AssertionFailed("!empty()");
+auto IsEmpty = AD_PROPERTY(SV, empty, Eq(true));
+auto IsNotEmpty = AD_PROPERTY(SV, empty, Not(Eq(true)));
 
 auto testConstOverloads = [](SV& initial, auto testLambda,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -56,25 +57,37 @@ auto testConstOverloads = [](SV& initial, auto testLambda,
 };
 }  // namespace
 
-// `SortedLocatedTriplesVector` satisfies the range concept.
+struct SortedVectorPairsTestHelper {
+  static auto stateIs(const std::vector<Pair>& elements,
+                      size_t numElementsLargePart, bool smallPartIsSorted) {
+    return AllOf(AD_FIELD(SV, elements_, ElementsAreArray(elements)),
+                 AD_FIELD(SV, numItemsLargePart_, Eq(numElementsLargePart)),
+                 AD_FIELD(SV, smallPartIsSorted_, Eq(smallPartIsSorted)));
+  }
+};
+
+namespace {
+auto StateIs = SortedVectorPairsTestHelper::stateIs;
+}  // namespace
+
 static_assert(ql::ranges::range<SV>);
 
 TEST(SortedVectorTest, constructor) {
   {
     SV s{};
-    EXPECT_THAT(s, IsEmpty());
-    EXPECT_THAT(s, SizeIs(0));
-    EXPECT_THAT(s.sizeForTesting(), Eq(0));
+    EXPECT_THAT(s, SizesAre(0, 0));
+    EXPECT_TRUE(s.empty());
     EXPECT_THAT(s, ElementsAre());
     EXPECT_EQ(s.begin(), s.end());
+    EXPECT_THAT(s, StateIs({}, 0, true));
   }
   {
     SV s = SV::fromSorted({});
-    EXPECT_THAT(s, IsEmpty());
-    EXPECT_THAT(s, SizeIs(0));
-    EXPECT_THAT(s.sizeForTesting(), Eq(0));
+    EXPECT_THAT(s, SizesAre(0, 0));
+    EXPECT_TRUE(s.empty());
     EXPECT_THAT(s, ElementsAre());
     EXPECT_EQ(s.begin(), s.end());
+    EXPECT_THAT(s, StateIs({}, 0, true));
   }
   {
     if (areExpensiveChecksEnabled) {
@@ -90,11 +103,11 @@ TEST(SortedVectorTest, constructor) {
   }
   {
     SV s = SV::fromSorted({p10, p20});
-    EXPECT_THAT(s, Not(IsEmpty()));
-    EXPECT_THAT(s, SizeIs(2));
-    EXPECT_THAT(s.sizeForTesting(), Eq(2));
+    EXPECT_THAT(s, SizesAre(2, 2));
+    EXPECT_FALSE(s.empty());
     EXPECT_THAT(s, ElementsAre(p10, p20));
     EXPECT_NE(s.begin(), s.end());
+    EXPECT_THAT(s, StateIs({p10, p20}, 2, true));
   }
 }
 
@@ -148,7 +161,7 @@ TEST(SortedVectorTest, size) {
   {
     SV s{};
     s.insert(p10);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.size(), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeUpperBound(), NotClean);
     AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotClean);
   }
   {
@@ -172,7 +185,7 @@ TEST(SortedVectorTest, size) {
     EXPECT_THAT(s, SizesAre(7, 6));
     s.erase(p20);
     EXPECT_THAT(s, SizesAre(6, 5));
-    // `p1` is shadowed by `p1I` but kept because the two parts are not merged.
+    // `p10` is shadowed by `p11` but kept because the two parts are not merged.
     // Removing it resolves the discrepancy between `size` and `sizeForTesting`.
     s.erase(p10);
     EXPECT_THAT(s, SizesAre(5, 5));
@@ -183,14 +196,14 @@ TEST(SortedVectorTest, size) {
 
 TEST(SortedVectorTest, clear) {
   SV s{};
-  EXPECT_THAT(s, IsEmpty());
+  EXPECT_THAT(s, IsEmpty);
   s.clear();
-  EXPECT_THAT(s, IsEmpty());
+  EXPECT_THAT(s, IsEmpty);
   s.insert(p10);
   s.insert(p20);
   s.insert(p30);
   s.consolidate();
-  EXPECT_THAT(s, Not(IsEmpty()));
+  EXPECT_THAT(s, IsNotEmpty);
   s.clear();
   EXPECT_TRUE(s.empty());
 }
@@ -222,8 +235,9 @@ TEST(SortedVectorTest, insert) {
 TEST(SortedVectorTest, back) {
   {
     SV s{};
-    testConstOverloads(
-        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), Empty); });
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.back(), AssertionFailed("!empty()"));
+    });
   }
   {
     SV s = SV::fromSorted({p10, p20, p30, p40, p50});
@@ -297,17 +311,18 @@ TEST(SortedVectorTest, erase) {
   }
   {
     SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
-    s.erase(std::vector<std::pair<int, int>>{});
+    s.eraseUnsorted(std::vector<std::pair<int, int>>{});
     EXPECT_THAT(s, ElementsAre(p10, p20, p30, p40, p50, p60));
-    s.erase(std::vector{p20, p40});
+    s.eraseUnsorted(std::vector{p20, p40});
     EXPECT_THAT(s, ElementsAre(p10, p30, p50, p60));
-    s.erase(std::vector{p10, p20});  // `p2` is no longer contained.
+    s.eraseUnsorted(std::vector{p10, p20});  // `p2` is no longer contained.
     EXPECT_THAT(s, ElementsAre(p30, p50, p60));
     s.insert(p10);
     // this `erase` overload sorts the elements
-    AD_EXPECT_THROW_WITH_MESSAGE(s.erase({p60, p30, p50, p10}), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.eraseUnsorted({p60, p30, p50, p10}),
+                                 NotClean);
     s.consolidate();
-    s.erase(std::vector{p60, p30, p50, p10});
+    s.eraseUnsorted(std::vector{p60, p30, p50, p10});
     EXPECT_THAT(s, ElementsAre());
   }
   {
@@ -384,53 +399,6 @@ TEST(SortedVectorTest, eraseSortedSubRange) {
   test({p10, p20}, {p10, p40}, {p20}, 1);
   test({p20, p30, p40}, {p10, p30, p50}, {p20, p40}, 1);
   test({p20, p30, p40}, {p10, p50}, {p20, p30, p40}, 0);
-}
-
-TEST(SortedVectorTest, equality) {
-  EXPECT_EQ(SV::fromSorted({p10, p20}), SV::fromSorted({p10, p20}));
-  EXPECT_NE(SV::fromSorted({p10, p20}), SV::fromSorted({p30}));
-  {
-    SV s1;
-    SV s2;
-
-    s1.insert(p10);
-    s1.insert(p20);
-
-    s2.insert(p20);
-    s2.insert(p10);
-
-    AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(s1 == s2), NotClean);
-    s1.consolidate();
-    AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(s1 == s2),
-                                 AssertionFailed("other.isClean()"));
-    s2.consolidate();
-
-    EXPECT_EQ(s1, s2);
-  }
-  {
-    SV s1;
-    SV s2;
-
-    s1.insert(p10);
-    s1.insert(p20);
-    s1.insert(p30);
-    s1.insert(p40);
-    s1.insert(p50);
-    s1.consolidate();
-    s1.insert(p60);
-    s1.consolidate();
-
-    s2.insert(p60);
-    s2.insert(p50);
-    s2.insert(p40);
-    s2.insert(p30);
-    s2.insert(p20);
-    s2.consolidate();
-    s2.insert(p10);
-    s2.consolidate();
-
-    EXPECT_NE(s1, s2);
-  }
 }
 
 }  // namespace ad_utility
