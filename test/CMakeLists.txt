@@ -243,6 +243,10 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
+addLinkAndDiscoverTest(UriParserUriTest)
+
+addLinkAndDiscoverTest(ParsedUriTest)
+
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)

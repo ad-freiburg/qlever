@@ -1053,13 +1053,13 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
     // The `numRows_` metadata shortcut is safe iff all rows of the block
-    // agree on the grouped column. Because triples within a block are sorted
-    // lexicographically by `(col0Id, col1Id, col2Id)`, that is equivalent to
-    // `firstTriple_` and `lastTriple_` agreeing on the first `columnIndex + 1`
-    // columns.
-    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1)) {
-      // The whole block has the same `colId` -> we get all the information
-      // from the metadata.
+    // agree on the grouped column AND the block has no delta triples. The
+    // column uniformity is equivalent to `firstTriple_` and `lastTriple_`
+    // agreeing on the first `columnIndex + 1` columns.
+    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1) &&
+        !locatedTriplesPerBlock.containsTriples(blockMetadata.blockIndex_)) {
+      // The whole block has the same `colId` and no delta triples ->
+      // we get all the information from the metadata.
       Id colId = getMaskedTriple(blockMetadata.firstTriple_)[columnIndex];
       bool abort = processColId(colId, blockMetadata.numRows_);
       if (abort) {
