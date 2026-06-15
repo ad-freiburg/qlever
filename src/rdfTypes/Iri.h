@@ -86,9 +86,11 @@ class BasicIri {
     return std::move(iri_);
   }
 
-  // return a valid RDF/SPARQL representation of the IRI. Note: currently this
-  // is equal to the internal string representation. Should this ever change,
-  // all call sites that rely on this equality have to be inspected.
+  // Return a valid RDF/SPARQL representation of the IRI.
+  //
+  // NOTE: currently this is equal to the internal string representation. Should
+  // this ever change, all call sites that rely on this equality have to be
+  // inspected.
   std::conditional_t<isOwning, std::string, std::string_view> toSparql()
       const& {
     return toStringRepresentation();
