@@ -89,7 +89,7 @@ class RuntimeInformation {
   // Default constructor.
   RuntimeInformation() = default;
 
-  /// Formatted output to `std::string` and `std::ostream`.
+  // Formatted output to `std::string` and `std::ostream`.
   [[nodiscard]] std::string toString() const;
   void writeToStream(std::ostream& out, size_t indent = 1) const;
 

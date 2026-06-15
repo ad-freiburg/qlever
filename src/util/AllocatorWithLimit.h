@@ -68,11 +68,9 @@ class AllocationMemoryLeft {
   [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
 };
 
-/*
- * Threadsafe Wrapper around `AllocationMemoryLeft`.
- * Copies of objects of this class will refer to the same `AllocationMemoryLeft`
- * object. Concurrent access is handled via `ad_utility::Synchronized`.
- */
+// Threadsafe Wrapper around `AllocationMemoryLeft`.
+// Copies of objects of this class will refer to the same `AllocationMemoryLeft`
+// object. Concurrent access is handled via `ad_utility::Synchronized`.
 class AllocationMemoryLeftThreadsafe {
  public:
   AllocationMemoryLeftThreadsafe() = delete;
