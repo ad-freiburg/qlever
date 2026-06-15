@@ -7,7 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ZIPMERGEITERATOR_H
+#define QLEVER_SRC_UTIL_ZIPMERGEITERATOR_H
 
 #include <functional>
 #include <iterator>
@@ -15,7 +16,6 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/functional.h"
-#include "util/Iterators.h"
 
 namespace ad_utility {
 namespace detail {
@@ -153,3 +153,5 @@ struct ZipIteratorStruct {
 constexpr detail::ZipIteratorStruct zipIterator;
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_ZIPMERGEITERATOR_H

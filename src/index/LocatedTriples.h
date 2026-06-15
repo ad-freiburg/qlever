@@ -127,8 +127,8 @@ class SortedLocatedTriplesVector {
   using value_type = LocatedTriple;
 
  private:
-  using storage = std::vector<value_type>;
-  storage triples_ = {};
+  using Storage = std::vector<value_type>;
+  Storage triples_ = {};
   size_t numItemsLargePart_ = 0;
   bool smallPartIsSorted_ = true;
 
@@ -155,8 +155,7 @@ class SortedLocatedTriplesVector {
   // keep the last `LocatedTriple` for each triple.
   CPP_template(typename R)(
       requires ql::ranges::range<
-          R>) static void sortAndRemoveDuplicates(std::vector<LocatedTriple>&
-                                                      triples,
+          R>) static void sortAndRemoveDuplicates(Storage& triples,
                                                   R&& rangeToSort) {
     // Stable sort ensures that the operations for each triple are not
     // reordered. Older `LocatedTriple`s are before newer ones.
@@ -177,14 +176,12 @@ class SortedLocatedTriplesVector {
     triples.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
-  // Let `r1` and `r2` contain sorted items. Let `r1` be contained in `triples`.
-  // Remove the items in `r2` from the subrange `r1` inside `triples`. Returns
-  // the number of items deleted.
+  // Removes everything in `r1` that is contained in `r2`. Returns the number of
+  // items deleted. NOTE: `r1` must be a subrange of `triples`.
   CPP_template(typename R1, typename R2)(
       requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
           R1, LocatedTriple>&& ql::ranges::input_range<R2>) static size_t
-      eraseSortedSubRange(std::vector<LocatedTriple>& triples, R1&& r1,
-                          R2&& r2) {
+      eraseSortedSubRange(Storage& triples, R1&& r1, R2&& r2) {
     auto [_, newEndOfSubrange] = ql::ranges::set_difference(
         r1, r2, ql::ranges::begin(r1), {}, &LocatedTriple::triple_,
         &LocatedTriple::triple_);
@@ -212,10 +209,10 @@ class SortedLocatedTriplesVector {
   void insert(LocatedTriple lt);
 
   using iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      storage::iterator, std::less<>,
+      Storage::iterator, std::less<>,
       ad_utility::MemberProj<&LocatedTriple::triple_>>;
   using const_iterator = ad_utility::detail::ZipMergeIteratorImpl<
-      storage::const_iterator, std::less<>,
+      Storage::const_iterator, std::less<>,
       ad_utility::MemberProj<&LocatedTriple::triple_>>;
 
   iterator begin();

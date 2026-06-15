@@ -61,9 +61,10 @@ void SortedLocatedTriplesVector::sortAndMergeParts() {
     sortSmallPart();
   }
 
-  // We cannot merge in place, so the merged items are moved to a temporary
-  // vector which then replaces the (moved from) storage.
-  storage merged;
+  // We cannot merge in place. Iterating over `*this` gives the total merged
+  // triples which are written to a temporary vector which then replaces the
+  // (moved from) storage.
+  Storage merged;
   merged.reserve(triples_.capacity());
   ql::ranges::move(*this, std::back_insert_iterator(merged));
   triples_.swap(merged);
@@ -73,7 +74,7 @@ void SortedLocatedTriplesVector::sortAndMergeParts() {
 
 // ____________________________________________________________________________
 SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
-    std::vector<LocatedTriple> sortedTriples) {
+    Storage sortedTriples) {
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(sortedTriples, LocatedTripleCompare{}));
   // No duplicate elements (`LocatedTriple`s with the same `triple_`).
@@ -106,14 +107,14 @@ void SortedLocatedTriplesVector::sortSmallPart() {
 
 // ____________________________________________________________________________
 void SortedLocatedTriplesVector::consolidate(double threshold) {
-  if (!smallPartIsSorted_) {
-    if (static_cast<double>(triples_.size() - numItemsLargePart_) /
-            triples_.size() >
-        threshold) {
-      sortAndMergeParts();
-    } else {
-      sortSmallPart();
-    }
+  if (smallPartIsSorted_) return;
+
+  if (static_cast<double>(triples_.size() - numItemsLargePart_) /
+          triples_.size() >
+      threshold) {
+    sortAndMergeParts();
+  } else {
+    sortSmallPart();
   }
 }
 
