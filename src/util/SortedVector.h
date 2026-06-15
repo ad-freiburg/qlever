@@ -19,7 +19,7 @@
 #include "backports/functional.h"
 #include "backports/span.h"
 #include "util/Exception.h"
-#include "util/ZipMergeIterator.h"
+#include "util/ZipMergeUniqueIterator.h"
 
 namespace ad_utility {
 
@@ -174,11 +174,12 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     smallPartIsSorted_ = false;
   }
 
-  using iterator = detail::ZipMergeIteratorImpl<typename Storage::iterator,
-                                                Compare, Projection>;
+  using iterator =
+      detail::ZipMergeUniqueIteratorImpl<typename Storage::iterator, Compare,
+                                         Projection>;
   using const_iterator =
-      detail::ZipMergeIteratorImpl<typename Storage::const_iterator, Compare,
-                                   Projection>;
+      detail::ZipMergeUniqueIteratorImpl<typename Storage::const_iterator,
+                                         Compare, Projection>;
 
   iterator begin() { return iterImpl(*this, false); }
   const_iterator begin() const { return iterImpl(*this, false); }

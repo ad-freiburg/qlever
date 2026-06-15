@@ -8,17 +8,17 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "util/GTestHelpers.h"
-#include "util/ZipMergeIterator.h"
+#include "util/ZipMergeUniqueIterator.h"
 
 namespace {
 template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
 auto makeZipRange(std::vector<T>& first, std::vector<T>& last, Comp comp = {},
                   Proj proj = {}) {
   return std::make_pair(
-      ad_utility::zipIterator(first.begin(), first.end(), last.begin(),
-                              last.end(), comp, proj),
-      ad_utility::zipIterator(first.end(), first.end(), last.end(), last.end(),
-                              comp, proj));
+      ad_utility::zipUniqueIterator(first.begin(), first.end(), last.begin(),
+                                    last.end(), comp, proj),
+      ad_utility::zipUniqueIterator(first.end(), first.end(), last.end(),
+                                    last.end(), comp, proj));
 }
 
 template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
@@ -29,7 +29,7 @@ auto zipMerge(std::vector<T> first, std::vector<T> last, Comp comp = {},
 }
 }  // namespace
 
-TEST(ZipMergeIteratorTest, integerZip) {
+TEST(ZipMergeIteratorUniqueTest, integerZip) {
   EXPECT_THAT(zipMerge<int>({}, {}), testing::ElementsAre());
   EXPECT_THAT(zipMerge<int>({1, 2, 3, 4}, {}),
               testing::ElementsAre(1, 2, 3, 4));
@@ -47,7 +47,7 @@ TEST(ZipMergeIteratorTest, integerZip) {
               testing::ElementsAre(5, 4, 3, 2, 1, 0));
 }
 
-TEST(ZipMergeIteratorTest, intPairZip) {
+TEST(ZipMergeIteratorUniqueTest, intPairZip) {
   using Pair = std::pair<int, int>;
   EXPECT_THAT(
       zipMerge<Pair>({{1, 1}, {2, 1}, {3, 1}}, {{1, 2}, {2, 2}, {3, 2}}),
@@ -60,7 +60,7 @@ TEST(ZipMergeIteratorTest, intPairZip) {
               testing::ElementsAre(Pair(1, 2), Pair(2, 1), Pair(3, 2)));
 }
 
-TEST(ZipMergeIteratorTest, MultiPass) {
+TEST(ZipMergeIteratorUniqueTest, MultiPass) {
   std::vector<int> a{1, 3, 5}, b{0, 2, 4};
   auto [begin, end] = makeZipRange(a, b);
   auto beginCopy = begin;

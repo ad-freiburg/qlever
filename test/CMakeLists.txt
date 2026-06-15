@@ -184,9 +184,9 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
 
-addLinkAndDiscoverTest(ZipMergeIteratorTest)
+addLinkAndDiscoverTest(ZipMergeUniqueIteratorTest)
 
-addLinkAndDiscoverTest(SortedVectorTest index)
+addLinkAndDiscoverTest(SortedVectorTest)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 

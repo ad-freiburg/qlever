@@ -20,7 +20,8 @@
 namespace ad_utility {
 namespace detail {
 
-// Lazily merges two sorted input ranges into a single sorted sequence.
+// Lazily merges and deduplicates two sorted input ranges into a single sorted
+// sequence.
 //
 // Elements are yielded one at a time. The `Compare` function is applied to the
 // projected values (`Projection` applied to each element) to determine order.
@@ -29,7 +30,7 @@ namespace detail {
 // *first* range is skipped (last-wins tie-break).
 CPP_template(typename It, typename Compare = std::less<>,
              class Projection = ql::identity)(
-    requires true) class ZipMergeIteratorImpl {
+    requires true) class ZipMergeUniqueIteratorImpl {
  public:
   using iterator_category = std::forward_iterator_tag;
   using iterator_concept = std::forward_iterator_tag;
@@ -47,8 +48,8 @@ CPP_template(typename It, typename Compare = std::less<>,
   Projection proj_;
 
  public:
-  explicit ZipMergeIteratorImpl(It b1, It e1, It b2, It e2, Compare cmp = {},
-                                Projection proj = {})
+  explicit ZipMergeUniqueIteratorImpl(It b1, It e1, It b2, It e2,
+                                      Compare cmp = {}, Projection proj = {})
       : it1_(b1), end1_(e1), it2_(b2), end2_(e2), comp_(cmp), proj_(proj) {
     if constexpr (std::is_pointer_v<Compare> ||
                   std::is_member_pointer_v<Compare>) {
@@ -61,7 +62,7 @@ CPP_template(typename It, typename Compare = std::less<>,
     decision_ = decide();
   }
 
-  ZipMergeIteratorImpl() = default;
+  ZipMergeUniqueIteratorImpl() = default;
 
  private:
   enum class Decision {
@@ -92,7 +93,7 @@ CPP_template(typename It, typename Compare = std::less<>,
                                             : it2_.operator->());
   }
 
-  ZipMergeIteratorImpl& operator++() {
+  ZipMergeUniqueIteratorImpl& operator++() {
     switch (decision_) {
       case Decision::UseFirst:
         ++it1_;
@@ -108,29 +109,29 @@ CPP_template(typename It, typename Compare = std::less<>,
     decision_ = decide();
     return *this;
   }
-  ZipMergeIteratorImpl operator++(int) {
-    ZipMergeIteratorImpl tmp = *this;
+  ZipMergeUniqueIteratorImpl operator++(int) {
+    ZipMergeUniqueIteratorImpl tmp = *this;
     ++(*this);
     return tmp;
   }
 
-  bool operator==(const ZipMergeIteratorImpl& o) const {
+  bool operator==(const ZipMergeUniqueIteratorImpl& o) const {
     return std::tie(it1_, end1_, it2_, end2_) ==
            std::tie(o.it1_, o.end1_, o.it2_, o.end2_);
   }
   // An explicit definition is required for C++17 compatibility.
-  bool operator!=(const ZipMergeIteratorImpl& other) const {
+  bool operator!=(const ZipMergeUniqueIteratorImpl& other) const {
     return !(*this == other);
   }
 };
 
-struct ZipIteratorStruct {
+struct ZipMergeUniqueIteratorStruct {
   CPP_template(typename It, typename Compare = std::less<>,
                typename Projection = ql::identity)(requires true)
-      ZipMergeIteratorImpl<It, Compare, Projection>
+      ZipMergeUniqueIteratorImpl<It, Compare, Projection>
       operator()(It begin1, It end1, It begin2, It end2, Compare cmp = {},
                  Projection proj = {}) const {
-    return ZipMergeIteratorImpl<It, Compare, Projection>(
+    return ZipMergeUniqueIteratorImpl<It, Compare, Projection>(
         begin1, end1, begin2, end2, std::move(cmp), std::move(proj));
   }
 
@@ -150,7 +151,7 @@ struct ZipIteratorStruct {
 
 }  // namespace detail
 
-constexpr detail::ZipIteratorStruct zipIterator;
+constexpr detail::ZipMergeUniqueIteratorStruct zipUniqueIterator;
 
 }  // namespace ad_utility
 
