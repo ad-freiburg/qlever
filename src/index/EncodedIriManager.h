@@ -12,13 +12,14 @@
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
-#include "util/CtreHelpers.h"
 #include "util/Log.h"
 #include "util/json.h"
 
 namespace detail {
-// CTRE named capture group identifiers for C++17 compatibility
-constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+// Match `repr` against the pattern `([0-9]+)>` and return the digit
+// substring as a `string_view` into `repr` on success, or `std::nullopt` if
+// the pattern does not match.
+std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
 }  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix
@@ -171,15 +172,11 @@ class EncodedIriManagerImpl {
     // Check that after the prefix, the string contains only digits and the
     // trailing '>'.
     repr.remove_prefix(it->size());
-    static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
-    auto match = ctre::match<regex>(repr);
-    if (!match) {
+    auto numStringOpt = detail::matchDigitsPrefix(repr);
+    if (!numStringOpt.has_value()) {
       return std::nullopt;
     }
-
-    // Extract the substring with the digits, and check that it is not too long.
-    const auto& numString =
-        match.template get<detail::digitsCaptureGroup>().to_view();
+    std::string_view numString = numStringOpt.value();
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }
