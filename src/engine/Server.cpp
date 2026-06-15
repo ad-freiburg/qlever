@@ -30,13 +30,11 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
-#include "opentelemetry/metrics/provider.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Metrics.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
@@ -1583,132 +1581,6 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
       },
       handle);
   co_await std::move(coroutine);
-}
-
-// _____________________________________________________________________________
-Server::ServerMetrics::ServerMetrics(std::shared_ptr<Index> index,
-                                     ad_utility::AllocatorWithLimit<Id>& alloc,
-                                     QueryResultCache& cache,
-                                     ad_utility::MemorySize maxMem)
-    : index_(index), allocator_(alloc), cache_(cache) {
-  auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
-      "qlever", "0.0.1");
-  startTimeMetric_ = meter->CreateInt64Gauge(
-      "qlever.server.start_time",
-      "Unix timestamp when the QLever server was started", "s");
-  indexLoadMetric_ = meter->CreateInt64Gauge(
-      "qlever.index.load_time",
-      "Unix timestamp when the current index was loaded", "s");
-  startedSparqlOperations_ = meter->CreateUInt64Counter(
-      "qlever.sparql_operation.started",
-      "Number of SPARQL operations started since server start");
-  runningSparqlOperations_ = meter->CreateInt64UpDownCounter(
-      "qlever.sparql_operation.running",
-      "Number of SPARQL operations currently being processed");
-  finishedSparqlOperations_ = meter->CreateUInt64Counter(
-      "qlever.sparql_operation.finished",
-      "Number of SPARQL operations successfully finished since server start");
-  sparqlOperationDuration_ = meter->CreateDoubleHistogram(
-      "qlever.sparql_operation.duration",
-      "Execution time of successful SPARQL operations", "ms");
-  deltaTriplesMetric_ = meter->CreateInt64ObservableGauge(
-      "qlever.delta_triples",
-      "Number of triples that are updated relative to the index");
-  sparqlErrors_ = meter->CreateUInt64Counter(
-      "qlever.sparql_operation.errors",
-      "Errors during the execution of SPARQL operations");
-  httpErrors_ = meter->CreateUInt64Counter(
-      "qlever.http.errors",
-      "Errors during the execution of non SPARQL operations");
-  memoryQueryFree_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_query_available", "Available memory for query processing",
-      "By");
-  memoryQueryTotal_ =
-      meter->CreateInt64Gauge("qlever.memory_query_limit",
-                              "Memory allocated for query processing", "By");
-  memoryCacheUsed_ = meter->CreateInt64ObservableGauge(
-      "qlever.memory_cache_used", "Memory used for caching", "By");
-  memoryCacheLimit_ = meter->CreateInt64Gauge(
-      "qlever.memory_cache_limit", "Memory allocated for caching", "By");
-
-  auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                 std::chrono::system_clock::now().time_since_epoch())
-                 .count();
-  startTimeMetric_->Record(now);
-  indexLoadMetric_->Record(now);
-  memoryQueryTotal_->Record(maxMem.getBytes());
-
-  // Record 0 once per label so every combination appears from the start.
-  ad_utility::metrics::initializeCounter(startedSparqlOperations_.get(),
-                                         "operation", {"query", "update"});
-  ad_utility::metrics::initializeCounter(runningSparqlOperations_.get(),
-                                         "operation", {"query", "update"});
-  ad_utility::metrics::initializeCounter(finishedSparqlOperations_.get(),
-                                         "operation", {"query", "update"});
-  ad_utility::metrics::initializeCounter(
-      sparqlErrors_.get(), "type",
-      {"system_error", "internal", "syntax", "timeout",
-       "send_streamable_response", "protocol", "in_use"});
-  ad_utility::metrics::initializeCounter(httpErrors_.get(), "type",
-                                         {"internal", "http"});
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<Server::ServerMetrics> Server::ServerMetrics::create(
-    std::shared_ptr<Index> index, ad_utility::AllocatorWithLimit<Id>& allocator,
-    QueryResultCache& cache, ad_utility::MemorySize maxMem) {
-  auto m = std::shared_ptr<ServerMetrics>(
-      new ServerMetrics(index, allocator, cache, maxMem));
-  m->registerCallbacks();
-  return m;
-}
-
-// _____________________________________________________________________________
-Server::ServerMetrics::~ServerMetrics() {
-  deltaTriplesMetric_->RemoveCallback(&observeDeltaTriples, this);
-  memoryQueryFree_->RemoveCallback(&observeMemoryQueryFree, this);
-  memoryCacheUsed_->RemoveCallback(&observeMemoryCacheUsed, this);
-}
-
-// _____________________________________________________________________________
-void Server::ServerMetrics::registerCallbacks() {
-  deltaTriplesMetric_->AddCallback(&observeDeltaTriples, this);
-  memoryQueryFree_->AddCallback(&observeMemoryQueryFree, this);
-  memoryCacheUsed_->AddCallback(&observeMemoryCacheUsed, this);
-}
-
-// _____________________________________________________________________________
-void Server::ServerMetrics::observe(
-    opentelemetry::metrics::ObserverResult result, int64_t value) {
-  opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
-      opentelemetry::metrics::ObserverResultT<int64_t>>>(result)
-      ->Observe(value);
-}
-
-// _____________________________________________________________________________
-void Server::ServerMetrics::observeDeltaTriples(
-    opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result,
-          self.index_->deltaTriplesManager()
-              .getCurrentLocatedTriplesSharedState()
-              ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
-              .numTriples());
-}
-
-// _____________________________________________________________________________
-void Server::ServerMetrics::observeMemoryQueryFree(
-    opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result, self.allocator_.amountMemoryLeft().getBytes());
-}
-
-// _____________________________________________________________________________
-void Server::ServerMetrics::observeMemoryCacheUsed(
-    opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result,
-          (self.cache_.nonPinnedSize() + self.cache_.pinnedSize()).getBytes());
 }
 
 // For helper function `Server::onlyForTestingProcess`

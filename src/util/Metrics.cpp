@@ -15,7 +15,6 @@
 
 #include "opentelemetry/exporters/prometheus/collector.h"
 #include "opentelemetry/metrics/provider.h"
-#include "opentelemetry/sdk/metrics/aggregation/histogram_aggregation.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"

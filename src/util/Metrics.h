@@ -10,10 +10,10 @@
 #ifndef QLEVER_SRC_UTIL_METRICS_H
 #define QLEVER_SRC_UTIL_METRICS_H
 
+#include <opentelemetry/metrics/sync_instruments.h>
+
 #include <memory>
 #include <string>
-
-#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace ad_utility::metrics {
 
@@ -36,7 +36,7 @@ std::shared_ptr<MetricsReader> initialize(bool enabled);
 // RAII guard: increments the given counter on construction, decrements on
 // destruction. Safe to use in coroutines — the frame destructor fires on
 // both normal completion and cancellation.
-class ActiveCounterGuard {
+class [[nodiscard]] ActiveCounterGuard {
  public:
   explicit ActiveCounterGuard(
       opentelemetry::metrics::UpDownCounter<int64_t>& counter,

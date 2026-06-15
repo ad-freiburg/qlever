@@ -20,7 +20,7 @@ add_library(engine
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
-        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp)
+        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp ServerMetrics.cpp)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
@@ -28,7 +28,8 @@ add_library(engine
 # too makes the engine PCH inherit `BOOST_PROGRAM_OPTIONS_DYN_LINK` (when
 # Boost is shared) so the PCH matches qlever-server's compile flags and is
 # not silently discarded by GCC with a `-Winvalid-pch` warning.
-qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo)
+qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo opentelemetry-cpp::api opentelemetry-cpp::sdk opentelemetry-cpp::metrics opentelemetry-cpp::ostream_metrics_exporter
+        opentelemetry-cpp::prometheus_exporter)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used
