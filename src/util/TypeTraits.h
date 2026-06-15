@@ -445,9 +445,6 @@ static_assert(
 static_assert(std::is_same_v<UniqueVariant<>, std::variant<>>);
 
 // A default-constructible projection functor for a pointer-to-member.
-// Prefer this over passing `&T::member` directly to algorithms or iterators
-// that store the projection by value, since pointer types are not
-// default-constructible to a valid state.
 template <auto MemberPtr>
 struct MemberProj {
   template <typename T>
