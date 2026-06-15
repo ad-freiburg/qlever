@@ -287,10 +287,15 @@ TEST(SortedVectorTest, iteration) {
   {
     SV s{};
     s.insert(p10);
-    testConstOverloads(
-        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.begin(), NotClean); });
-    testConstOverloads(
-        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.end(), NotClean); });
+    // `begin()` and `end()` are implemented using a static impl function which
+    // results in a slightly different assertion message.
+    auto NotClean = AssertionFailed("self.isClean()");
+    testConstOverloads(s, [&NotClean](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.begin(), NotClean);
+    });
+    testConstOverloads(s, [&NotClean](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.end(), NotClean);
+    });
   }
 }
 

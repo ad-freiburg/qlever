@@ -83,6 +83,17 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     return smallPartIsSorted_ && numItemsLargePart_ <= elements_.size();
   }
 
+  template <typename Self>
+  static auto iterImpl(Self& self, bool atEnd) {
+    AD_CONTRACT_CHECK(self.isClean());
+    using Iter =
+        std::conditional_t<std::is_const_v<Self>, const_iterator, iterator>;
+    auto mid = self.elements_.begin() + self.numItemsLargePart_;
+    return Iter(atEnd ? mid : self.elements_.begin(), mid,
+                atEnd ? self.elements_.end() : mid, self.elements_.end(),
+                self.comp_, self.proj_);
+  }
+
   FRIEND_TEST(SortedVectorTest, eraseSortedSubRange);
   FRIEND_TEST(SortedVectorTest, sortAndRemoveDuplicates);
   FRIEND_TEST(SortedVectorTest, constructor);
@@ -169,30 +180,10 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
       detail::ZipMergeIteratorImpl<typename Storage::const_iterator, Compare,
                                    Projection>;
 
-  iterator begin() {
-    AD_CONTRACT_CHECK(isClean());
-    auto midpoint = elements_.begin() + numItemsLargePart_;
-    return iterator(elements_.begin(), midpoint, midpoint, elements_.end(),
-                    comp_, proj_);
-  }
-  const_iterator begin() const {
-    AD_CONTRACT_CHECK(isClean());
-    auto midpoint = elements_.begin() + numItemsLargePart_;
-    return const_iterator(elements_.begin(), midpoint, midpoint,
-                          elements_.end(), comp_, proj_);
-  }
-  iterator end() {
-    AD_CONTRACT_CHECK(isClean());
-    auto midpoint = elements_.begin() + numItemsLargePart_;
-    return iterator(midpoint, midpoint, elements_.end(), elements_.end(), comp_,
-                    proj_);
-  }
-  const_iterator end() const {
-    AD_CONTRACT_CHECK(isClean());
-    auto midpoint = elements_.begin() + numItemsLargePart_;
-    return const_iterator(midpoint, midpoint, elements_.end(), elements_.end(),
-                          comp_, proj_);
-  }
+  iterator begin() { return iterImpl(*this, false); }
+  const_iterator begin() const { return iterImpl(*this, false); }
+  iterator end() { return iterImpl(*this, true); }
+  const_iterator end() const { return iterImpl(*this, true); }
 
   const ValueType& back() const {
     AD_CONTRACT_CHECK(!empty());
