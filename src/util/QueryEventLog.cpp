@@ -33,8 +33,7 @@ void QueryEventLog::setOutputFile(const std::filesystem::path& path) {
   queue_ = std::make_unique<data_structures::ThreadSafeQueue<std::string>>(
       maxQueueSize_);
   writer_ = JThread{[this] {
-    // Flush per line so live readers see events promptly; `flush()` is
-    // not `fsync`, so the cost is negligible.
+    // Flush after each line so a live reader sees events promptly.
     while (auto line = queue_->pop()) {
       stream_ << *line << std::flush;
     }

@@ -272,6 +272,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
 TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
   Result result{[]() -> Result::Generator {
                   throw ad_utility::CancellationException{
+                      ad_utility::CancellationState::MANUAL,
                       "verifyRunOnNewChunkCallsFinishOnCancellation"};
                   co_return;
                 }(),

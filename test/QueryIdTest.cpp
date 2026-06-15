@@ -205,7 +205,7 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
 TEST(QueryRegistry, statusDefaultsToUnknown) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
-  EXPECT_EQ(owned.status(), QueryStatus::Unknown);
+  EXPECT_EQ(owned.status(), QueryStatus::UNKNOWN);
 }
 
 // _____________________________________________________________________________
@@ -213,13 +213,13 @@ TEST(QueryRegistry, statusDefaultsToUnknown) {
 TEST(QueryRegistry, setStatusIsObservable) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
-  ASSERT_EQ(owned.status(), QueryStatus::Unknown);
+  ASSERT_EQ(owned.status(), QueryStatus::UNKNOWN);
 
-  owned.setStatus(QueryStatus::Ok);
-  EXPECT_EQ(owned.status(), QueryStatus::Ok);
+  owned.setStatus(QueryStatus::OK);
+  EXPECT_EQ(owned.status(), QueryStatus::OK);
 
-  owned.setStatus(QueryStatus::Failed);
-  EXPECT_EQ(owned.status(), QueryStatus::Failed);
+  owned.setStatus(QueryStatus::FAILED);
+  EXPECT_EQ(owned.status(), QueryStatus::FAILED);
 }
 
 // _____________________________________________________________________________
@@ -228,10 +228,10 @@ TEST(QueryRegistry, setStatusIsObservable) {
 TEST(QueryRegistry, statusSurvivesMove) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
-  owned.setStatus(QueryStatus::Cancelled);
+  owned.setStatus(QueryStatus::CANCELLED);
 
   OwningQueryId moved = std::move(owned);
-  EXPECT_EQ(moved.status(), QueryStatus::Cancelled);
+  EXPECT_EQ(moved.status(), QueryStatus::CANCELLED);
 }
 
 // _____________________________________________________________________________
@@ -341,16 +341,16 @@ std::string runCycleCaptureEndStatus(QueryStatus toSet) {
 
 // The status set on the `OwningQueryId` reaches the serialized end event.
 TEST(QueryRegistry, onEndStatusReflectsSetStatusOk) {
-  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Ok), "ok");
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::OK), "ok");
 }
 TEST(QueryRegistry, onEndStatusReflectsSetStatusFailed) {
-  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Failed), "failed");
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::FAILED), "failed");
 }
 TEST(QueryRegistry, onEndStatusReflectsSetStatusCancelled) {
-  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Cancelled), "cancelled");
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::CANCELLED), "cancelled");
 }
 TEST(QueryRegistry, onEndStatusReflectsSetStatusTimeout) {
-  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::Timeout), "timeout");
+  EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::TIMEOUT), "timeout");
 }
 
 // _____________________________________________________________________________
@@ -387,11 +387,11 @@ TEST(QueryRegistry, sharedStatusReachesEndCallback) {
     ASSERT_TRUE(owned.has_value());
     auto handle = owned->sharedStatus();
     OwningQueryId movedAway = std::move(owned.value());
-    handle->store(QueryStatus::Failed);
+    handle->store(QueryStatus::FAILED);
   }
 
   ASSERT_TRUE(captured.has_value());
-  EXPECT_EQ(captured.value(), QueryStatus::Failed);
+  EXPECT_EQ(captured.value(), QueryStatus::FAILED);
 }
 
 // _____________________________________________________________________________

@@ -683,7 +683,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString, clientIp);
     // Grab the shared handle before `messageSender` is moved below.
-    using ad_utility::websocket::QueryStatus;
+    using enum ad_utility::websocket::QueryStatus;
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
@@ -710,17 +710,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                               cancellationHandle, qec, std::move(request), send,
                               timeLimit.value(), plannedQuery);
       }
-      queryStatus->store(QueryStatus::Ok);
+      queryStatus->store(OK);
       co_return;
     } catch (const ad_utility::CancellationException& e) {
-      auto reason = e.state();
-      queryStatus->store(!reason.has_value() ? QueryStatus::Unknown
-                         : reason == ad_utility::CancellationState::TIMEOUT
-                             ? QueryStatus::Timeout
-                             : QueryStatus::Cancelled);
+      queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
+                             ? TIMEOUT
+                             : CANCELLED);
       throw;
     } catch (...) {
-      queryStatus->store(QueryStatus::Failed);
+      queryStatus->store(FAILED);
       throw;
     }
   };
@@ -1373,8 +1371,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   std::optional<std::string> exceptionErrorMsg;
   std::optional<ExceptionMetadata> metadata;
   try {
-    co_await std::visit(visitor, std::move(operation));
-    co_return;
+    co_return co_await std::visit(visitor, std::move(operation));
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();

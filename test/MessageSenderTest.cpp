@@ -122,10 +122,10 @@ ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
     MessageSender messageSender{std::move(queryId), queryHub};
     auto handle = messageSender.sharedStatus();
     EXPECT_NE(handle, nullptr);
-    EXPECT_EQ(handle->load(), QueryStatus::Unknown);
+    EXPECT_EQ(handle->load(), QueryStatus::UNKNOWN);
 
-    handle->store(QueryStatus::Ok);
-    EXPECT_EQ(messageSender.sharedStatus()->load(), QueryStatus::Ok);
+    handle->store(QueryStatus::OK);
+    EXPECT_EQ(messageSender.sharedStatus()->load(), QueryStatus::OK);
   }
   // Wait for the asynchronous `signalEnd` before the `QueryHub` is destroyed.
   co_await net::post(net::use_awaitable);

@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 #define QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -13,7 +15,6 @@
 #include <string_view>
 #include <vector>
 
-#include "absl/functional/any_invocable.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
@@ -56,19 +57,20 @@ class QueryId {
 };
 
 // Terminal status of a query, observed at `OwningQueryId` destruction.
-enum class QueryStatus { Unknown, Ok, Failed, Cancelled, Timeout };
+enum class QueryStatus { UNKNOWN, OK, FAILED, CANCELLED, TIMEOUT };
 
 inline std::string_view toString(QueryStatus s) noexcept {
+  using enum QueryStatus;
   switch (s) {
-    case QueryStatus::Ok:
+    case OK:
       return "ok";
-    case QueryStatus::Failed:
+    case FAILED:
       return "failed";
-    case QueryStatus::Cancelled:
+    case CANCELLED:
       return "cancelled";
-    case QueryStatus::Timeout:
+    case TIMEOUT:
       return "timeout";
-    case QueryStatus::Unknown:
+    case UNKNOWN:
       return "unknown";
   }
   return "unknown";
@@ -108,7 +110,7 @@ class OwningQueryId {
   // `~OwningQueryId`; safe to call from any thread.
   void setStatus(QueryStatus s) noexcept { status_->store(s); }
 
-  // Returns `QueryStatus::Unknown` until `setStatus` is invoked.
+  // Returns `QueryStatus::UNKNOWN` until `setStatus` is invoked.
   [[nodiscard]] QueryStatus status() const noexcept { return status_->load(); }
 
   // Shared handle to the atomic; lets a caller publish the status
@@ -129,12 +131,12 @@ class QueryRegistry {
     SharedCancellationHandle cancellationHandle_ =
         std::make_shared<CancellationHandle<>>();
     std::string query_;
-    // Wall-clock instant at which this entry was registered. Supplied by the
-    // caller so the same value also feeds the start-event log line.
-    std::chrono::system_clock::time_point startedAt_;
-    CancellationHandleWithQuery(std::string_view query,
-                                std::chrono::system_clock::time_point startedAt)
-        : query_{query}, startedAt_{startedAt} {}
+    // Wall-clock instant at which this entry was registered. Stamped here so
+    // the registry owns the start time; the start-event log line reads it back.
+    std::chrono::system_clock::time_point startedAt_ =
+        std::chrono::system_clock::now();
+    explicit CancellationHandleWithQuery(std::string_view query)
+        : query_{query} {}
   };
   using SynchronizedType = ad_utility::Synchronized<
       ad_utility::HashMap<QueryId, CancellationHandleWithQuery>>;
@@ -218,13 +220,9 @@ class QueryRegistry {
       std::string id, std::string_view query, std::string_view clientIp = {}) {
     auto queryId = QueryId::idFromString(std::move(id));
 
-    // Computed once and used for both the registry entry and the start
-    // event, so both report the same time.
-    auto startedAt = std::chrono::system_clock::now();
-
     // Created before the lambda so the lambda can capture it.
     auto status =
-        std::make_shared<std::atomic<QueryStatus>>(QueryStatus::Unknown);
+        std::make_shared<std::atomic<QueryStatus>>(QueryStatus::UNKNOWN);
     // `weak_ptr` so the lambda doesn't keep the registry alive. The
     // end-event push runs unconditionally (one `end` per `start`); the
     // erase is best-effort.
@@ -243,11 +241,14 @@ class QueryRegistry {
 
     // Insert into the registry. If the id is already in use, nothing was
     // added, so we just return.
+    std::chrono::system_clock::time_point startedAt;
     {
       auto lockedMap = registry_->wlock();
-      if (!lockedMap->try_emplace(queryId, query, startedAt).second) {
+      auto [it, inserted] = lockedMap->try_emplace(queryId, query);
+      if (!inserted) {
         return std::nullopt;
       }
+      startedAt = it->second.startedAt_;
     }
 
     // Build the OwningQueryId first (only moves, never throws), then fire the
@@ -302,7 +303,7 @@ class QueryRegistry {
  private:
   std::vector<StartCallback> onStart_;
   // `shared_ptr` so the unregister lambda keeps these alive even if the
-  // registry dies first; the end event must always fire.
+  // registry is destroyed first (e.g. on server shutdown).
   std::shared_ptr<std::vector<EndCallback>> onEnd_ =
       std::make_shared<std::vector<EndCallback>>();
 };
