@@ -9,6 +9,8 @@
 
 #include "util/metrics/ServerMetrics.h"
 
+#include <utility>
+
 #include "opentelemetry/metrics/provider.h"
 #include "util/metrics/Metrics.h"
 
@@ -83,18 +85,6 @@ ServerMetrics::ServerMetrics(std::function<int64_t()> getDeltaTriples,
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<ServerMetrics> ServerMetrics::create(
-    std::function<int64_t()> getDeltaTriples,
-    std::function<int64_t()> getMemoryLeft,
-    std::function<int64_t()> getCacheUsed, ad_utility::MemorySize maxMem) {
-  auto m = std::unique_ptr<ServerMetrics>(
-      new ServerMetrics(std::move(getDeltaTriples), std::move(getMemoryLeft),
-                        std::move(getCacheUsed), maxMem));
-  m->registerCallbacks();
-  return m;
-}
-
-// _____________________________________________________________________________
 ServerMetrics::~ServerMetrics() {
   deltaTriplesMetric_->RemoveCallback(&observeDeltaTriples, this);
   memoryQueryFree_->RemoveCallback(&observeMemoryQueryFree, this);
@@ -119,20 +109,20 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 // _____________________________________________________________________________
 void ServerMetrics::observeDeltaTriples(
     opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result, self.getDeltaTriples_());
+  const auto& self = *static_cast<ServerMetrics*>(state);
+  observe(std::move(result), self.getDeltaTriples_());
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::observeMemoryQueryFree(
     opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result, self.getMemoryLeft_());
+  const auto& self = *static_cast<ServerMetrics*>(state);
+  observe(std::move(result), self.getMemoryLeft_());
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::observeMemoryCacheUsed(
     opentelemetry::metrics::ObserverResult result, void* state) {
-  auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result, self.getCacheUsed_());
+  const auto& self = *static_cast<ServerMetrics*>(state);
+  observe(std::move(result), self.getCacheUsed_());
 }

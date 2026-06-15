@@ -24,10 +24,6 @@
 // members via the stored callbacks.
 class ServerMetrics {
  public:
-  static std::unique_ptr<ServerMetrics> create(
-      std::function<int64_t()> getDeltaTriples,
-      std::function<int64_t()> getMemoryLeft,
-      std::function<int64_t()> getCacheUsed, ad_utility::MemorySize maxMem);
   ~ServerMetrics();
   ServerMetrics(const ServerMetrics&) = delete;
   ServerMetrics& operator=(const ServerMetrics&) = delete;
@@ -48,13 +44,13 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
- private:
   ServerMetrics(std::function<int64_t()> getDeltaTriples,
                 std::function<int64_t()> getMemoryLeft,
                 std::function<int64_t()> getCacheUsed,
                 ad_utility::MemorySize maxMem);
   void registerCallbacks();
 
+ private:
   static void observeDeltaTriples(opentelemetry::metrics::ObserverResult result,
                                   void* state);
   static void observeMemoryQueryFree(

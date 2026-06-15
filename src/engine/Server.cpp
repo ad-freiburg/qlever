@@ -112,7 +112,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     }
   }
 
-  metrics_ = ServerMetrics::create(
+  metrics_ = std::make_unique<ServerMetrics>(
       [this]() -> int64_t {
         return index_->deltaTriplesManager()
             .getCurrentLocatedTriplesSharedState()
@@ -124,6 +124,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
         return (cache_.nonPinnedSize() + cache_.pinnedSize()).getBytes();
       },
       maxMem_);
+  metrics_->registerCallbacks();
   // Re-register the cache-size action to also record the metric going forward.
   // This triggers immediately, recording the current cache limit as the initial
   // value.
