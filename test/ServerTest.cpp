@@ -7,6 +7,7 @@
 #include <boost/beast/http.hpp>
 
 #include "ServerTestHelpers.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -391,18 +392,34 @@ TEST(ServerTest, checkAccessToken) {
 }
 
 // _____________________________________________________________________________
-MATCHER_P(ContentTypeIs, contentType,
-          absl::StrCat("Content-Type is ", negation ? "not " : "",
-                       contentType)) {
-  auto it = arg.find(http::field::content_type);
+MATCHER_P2(HeaderFieldIs, field, matcher,
+           absl::StrCat(std::string{boost::beast::http::to_string(field)}, " ",
+                        testing::DescribeMatcher<std::string>(matcher,
+                                                              negation))) {
+  auto it = arg.find(field);
   if (it == arg.end()) {
-    *result_listener << "which has no Content-Type header";
+    *result_listener << "which has no " << field << " header";
     return false;
   }
-  auto actualContentType = it->value();
-  *result_listener << "which has Content-Type " << actualContentType;
-  return actualContentType == contentType;
+  auto fieldValue = it->value();
+  *result_listener << "which has " << field << " with " << fieldValue;
+  return testing::ExplainMatchResult(matcher, fieldValue, result_listener);
 }
+
+// _____________________________________________________________________________
+auto ContentTypeIs = [](const std::string& contentType) {
+  return HeaderFieldIs(http::field::content_type, testing::StrEq(contentType));
+};
+
+// _____________________________________________________________________________
+auto LocationIs = [](const auto& matcher) {
+  return HeaderFieldIs(http::field::location, matcher);
+};
+
+// _____________________________________________________________________________
+auto HasHeader = [](http::field field) {
+  return HeaderFieldIs(field, testing::Not(testing::IsEmpty()));
+};
 
 // _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
@@ -556,6 +573,23 @@ TEST(ServerTest, gspDelete) {
   testDelete("graph=foo", StatusIs(http::status::not_found));
 }
 
+MATCHER(PairwiseUnequal, "contains no duplicate elements") {
+  const auto& container = arg;
+  auto begin = std::begin(container);
+  auto end = std::end(container);
+
+  for (auto it = begin; it != end; ++it) {
+    for (auto jt = std::next(it); jt != end; ++jt) {
+      if (*it == *jt) {
+        *result_listener << "duplicate value found: "
+                         << ::testing::PrintToString(*it);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // _____________________________________________________________________________
 TEST(ServerTest, gspPost) {
   // TODO: test more broadly including the delta triples after the operation
@@ -574,4 +608,88 @@ TEST(ServerTest, gspPost) {
   };
   expectPost("", StatusIs(http::status::no_content));
   expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPost = [](const SimulateHttpRequest& simulateHttpRequest,
+                     auto request, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+    return response;
+  };
+
+  // Insert a payload into a new graph chosen by the server 1000 times. Check
+  // that the returned graph has the expected format and that no graph is
+  // selected twice.
+  {
+    std::string basename = "ServerTest_gspPostCreateNewGraph";
+    auto index = makeTestIndex(basename, "");
+    SimulateHttpRequest simulateHttpRequest{basename};
+    auto testPostCreateNewGraph =
+        [&testPost, &simulateHttpRequest](
+            const std::string& body, const auto& bodyMatcher,
+            ad_utility::source_location l =
+                AD_CURRENT_SOURCE_LOC()) -> std::string {
+      auto request =
+          makeRequest(http::verb::post,
+                      "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+                      {{http::field::authorization, "Bearer accessToken"},
+                       {http::field::host, "example.org"},
+                       {http::field::content_type, "text/turtle"}},
+                      body);
+      auto response = testPost(simulateHttpRequest, request, bodyMatcher, l);
+      return response.at(http::field::location);
+    };
+    std::vector<std::string> locations;
+    for (int i = 0; i < 10; ++i) {
+      auto location = testPostCreateNewGraph(
+          "<a> <b> <c>",
+          testing::AllOf(
+              // Check that the random part of the graph is a V4 UUID.
+              LocationIs(testing::MatchesRegex(
+                  R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+              StatusIs(http::status::created)));
+      locations.push_back(location);
+    }
+    EXPECT_THAT(locations, PairwiseUnequal());
+  }
+
+  // Same behavior via Direct Graph Identification: POST `/http-graph-store`
+  // with no `?graph=`. The graph IRI is constructed from `Host` + path and
+  // matches the instance's graph store URL, so a new graph is created.
+  testPost(
+      {"ServerTest_gspPostCreateNewGraph"},
+      makeRequest(http::verb::post, "/http-graph-store",
+                  {{http::field::authorization, "Bearer accessToken"},
+                   {http::field::host, "example.org"},
+                   {http::field::content_type, "text/turtle"}},
+                  "<a> <b> <c>"),
+      testing::AllOf(
+          LocationIs(testing::MatchesRegex(
+              R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+          StatusIs(http::status::created)));
+
+  auto IsPostNoCreatedGraph = [](http::status status) {
+    return testing::AllOf(StatusIs(status),
+                          testing::Not(HasHeader(http::field::location)));
+  };
+  // Here we only care that logic for creating a new graph doesn't fire. The
+  // updated triples are not the primary concern here.
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?default",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?graph=foo",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
 }

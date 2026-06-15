@@ -26,6 +26,14 @@ struct SimulateHttpRequest {
   // (metrics disabled), matching the behaviour of all existing tests.
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_ = nullptr;
 
+  struct ServerSettings {
+    bool useText = false;
+    bool usePatterns = true;
+    bool loadAllPermutations = true;
+    bool persistUpdates = false;
+  };
+  ServerSettings serverSettings_{};
+
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
     // The range overload doesn't work because it takes a const Range& but
@@ -42,14 +50,17 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName, auto metricsReader,
-           auto& io) -> boost::asio::awaitable<ResT> {
+        [](auto request, auto indexName, const ServerSettings& serverSettings,
+           auto metricsReader, auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           Server server{
               4321,          1,     ad_utility::MemorySize::megabytes(1),
               "accessToken", false, true,
               metricsReader};
-          server.initialize(indexName, false);
+          server.initialize(indexName, serverSettings.useText,
+                            serverSettings.usePatterns,
+                            serverSettings.loadAllPermutations,
+                            serverSettings.persistUpdates);
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
 
@@ -59,7 +70,7 @@ struct SimulateHttpRequest {
                   .template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, metricsReader_, io),
+        }(request, indexBaseName_, serverSettings_, metricsReader_, io),
         boost::asio::use_future);
     io.run();
     return fut.get();
