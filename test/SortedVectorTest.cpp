@@ -16,29 +16,22 @@
 
 namespace ad_utility {
 namespace {
+
 using namespace ::testing;
-auto V = testing::VocabId;
+using Pair = std::pair<int, int>;
+using SV = SortedVector<Pair, std::less<>, MemberProj<&Pair::first>>;
 
-auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
-  return IdTriple{std::array<Id, 4>{V(c1), V(c2), V(c3), V(0)}};
-};
+auto p10 = Pair{1, 0};
+auto p11 = Pair{1, 1};
+auto p20 = Pair{2, 0};
+auto p21 = Pair{2, 1};
+auto p30 = Pair{3, 0};
+auto p31 = Pair{3, 1};
+auto p40 = Pair{4, 0};
+auto p50 = Pair{5, 0};
+auto p51 = Pair{5, 1};
+auto p60 = Pair{6, 0};
 
-auto LT = [](size_t blockIndex, const IdTriple<>& triple, bool insertOrDelete) {
-  return LocatedTriple{blockIndex, triple, insertOrDelete};
-};
-
-auto lt1 = LT(0, IT(1, 2, 3), true);
-auto lt1I = LT(0, IT(1, 2, 3), false);
-auto lt2 = LT(0, IT(1, 2, 4), true);
-auto lt2I = LT(0, IT(1, 2, 4), false);
-auto lt3 = LT(0, IT(1, 2, 5), true);
-auto lt3I = LT(0, IT(1, 2, 5), false);
-auto lt4 = LT(0, IT(2, 1, 1), true);
-auto lt5 = LT(0, IT(2, 1, 3), true);
-auto lt5I = LT(0, IT(2, 1, 3), false);
-auto lt6 = LT(0, IT(3, 3, 3), true);
-
-using SV = SortedLocatedTriplesVector;
 auto SizesAre = [](size_t size, size_t sizeForTesting) {
   return AllOf(AD_PROPERTY(SV, size, Eq(size)),
                AD_PROPERTY(SV, sizeForTesting, Eq(sizeForTesting)));
@@ -49,7 +42,6 @@ auto AssertionFailed = [](const std::string& assertion) {
 auto NotClean = AssertionFailed("isClean()");
 auto Empty = AssertionFailed("!empty()");
 
-// Runs `testLamda` on with `const SV&` and `SV&` to test the const overloads.
 auto testConstOverloads = [](SV& initial, auto testLambda,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   {
@@ -87,30 +79,30 @@ TEST(SortedVectorTest, constructor) {
   {
     if (areExpensiveChecksEnabled) {
       AD_EXPECT_THROW_WITH_MESSAGE(
-          SV::fromSorted({lt2, lt1}),
+          SV::fromSorted({p20, p10}),
           AssertionFailed("ql::ranges::is_sorted(sortedElements, comp, proj)"));
       AD_EXPECT_THROW_WITH_MESSAGE(
-          SV::fromSorted({lt1, lt1I}),
+          SV::fromSorted({p10, p11}),
           AssertionFailed(
               "ql::ranges::adjacent_find(sortedElements, {}, proj) == "
               "sortedElements.end()"));
     }
   }
   {
-    SV s = SV::fromSorted({lt1, lt2});
+    SV s = SV::fromSorted({p10, p20});
     EXPECT_THAT(s, Not(IsEmpty()));
     EXPECT_THAT(s, SizeIs(2));
     EXPECT_THAT(s.sizeForTesting(), Eq(2));
-    EXPECT_THAT(s, ElementsAre(lt1, lt2));
+    EXPECT_THAT(s, ElementsAre(p10, p20));
     EXPECT_NE(s.begin(), s.end());
   }
 }
 
 TEST(SortedVectorTest, empty) {
-  auto insertInto = [](SV& sv, LocatedTriple lt,
+  auto insertInto = [](SV& sv, Pair p,
                        source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(loc);
-    sv.insert(std::move(lt));
+    sv.insert(std::move(p));
     sv.consolidate(0);
     EXPECT_FALSE(sv.empty());
   };
@@ -123,32 +115,29 @@ TEST(SortedVectorTest, empty) {
     EXPECT_TRUE(s.empty());
   }
   {
-    SV s = SV::fromSorted({lt1});
+    SV s = SV::fromSorted({p10});
     EXPECT_FALSE(s.empty());
   }
   {
     SV s{};
-    insertInto(s, lt1);
-    insertInto(s, lt1);
-    insertInto(s, lt1I);
-    s.erase(lt1I);
+    insertInto(s, p10);
+    insertInto(s, p10);
+    insertInto(s, p11);
+    s.erase(p11);
     EXPECT_TRUE(s.empty());
   }
   {
     SV s{};
-    insertInto(s, lt1);
+    insertInto(s, p10);
     s.clear();
     EXPECT_TRUE(s.empty());
   }
   {
     SV s{};
     FastRandomIntGenerator<uint64_t> rng{};
-    auto rndVocabId = [&rng]() { return V(rng() % Id::maxIndex); };
     for (size_t i = 0; i < 100; ++i) {
-      insertInto(s, LT(0,
-                       IdTriple{std::array{rndVocabId(), rndVocabId(),
-                                           rndVocabId(), rndVocabId()}},
-                       rng() % 2 == 0));
+      insertInto(
+          s, {static_cast<int>(rng() % 1000), static_cast<int>(rng() % 1000)});
     }
     s.clear();
     EXPECT_TRUE(s.empty());
@@ -158,35 +147,34 @@ TEST(SortedVectorTest, empty) {
 TEST(SortedVectorTest, size) {
   {
     SV s{};
-    s.insert(lt1);
+    s.insert(p10);
     AD_EXPECT_THROW_WITH_MESSAGE(s.size(), NotClean);
     AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotClean);
   }
   {
     SV s{};
     EXPECT_THAT(s, SizesAre(0, 0));
-    s.insert(lt1);
+    s.insert(p10);
     s.consolidate();
     EXPECT_THAT(s, SizesAre(1, 1));
-    s.insert(lt1);  // Inserted twice, does not contribute.
-    s.insert(lt2);
-    s.insert(lt3);
-    s.insert(lt4);
-    s.insert(lt5);
-    s.insert(lt6);
+    s.insert(p10);  // Inserted twice, does not contribute.
+    s.insert(p20);
+    s.insert(p30);
+    s.insert(p40);
+    s.insert(p50);
+    s.insert(p60);
     s.consolidate();
     EXPECT_THAT(s, SizesAre(6, 6));
-    // Due to the relative sizes of the two parts both `lt1` and `lt1I` exist in
-    // the internal storage. When iterating only the `lt1I` will be returned.
-    s.insert(lt1I);
+    // Due to the relative sizes of the two parts both `p1` and `p1I` exist in
+    // the internal storage. When iterating only `p1I` will be returned.
+    s.insert(p11);
     s.consolidate();
     EXPECT_THAT(s, SizesAre(7, 6));
-    s.erase(lt2);
+    s.erase(p20);
     EXPECT_THAT(s, SizesAre(6, 5));
-    // `lt1` is shadowed by `lt1I` but kept because the two parts are not
-    // merged. Removing it resolve the discrepancy between `size` and
-    // `sizeForTesting`.
-    s.erase(lt1);
+    // `p1` is shadowed by `p1I` but kept because the two parts are not merged.
+    // Removing it resolves the discrepancy between `size` and `sizeForTesting`.
+    s.erase(p10);
     EXPECT_THAT(s, SizesAre(5, 5));
     s.clear();
     EXPECT_THAT(s, SizesAre(0, 0));
@@ -198,9 +186,9 @@ TEST(SortedVectorTest, clear) {
   EXPECT_THAT(s, IsEmpty());
   s.clear();
   EXPECT_THAT(s, IsEmpty());
-  s.insert(lt1);
-  s.insert(lt2);
-  s.insert(lt3);
+  s.insert(p10);
+  s.insert(p20);
+  s.insert(p30);
   s.consolidate();
   EXPECT_THAT(s, Not(IsEmpty()));
   s.clear();
@@ -210,22 +198,21 @@ TEST(SortedVectorTest, clear) {
 TEST(SortedVectorTest, insert) {
   SV s{};
   EXPECT_TRUE(s.smallPartIsSorted_);
-  s.insert(lt1);
+  s.insert(p10);
   EXPECT_FALSE(s.smallPartIsSorted_);
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(lt1)));
-  s.insert(lt1I);
-  s.insert(lt4);
-  s.insert(lt3);
-  s.insert(lt2);
-  EXPECT_THAT(s,
-              AD_FIELD(SV, elements_, ElementsAre(lt1, lt1I, lt4, lt3, lt2)));
+  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p10)));
+  s.insert(p11);
+  s.insert(p40);
+  s.insert(p30);
+  s.insert(p20);
+  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p10, p11, p40, p30, p20)));
   EXPECT_FALSE(s.smallPartIsSorted_);
   s.consolidate();
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(lt1I, lt2, lt3, lt4)));
+  // p1I is the last-inserted element for key=1, so it wins deduplication.
+  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p11, p20, p30, p40)));
   EXPECT_TRUE(s.smallPartIsSorted_);
-  s.insert(lt1);
-  EXPECT_THAT(s,
-              AD_FIELD(SV, elements_, ElementsAre(lt1I, lt2, lt3, lt4, lt1)));
+  s.insert(p10);
+  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p11, p20, p30, p40, p10)));
   EXPECT_FALSE(s.smallPartIsSorted_);
   s.consolidate();
   EXPECT_THAT(s, SizesAre(5, 4));
@@ -239,33 +226,31 @@ TEST(SortedVectorTest, back) {
         s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), Empty); });
   }
   {
-    SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5});
+    SV s = SV::fromSorted({p10, p20, p30, p40, p50});
     // small part is empty
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5); });
-    s.insert(lt2I);
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p50); });
+    s.insert(p21);
     s.consolidate();
     // The small part is non-empty but the large part has the largest element.
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5); });
-    s.insert(lt5I);  // `lt5I` will be in the small part
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p50); });
+    s.insert(p51);  // `p5I` will be in the small part
     testConstOverloads(
         s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), NotClean); });
     s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt5I); });
-    s.insert(lt6);  // `lt6` will be in the small part
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p51); });
+    s.insert(p60);  // `p6` will be in the small part
     s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), lt6); });
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p60); });
   }
 }
 
 TEST(SortedVectorTest, iteration) {
   auto expectElements = [&](SV& sv,
-                            const std::vector<LocatedTriple>& expectedTriples,
+                            const std::vector<std::pair<int, int>>& expected,
                             source_location l = AD_CURRENT_SOURCE_LOC()) {
     testConstOverloads(
         sv,
-        [&expectedTriples](auto& sv) {
-          EXPECT_THAT(sv, ElementsAreArray(expectedTriples));
-        },
+        [&expected](auto& sv) { EXPECT_THAT(sv, ElementsAreArray(expected)); },
         l);
   };
   {
@@ -273,21 +258,21 @@ TEST(SortedVectorTest, iteration) {
     expectElements(s, {});
   }
   {
-    SV s = SV::fromSorted({lt1, lt2});
-    expectElements(s, {lt1, lt2});
-    s.insert(lt1I);
+    SV s = SV::fromSorted({p10, p20});
+    expectElements(s, {p10, p20});
+    s.insert(p11);
     s.consolidate();
-    expectElements(s, {lt1I, lt2});
-    s.insert(lt3);
-    s.insert(lt5);
+    expectElements(s, {p11, p20});
+    s.insert(p30);
+    s.insert(p50);
     s.consolidate();
-    expectElements(s, {lt1I, lt2, lt3, lt5});
+    expectElements(s, {p11, p20, p30, p50});
     s.clear();
     expectElements(s, {});
   }
   {
     SV s{};
-    s.insert(lt1);
+    s.insert(p10);
     testConstOverloads(
         s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.begin(), NotClean); });
     testConstOverloads(
@@ -297,63 +282,64 @@ TEST(SortedVectorTest, iteration) {
 
 TEST(SortedVectorTest, erase) {
   {
-    SV s = SV::fromSorted({lt1, lt2, lt3, lt4});
-    s.erase(lt2);
-    EXPECT_THAT(s, ElementsAre(lt1, lt3, lt4));
-    s.erase(lt4);
-    EXPECT_THAT(s, ElementsAre(lt1, lt3));
-    s.erase(lt1);
-    EXPECT_THAT(s, ElementsAre(lt3));
-    s.insert(lt2);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(lt3), NotClean);
+    SV s = SV::fromSorted({p10, p20, p30, p40});
+    s.erase(p20);
+    EXPECT_THAT(s, ElementsAre(p10, p30, p40));
+    s.erase(p40);
+    EXPECT_THAT(s, ElementsAre(p10, p30));
+    s.erase(p10);
+    EXPECT_THAT(s, ElementsAre(p30));
+    s.insert(p20);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(p30), NotClean);
     s.consolidate();
-    s.erase(lt3);
-    EXPECT_THAT(s, ElementsAre(lt2));
+    s.erase(p30);
+    EXPECT_THAT(s, ElementsAre(p20));
   }
   {
-    SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5, lt6});
-    s.erase(std::vector<LocatedTriple>{});
-    EXPECT_THAT(s, ElementsAre(lt1, lt2, lt3, lt4, lt5, lt6));
-    s.erase(std::vector{lt2, lt4});
-    EXPECT_THAT(s, ElementsAre(lt1, lt3, lt5, lt6));
-    s.erase(std::vector{lt1, lt2});  // `lt2` is no longer contained.
-    EXPECT_THAT(s, ElementsAre(lt3, lt5, lt6));
-    s.insert(lt1);
+    SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
+    s.erase(std::vector<std::pair<int, int>>{});
+    EXPECT_THAT(s, ElementsAre(p10, p20, p30, p40, p50, p60));
+    s.erase(std::vector{p20, p40});
+    EXPECT_THAT(s, ElementsAre(p10, p30, p50, p60));
+    s.erase(std::vector{p10, p20});  // `p2` is no longer contained.
+    EXPECT_THAT(s, ElementsAre(p30, p50, p60));
+    s.insert(p10);
     // this `erase` overload sorts the elements
-    AD_EXPECT_THROW_WITH_MESSAGE(s.erase({lt6, lt3, lt5, lt1}), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.erase({p60, p30, p50, p10}), NotClean);
     s.consolidate();
-    s.erase(std::vector{lt6, lt3, lt5, lt1});
+    s.erase(std::vector{p60, p30, p50, p10});
     EXPECT_THAT(s, ElementsAre());
   }
   {
-    SV s = SV::fromSorted({lt1, lt2, lt3, lt4, lt5, lt6});
-    auto erase = [&s](std::vector<LocatedTriple> triples) {
-      s.eraseSorted(triples);
+    SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
+    auto erase = [&s](std::vector<std::pair<int, int>> pairs) {
+      s.eraseSorted(pairs);
     };
     erase({});
-    EXPECT_THAT(s, ElementsAre(lt1, lt2, lt3, lt4, lt5, lt6));
-    erase({lt2, lt4});
-    EXPECT_THAT(s, ElementsAre(lt1, lt3, lt5, lt6));
-    s.insert(lt4);
-    AD_EXPECT_THROW_WITH_MESSAGE(erase({lt1, lt2, lt4}), NotClean);
+    EXPECT_THAT(s, ElementsAre(p10, p20, p30, p40, p50, p60));
+    erase({p20, p40});
+    EXPECT_THAT(s, ElementsAre(p10, p30, p50, p60));
+    s.insert(p40);
+    AD_EXPECT_THROW_WITH_MESSAGE(erase({p10, p20, p40}), NotClean);
     s.consolidate();
-    erase({lt1, lt2, lt4});  // `lt2` is no longer contained.
-    EXPECT_THAT(s, ElementsAre(lt3, lt5, lt6));
+    erase({p10, p20, p40});  // `p2` is no longer contained.
+    EXPECT_THAT(s, ElementsAre(p30, p50, p60));
     if (areExpensiveChecksEnabled) {
       AD_EXPECT_THROW_WITH_MESSAGE(
-          erase({lt6, lt3, lt5}),
+          erase({p60, p30, p50}),
           AssertionFailed("ql::ranges::is_sorted(sortedElems, comp_, proj_)"));
     }
-    erase({lt3, lt5, lt6});  // this `erase` overload sorts the elements
+    erase({p30, p50, p60});
     EXPECT_THAT(s, ElementsAre());
   }
 }
 
 TEST(SortedVectorTest, sortAndRemoveDuplicates) {
-  auto expect = [](std::vector<LocatedTriple> input, const auto& resultMatcher,
+  using Pairs = std::vector<std::pair<int, int>>;
+  auto expect = [](Pairs input, const auto& resultMatcher,
                    std::optional<size_t> subrangeBegin = std::nullopt,
                    std::optional<size_t> subrangeEnd = std::nullopt,
-                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto subrange = ql::ranges::subrange(
         input.begin() + subrangeBegin.value_or(0),
@@ -363,20 +349,20 @@ TEST(SortedVectorTest, sortAndRemoveDuplicates) {
   };
 
   expect({}, ElementsAre());
-  expect({lt1}, ElementsAre(lt1));
-  expect({lt1I, lt2, lt3I}, ElementsAre(lt1I, lt2, lt3I));
-  expect({lt3I, lt1, lt2I}, ElementsAre(lt1, lt2I, lt3I));
-  expect({lt1, lt2I, lt3I, lt1I, lt1, lt2}, ElementsAre(lt1, lt2, lt3I));
-  expect({lt1I, lt1, lt1I, lt1}, ElementsAre(lt1));
-  expect({lt1I, lt2, lt3, lt2I, lt3I}, ElementsAre(lt1I, lt2, lt2I, lt3I), 2);
-  expect({lt1I, lt2, lt1, lt2I, lt1I}, ElementsAre(lt1I, lt2, lt1I, lt2I), 2);
-  expect({lt1I, lt2, lt1, lt2I, lt1I}, ElementsAre(lt1, lt2, lt2I, lt1I), 0, 3);
+  expect({p10}, ElementsAre(p10));
+  expect({p11, p20, p31}, ElementsAre(p11, p20, p31));
+  expect({p31, p10, p21}, ElementsAre(p10, p21, p31));
+  expect({p10, p21, p31, p11, p10, p20}, ElementsAre(p10, p20, p31));
+  expect({p11, p10, p11, p10}, ElementsAre(p10));
+  expect({p11, p20, p30, p21, p31}, ElementsAre(p11, p20, p21, p31), 2);
+  expect({p11, p20, p10, p21, p11}, ElementsAre(p11, p20, p11, p21), 2);
+  expect({p11, p20, p10, p21, p11}, ElementsAre(p10, p20, p21, p11), 0, 3);
 }
 
 TEST(SortedVectorTest, eraseSortedSubRange) {
-  using LTs = std::vector<LocatedTriple>;
+  using Pairs = std::vector<std::pair<int, int>>;
 
-  auto test = [](LTs triples, LTs toDelete, const LTs& expected,
+  auto test = [](Pairs triples, Pairs toDelete, const Pairs& expected,
                  size_t numDeleted,
                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
@@ -385,33 +371,33 @@ TEST(SortedVectorTest, eraseSortedSubRange) {
   };
 
   test({}, {}, {}, 0);
-  test({}, {lt1}, {}, 0);
-  test({lt1, lt2, lt3}, {}, {lt1, lt2, lt3}, 0);
-  test({lt1}, {lt1}, {}, 1);
-  test({lt1}, {lt2}, {lt1}, 0);
-  test({lt1, lt2, lt3}, {lt1}, {lt2, lt3}, 1);
-  test({lt1, lt2, lt3}, {lt2}, {lt1, lt3}, 1);
-  test({lt1, lt2, lt3}, {lt3}, {lt1, lt2}, 1);
-  test({lt1, lt2, lt3}, {lt1, lt2, lt3}, {}, 3);
-  test({lt1, lt2, lt3}, {lt1, lt3}, {lt2}, 2);
-  test({lt2, lt3}, {lt1, lt3}, {lt2}, 1);
-  test({lt1, lt2}, {lt1, lt4}, {lt2}, 1);
-  test({lt2, lt3, lt4}, {lt1, lt3, lt5}, {lt2, lt4}, 1);
-  test({lt2, lt3, lt4}, {lt1, lt5}, {lt2, lt3, lt4}, 0);
+  test({}, {p10}, {}, 0);
+  test({p10, p20, p30}, {}, {p10, p20, p30}, 0);
+  test({p10}, {p10}, {}, 1);
+  test({p10}, {p20}, {p10}, 0);
+  test({p10, p20, p30}, {p10}, {p20, p30}, 1);
+  test({p10, p20, p30}, {p20}, {p10, p30}, 1);
+  test({p10, p20, p30}, {p30}, {p10, p20}, 1);
+  test({p10, p20, p30}, {p10, p20, p30}, {}, 3);
+  test({p10, p20, p30}, {p10, p30}, {p20}, 2);
+  test({p20, p30}, {p10, p30}, {p20}, 1);
+  test({p10, p20}, {p10, p40}, {p20}, 1);
+  test({p20, p30, p40}, {p10, p30, p50}, {p20, p40}, 1);
+  test({p20, p30, p40}, {p10, p50}, {p20, p30, p40}, 0);
 }
 
 TEST(SortedVectorTest, equality) {
-  EXPECT_EQ(SV::fromSorted({lt1, lt2}), SV::fromSorted({lt1, lt2}));
-  EXPECT_NE(SV::fromSorted({lt1, lt2}), SV::fromSorted({lt3}));
+  EXPECT_EQ(SV::fromSorted({p10, p20}), SV::fromSorted({p10, p20}));
+  EXPECT_NE(SV::fromSorted({p10, p20}), SV::fromSorted({p30}));
   {
     SV s1;
     SV s2;
 
-    s1.insert(lt1);
-    s1.insert(lt2);
+    s1.insert(p10);
+    s1.insert(p20);
 
-    s2.insert(lt2);
-    s2.insert(lt1);
+    s2.insert(p20);
+    s2.insert(p10);
 
     AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(s1 == s2), NotClean);
     s1.consolidate();
@@ -425,22 +411,22 @@ TEST(SortedVectorTest, equality) {
     SV s1;
     SV s2;
 
-    s1.insert(lt1);
-    s1.insert(lt2);
-    s1.insert(lt3);
-    s1.insert(lt4);
-    s1.insert(lt5);
+    s1.insert(p10);
+    s1.insert(p20);
+    s1.insert(p30);
+    s1.insert(p40);
+    s1.insert(p50);
     s1.consolidate();
-    s1.insert(lt6);
+    s1.insert(p60);
     s1.consolidate();
 
-    s2.insert(lt6);
-    s2.insert(lt5);
-    s2.insert(lt4);
-    s2.insert(lt3);
-    s2.insert(lt2);
+    s2.insert(p60);
+    s2.insert(p50);
+    s2.insert(p40);
+    s2.insert(p30);
+    s2.insert(p20);
     s2.consolidate();
-    s2.insert(lt1);
+    s2.insert(p10);
     s2.consolidate();
 
     EXPECT_NE(s1, s2);
