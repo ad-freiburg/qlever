@@ -7,17 +7,19 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/ServerMetrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 #include "opentelemetry/metrics/provider.h"
-#include "util/Metrics.h"
+#include "util/metrics/Metrics.h"
 
 // _____________________________________________________________________________
-ServerMetrics::ServerMetrics(std::shared_ptr<Index> index,
-                             ad_utility::AllocatorWithLimit<Id>& alloc,
-                             QueryResultCache& cache,
+ServerMetrics::ServerMetrics(std::function<int64_t()> getDeltaTriples,
+                             std::function<int64_t()> getMemoryLeft,
+                             std::function<int64_t()> getCacheUsed,
                              ad_utility::MemorySize maxMem)
-    : index_(index), allocator_(alloc), cache_(cache) {
+    : getDeltaTriples_(std::move(getDeltaTriples)),
+      getMemoryLeft_(std::move(getMemoryLeft)),
+      getCacheUsed_(std::move(getCacheUsed)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   startTimeMetric_ = meter->CreateInt64Gauge(
@@ -82,10 +84,12 @@ ServerMetrics::ServerMetrics(std::shared_ptr<Index> index,
 
 // _____________________________________________________________________________
 std::unique_ptr<ServerMetrics> ServerMetrics::create(
-    std::shared_ptr<Index> index, ad_utility::AllocatorWithLimit<Id>& allocator,
-    QueryResultCache& cache, ad_utility::MemorySize maxMem) {
+    std::function<int64_t()> getDeltaTriples,
+    std::function<int64_t()> getMemoryLeft,
+    std::function<int64_t()> getCacheUsed, ad_utility::MemorySize maxMem) {
   auto m = std::unique_ptr<ServerMetrics>(
-      new ServerMetrics(index, allocator, cache, maxMem));
+      new ServerMetrics(std::move(getDeltaTriples), std::move(getMemoryLeft),
+                        std::move(getCacheUsed), maxMem));
   m->registerCallbacks();
   return m;
 }
@@ -116,24 +120,19 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 void ServerMetrics::observeDeltaTriples(
     opentelemetry::metrics::ObserverResult result, void* state) {
   auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result,
-          self.index_->deltaTriplesManager()
-              .getCurrentLocatedTriplesSharedState()
-              ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
-              .numTriples());
+  observe(result, self.getDeltaTriples_());
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::observeMemoryQueryFree(
     opentelemetry::metrics::ObserverResult result, void* state) {
   auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result, self.allocator_.amountMemoryLeft().getBytes());
+  observe(result, self.getMemoryLeft_());
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::observeMemoryCacheUsed(
     opentelemetry::metrics::ObserverResult result, void* state) {
   auto& self = *static_cast<ServerMetrics*>(state);
-  observe(result,
-          (self.cache_.nonPinnedSize() + self.cache_.pinnedSize()).getBytes());
+  observe(result, self.getCacheUsed_());
 }

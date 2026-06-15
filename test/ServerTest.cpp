@@ -14,11 +14,11 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/Metrics.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
 
 using nlohmann::json;
 

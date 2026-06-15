@@ -18,13 +18,11 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ServerMetrics.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Metrics.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -32,6 +30,8 @@
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =

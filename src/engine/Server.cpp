@@ -112,7 +112,18 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     }
   }
 
-  metrics_ = ServerMetrics::create(index_, allocator_, cache_, maxMem_);
+  metrics_ = ServerMetrics::create(
+      [this]() -> int64_t {
+        return index_->deltaTriplesManager()
+            .getCurrentLocatedTriplesSharedState()
+            ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
+            .numTriples();
+      },
+      [this]() -> int64_t { return allocator_.amountMemoryLeft().getBytes(); },
+      [this]() -> int64_t {
+        return (cache_.nonPinnedSize() + cache_.pinnedSize()).getBytes();
+      },
+      maxMem_);
   // Re-register the cache-size action to also record the metric going forward.
   // This triggers immediately, recording the current cache limit as the initial
   // value.

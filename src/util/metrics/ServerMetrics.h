@@ -7,30 +7,27 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_SERVERMETRICS_H
-#define QLEVER_SRC_ENGINE_SERVERMETRICS_H
+#ifndef QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
+#define QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
 
 #include <opentelemetry/metrics/async_instruments.h>
 #include <opentelemetry/metrics/sync_instruments.h>
 
+#include <functional>
 #include <memory>
 
-#include "QueryExecutionContext.h"
-#include "global/Id.h"
-#include "index/Index.h"
-#include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
 // destruction. Must be declared after index_, allocator_, and cache_ so
 // that it is destroyed first and its destructor can safely access those
-// members via the stored references.
+// members via the stored callbacks.
 class ServerMetrics {
  public:
   static std::unique_ptr<ServerMetrics> create(
-      std::shared_ptr<Index> index,
-      ad_utility::AllocatorWithLimit<Id>& allocator, QueryResultCache& cache,
-      ad_utility::MemorySize maxMem);
+      std::function<int64_t()> getDeltaTriples,
+      std::function<int64_t()> getMemoryLeft,
+      std::function<int64_t()> getCacheUsed, ad_utility::MemorySize maxMem);
   ~ServerMetrics();
   ServerMetrics(const ServerMetrics&) = delete;
   ServerMetrics& operator=(const ServerMetrics&) = delete;
@@ -52,9 +49,10 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
  private:
-  ServerMetrics(std::shared_ptr<Index> index,
-                ad_utility::AllocatorWithLimit<Id>& allocator,
-                QueryResultCache& cache, ad_utility::MemorySize maxMem);
+  ServerMetrics(std::function<int64_t()> getDeltaTriples,
+                std::function<int64_t()> getMemoryLeft,
+                std::function<int64_t()> getCacheUsed,
+                ad_utility::MemorySize maxMem);
   void registerCallbacks();
 
   static void observeDeltaTriples(opentelemetry::metrics::ObserverResult result,
@@ -66,12 +64,9 @@ class ServerMetrics {
   static void observe(opentelemetry::metrics::ObserverResult result,
                       int64_t value);
 
-  // References to Server state used by observable callbacks. Valid for the
-  // entire lifetime of ServerMetrics because Server holds the shared_ptr and
-  // its own members outlive it (declared earlier in Server).
-  std::shared_ptr<Index> index_;
-  ad_utility::AllocatorWithLimit<Id>& allocator_;
-  QueryResultCache& cache_;
+  std::function<int64_t()> getDeltaTriples_;
+  std::function<int64_t()> getMemoryLeft_;
+  std::function<int64_t()> getCacheUsed_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -83,4 +78,4 @@ class ServerMetrics {
       memoryCacheUsed_;
 };
 
-#endif  // QLEVER_SRC_ENGINE_SERVERMETRICS_H
+#endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H

@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_METRICS_H
-#define QLEVER_SRC_UTIL_METRICS_H
+#ifndef QLEVER_SRC_UTIL_METRICS_METRICS_H
+#define QLEVER_SRC_UTIL_METRICS_METRICS_H
 
 #include <opentelemetry/metrics/sync_instruments.h>
 
@@ -63,4 +63,4 @@ void initializeCounter(T* counter, std::string labelKey,
 
 }  // namespace ad_utility::metrics
 
-#endif  // QLEVER_SRC_UTIL_METRICS_H
+#endif  // QLEVER_SRC_UTIL_METRICS_METRICS_H

@@ -16,10 +16,10 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Metrics.h"  // for ad_utility::metrics::initialize
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/metrics/Metrics.h"  // for ad_utility::metrics::initialize
 
 using std::size_t;
 using std::string;

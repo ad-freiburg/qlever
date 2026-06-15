@@ -10,7 +10,7 @@
 #include <boost/beast/http.hpp>
 
 #include "engine/Server.h"
-#include "util/Metrics.h"
+#include "util/metrics/Metrics.h"
 
 namespace serverTestHelpers {
 
