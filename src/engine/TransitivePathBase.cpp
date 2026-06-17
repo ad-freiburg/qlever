@@ -639,9 +639,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
           columnIndexWithType.columnIndex_ -= 1;
         }
       }
-      // Ensure all "payload columns" (colums that come with the transitive path
-      // but are irrelevant for the join) are appended to the `variableColumns_`
-      // list.
+      // Ensure all "payload columns" (columns that come with the transitive
+      // path but are irrelevant for the join) are appended to the
+      // `variableColumns_` list.
       AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
       plan->variableColumns_[variable] = columnIndexWithType;
     }
