@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "util/GTestHelpers.h"
 #include "util/http/websocket/QueryId.h"
 
 using ad_utility::websocket::epochMillis;
@@ -322,7 +323,10 @@ namespace {
 // Run one register -> setStatus -> destroy cycle; serialize the end event and
 // return its `status` string. This drives `EndInfo::to_json` and `toString`,
 // so it checks both that `setStatus` propagates and how each status is spelled.
-std::string runCycleCaptureEndStatus(QueryStatus toSet) {
+std::string runCycleCaptureEndStatus(
+    QueryStatus toSet,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(location);
   QueryRegistry registry{};
   std::optional<std::string> captured;
   registry.addOnEnd([&captured](const QueryRegistry::EndInfo& info) {
@@ -340,16 +344,10 @@ std::string runCycleCaptureEndStatus(QueryStatus toSet) {
 }  // namespace
 
 // The status set on the `OwningQueryId` reaches the serialized end event.
-TEST(QueryRegistry, onEndStatusReflectsSetStatusOk) {
+TEST(QueryRegistry, onEndStatusReflectsSetStatus) {
   EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::OK), "ok");
-}
-TEST(QueryRegistry, onEndStatusReflectsSetStatusFailed) {
   EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::FAILED), "failed");
-}
-TEST(QueryRegistry, onEndStatusReflectsSetStatusCancelled) {
   EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::CANCELLED), "cancelled");
-}
-TEST(QueryRegistry, onEndStatusReflectsSetStatusTimeout) {
   EXPECT_EQ(runCycleCaptureEndStatus(QueryStatus::TIMEOUT), "timeout");
 }
 
@@ -359,13 +357,13 @@ TEST(QueryRegistry, onEndStatusReflectsSetStatusTimeout) {
 // event fires even if the registry is destroyed before the `OwningQueryId`.
 TEST(QueryRegistry, onEndFiresEvenWhenRegistryDestroyedFirst) {
   int ends = 0;
-  std::optional<QueryRegistry> registry{std::in_place};
-  registry->addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
-
-  auto owned = registry->uniqueIdFromString("01123581321345589144", "q");
-  ASSERT_TRUE(owned.has_value());
-
-  registry.reset();  // registry gone; the weak_ptr in the lambda expires
+  std::optional<OwningQueryId> owned;
+  {
+    QueryRegistry registry{};
+    registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+    owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    ASSERT_TRUE(owned.has_value());
+  }  // registry gone; the weak_ptr in the lambda expires
   EXPECT_EQ(ends, 0);
   owned.reset();  // end callback still fires
   EXPECT_EQ(ends, 1);

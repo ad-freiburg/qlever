@@ -87,12 +87,10 @@ void Server::configureQueryEventLog(const std::filesystem::path& path) {
   auto log = std::make_shared<ad_utility::QueryEventLog>();
   log->setOutputFile(path);
   // One generic lambda for both events: serialize the info struct (via its
-  // `to_json`) and push it as a newline-terminated line.
+  // `to_json`) and push it; the log appends the trailing newline.
   auto logEvent = [log](const auto& info) {
     nlohmann::ordered_json line = info;
-    auto s = line.dump();
-    s.push_back('\n');
-    log->push(std::move(s));
+    log->push(line.dump());
   };
   queryRegistry_.addOnStart(logEvent);
   queryRegistry_.addOnEnd(std::move(logEvent));

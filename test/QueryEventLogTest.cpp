@@ -34,7 +34,7 @@ TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
   QueryEventLog log;
   // No `setOutputFile` call. `push` must silently drop the line and not
   // create any file.
-  log.push("this should be discarded\n");
+  log.push("this should be discarded");
   EXPECT_FALSE(fs::exists(path));
 }
 
@@ -62,8 +62,8 @@ TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
   {
     QueryEventLog log;
     log.setOutputFile(path);
-    log.push("first\n");
-    log.push("second\n");
+    log.push("first");
+    log.push("second");
     // Destructor finishes the queue, joins the writer (which drains the
     // remaining lines and flushes), then closes the file.
   }
@@ -88,9 +88,9 @@ TEST(QueryEventLog, ConcurrentProducersProduceWellFormedLines) {
     for (size_t t = 0; t < kThreads; ++t) {
       producers.emplace_back([&log, t] {
         for (size_t n = 0; n < kLinesPerThread; ++n) {
-          // Format: "<threadId>:<seq>\n". Cheap to parse back without a
+          // Format: "<threadId>:<seq>". Cheap to parse back without a
           // JSON dependency, and uniquely identifies each pushed line.
-          log.push(absl::StrCat(t, ":", n, "\n"));
+          log.push(absl::StrCat(t, ":", n));
         }
       });
     }

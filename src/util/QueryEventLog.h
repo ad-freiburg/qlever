@@ -40,8 +40,8 @@ class QueryEventLog {
   // called at most once per instance; a second call throws.
   void setOutputFile(const std::filesystem::path& path);
 
-  // Enqueue one already-formatted line. The caller must include the
-  // trailing newline. No-op if the sink has not been configured.
+  // Enqueue one already-formatted line; the writer appends the trailing
+  // newline. No-op if the sink has not been configured.
   void push(std::string line);
 
  private:
