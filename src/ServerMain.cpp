@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
+  bool noMetricsLog = false;
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
   std::vector<std::string> preloadMaterializedViews;
@@ -112,6 +113,10 @@ int main(int argc, char** argv) {
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
+  add("no-metrics-log", po::bool_switch(&noMetricsLog),
+      "Disable the per-query metrics log. By default a JSONL log of query "
+      "start/end events is written next to the index files "
+      "(`<index-basename>.metrics-log.jsonl`).");
   add("text,t", po::bool_switch(&text),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
@@ -231,8 +236,11 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
-    // Per-query jsonl metrics log, written next to the index files.
-    server.configureQueryEventLog(indexBasename + ".metrics-log.jsonl");
+    // Per-query jsonl metrics log, written next to the index files. On by
+    // default; `--no-metrics-log` opts out.
+    if (!noMetricsLog) {
+      server.configureQueryEventLog(indexBasename + ".metrics-log.jsonl");
+    }
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {
