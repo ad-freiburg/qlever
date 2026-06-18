@@ -1814,7 +1814,7 @@ TEST_F(MaterializedViewsTest,
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("threeVarPermTestView", plan);
-  manager.loadView("threeVarPermTestView");
+  manager.loadView("threeVarPermTestView", nullptr);
 
   // Create a three-variable scan on the view binding all three columns.
   using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
