@@ -23,7 +23,18 @@
 #include "index/ConstantsIndexBuilding.h"
 #endif
 
-template <int i0, int i1, int i2, bool hasGraphColumn = true>
+// The `localVocabAware` template parameter controls how `Id`s are compared. By
+// default (and during the regular index build) it is `false`, which compares
+// `Id`s by their raw bits (`compareWithoutLocalVocab`). This is correct and
+// fast for the regular index, where there are no local vocab entries and the
+// global vocabulary is assigned in sorted order, so bit order equals content
+// order. When `localVocabAware` is `true`, `Id`s are compared by content
+// (`compareThreeWay`), which is required when sorting data that may contain
+// `LocalVocabIndex` `Id`s (e.g. when building a materialized view that contains
+// local vocabulary entries), because for those the raw bits are memory
+// addresses with no relation to the content order.
+template <int i0, int i1, int i2, bool hasGraphColumn = true,
+          bool localVocabAware = false>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
@@ -35,7 +46,8 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &Id::compareWithoutLocalVocab;
+    constexpr auto compare =
+        localVocabAware ? &Id::compareThreeWay : &Id::compareWithoutLocalVocab;
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.

@@ -181,6 +181,39 @@ CPP_template(typename Range)(
   }
 }
 
+// Serialize only the local vocabulary (including the local blank node blocks)
+// to the given path. This is used by materialized views, which store their
+// local vocabulary in a dedicated file while the actual `Id`s live in the
+// permutation on disk. The format is compatible with the local vocab part read
+// by `deserializeLocalVocabAndMapping` below.
+inline void serializeLocalVocabToFile(const std::filesystem::path& path,
+                                      const LocalVocab& vocab) {
+  serialization::FileWriteSerializer serializer{path.c_str()};
+  detail::writeHeader(serializer);
+  detail::serializeLocalVocab(serializer, vocab);
+}
+
+// Deserialize a local vocabulary written by `serializeLocalVocabToFile` and
+// return it together with the `mapping` from the (now invalid) `Id` bits that
+// were stored when the vocab was written to the new, valid `Id`s in the
+// returned `LocalVocab`. The caller is responsible for applying this `mapping`
+// (e.g. via `remapLocalVocabIds`) to all `Id`s that reference this local vocab.
+inline std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>>
+deserializeLocalVocabAndMapping(const std::filesystem::path& path,
+                                const LocalVocabContext& context) {
+  serialization::FileReadSerializer serializer{path.c_str()};
+  detail::readHeader(serializer);
+  return detail::deserializeLocalVocab(serializer, context);
+}
+
+// Apply a `mapping` (as returned by `deserializeLocalVocabAndMapping`) to the
+// given range of `Id`s, rewriting every `LocalVocabIndex` `Id` to the
+// corresponding new `Id`. All other `Id`s are left unchanged.
+inline void remapLocalVocabIds(ql::span<Id> ids,
+                               const absl::flat_hash_map<Id::T, Id>& mapping) {
+  detail::remapLocalVocab(ids, mapping);
+}
+
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
     const std::filesystem::path& path, const LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and

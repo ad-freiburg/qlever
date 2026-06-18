@@ -1168,6 +1168,22 @@ CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedRelationReader::ScanImplConfig& scanConfig,
     const CompressedBlockMetadata& metadata) const {
   auto decompressedBlock = decompressBlock(compressedBlock, numRowsToRead);
+  // For materialized views that contain local vocabulary entries, the
+  // `LocalVocabIndex` `Id`s stored on disk are no longer valid (they were
+  // memory addresses at write time). Remap them to the view's in-memory local
+  // vocabulary before any further processing (located triples merge, graph
+  // postprocessing, or intra-block filtering by the caller), all of which may
+  // dereference these `Id`s. For the regular index `localVocabRemapping_` is
+  // `nullptr` and this is a no-op.
+  if (localVocabRemapping_ != nullptr) {
+    for (size_t i = 0; i < decompressedBlock.numColumns(); ++i) {
+      for (Id& id : decompressedBlock.getColumn(i)) {
+        if (id.getDatatype() == Datatype::LocalVocabIndex) {
+          id = localVocabRemapping_->at(id.getBits());
+        }
+      }
+    }
+  }
   auto [numIndexColumns, includeGraphColumn] =
       prepareLocatedTriples(scanConfig.scanColumns_);
   bool hasUpdates = false;
