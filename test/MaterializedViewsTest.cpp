@@ -1843,6 +1843,3 @@ TEST_F(MaterializedViewsTest,
   AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
       *scanTree, V{"?o"}, V{"?s"}));
 }
-
-// TODO test rewriting of patterns not covered by the hard coded cases, with and
-// without bind.
