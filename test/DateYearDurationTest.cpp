@@ -1099,4 +1099,5 @@ TEST(DateYearOrDuration, Addition) {
     EXPECT_EQ(year1 + year2, std::nullopt);
   }
 }
+}
 #endif

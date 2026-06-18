@@ -133,33 +133,6 @@ std::optional<int64_t> Date::toEpochInt() const {
         .count();
   }
 }
-
-// _____________________________________________________________________________
-Date Date::makeFromEpoch(Nanoseconds timestamp, TimeZone tz) {
-  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
-  // Shift the timestamp according to the given `TimeZone`offset.
-  timestamp = timestamp + std::chrono::hours{offset};
-
-  // Extract date from epoch timestamp.
-  auto days = std::chrono::floor<std::chrono::days>(timestamp);
-  std::chrono::year_month_day date = std::chrono::year_month_day{days};
-
-  // Extract time from remaining seconds.
-  auto seconds = std::chrono::floor<std::chrono::seconds>(timestamp - days);
-  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
-
-  // The methods `year`, `month`, `day` return
-  // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
-  // static casts are necessary. For `month` and `day` only `operator unsigned`
-  // is supported, therefore two casts are necessary.
-  return Date{static_cast<int>(date.year()),
-              static_cast<int>(static_cast<unsigned>(date.month())),
-              static_cast<int>(static_cast<unsigned>(date.day())),
-              static_cast<int>(remainder.hours().count()),
-              static_cast<int>(remainder.minutes().count()),
-              static_cast<double>(remainder.seconds().count()),
-              tz};
-}
 #endif
 
 // _____________________________________________________________________________

@@ -219,6 +219,11 @@ class DateYearOrDuration {
       const DateYearOrDuration& rhs) const;
   [[nodiscard]] std::optional<DateYearOrDuration> operator+(
       const DateYearOrDuration& rhs) const;
+
+  // From a Unix Epoch timestamp, construct the corresponding `Date` or
+  // `LargeYear`.
+  static DateYearOrDuration makeFromEpoch(Date::Milliseconds timestamp,
+                                          Date::TimeZone tz);
 #endif
 };
 #ifdef QLEVER_CPP_17
