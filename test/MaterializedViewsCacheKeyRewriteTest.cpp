@@ -95,7 +95,7 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
 
   // User query contains an additional `OPTIONAL`.
   const std::string optionalQuery = R"(
-      SELECT * {
+      SELECT ?s ?o1 ?m1 ?m2 ?o2 {
         ?s <p1> ?o1 .
         ?s <p3> ?m1 .
         ?m1 <p2> ?m2 .
@@ -136,7 +136,8 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
   // Optional in write query.
   qlv().unloadMaterializedView("testView2");
   prepareView("testView3", optionalQuery, 2,
-              viewScan("testView3", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
+              viewScan("testView3", "?s", "?o1", "?m1", 5,
+                       {{3, V{"?m2"}}, {4, V{"?o2"}}}));
 
   // TODO bind
 }
