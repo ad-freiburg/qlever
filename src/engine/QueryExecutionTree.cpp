@@ -199,7 +199,7 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
   if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
@@ -216,7 +216,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      explicitSort);
 }
 
 // _____________________________________________________________________________

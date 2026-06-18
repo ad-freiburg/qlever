@@ -202,8 +202,6 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
   GraphNameManager graphNameManager_ = GraphNameManager();
-  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
-      std::nullopt;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -265,10 +263,6 @@ class IndexImpl {
 
   GraphNameManager& graphNameManager() { return graphNameManager_; }
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const {
-    return graphNameManagerStateFile_;
-  }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
@@ -294,15 +288,6 @@ class IndexImpl {
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesState&) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation,
-                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
