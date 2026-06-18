@@ -139,5 +139,36 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
               viewScan("testView3", "?s", "?o1", "?m1", 5,
                        {{3, V{"?m2"}}, {4, V{"?o2"}}}));
 
-  // TODO bind
+  // Write query containing a `BIND`.
+  const std::string bindQuery = R"(
+    SELECT ?s ?m ?o1 ?o2 ?b {
+      ?s <p1> ?o1 .
+      ?s <p3> ?m .
+      ?m <p2> ?o2 .
+      BIND (5 * ?o2 AS ?b)
+    }
+  )";
+  qlv().unloadMaterializedView("testView3");
+  prepareView("testView4", bindQuery, 2,
+              viewScan("testView4", "?s", "?m", "?o1", 5,
+                       {{3, V{"?o2"}}, {4, V{"?b"}}}));
+
+  // User query is the same as the write query but the `BIND` is omitted.
+  qpExpect(qlv(), writeQuery1,
+           viewScan("testView4", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
+
+  // User query is the same as the write query but it contains an additional
+  // `BIND`.
+  qpExpect(qlv(), R"(
+      SELECT * {
+        ?s <p1> ?o1 .
+        ?s <p3> ?m .
+        ?m <p2> ?o2 .
+        BIND (5 * ?o2 AS ?b1)
+        BIND (?o2 + 2 AS ?b2)
+      }
+    )",
+           h::Bind(viewScan("testView4", "?s", "?m", "?o1", 5,
+                            {{3, V{"?o2"}}, {4, V{"?b1"}}}),
+                   "?o2 + 2", V{"?b2"}));
 }
