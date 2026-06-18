@@ -103,7 +103,17 @@ class TransitivePathImpl : public TransitivePathBase {
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
 
     auto startNodes = setupNodes(startSide, std::move(startSideResult));
-    auto targetNodes = setupNodes(targetSide, std::move(targetSideResult));
+
+    // Only fetch the target nodes if the target side is also bound.
+    std::optional<decltype(startNodes)> targetNodes = std::nullopt;
+    if (targetSideResult) {
+      targetNodes =
+          std::move(setupNodes(targetSide, std::move(targetSideResult)));
+    }
+    // std::optional<const decltype (setupNodes())> targetNodes =
+    // targetSideResult
+    //                        ? setupNodes(targetSide,
+    //                        std::move(targetSideResult)) : std::nullopt;
 
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
@@ -157,10 +167,11 @@ class TransitivePathImpl : public TransitivePathBase {
     detail::TableColumnWithVocab<const decltype(targetNodes)&> targetTableInfo{
         std::nullopt, targetNodes, LocalVocab{}};
 
-    NodeGenerator hull = transitiveHull(
-        std::move(edges), sub->getCopyOfLocalVocab(),
-        ql::span{&startTableInfo, 1}, ql::span{&targetTableInfo, 1},
-        startSide.value_, targetSide.value_, yieldOnce);
+    NodeGenerator hull =
+        transitiveHull(std::move(edges), sub->getCopyOfLocalVocab(),
+                       ql::span{&startTableInfo, 1},
+                       std::optional(ql::span{&targetTableInfo, 1}),
+                       startSide.value_, targetSide.value_, yieldOnce);
 
     // We don't pass a payload table, so our `inputWidth` is 0.
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
@@ -193,7 +204,9 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult =
           startSide.treeAndCol_.value().first->getResult(true);
       std::shared_ptr<const Result> targetSideResult =
-          targetSide.treeAndCol_.value().first->getResult(true);
+          targetSide.isBoundVariable()
+              ? targetSide.treeAndCol_.value().first->getResult(true)
+              : nullptr;
 
       auto gen = computeTransitivePathBound(
           std::move(subRes), startSide, targetSide, std::move(startSideResult),
@@ -232,7 +245,7 @@ class TransitivePathImpl : public TransitivePathBase {
    */
   CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
-                     Node targetNodes, TripleComponent start,
+                     std::optional<Node> targetNodes, TripleComponent start,
                      TripleComponent target, bool yieldOnce) const {
     using namespace qlever::graphSearch;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
@@ -250,6 +263,8 @@ class TransitivePathImpl : public TransitivePathBase {
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
         start.isVariable() && graphVariable_ == start.getVariable();
+    bool targetNodesAreBound = targetNodes.has_value();
+
     for (auto&& [currentColumn, tableColumn] :
          ::ranges::views::enumerate(startNodes)) {
       timer.cont();
@@ -257,6 +272,7 @@ class TransitivePathImpl : public TransitivePathBase {
       mergedVocab.mergeWith(edgesVocab);
       for (const auto& [currentRow, pair] :
            ::ranges::views::enumerate(tableColumn.nodes_)) {
+        size_t currentPair = 0;
         for (const auto& [startNode, graphId] :
              tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
           // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
@@ -268,18 +284,57 @@ class TransitivePathImpl : public TransitivePathBase {
             targetId = startNode;
           } else if (endsWithGraphVariable) {
             targetId = graphId;
-          } else {
-            // TODO<schaetzr>: Add in the `expandUndef` function!
+          } else if (targetNodesAreBound) {
+            // TODO<schaetzr>: Make this more readable!
             // Traverse the `targetNodes` object the same amount as the
             // `startNodes` to obtain a potential `targetId` for the graph
             // search.
-            auto columnIterator = targetNodes.begin();
-            std::advance(columnIterator, currentColumn);
-            auto& targetNodesColumn = columnIterator->nodes_;
-            auto rowIterator = targetNodesColumn.begin();
-            std::advance(rowIterator, currentRow);
-            const auto& [targetNode, targetGraphColumn] = *rowIterator;
-            targetId = targetNode;
+            // auto columnIterator = targetNodes.value().begin();
+            // std::advance(columnIterator, currentColumn);
+            // auto&& targetTableColumn = *columnIterator;
+            // auto& targetColumnNodes = columnIterator->nodes_;
+
+            // auto rowIterator = targetColumnNodes.begin();
+            // std::advance(rowIterator, currentRow);
+            // const auto& targetPair = *rowIterator;
+
+            // const auto& pairs = targetTableColumn.expandUndef(targetPair,
+            // edges, graphVariable_.has_value()); auto pairIterator =
+            // pairs.begin(); std::advance(pairIterator, currentPair); const
+            // auto& [targetNode, targetGraphColumn] = *pairIterator;
+            // auto& targetColumn =
+            //     *(::ranges::next(targetNodes.value().begin(),
+            //     currentColumn));
+            // auto& targetRow =
+            //     *::ranges::next(targetColumn.nodes_.begin(), currentRow);
+            // auto expandedPairs = targetColumn.expandUndef(
+            //     targetRow, edges, graphVariable_.has_value());
+            // auto [targetNode, _] = expandedPairs.at(currentPair);
+            // auto targetNode =
+            //     getPairAt(targetNodes, currentColumn, currentRow,
+            //     currentPair);
+
+            for (auto&& [targetCurrentColumn, tableColumn] :
+                 ::ranges::views::enumerate(targetNodes.value())) {
+              if (targetCurrentColumn != currentColumn) {
+                continue;
+              }
+              for (const auto& [targetCurrentRow, pair] :
+                   ::ranges::views::enumerate(tableColumn.nodes_)) {
+                if (targetCurrentRow != currentRow) {
+                  continue;
+                }
+                size_t targetCurrentPair = 0;
+                for (const auto& [node, _] : tableColumn.expandUndef(
+                         pair, edges, graphVariable_.has_value())) {
+                  if (currentPair == targetCurrentPair) {
+                    targetId = node;
+                    break;
+                  }
+                  currentPair++;
+                }
+              }
+            }
           }
           edges.setGraphId(graphId);
 
@@ -305,6 +360,7 @@ class TransitivePathImpl : public TransitivePathBase {
               mergedVocab = LocalVocab{};
             }
           }
+          currentPair++;
         }
       }
       timer.stop();
