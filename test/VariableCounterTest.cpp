@@ -137,6 +137,18 @@ TEST(VariableCounterTest, VariableCounts) {
     count(TripleComponent{V{"?x"}});
     EXPECT_THAT(count, counts({{V{"?x"}, 1}}));
   }
+
+  // `TransPath`.
+  {
+    VariableCounter count;
+    parsedQuery::TransPath tp{
+        {V{"?left"}}, {V{"?right"}}, {V{"?ileft"}}, {V{"?iright"}}, 0, 5, {}};
+    count(tp);
+    EXPECT_THAT(count, counts({{V{"?left"}, 1},
+                               {V{"?right"}, 1},
+                               {V{"?ileft"}, 1},
+                               {V{"?iright"}, 1}}));
+  }
 }
 
 // _____________________________________________________________________________
