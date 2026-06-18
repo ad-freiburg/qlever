@@ -188,7 +188,6 @@ testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
   return Optional(
       AllOf(AD_PROPERTY(DateYearOrDuration, isDayTimeDuration, IsTrue()),
             Eq(expected)));
-}
 }  // namespace
 
 TEST(Date, OrderRandomValues) {
@@ -1189,3 +1188,4 @@ TEST(DateYearOrDuration, Addition) {
     EXPECT_EQ(year1 + year2, std::nullopt);
   }
 }
+#endif
