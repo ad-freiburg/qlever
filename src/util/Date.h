@@ -360,6 +360,7 @@ class Date {
   // Uses `toEpoch` to return the Epoch time in seconds.
   std::optional<int64_t> toEpochInt() const;
 #endif
+
   static int8_t getTimeZoneOffsetToUTCInHours(TimeZone tz);
   int8_t getTimeZoneOffsetToUTCInHours() const;
 };

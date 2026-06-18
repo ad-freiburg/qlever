@@ -343,7 +343,6 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {

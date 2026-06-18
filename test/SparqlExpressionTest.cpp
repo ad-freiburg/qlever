@@ -687,15 +687,15 @@ TEST(SparqlExpression, dateOperators) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
             42.25, 9'633'222),
-      ::testing::ContainsRegex("does not support ql:toEpoch"));
+      ::testing::HasSubstr("does not support ql:toEpoch"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt,
             std::nullopt, std::nullopt, 9'590'400),
-      ::testing::ContainsRegex("does not support ql:toEpoch"));
+      ::testing::HasSubstr("does not support ql:toEpoch"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt,
             std::nullopt, std::nullopt, std::nullopt, -101'108'476'800),
-      ::testing::ContainsRegex("does not support ql:toEpoch"));
+      ::testing::HasSubstr("does not support ql:toEpoch"));
 #endif
 // Test behavior of the `largeYear` representation that doesn't store the
 // actual date.
@@ -708,10 +708,10 @@ TEST(SparqlExpression, dateOperators) {
 #else
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseGYear("123456"), 123456),
-      ::testing::ContainsRegex("does not support ql:toEpoch"));
+      ::testing::HasSubstr("does not support ql:toEpoch"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1),
-      ::testing::ContainsRegex("does not support ql:toEpoch"));
+      ::testing::HasSubstr("does not support ql:toEpoch"));
 #endif
 
   // Invalid inputs for date expressions.

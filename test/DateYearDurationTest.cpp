@@ -188,14 +188,6 @@ testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
   return Optional(
       AllOf(AD_PROPERTY(DateYearOrDuration, isDayTimeDuration, IsTrue()),
             Eq(expected)));
-// This matcher is used to test the subtraction/addition operation of
-// `DateYearOrDuration`objects.
-testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
-    DateYearOrDuration expected) {
-  using namespace testing;
-  return Optional(
-      AllOf(AD_PROPERTY(DateYearOrDuration, isDayTimeDuration, IsTrue()),
-            Eq(expected)));
 }
 }  // namespace
 
@@ -975,7 +967,6 @@ TEST(DateYearOrDuration, Subtraction) {
   }
   {
     // Test for `LargeYear` - `LargeYear`.
-    using namespace testing;
     DateYearOrDuration year1 =
         DateYearOrDuration(12'000, DateYearOrDuration::Type::Year);
     DateYearOrDuration year2 =
@@ -996,37 +987,94 @@ TEST(DateYearOrDuration, Subtraction) {
                 expectDuration(DateYearOrDuration(DayTimeDuration(
                     DayTimeDuration::Type::Negative, 1461, 0, 0, 0))));
   }
-    {
-    // Test for `LargeYear` - `LargeYear`.
-    DateYearOrDuration year1 =
-        DateYearOrDuration(22'000, DateYearOrDuration::Type::Year);
-    DateYearOrDuration year2 =
-        DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
+  {
+    // Test invalid subtractions.
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 10, 20, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 30, 10, 33));
+    EXPECT_EQ(duration - date, std::nullopt);
 
-    std::optional<DateYearOrDuration> result = year1 - year2;
-    ASSERT_TRUE(result);
-    EXPECT_TRUE(result.value().isLongYear());
-    EXPECT_EQ(DateYearOrDuration(11'000, DateYearOrDuration::Type::Year),
-              result.value());
+    // Invalid `Date`.
+    date = DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
+    EXPECT_EQ(date - duration, std::nullopt);
+  }
+}
 
-    year2 = DateYearOrDuration(42'000, DateYearOrDuration::Type::Year);
-    result = year1 - year2;
-    ASSERT_TRUE(result);
-    EXPECT_TRUE(result.value().isLongYear());
-    EXPECT_EQ(DateYearOrDuration(-20'000, DateYearOrDuration::Type::Year),
-              result.value());
+// _____________________________________________________________________________
+TEST(DateYearOrDuration, Addition) {
+  {
+    // Test for `DayTimeDuration` addition.
+    DateYearOrDuration duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 25, 0, 0, 0));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 20, 0, 0, 0));
+    EXPECT_THAT(duration1 + duration2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 45, 0, 0, 0))));
 
-    year2 = DateYearOrDuration(20'000, DateYearOrDuration::Type::Year);
-    result = year1 - year2;
-    ASSERT_TRUE(result);
-    EXPECT_FALSE(result.value().isLongYear());
-    EXPECT_EQ(DateYearOrDuration(Date(2000, 1, 1)), result.value());
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 0, 0, 0));
+    EXPECT_THAT(duration1 + duration2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 5, 0, 0, 0))));
 
-    year2 = DateYearOrDuration(24'000, DateYearOrDuration::Type::Year);
-    result = year1 - year2;
-    ASSERT_TRUE(result);
-    EXPECT_FALSE(result.value().isLongYear());
-    EXPECT_EQ(DateYearOrDuration(Date(-2000, 1, 1)), result.value());
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 20, 0, 0, 0));
+    EXPECT_THAT(duration1 + duration2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Negative, 5, 0, 0, 0))));
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 25, 0, 0, 0));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 0, 0, 0));
+    EXPECT_THAT(duration1 + duration2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Negative, 45, 0, 0, 0))));
+
+    duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 40, 23, 8, 54));
+    duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 40, 20, 3, 40));
+    EXPECT_THAT(duration1 + duration2,
+                expectDuration(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 81, 19, 12, 34))));
+  }
+  {
+    // Test for `Date` + `DayTimeDuration`.
+    using namespace testing;
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 2, 10, 13));
+    EXPECT_THAT(
+        date + duration,
+        Optional(Eq(DateYearOrDuration(Date(1989, 01, 23, 22, 20, 46)))));
+
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 30, 2, 10, 13));
+    EXPECT_THAT(
+        date + duration,
+        Optional(Eq(DateYearOrDuration(Date(1989, 2, 22, 22, 20, 46)))));
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, 2));  // UTC + 2
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 10, 10, 0));
+    EXPECT_THAT(
+        date + duration,
+        Optional(Eq(DateYearOrDuration(Date(2000, 4, 19, 6, 20, 0, 2)))));
+
+    date = DateYearOrDuration(Date(2000, 4, 18, 20, 10, 0, -4));  // UTC - 4
+    EXPECT_THAT(
+        date + duration,
+        Optional(Eq(DateYearOrDuration(Date(2000, 4, 19, 6, 20, 0, -4)))));
   }
   {
     // Test invalid subtractions.
