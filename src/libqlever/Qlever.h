@@ -264,6 +264,8 @@ class Qlever {
   void eraseResultWithName(std::string name);
   // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
+  // Completely clear the `QueryResultCache` (non-named).
+  void clearQueryResultCache();
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.

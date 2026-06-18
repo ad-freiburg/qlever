@@ -168,7 +168,9 @@ bool QueryExecutionTree::readFromCache() {
 // _____________________________________________________________________________
 void QueryExecutionTree::readFromMaterializedView() {
   AD_CORRECTNESS_CHECK(qec_ != nullptr);
-  if (qec_->disableMaterializedViewRewriting()) {
+  if (qec_->disableMaterializedViewRewriting() || qec_->disableCaching()) {
+    // If caching is disabled completely, we don't have cache keys and therefore
+    // can't match based on cache keys.
     return;
   }
   auto scan = qec_->materializedViewsManager().makeIndexScan(
