@@ -295,6 +295,27 @@ TEST(QueryRegistry, onStartNotFiredForDuplicateId) {
 
 // _____________________________________________________________________________
 
+// A throwing start callback unwinds through `~OwningQueryId`, which must still
+// fire end once and erase the already-inserted entry.
+TEST(QueryRegistry, throwingStartCallbackCleansUpEntry) {
+  QueryRegistry registry{};
+  int ends = 0;
+  registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
+  registry.addOnStart([](const QueryRegistry::StartInfo&) {
+    throw std::runtime_error("start callback failed");
+  });
+
+  EXPECT_THROW(registry.uniqueIdFromString("01123581321345589144", "q"),
+               std::runtime_error);
+
+  // End fired once and the entry was erased (an empty snapshot reads the same
+  // map that was inserted into).
+  EXPECT_EQ(ends, 1);
+  EXPECT_TRUE(registry.getActiveQueries().empty());
+}
+
+// _____________________________________________________________________________
+
 // Destroying the `OwningQueryId` fires the end callback once. We serialize the
 // event so this also drives `toString(Unknown)` (the `case`, not the trailing
 // fallback) and pins the default `Unknown` status string.
