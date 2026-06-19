@@ -466,7 +466,7 @@ DateYearOrDuration DateYearOrDuration::makeFromEpoch(
              static_cast<double>(remainder.seconds().count() +
                                  (milliseconds.count() / 1'000.0)),
              tz}};
-  } else {  // nNeeds to be stored as a `LargeYear`.
+  } else {  // Needs to be stored as a `LargeYear`.
     return DateYearOrDuration{year, DateYearOrDuration::Type::Year};
   }
 }

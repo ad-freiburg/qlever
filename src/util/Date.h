@@ -179,9 +179,7 @@ class Date {
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
   using Milliseconds = std::chrono::sys_time<std::chrono::milliseconds>;
-  using Seconds = std::chrono::sys_time<std::chrono::seconds>;
 #endif
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
