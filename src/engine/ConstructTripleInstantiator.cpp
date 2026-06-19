@@ -12,6 +12,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
@@ -31,8 +32,8 @@ std::optional<EvaluatedTerm> instantiateTerm(
         } else if constexpr (std::is_same_v<T, PrecomputedVariable>) {
           return batchResult.getVariable(t.columnIndex_, rowIdxInBatch);
         } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
-          return std::make_shared<const EvaluatedTermData>(EvaluatedTermData{
-              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr});
+          return std::make_shared<const EvaluatedTermData>(
+              absl::StrCat(t.prefix_, rowIdxTotal, t.suffix_), nullptr);
         } else {
           static_assert(ad_utility::alwaysFalse<T>, "Unhandled variant type");
         }
@@ -50,6 +51,41 @@ std::vector<EvaluatedTriple> instantiateBatch(
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (const auto& triple : tmpl.preprocessedTriples_) {
+      auto instantiate = [&triple, &batchResult, rowInBatch,
+                          blankNodeRowId](size_t pos) {
+        return instantiateTerm(triple[pos], batchResult, rowInBatch,
+                               blankNodeRowId);
+      };
+      auto subject = instantiate(0);
+      auto predicate = instantiate(1);
+      auto object = instantiate(2);
+      if (subject && predicate && object) {
+        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
+      }
+    }
+  }
+  return triples;
+}
+
+// _____________________________________________________________________________
+std::vector<EvaluatedTriple> instantiateBatch(
+    const PreprocessedConstructTemplate& tmpl,
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    ConstructDeduplicationState& deduplicationState,
+    const BatchEvaluationContext& ctx) {
+  std::vector<EvaluatedTriple> triples;
+  triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
+
+  for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
+    const size_t blankNodeRowId = batchOffset + rowInBatch;
+    const size_t absoluteRow = ctx.firstRow_ + rowInBatch;
+    for (size_t tripleIdx :
+         ql::views::iota(size_t{0}, tmpl.preprocessedTriples_.size())) {
+      if (!deduplicationState.isNew(tripleIdx, absoluteRow, tmpl, ctx)) {
+        continue;
+      }
+
+      const auto& triple = tmpl.preprocessedTriples_[tripleIdx];
       auto instantiate = [&triple, &batchResult, rowInBatch,
                           blankNodeRowId](size_t pos) {
         return instantiateTerm(triple[pos], batchResult, rowInBatch,

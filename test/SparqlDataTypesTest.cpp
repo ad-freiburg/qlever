@@ -63,8 +63,12 @@ std::optional<std::string> evaluate(
   using namespace qlever::constructExport;
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
+  // A local `LocalVocab` to hold the entries backing any constant literal's
+  // `dedupId_`; this helper only inspects the string output, not the id.
+  LocalVocab constantLocalVocab;
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
-      term, position, exportCtx._variableColumns);
+      term, position, exportCtx._variableColumns, exportCtx._qecIndex,
+      constantLocalVocab);
   if (!preprocessed) return std::nullopt;
 
   BatchEvaluationResult batchResult;
@@ -235,16 +239,20 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Literal literal{"some literal"};
+  // A CONSTRUCT-template literal is always a fully-formed RDF literal (the real
+  // parser includes the quotes); `preprocessLiteral` parses it as a Turtle
+  // object to resolve its deduplication id, so the raw value must be valid.
+  Literal literal{"\"some literal\""};
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   EXPECT_EQ(evaluate(literal, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
 
-  auto expectedString = Optional("some literal"s);
+  auto expectedString = Optional("\"some literal\""s);
 
-  EXPECT_THAT(evaluate(literal, context, OBJECT), expectedString);
+  auto val = evaluate(literal, context, OBJECT);
+  EXPECT_THAT(val, expectedString);
   EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);
   EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);
 }

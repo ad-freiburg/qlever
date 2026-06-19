@@ -16,6 +16,7 @@
 
 namespace {
 using namespace qlever::constructExport;
+using ad_utility::DeduplicationMode;
 using ::testing::ElementsAre;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;

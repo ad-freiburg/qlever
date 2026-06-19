@@ -20,6 +20,7 @@
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
@@ -34,6 +35,7 @@ class ExportQueryExecutionTrees {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously

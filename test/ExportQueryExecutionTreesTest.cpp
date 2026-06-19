@@ -417,6 +417,213 @@ TEST(ExportQueryExecutionTrees, Integers) {
 }
 
 // ____________________________________________________________________________
+// End-to-end tests for the `construct-deduplicate` runtime parameter. These run
+// a full CONSTRUCT query (parse -> plan -> export) and assert that the
+// serialized Turtle reflects the active deduplication mode. The template
+// `?s <p> <o>` projects away the object, so the three KG rows (all with the
+// same `?s`) instantiate the identical triple `<s> <p> <o>` three times before
+// dedup. It has a variable subject, so it is non-ground and exercises the dedup
+// filter itself (rather than the constant-triple optimization).
+namespace {
+const std::string kConstructDedupKg =
+    "<s> <p> <o1> . <s> <p> <o2> . <s> <p> <o3> .";
+const std::string kConstructDedupQuery =
+    "CONSTRUCT { ?s <p> <o> } WHERE { ?s ?p ?o }";
+}  // namespace
+
+TEST(ExportQueryExecutionTrees, constructDeduplicateNoneEmitsAllDuplicates) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::none());
+  EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
+                                     ad_utility::MediaType::turtle),
+            "<s> <p> <o> .\n<s> <p> <o> .\n<s> <p> <o> .\n");
+}
+
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCollapsesDuplicates) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, kConstructDedupQuery,
+                                     ad_utility::MediaType::turtle),
+            "<s> <p> <o> .\n");
+}
+
+// Distinct variable bindings must not be merged: each subject yields its own
+// triple even under global dedup.
+TEST(ExportQueryExecutionTrees,
+     constructDeduplicateGlobalKeepsDistinctTriples) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(runQueryStreamableResult(
+                "<a> <p> <o> . <b> <p> <o> .",
+                "CONSTRUCT { ?s <p> <o> } WHERE { ?s <p> <o> } ORDER BY ?s",
+                ad_utility::MediaType::turtle),
+            "<a> <p> <o> .\n<b> <p> <o> .\n");
+}
+
+// BatchWise dedup keeps only the last N unique keys. With capacity 1 the
+// binding `<k1>` is evicted when `<k2>` arrives, so the recurring `<k1>` row is
+// treated as new and re-emitted; under global dedup it would be suppressed.
+TEST(ExportQueryExecutionTrees,
+     constructDeduplicateBatchWiseReemitsAfterEviction) {
+  const std::string kg = "<a> <p> <k1> . <b> <p> <k2> . <c> <p> <k1> .";
+  const std::string query =
+      "CONSTRUCT { ?o <p> <x> } WHERE { ?s <p> ?o } ORDER BY ?s";
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::batchWise(1));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        "<k1> <p> <x> .\n<k2> <p> <x> .\n<k1> <p> <x> .\n");
+  }
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::global());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        "<k1> <p> <x> .\n<k2> <p> <x> .\n");
+  }
+}
+
+// The constant-triple optimization emits a ground template triple exactly once
+// for every mode (including `none`), given at least one solution.
+TEST(ExportQueryExecutionTrees, constructGroundTripleEmittedOnceInAllModes) {
+  const std::string query = "CONSTRUCT { <x> <p> <o> } WHERE { ?s ?p ?o }";
+  for (auto mode : {ad_utility::DeduplicationMode::none(),
+                    ad_utility::DeduplicationMode::global(),
+                    ad_utility::DeduplicationMode::batchWise(1)}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            mode);
+    EXPECT_EQ(runQueryStreamableResult(kConstructDedupKg, query,
+                                       ad_utility::MediaType::turtle),
+              "<x> <p> <o> .\n");
+  }
+}
+
+// Counts the triples in a Turtle serialization. Every triple is emitted on its
+// own line terminated by "\n", so the number of newlines is the triple count.
+// Used by the deduplication tests below, where the output order is not fixed
+// but the multiset of emitted triples is what we want to assert on.
+namespace {
+size_t countTurtleTriples(const std::string& turtle) {
+  return static_cast<size_t>(ql::ranges::count(turtle, '\n'));
+}
+}  // namespace
+
+// A single film has 2 labels, 2 genres, 3 cast members and 1 release date, so
+// the WHERE clause has 2*2*3*1 = 12 solutions. Every one of the five template
+// triples is instantiated once per solution, so `DeduplicationMode::None` mode
+// emits 12*5 = 60 triples, even though only 9 distinct triples exist (1 type +
+// 2 labels + 2 genres + 3 cast + 1 date). `DeduplicationMode::Global` mode must
+// collapse to exactly those 9.
+TEST(ExportQueryExecutionTrees, constructDeduplicateFilmMultiplicityExample) {
+  const std::string kg =
+      "<film> <type> <Film> ."
+      "<film> <label> \"l1\" . <film> <label> \"l2\" ."
+      "<film> <genre> <g1> . <film> <genre> <g2> ."
+      "<film> <cast> <c1> . <film> <cast> <c2> . <film> <cast> <c3> ."
+      "<film> <date> \"2020\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "} WHERE {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "}";
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::none());
+    EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                  kg, query, ad_utility::MediaType::turtle)),
+              60u);
+  }
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+            ad_utility::DeduplicationMode::global());
+    EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                  kg, query, ad_utility::MediaType::turtle)),
+              9u);
+  }
+}
+
+// Cross-template duplicate: the scaled-down analogue of issue #2877 (the 83 vs
+// 77 discrepancy). A parent-child chain binds the same node to both `?s` and
+// `?o`: with `<a> <p40> <b>` and `<b> <p40> <c>`, the WHERE solutions are
+// (s=a,o=b) and (s=b,o=c), so `<b>` is bound to `?o` in the first and to `?s`
+// in the second. The two label template triples `?s <label> ?sl` and
+// `?o <label> ?ol` therefore both emit `<b> <label> "lb"`. The full result is
+// the set {a-la, b-lb, c-lc}, i.e. 3 triples.
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalCrossTemplate) {
+  const std::string kg =
+      "<a> <p40> <b> . <b> <p40> <c> ."
+      "<a> <label> \"la\" . <b> <label> \"lb\" . <c> <label> \"lc\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?s <label> ?sl ."
+      "  ?o <label> ?ol ."
+      "} WHERE {"
+      "  ?s <p40> ?o ."
+      "  ?s <label> ?sl ."
+      "  ?o <label> ?ol ."
+      "}";
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(countTurtleTriples(runQueryStreamableResult(
+                kg, query, ad_utility::MediaType::turtle)),
+            3u);
+}
+
+// The QLever JSON `resultsize` (used by the QLever UI) must reflect the number
+// of triples actually emitted after deduplication, not the pre-deduplication
+// estimate `numRows * numTemplateTriples`. Using the film example above,
+// `global` mode emits 9 triples, so `resultsize` must be 9.
+TEST(ExportQueryExecutionTrees, constructDeduplicateGlobalReportsResultSize) {
+  const std::string kg =
+      "<film> <type> <Film> ."
+      "<film> <label> \"l1\" . <film> <label> \"l2\" ."
+      "<film> <genre> <g1> . <film> <genre> <g2> ."
+      "<film> <cast> <c1> . <film> <cast> <c2> . <film> <cast> <c3> ."
+      "<film> <date> \"2020\" .";
+  const std::string query =
+      "CONSTRUCT {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "} WHERE {"
+      "  ?film <type> <Film> ."
+      "  ?film <label> ?label ."
+      "  ?film <genre> ?genre ."
+      "  ?film <cast> ?cast ."
+      "  ?film <date> ?date ."
+      "}";
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplicate_>(
+          ad_utility::DeduplicationMode::global());
+  auto json = runJSONQuery(kg, query, ad_utility::MediaType::qleverJson);
+  EXPECT_EQ(json["res"].size(), 9u);
+  EXPECT_EQ(json["resultSizeExported"], 9u);
+  EXPECT_EQ(json["resultsize"], 9u);
+  EXPECT_EQ(json["resultSizeTotal"], 9u);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg =
       "<s> <p> true . <s> <p> false ."

@@ -40,6 +40,7 @@ namespace {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
+using DeduplicationMode = ad_utility::DeduplicationMode;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -274,10 +275,14 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
+  const DeduplicationMode mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>();
+
   return qlever::constructExport::ConstructTripleGenerator::
       generateStringTriples(constructTriples, qet.getVariableColumns(),
                             qet.getQec()->getIndex(), cancellationHandle,
-                            std::move(rowIndices), limitAndOffset._offset);
+                            std::move(rowIndices), limitAndOffset._offset,
+                            mode);
 }
 
 // _____________________________________________________________________________
@@ -778,6 +783,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   result->logResultSize();
   uint64_t resultSize = 0;
 
+  const DeduplicationMode mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>();
+
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require
@@ -789,7 +797,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       generateFormattedTriples(constructTriples, qet.getVariableColumns(),
                                qet.getQec()->getIndex(), cancellationHandle,
                                std::move(rowIndices), limitAndOffset._offset,
-                               format);
+                               format, mode);
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
@@ -962,6 +970,21 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     STREAMABLE_YIELD(b);
     ++numBindingsExported;
   }
+
+  // For a CONSTRUCT query with active deduplication, the lazily-computed
+  // `resultSize` is the *pre-deduplication* estimate
+  // (`numRows * numTemplateTriples`), which overcounts the triples that the
+  // streaming dedup filter actually produces. The number of bindings yielded
+  // (`numBindingsExported`) is the true deduplicated count, so report it as the
+  // total. (Without deduplication the estimate is kept, because it also
+  // accounts for counted-but-not-exported triples beyond the export limit.)
+  if (query.hasConstructClause() &&
+      !std::holds_alternative<DeduplicationMode::None>(
+          getRuntimeParameter<&RuntimeParameters::constructDeduplicate_>()
+              .value_)) {
+    resultSize = numBindingsExported;
+  }
+
   if (numBindingsExported < resultSize) {
     AD_LOG_INFO << "Number of bindings exported: " << numBindingsExported
                 << " of " << resultSize << std::endl;

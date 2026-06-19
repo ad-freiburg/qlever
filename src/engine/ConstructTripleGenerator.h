@@ -11,6 +11,7 @@
 #include <gtest/gtest_prod.h>
 
 #include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
@@ -29,6 +30,7 @@ using Triples = ad_utility::sparql_types::Triples;
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;
+using DeduplicationMode = ad_utility::DeduplicationMode;
 
 // Generates triples from the CONSTRUCT query results by instantiating the
 // template triple patterns with the values from the result table produced by
@@ -49,14 +51,15 @@ class ConstructTripleGenerator {
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType);
+      ad_utility::MediaType mediaType, DeduplicationMode mode);
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
-      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+      DeduplicationMode mode);
 
  private:
   // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
@@ -71,11 +74,12 @@ class ConstructTripleGenerator {
       const VariableToColumnMap& variableColumns, const Index& index,
       CancellationHandle cancellationhandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset);
+      size_t queryOffset, DeduplicationMode mode);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
   FRIEND_TEST(MakeIdCache, multipleVariables);
+  FRIEND_TEST(ConstructTripleGeneratorTest, acrossBatchBoundary);
   FRIEND_TEST(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables);
   FRIEND_TEST(ConstructTripleGeneratorTest, cannotCancelDuringBatch);
   FRIEND_TEST(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches);

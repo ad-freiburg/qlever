@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructDeduplicationFilter.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/http/MediaTypes.h"
@@ -32,14 +33,26 @@ std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
     size_t rowIdxInBatch, size_t rowIdxTotal);
 
-// Instantiates all template triples for all rows in a batch. For each row,
-// every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
-// any unbound term are silently dropped. `batchOffset` is the absolute
-// row ID of the first row in the batch (used to generate unique blank node
-// IDs).
+// Instantiates all template triples for all rows in a batch without
+// deduplication. For each row, every triple in `tmpl.preprocessedTriples_`
+// is instantiated; triples with any unbound term are silently dropped.
+// `batchOffset` is the absolute row ID of the first row in the batch (used
+// to generate unique blank node IDs).
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset);
+
+// Instantiates all template triples for all rows in a batch with
+// deduplication. For each (row, tripleIdx) pair, a masked deduplication key
+// is constructed from the variable-position ValueIds and checked against
+// `deduplicationState[tripleIdx]`. Triples whose key is already present are
+// skipped; all others are instantiated and their key inserted into the filter.
+// `ctx` provides access to the raw IdTable for key construction.
+std::vector<EvaluatedTriple> instantiateBatch(
+    const PreprocessedConstructTemplate& tmpl,
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    ConstructDeduplicationState& deduplicationState,
+    const BatchEvaluationContext& ctx);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals
