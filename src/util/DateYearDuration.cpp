@@ -362,7 +362,13 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     //  `DayTimeDuration` - `DayTimeDuration` => `DayTimeDuration`.
     const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
-    return DateYearOrDuration{ownDuration - otherDuration};
+
+    std::optional<DayTimeDuration> difference = ownDuration - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
   } else if (isDate() && rhs.isDayTimeDuration()) {
     //  `Date` - `DayTimeDuration` => `Date` or `LargeYear`.
     const Date& ownDate = getDateUnchecked();
@@ -407,7 +413,13 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
     //  `DayTimeDuration` + `DayTimeDuration` => `DayTimeDuration`.
     const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
-    return DateYearOrDuration{ownDuration + otherDuration};
+
+    std::optional<DayTimeDuration> sum = ownDuration + otherDuration;
+    if (!sum.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{sum.value()};
+    }
   } else if (isDate() && rhs.isDayTimeDuration()) {
     //  `Date` + `DayTimeDuration` => `Date`.
     const Date& ownDate = getDateUnchecked();

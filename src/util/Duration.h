@@ -231,11 +231,13 @@ class DayTimeDuration {
 
   //____________________________________________________________________________
   // Subtraction of two `DayTimeDuration` objects.
-  [[nodiscard]] DayTimeDuration operator-(const DayTimeDuration& rhs) const;
+  [[nodiscard]] std::optional<DayTimeDuration> operator-(
+      const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   // Addition of two `DayTimeDuration` objects.
-  [[nodiscard]] DayTimeDuration operator+(const DayTimeDuration& rhs) const;
+  [[nodiscard]] std::optional<DayTimeDuration> operator+(
+      const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   template <typename H>
