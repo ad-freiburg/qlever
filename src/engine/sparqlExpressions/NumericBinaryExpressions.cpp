@@ -36,12 +36,48 @@ using Divide2 = MakeNumericExpression<DivideImpl, false>;
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
                 FV<Divide2, NumericValueGetter>);
 
-// Addition and subtraction, currently all results are converted to double.
-using Add = MakeNumericExpression<std::plus<>>;
-NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
+// _____________________________________________________________________________
+// Addition.
+struct AddImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(AddImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs + rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) + rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs + rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs + static_cast<double>(rhs));
+  }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator+` implementation in `DateYearOrDuration`.
+    auto difference = lhs + rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use addition between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
+NARY_EXPRESSION(AddExpression, 2, FV<AddImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
-// Subtract.
+// Subtraction.
 struct SubtractImpl {
   ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
     return std::visit(SubtractImpl{}, lhs, rhs);
@@ -59,7 +95,7 @@ struct SubtractImpl {
   ValueId operator()(double lhs, int64_t rhs) const {
     return Id::makeFromDouble(lhs - static_cast<double>(rhs));
   }
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
     // Using `operator-` implementation in `DateYearOrDuration`.
     auto difference = lhs - rhs;
@@ -374,11 +410,13 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override {
+      const LocalVocabContext& context, bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
-    auto leftChild = children[0]->getPrefilterExpressionForMetadata(isNegated);
-    auto rightChild = children[1]->getPrefilterExpressionForMetadata(isNegated);
+    auto leftChild =
+        children[0]->getPrefilterExpressionForMetadata(context, isNegated);
+    auto rightChild =
+        children[1]->getPrefilterExpressionForMetadata(context, isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
   }

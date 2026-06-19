@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/RuntimeParameters.h"
+#include "index/LocalVocabEntry.h"
 #include "util/Log.h"
 #include "util/Random.h"
 #include "util/TypeIdentity.h"
@@ -70,29 +71,31 @@ auto generateSortedGroupVec = [](size_t n, size_t g) {
 
 // Create a local vocab of random strings and a vector of the local vocab
 // indices.
-auto generateRandomLocalVocabAndIndicesVec = [](size_t n, size_t m) {
-  LocalVocab localVocab;
-  std::vector<LocalVocabIndex> indices;
+auto generateRandomLocalVocabAndIndicesVec =
+    [](const LocalVocabContext& context, size_t n, size_t m) {
+      LocalVocab localVocab;
+      std::vector<LocalVocabIndex> indices;
 
-  std::string alphanum =
-      "0123456789"
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      "abcdefghijklmnopqrstuvwxyz";
+      std::string alphanum =
+          "0123456789"
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+          "abcdefghijklmnopqrstuvwxyz";
 
-  auto gen = ad_utility::SlowRandomIntGenerator<size_t>{0, alphanum.size() - 1};
-  for ([[maybe_unused]] auto i : ad_utility::integerRange(n)) {
-    std::string str;
-    str.reserve(m);
-    for (size_t j = 0; j < m; j++) {
-      str += alphanum.at(gen());
-    }
-    using namespace ad_utility::triple_component;
-    indices.push_back(localVocab.getIndexAndAddIfNotContained(
-        LiteralOrIri::literalWithoutQuotes(str)));
-  }
+      auto gen =
+          ad_utility::SlowRandomIntGenerator<size_t>{0, alphanum.size() - 1};
+      for ([[maybe_unused]] auto i : ad_utility::integerRange(n)) {
+        std::string str;
+        str.reserve(m);
+        for (size_t j = 0; j < m; j++) {
+          str += alphanum.at(gen());
+        }
+        using namespace ad_utility::triple_component;
+        indices.push_back(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes(str, context)));
+      }
 
-  return std::make_pair(std::move(localVocab), indices);
-};
+      return std::make_pair(std::move(localVocab), indices);
+    };
 
 enum class ValueIdType { OnlyInt, OnlyDouble, RandomlyMixed, Strings };
 
@@ -404,7 +407,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
           });
     } else {
       auto [newLocalVocab, indices] = generateRandomLocalVocabAndIndicesVec(
-          numInputRows, randomStringLength);
+          qec->getLocalVocabContext(), numInputRows, randomStringLength);
       localVocab = std::move(newLocalVocab);
 
       ql::ranges::transform(indices.begin(), indices.end(), otherValues.begin(),

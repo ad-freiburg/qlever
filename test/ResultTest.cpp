@@ -6,6 +6,7 @@
 
 #include "engine/Result.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
@@ -65,6 +66,25 @@ TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
   Result result{[]() -> Result::Generator { co_return; }(), {}};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTable(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  ASSERT_TRUE(result.isFullyMaterialized());
+  IdTableView<0> view = result.idTableView();
+  EXPECT_EQ(view.numRows(), 2u);
+  EXPECT_EQ(view.numColumns(), 2u);
+  EXPECT_EQ(view(0, 0), idTable(0, 0));
+  EXPECT_EQ(view(1, 1), idTable(1, 1));
+}
+
+// _____________________________________________________________________________
+TEST(Result, idTableViewThrowsWhenActuallyLazy) {
+  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  EXPECT_FALSE(result.isFullyMaterialized());
+  EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -169,23 +189,24 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
+  auto* queryExecutionContext = ad_utility::testing::getQec();
   auto idTable1 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}});
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   Result result{
-      [](auto& t1, auto& t2, auto& t3) -> Result::Generator {
+      [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
         std::this_thread::sleep_for(1ms);
         LocalVocab localVocab{};
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-            ad_utility::triple_component::Literal::literalWithoutQuotes(
-                "Test")});
+        localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes("Test",
+                                                  qec->getLocalVocabContext()));
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
         co_yield {t2.clone(), LocalVocab{}};
         std::this_thread::sleep_for(5ms);
         co_yield {t3.clone(), LocalVocab{}};
-      }(idTable1, idTable2, idTable3),
+      }(queryExecutionContext, idTable1, idTable2, idTable3),
       {}};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;

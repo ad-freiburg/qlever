@@ -1,6 +1,11 @@
-// Copyright 2018 - 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_PARSER_RDFPARSER_H
 #define QLEVER_SRC_PARSER_RDFPARSER_H
@@ -27,6 +32,7 @@
 #include "util/HashMap.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
+#include "util/ParsedUri.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 
@@ -159,21 +165,20 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
-  // The keys for storing the base prefix (for relative and absolute IRIs) in
-  // the prefix map. The only thing that is important about these keys is that
-  // they are different from each other and from any valid prefix name.
-  static constexpr const char* baseForRelativeIriKey_ = "@";
-  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
-
   // Helper function to raise an exception in response to BASE or PREFIX
   // mismatches during parallel parsing.
   [[noreturn]] void raiseDisallowedPrefixOrBaseError() const;
 
-  // Set the prefix or base IRI for the given key. If `prefixAndBaseDisabled_`
+  // Set the prefix IRI for the given key. If `prefixAndBaseDisabled_`
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
   void setPrefixOrThrow(const std::string& key,
                         const ad_utility::triple_component::Iri& prefix);
+
+  // Set the base IRI for the given key. If `prefixAndBaseDisabled_`
+  // is true, throw an error if this would change the mapping, which is illegal
+  // during parallel parsing.
+  void setBaseIriOrThrow(const ad_utility::triple_component::Iri& iri);
 
  protected:
   // Data members.
@@ -193,23 +198,8 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Map that maps prefix names to their IRI. For our tests, it is important
-  // that without any BASE declaration, the two base prefixes are mapped to the
-  // empty IRI.
-  static const inline ad_utility::HashMap<std::string, TripleComponent::Iri>
-      prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
-                        {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_ =
-      prefixMapDefault_;
-
-  // Getters for the two base prefixes. Without BASE declaration, these will
-  // both return the empty IRI.
-  const TripleComponent::Iri& baseForRelativeIri() const {
-    return prefixMap_.at(baseForRelativeIriKey_);
-  }
-  const TripleComponent::Iri& baseForAbsoluteIri() const {
-    return prefixMap_.at(baseForAbsoluteIriKey_);
-  }
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+  std::optional<qlever::util::ParsedUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -235,6 +225,14 @@ class TurtleParser : public RdfParserBase {
   // grammar that can be parsed in parallel. This disallows re-definitions of
   // @base and @prefix as well as usage of multiline literals.
   bool useSimplifiedGrammar_ = false;
+
+  // Unified interface to copy/move data that has been collected by the parallel
+  // parser before sharding out to parallel worker threads.
+  template <typename Source, typename Target>
+  static void copyHeaderFrom(Source&& source, Target& target) {
+    target.prefixMap_ = AD_FWD(source).prefixMap_;
+    target.baseIri_ = AD_FWD(source).baseIri_;
+  }
 
  public:
   explicit TurtleParser(const EncodedIriManager* encodedIriManager)
@@ -427,6 +425,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                               Parser, RdfParserBase>) class RdfStringParser
     : public Parser {
  public:
+  using Parser::baseIri_;
   using Parser::getLine;
   using Parser::prefixMap_;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
@@ -510,6 +509,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
   const auto& getPrefixMap() const { return prefixMap_; }
 
+  const auto& getBaseIri() const { return baseIri_; }
+
   // __________________________________________________________
   void setInputStream(ParallelBuffer::BufferType&& toParse) {
     tmpToParse_ = std::move(toParse);
@@ -560,21 +561,19 @@ class RdfStreamParser : public Parser {
  public:
   // Default construction needed for tests
   explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
-  explicit RdfStreamParser(
-      const std::string& filename, const EncodedIriManager* ev,
-      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      TripleComponent defaultGraphIri =
-          qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+
+  // Construct a parser that reads from an already-opened `ParallelBuffer`.
+  explicit RdfStreamParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+                           const EncodedIriManager* ev,
+                           TripleComponent defaultGraphIri =
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : Parser{ev, std::move(defaultGraphIri)} {
-    AD_LOG_DEBUG << "Initialize RDF parsing from uncompressed file or stream "
-                 << filename << std::endl;
-    initialize(filename, bufferSize);
+    initialize(std::move(rawBuffer));
   }
 
   bool getLineImpl(TurtleTriple* triple) override;
 
-  void initialize(const std::string& filename,
-                  ad_utility::MemorySize bufferSize);
+  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
 
   size_t getParsePosition() const override {
     return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
@@ -620,28 +619,17 @@ class RdfParallelParser : public Parser {
   // Default construction needed for tests
   explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
 
-  // If the `sleepTimeForTesting` is set, then after the initialization the
-  // parser will sleep for the specified time before parsing each batch s.t.
-  // certain corner cases can be tested.
-  RdfParallelParser(
-      const std::string& filename, const EncodedIriManager* ev,
-      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      std::chrono::milliseconds sleepTimeForTesting =
-          std::chrono::milliseconds{0})
-      : Parser{ev}, sleepTimeForTesting_(sleepTimeForTesting) {
-    AD_LOG_DEBUG
-        << "Initialize parallel Turtle Parsing from uncompressed file or "
-           "stream "
-        << filename << std::endl;
-    initialize(filename, bufferSize);
-  }
-
-  // Construct a parser from a file and a given default graph iri.
-  RdfParallelParser(const std::string& filename, const EncodedIriManager* ev,
-                    ad_utility::MemorySize bufferSize,
-                    const TripleComponent& defaultGraphIri)
-      : Parser{ev, defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
-    initialize(filename, bufferSize);
+  // Construct a parser that reads from an already-opened `ParallelBuffer`.
+  RdfParallelParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+                    const EncodedIriManager* ev,
+                    const TripleComponent& defaultGraphIri =
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                    std::chrono::milliseconds sleepTimeForTesting =
+                        std::chrono::milliseconds{0})
+      : Parser{ev, defaultGraphIri},
+        defaultGraphIri_{defaultGraphIri},
+        sleepTimeForTesting_(sleepTimeForTesting) {
+    initialize(std::move(rawBuffer));
   }
 
   // inherit the wrapper overload
@@ -656,8 +644,7 @@ class RdfParallelParser : public Parser {
     parallelParser_.resetTimers();
   }
 
-  void initialize(const std::string& filename,
-                  ad_utility::MemorySize bufferSize);
+  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
 
   size_t getParsePosition() const override {
     // TODO: can we really define this position here?
@@ -760,11 +747,10 @@ class RdfMultifileParser : public RdfParserBase {
   ~RdfMultifileParser() override;
 
  private:
-  // A thread that feeds the file specifications to the actual parser threads.
-  ad_utility::JThread feederThread_;
   // The buffer for the finished batches.
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
       finishedBatchQueue_{10};
+
   // This queue manages its own worker threads. Each task consists of a single
   // file that is to be parsed. The parsed results are then pushed to the
   // `finishedBatchQueue_` above. Note: It is important, that the
@@ -774,9 +760,8 @@ class RdfMultifileParser : public RdfParserBase {
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS};
 
-  // The number of parsers that have started, but not yet finished. This is
-  // needed to detect the complete parsing.
-  std::atomic<size_t> numActiveParsers_ = 0;
+  // A thread that feeds the file specifications to the actual parser threads.
+  ad_utility::JThread feederThread_;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

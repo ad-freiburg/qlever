@@ -5,6 +5,8 @@
 #include "engine/ExecuteUpdate.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/UpdateMetadata.h"
+#include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
@@ -47,9 +49,9 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 // operation). Still, it would be cleaner to avoid these copies.
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
-    const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
-    const VariableToColumnMap& variableColumns,
+    const IndexImpl& index, const VariableToColumnMap& variableColumns,
     const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+  const auto& encodedIriManager = index.encodedIriManager();
   // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
 
@@ -94,12 +96,13 @@ ExecuteUpdate::transformTriplesTemplate(
   // Sort the `TripleComponent`s.
   std::vector lookupVec(std::move_iterator(lookupItems.begin()),
                         std::move_iterator(lookupItems.end()));
-  ql::ranges::sort(
-      lookupVec, vocab.getCaseComparator(), [](const TripleComponent& tc) {
-        AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
-        return tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
-                              : tc.getIri().toStringRepresentation();
-      });
+  ql::ranges::sort(lookupVec, index.getVocab().getCaseComparator(),
+                   [](const TripleComponent& tc) {
+                     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
+                     return tc.isLiteral()
+                                ? tc.getLiteral().toStringRepresentation()
+                                : tc.getIri().toStringRepresentation();
+                   });
 
   // Local vocab for all `TripleComponent`s that are not in the existing vocab.
   //
@@ -116,8 +119,8 @@ ExecuteUpdate::transformTriplesTemplate(
   ad_utility::HashMap<TripleComponent, Id> lookupMap;
   for (auto& tc : lookupVec) {
     TripleComponent copy{tc};
-    lookupMap.emplace(std::move(tc), std::move(copy).toValueId(
-                                         vocab, localVocab, encodedIriManager));
+    lookupMap.emplace(std::move(tc),
+                      std::move(copy).toValueId(index, localVocab));
   }
 
   // Lookup the given `TripleComponent` in `lookupMap`. For a variable, return
@@ -225,15 +228,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   // Start the timer once the where clause has been evaluated.
   tracer.beginTrace("computeIds");
-  const auto& vocab = index.getVocab();
-  const auto& encodedIriManager = index.encodedIriManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns, &encodedIriManager, &result](
+      [&index, &variableColumns, &result](
           const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
-                                     tripleTemplates);
+            transformTriplesTemplate(index, variableColumns, tripleTemplates);
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with

@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "engine/LocalVocab.h"
+#include "index/LocalVocab.h"
 
 #include "global/ValueId.h"
 #include "util/TransparentFunctors.h"
@@ -140,4 +140,14 @@ void LocalVocab::reserveBlankNodeBlocksFromExplicitIndices(
       std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
           blankNodeManager);
   localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
+}
+
+// _____________________________________________________________________________
+bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
+  auto c = [lvi](const auto& set) {
+    AD_CONTRACT_CHECK(set != nullptr);
+    return ql::ranges::any_of(
+        *set, [lvi](const auto& entry) { return &entry == lvi; });
+  };
+  return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets_, c);
 }

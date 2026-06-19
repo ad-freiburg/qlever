@@ -222,3 +222,11 @@ std::unique_ptr<Operation> Distinct::cloneImpl() const {
   return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
                                     keepIndices_);
 }
+
+// ____________________________________________________________________________
+IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
+  size_t width = input.numColumns();
+  return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+    return self->outOfPlaceDistinct<width>(input);
+  });
+}

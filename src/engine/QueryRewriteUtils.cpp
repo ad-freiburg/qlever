@@ -47,5 +47,6 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
                                   std::nullopt,
                                   PayloadVariables::all(),
                                   SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                                  type};
+                                  type,
+                                  std::nullopt};
 }

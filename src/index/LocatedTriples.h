@@ -37,6 +37,39 @@ struct NumAddedAndDeleted {
   }
 };
 
+// Statistics collected during a vacuum operation on a block.
+struct VacuumStatistics {
+  // Only updates that have an effect are kept. Inserts that already exist
+  // and deletes that don't exist are removed.
+  size_t numDeletionsRemoved_;
+  size_t numInsertionsRemoved_;
+  size_t numDeletionsKept_;
+  size_t numInsertionsKept_;
+
+  size_t totalRemoved() const {
+    return numDeletionsRemoved_ + numInsertionsRemoved_;
+  }
+
+  size_t totalKept() const { return numDeletionsKept_ + numInsertionsKept_; }
+
+  VacuumStatistics& operator+=(const VacuumStatistics& other) {
+    numDeletionsRemoved_ += other.numDeletionsRemoved_;
+    numInsertionsRemoved_ += other.numInsertionsRemoved_;
+    numDeletionsKept_ += other.numDeletionsKept_;
+    numInsertionsKept_ += other.numInsertionsKept_;
+    return *this;
+  }
+
+  friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
+};
+
+// Triples identified for removal during a vacuum operation.
+struct TriplesToVacuum {
+  std::vector<IdTriple<0>> deletionsToRemove_;
+  std::vector<IdTriple<0>> insertionsToRemove_;
+  VacuumStatistics stats_;
+};
+
 // A triple and its block in a particular permutation. For a detailed definition
 // of all border cases, see the definition at the end of this file.
 struct LocatedTriple {
@@ -218,12 +251,27 @@ class LocatedTriplesPerBlock {
     augmentedMetadata_.reset();
   }
 
+  // Identify, for all blocks in `perm` whose number of located triples is at
+  // least `vacuum-minimum-block-size`, the redundant insertions (triple already
+  // in index) and invalid deletions (triple not in index). The redundant
+  // triples are then returned as `SPO`. Depending on the updates different
+  // permutations may be more or less effective.
+  TriplesToVacuum identifyTriplesToVacuum(
+      const Permutation& perm,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
+
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).
   //
   // NOTE: This is expensive because it iterates over all blocks and checks
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
+
+  // Compute the located triples that are present in this
+  // `LocatedTriplesPerBlock` instance but not in `oldBlocks`. The result is a
+  // pair of vectors (insertions, deletions), each sorted in SPO order.
+  std::array<std::vector<IdTriple<0>>, 2> computeDiff(
+      const LocatedTriplesPerBlock& oldBlocks) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

@@ -12,10 +12,10 @@
 #ifndef QLEVER_SRC_ENGINE_SORT_H
 #define QLEVER_SRC_ENGINE_SORT_H
 
-#include "engine/LocalVocab.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "index/LocalVocab.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -29,10 +29,15 @@ class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> sortColumnIndices_;
+  // If `true`, this `Sort` was created from an explicit `INTERNAL SORT BY`
+  // clause. In that case we deliberately do not propagate a `LIMIT`/`OFFSET`
+  // to the subtree, because the user explicitly asked for the complete sorted
+  // result (see `handlesLimitOffset()`).
+  bool explicitSort_;
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       std::vector<ColumnIndex> sortColumnIndices);
+       std::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
 
  public:
   virtual std::string getDescriptor() const override;
@@ -45,6 +50,8 @@ class Sort : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
+
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -67,6 +74,19 @@ class Sort : public Operation {
     return subtree_->knownEmptyResult();
   }
 
+  // For a `Sort` with `LIMIT N`, any N rows are fine as long as they are
+  // sorted: there is no user-defined order that the `LIMIT` is taken against
+  // (user-facing `ORDER BY` goes through `OrderBy`, not `Sort`). So we can
+  // let the subtree compute only N rows and sort those. The exception is an
+  // explicit `INTERNAL SORT BY`: there the user explicitly requested the
+  // complete sorted result, so we do not handle (and hence do not propagate)
+  // the `LIMIT`/`OFFSET` here, but let it be applied externally on the full
+  // sorted output.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return explicitSort_ ? LimitOffsetHandling::NONE
+                         : LimitOffsetHandling::FULL;
+  }
+
   [[nodiscard]] size_t getResultWidth() const override;
 
   std::vector<QueryExecutionTree*> getChildren() override {
@@ -85,7 +105,7 @@ class Sort : public Operation {
 
   virtual Result computeResult(bool requestLaziness) override;
 
-  // Sort in memory, using `Engine::sort`.
+  // Sort in memory, using `IdTableUtils::sort`.
   Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
 
   // Sort externally, using `CompressedExternalIdTableSorter`, using the value

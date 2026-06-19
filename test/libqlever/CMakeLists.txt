@@ -1,1 +1,1 @@
-addLinkAndDiscoverTestNoLibs(QleverTest qlever)
+addLinkAndDiscoverTestNoLibs(QleverTest qlever testUtil)

@@ -2648,6 +2648,21 @@ TEST(QueryPlanner, Exists) {
       "SELECT * FROM <g> FROM NAMED <g2> { ?x ?y ?z FILTER EXISTS {?a ?b ?c. "
       "GRAPH ?g { ?u ?v ?c}}}",
       filter);
+  // Make sure we get the correct permutation.
+  h::expect("SELECT ?s { ?s <p> <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "<p>", "<o>"),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO,
+                                                   Permutation::Enum::SOP}))));
+  h::expect("SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "?p", "<o>",
+                                                  {Permutation::Enum::OSP}),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO}))));
 }
 
 // _____________________________________________________________________________
@@ -3023,7 +3038,7 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
                   hasLimit({std::nullopt, 3})));
   // Last offset should only be applied by exporter since VALUES does not
-  // support OFFSET natively
+  // handle OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} OFFSET 1 } OFFSET 2 } OFFSET 5",
@@ -3032,8 +3047,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
   h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
-  // Last limit should only be applied by exporter since VALUES does not support
-  // OFFSET natively
+  // Last limit should only be applied by exporter since VALUES does not handle
+  // OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} LIMIT 3 } LIMIT 2 } LIMIT 1",

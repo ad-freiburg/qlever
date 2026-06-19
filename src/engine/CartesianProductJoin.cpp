@@ -160,9 +160,9 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
 
   if (!requestLaziness) {
     AD_CORRECTNESS_CHECK(!lazyResult);
-    return {writeAllColumns(subResults | ql::views::transform(&Result::idTable),
-                            getLimitOffset()._offset,
-                            getLimitOffset().limitOrDefault()),
+    return {writeAllColumns(
+                subResults | ql::views::transform(&Result::idTableView),
+                getLimitOffset()._offset, getLimitOffset().limitOrDefault()),
             resultSortedOn(), std::move(staticMergedVocab)};
   }
 
@@ -209,7 +209,8 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
   // single result is left. This can probably be done by using the
   // `Result`.
 
-  auto sizesView = ql::views::transform(idTables, &IdTable::size);
+  auto sizesView =
+      ql::views::transform(idTables, [](const auto& t) { return t.size(); });
   auto totalResultSize =
       ::ranges::accumulate(sizesView, 1UL, std::multiplies{});
 
@@ -240,9 +241,11 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
     // The index of the next column in the output that hasn't been written so
     // far.
     size_t resultColIdx = 0;
-    for (const auto& input : idTables) {
-      size_t extraOffset =
-          &input == &idTables.back() ? lastTableOffset * groupSize : 0;
+    size_t numTables = ql::ranges::size(idTables);
+    for (const auto& [tableIdx, input] : ::ranges::views::enumerate(idTables)) {
+      size_t extraOffset = (static_cast<size_t>(tableIdx) + 1 == numTables)
+                               ? lastTableOffset * groupSize
+                               : 0;
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
         writeResultColumn(resultCol, inputCol, groupSize, offset - extraOffset);
@@ -275,8 +278,9 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
-    if (limitIfPresent.has_value() && childTree->supportsLimit()) {
-      childTree->applyLimit(limitIfPresent.value());
+    if (limitIfPresent.has_value() &&
+        childTree->handlesLimitOffset() != LimitOffsetHandling::NONE) {
+      childTree->applyLimitOffset(limitIfPresent.value());
       forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();
@@ -369,21 +373,33 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
     std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
-  std::vector<std::shared_ptr<const IdTable>> idTables;
+  // For each subresult, create an alias `shared_ptr<const IdTableView<0>>` that
+  // shares ownership with the corresponding `shared_ptr<const Result>`. This
+  // keeps the `Result` alive as long as `idTables` is alive, making the view's
+  // lifetime explicit and self-contained without a separate `subresults`
+  // capture.
+  std::vector<std::shared_ptr<const IdTableView<0>>> idTables;
   idTables.reserve(subresults.size() + 1);
   for (auto& result : subresults) {
-    auto* idTable = &result->idTable();
-    idTables.emplace_back(std::move(result), idTable);
+    auto* idTableView = &result->idTableView();
+    idTables.emplace_back(std::move(result), idTableView);
   }
-  // Placeholder, will be replaced with the current `IdTable` from the lazy
-  // result.
-  idTables.emplace_back(std::make_shared<IdTable>(IdTable{0, allocator()}));
+  // Placeholder for the current `IdTable` from the lazy result. The view is
+  // kept as a non-const `shared_ptr` so it can be updated in-place on each
+  // iteration without a new allocation; the implicit conversion to
+  // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
+  auto placeholder = std::make_shared<IdTable>(0, allocator());
+  auto placeholderView =
+      std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
+  idTables.push_back(placeholderView);
 
   auto generatedTables = lazyResult->idTables();
 
   auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
               limit = getLimitOffset().limitOrDefault(),
               offset = getLimitOffset()._offset, idTables = std::move(idTables),
+              placeholder = std::move(placeholder),
+              placeholderView = std::move(placeholderView),
               lastTableOffset = size_t{0}, producedTableSize = size_t{0},
               lazyResult =
                   std::move(lazyResult)](auto& idTableVocabPair) mutable {
@@ -395,10 +411,9 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
     producedTableSize = 0;
 
     auto& [idTable, localVocab] = idTableVocabPair;
-    // We know that the last id table is mutable (we inserted it ourselves), so
-    // we can replace it without paying the cost of creating and destroying a
-    // shared pointer.
-    const_cast<IdTable&>(*idTables.back()) = std::move(idTable);
+    // Replace the placeholder table and update the view in-place.
+    *placeholder = std::move(idTable);
+    *placeholderView = placeholder->asStaticView<0>();
     if (idTables.back()->empty()) {
       return Result::IdTableLoopControl::makeContinue();
     }

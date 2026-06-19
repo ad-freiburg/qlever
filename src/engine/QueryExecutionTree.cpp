@@ -179,7 +179,7 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
   if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
@@ -196,7 +196,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      explicitSort);
 }
 
 // _____________________________________________________________________________
@@ -209,7 +210,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   // return the original tree, without stripping any columns.
   if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
                          [&variablesToKeep](const Variable& variable) {
-                           return variablesToKeep.contains(variable);
+                           return ad_utility::contains(variablesToKeep,
+                                                       variable);
                          })) {
     return qet;
   }
@@ -227,7 +229,12 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
       "`LIMIT` and `OFFSET` are applied by "
       "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
       "implementations.");
-  resultTree->applyLimit(rootOperation->getLimitOffset());
+  // We cannot use `applyLimitOffset` here, because this might get propagated to
+  // children of this operation, where the limit/offset has already been set
+  // correctly. We just reapply a previously set limit which was removed by the
+  // column stripping.
+  resultTree->setLimitOffsetDirectlyWithoutTriggeringHooks(
+      rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but

@@ -9,6 +9,7 @@
 
 #include "util/CancellationHandle.h"
 #include "util/http/beast.h"
+#include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/UpdateFetcher.h"
@@ -66,7 +67,7 @@ class WebSocketSession {
       const http::request<http::string_body>& request, tcp::socket socket);
   /// Helper function to provide a proper error response if the provided URL
   /// path is not accepted by the server.
-  static std::optional<http::response<http::string_body>>
+  static std::optional<http::response<httpUtils::httpStreams::streamable_body>>
   getErrorResponseIfPathIsInvalid(const http::request<http::string_body>&);
 };
 };  // namespace ad_utility::websocket

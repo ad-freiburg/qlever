@@ -115,8 +115,9 @@ using AGG_EXP = AggregateExpression<
 template <typename NumericOperation>
 struct NumericExpressionForAggregate {
   template <typename... Args>
-  auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
-      requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
+  auto operator()(const Args&... args) const
+      -> CPP_ret(NumericValue)(
+          requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -189,14 +190,14 @@ class AvgExpression : public AvgExpressionBase {
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
     [](const auto& a, const auto& b,
-       const EvaluationContext* ctx) -> IdOrLiteralOrIri {
+       const EvaluationContext* ctx) -> IdOrLocalVocabEntry {
   // TODO<joka921> moveTheStrings.
   return toBoolNotUndef(
              sparqlExpression::compareIdsOrStrings<
                  Comp, valueIdComparators::ComparisonForIncompatibleTypes::
                            CompareByType>(a, b, ctx))
-             ? IdOrLiteralOrIri{a}
-             : IdOrLiteralOrIri{b};
+             ? IdOrLocalVocabEntry{a}
+             : IdOrLocalVocabEntry{b};
 };
 
 // Aggregate expression for MIN and MAX.

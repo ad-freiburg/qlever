@@ -267,10 +267,10 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
         // Let request be handled by `WebSocketSession` if the HTTP
         // request is a WebSocket handshake
         if (beast::websocket::is_upgrade(req)) {
-          auto errorResponse = ad_utility::websocket::WebSocketSession::
-              getErrorResponseIfPathIsInvalid(req);
-          if (errorResponse.has_value()) {
-            co_await sendMessage(errorResponse.value());
+          auto websocketErrorResponse = ad_utility::websocket::
+              WebSocketSession::getErrorResponseIfPathIsInvalid(req);
+          if (websocketErrorResponse.has_value()) {
+            co_await sendMessage(std::move(websocketErrorResponse.value()));
           } else {
             // prevent cleanup after socket has been moved from
             releaseConnection.cancel();

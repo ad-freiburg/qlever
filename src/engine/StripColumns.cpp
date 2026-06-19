@@ -11,6 +11,7 @@
 #include "engine/StripColumns.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "parser/GraphPatternOperation.h"
 
 // _____________________________________________________________________________
 StripColumns::StripColumns(QueryExecutionContext* ctx,
@@ -82,6 +83,25 @@ bool StripColumns::knownEmptyResult() { return child_->knownEmptyResult(); }
 std::unique_ptr<Operation> StripColumns::cloneImpl() const {
   return std::make_unique<StripColumns>(getExecutionContext(), child_->clone(),
                                         subset_, varToCol_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // Push `bind` down to the child. If successful, create a new `StripColumns`
+  // that also keeps the bound target variable.
+  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newChild) {
+    return std::nullopt;
+  }
+
+  // Add the bind target to the variables to keep.
+  auto view = varToCol_ | ql::ranges::views::keys;
+  std::set<Variable> keepVars{view.begin(), view.end()};
+  keepVars.insert(bind._target);
+
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(*newChild), keepVars);
 }
 
 // _____________________________________________________________________________

@@ -6,8 +6,11 @@
 
 #include <boost/beast/http.hpp>
 
+#include "ServerTestHelpers.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
+#include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
@@ -164,6 +167,7 @@ TEST(ServerTest, getQueryId) {
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   json expectedJson{{"git-hash-index", "git short hash not set"},
@@ -181,6 +185,7 @@ TEST(ServerTest, composeStatsJson) {
   EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
@@ -218,6 +223,7 @@ TEST(ServerTest, createMessageSender) {
       testing::HasSubstr("Assertion `queryHubLock` failed."));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, createResponseMetadata) {
   // Setup the datastructures
   const ad_utility::SharedCancellationHandle handle =
@@ -234,12 +240,12 @@ TEST(ServerTest, createResponseMetadata) {
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
+      index, plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
       deltaTriples, handle);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
@@ -251,12 +257,12 @@ TEST(ServerTest, createResponseMetadata) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
           index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, plannedQuery.queryExecutionTree_, UpdateMetadata{},
+          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
           tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
       index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
+      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -278,15 +284,16 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
+    auto* qec = ad_utility::testing::getQec();
     QueryExecutionTree qet =
-        QueryPlanner{ad_utility::testing::getQec(),
-                     std::make_shared<ad_utility::CancellationHandle<>>()}
+        QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
             .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet)};
+    return {std::move(parsed), std::move(qet), *qec};
   };
   auto expectExportLimit =
       [&makePlannedQuery](
@@ -299,7 +306,7 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
         Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
-        EXPECT_THAT(pq.parsedQuery_._limitOffset.exportLimit_,
+        EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
                     testing::Eq(limit));
       };
 
@@ -370,6 +377,7 @@ TEST(ServerTest, configurePinnedResultWithName) {
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
@@ -380,4 +388,262 @@ TEST(ServerTest, checkAccessToken) {
 
   Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
+}
+
+// _____________________________________________________________________________
+MATCHER_P2(HeaderFieldIs, field, matcher,
+           absl::StrCat(std::string{boost::beast::http::to_string(field)}, " ",
+                        testing::DescribeMatcher<std::string>(matcher,
+                                                              negation))) {
+  auto it = arg.find(field);
+  if (it == arg.end()) {
+    *result_listener << "which has no " << field << " header";
+    return false;
+  }
+  auto fieldValue = it->value();
+  *result_listener << "which has " << field << " with " << fieldValue;
+  return testing::ExplainMatchResult(matcher, fieldValue, result_listener);
+}
+
+// _____________________________________________________________________________
+auto ContentTypeIs = [](const std::string& contentType) {
+  return HeaderFieldIs(http::field::content_type, testing::StrEq(contentType));
+};
+
+// _____________________________________________________________________________
+auto LocationIs = [](const auto& matcher) {
+  return HeaderFieldIs(http::field::location, matcher);
+};
+
+// _____________________________________________________________________________
+auto HasHeader = [](http::field field) {
+  return HeaderFieldIs(field, testing::Not(testing::IsEmpty()));
+};
+
+// _____________________________________________________________________________
+MATCHER_P(StatusIs, status,
+          absl::StrCat("status is ", negation ? "not " : "",
+                       testing::PrintToString(status))) {
+  auto actualStatus = arg.base().result();
+  *result_listener << "which has Status " << actualStatus;
+  return actualStatus == status;
+}
+
+using namespace serverTestHelpers;
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspHead) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testHead = [&simulateHttpRequest](
+                      const std::optional<std::string>& accept,
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto head = makeRequest(http::verb::head, "/?default");
+    if (accept.has_value()) {
+      head.set(http::field::accept, accept.value());
+    }
+    auto response = simulateHttpRequest.processRaw(head);
+    EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
+    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
+                testing::IsEmpty());
+  };
+  testHead(std::nullopt);
+  testHead("text/csv");
+  testHead("text/tab-separated-values");
+  testHead("text/turtle");
+  testHead("application/qlever-results+json");
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspGet) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testGet = [&simulateHttpRequest](
+                     const std::optional<std::string>& accept,
+                     const testing::Matcher<const std::string&>& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto get = makeGetRequest("/?default");
+    if (accept.has_value()) {
+      get.set(http::field::accept, accept.value());
+    }
+    auto response = simulateHttpRequest.processRaw(get);
+    EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
+    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
+                bodyMatcher);
+  };
+  testGet(std::nullopt, testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
+  testGet("text/csv", testing::Eq("<a>,<b>,<c>\n<a>,<b>,<d>\n"));
+  testGet("text/tab-separated-values",
+          testing::Eq("<a>\t<b>\t<c>\n<a>\t<b>\t<d>\n"));
+  testGet("text/turtle", testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPut) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testPut = [&simulateHttpRequest](
+                     const std::string& contentType, const std::string& body,
+                     const std::string& graph, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+
+    auto request =
+        makeRequest(http::verb::put, "/?" + graph,
+                    {{http::field::authorization, "Bearer accessToken"}}, body);
+    request.set(http::field::content_type, contentType);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  testPut("text/turtle", "<a> <b> <c> .", "default",
+          StatusIs(http::status::ok));
+  testPut("text/turtle", "<a> <b> <c> .", "graph=foo",
+          StatusIs(http::status::created));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspDelete) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testDelete = [&simulateHttpRequest](const std::string& graph,
+                                           const auto& bodyMatcher,
+                                           ad_utility::source_location l =
+                                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+
+    auto request =
+        makeRequest(http::verb::delete_, "/?" + graph,
+                    {{http::field::authorization, "Bearer accessToken"}});
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  testDelete("default", StatusIs(http::status::ok));
+  testDelete("graph=foo", StatusIs(http::status::not_found));
+}
+
+MATCHER(PairwiseUnequal, "contains no duplicate elements") {
+  const auto& container = arg;
+  auto begin = std::begin(container);
+  auto end = std::end(container);
+
+  for (auto it = begin; it != end; ++it) {
+    for (auto jt = std::next(it); jt != end; ++jt) {
+      if (*it == *jt) {
+        *result_listener << "duplicate value found: "
+                         << ::testing::PrintToString(*it);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPost) {
+  // TODO: test more broadly including the delta triples after the operation
+  auto expectPost = [](std::string body, const auto& responseMatcher) {
+    auto baseName = "ServerTest_gspPost";
+    makeTestIndex(baseName, "");
+    SimulateHttpRequest simulateHttpRequest{baseName};
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    body);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, responseMatcher);
+  };
+  expectPost("", StatusIs(http::status::no_content));
+  expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPost = [](const SimulateHttpRequest& simulateHttpRequest,
+                     auto request, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+    return response;
+  };
+
+  // Insert a payload into a new graph chosen by the server 1000 times. Check
+  // that the returned graph has the expected format and that no graph is
+  // selected twice.
+  {
+    std::string basename = "ServerTest_gspPostCreateNewGraph";
+    auto index = makeTestIndex(basename, "");
+    SimulateHttpRequest simulateHttpRequest{basename};
+    auto testPostCreateNewGraph =
+        [&testPost, &simulateHttpRequest](
+            const std::string& body, const auto& bodyMatcher,
+            ad_utility::source_location l =
+                AD_CURRENT_SOURCE_LOC()) -> std::string {
+      auto request =
+          makeRequest(http::verb::post,
+                      "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+                      {{http::field::authorization, "Bearer accessToken"},
+                       {http::field::host, "example.org"},
+                       {http::field::content_type, "text/turtle"}},
+                      body);
+      auto response = testPost(simulateHttpRequest, request, bodyMatcher, l);
+      return response.at(http::field::location);
+    };
+    std::vector<std::string> locations;
+    for (int i = 0; i < 10; ++i) {
+      auto location = testPostCreateNewGraph(
+          "<a> <b> <c>",
+          testing::AllOf(
+              // Check that the random part of the graph is a V4 UUID.
+              LocationIs(testing::MatchesRegex(
+                  R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+              StatusIs(http::status::created)));
+      locations.push_back(location);
+    }
+    EXPECT_THAT(locations, PairwiseUnequal());
+  }
+
+  // Same behavior via Direct Graph Identification: POST `/http-graph-store`
+  // with no `?graph=`. The graph IRI is constructed from `Host` + path and
+  // matches the instance's graph store URL, so a new graph is created.
+  testPost(
+      {"ServerTest_gspPostCreateNewGraph"},
+      makeRequest(http::verb::post, "/http-graph-store",
+                  {{http::field::authorization, "Bearer accessToken"},
+                   {http::field::host, "example.org"},
+                   {http::field::content_type, "text/turtle"}},
+                  "<a> <b> <c>"),
+      testing::AllOf(
+          LocationIs(testing::MatchesRegex(
+              R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+          StatusIs(http::status::created)));
+
+  auto IsPostNoCreatedGraph = [](http::status status) {
+    return testing::AllOf(StatusIs(status),
+                          testing::Not(HasHeader(http::field::location)));
+  };
+  // Here we only care that logic for creating a new graph doesn't fire. The
+  // updated triples are not the primary concern here.
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?default",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+  testPost({"ServerTest_gspPostCreateNewGraph"},
+           makeRequest(http::verb::post, "/?graph=foo",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
 }

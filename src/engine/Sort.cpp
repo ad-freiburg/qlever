@@ -12,11 +12,11 @@
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -34,10 +34,11 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices)
+           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
-      sortColumnIndices_{std::move(sortColumnIndices)} {}
+      sortColumnIndices_{std::move(sortColumnIndices)},
+      explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
 std::string Sort::getCacheKeyImpl() const {
@@ -67,6 +68,18 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  // For an explicit `INTERNAL SORT BY` we deliberately keep the complete sorted
+  // result and let the `LIMIT`/`OFFSET` be applied externally (see
+  // `handlesLimitOffset()`), so we must not push it down to the subtree.
+  if (explicitSort_) {
+    return;
+  }
+  subtree_ = subtree_->clone();
+  subtree_->applyLimitOffset(limitOffset);
+}
+
+// _____________________________________________________________________________
 Result Sort::computeResult(bool requestLaziness) {
   size_t numColumns = subtree_->getResultWidth();
   // Maximum number of rows that can be sorted in memory.
@@ -86,7 +99,7 @@ Result Sort::computeResult(bool requestLaziness) {
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),
                                    std::move(input), requestLaziness);
@@ -134,7 +147,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
 
-  Engine::sort(idTable, sortColumnIndices_);
+  IdTableUtils::sort(idTable, sortColumnIndices_);
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.
@@ -182,7 +195,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   }
   while (it != end) {
     checkCancellation();
-    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+    if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
                                         Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
@@ -243,13 +256,13 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
   return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                             sortColumns);
+                                             sortColumns, explicitSort_);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
-                                sortColumnIndices_);
+                                sortColumnIndices_, explicitSort_);
 }
 
 // _____________________________________________________________________________
@@ -278,6 +291,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(
-      getExecutionContext(), std::move(subtree), sortColumnIndices);
+  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
+                                             std::move(subtree),
+                                             sortColumnIndices, explicitSort_);
 }

@@ -47,20 +47,6 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getCardinality(
-    const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
-    Id id, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
 RdfsVocabulary::AccessReturnType Index::indexToString(VocabIndex id) const {
   return pimpl_->indexToString(id);
 }
@@ -150,6 +136,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
+
+// ____________________________________________________________________________
+bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
 
 // ____________________________________________________________________________
 bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
@@ -294,4 +283,13 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 // ____________________________________________________________________________
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
+}
+// ____________________________________________________________________________
+GraphNameManager& Index::graphNameManager() {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const GraphNameManager& Index::graphNameManager() const {
+  return pimpl_->graphNameManager();
 }

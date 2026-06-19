@@ -19,6 +19,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/RuntimeParameters.h"
+#include "index/ExportIds.h"
 #include "util/Exception.h"
 #include "util/LazyJsonParser.h"
 #include "util/SparqlJsonBindingUtils.h"
@@ -229,8 +230,7 @@ std::string Proxy::serializeInputAsJson(const Result& childResult) const {
       // Convert the ID to a JSON binding.
       nlohmann::json valueObj;
       auto optStringAndType =
-          ExportQueryExecutionTrees::idToStringAndType<true>(getIndex(), id,
-                                                             localVocab);
+          ql::exportIds::idToStringAndType<true>(getIndex(), id, localVocab);
 
       if (!optStringAndType.has_value()) {
         continue;
@@ -243,9 +243,8 @@ std::string Proxy::serializeInputAsJson(const Result& childResult) const {
         case Datatype::VocabIndex:
         case Datatype::LocalVocabIndex: {
           // Could be IRI or literal - check the string representation.
-          auto litOrIri =
-              ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                  getIndex(), id, localVocab);
+          auto litOrIri = ql::exportIds::getLiteralOrIriFromVocabIndex(
+              getIndex(), id, localVocab);
           if (litOrIri.isIri()) {
             valueObj["type"] = "uri";
             valueObj["value"] = value;
@@ -381,7 +380,8 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   // Send the request.
   HttpOrHttpsResponse response = sendRequestFunction_(
       url, cancellationHandle_, boost::beast::http::verb::post, payload,
-      "application/sparql-results+json", "application/sparql-results+json");
+      "application/sparql-results+json", "application/sparql-results+json",
+      /*maxRedirects=*/0);
 
   // Check response status.
   if (response.status_ != boost::beast::http::status::ok) {
@@ -452,9 +452,7 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
         } else {
           tc = TripleComponent::UNDEF();
         }
-        Id id =
-            std::move(tc).toValueId(getIndex().getVocab(), responseLocalVocab,
-                                    getIndex().encodedIriManager());
+        Id id = std::move(tc).toValueId(getIndex(), responseLocalVocab);
         responseTable(rowIdx, colIdx) = id;
       }
       checkCancellation();

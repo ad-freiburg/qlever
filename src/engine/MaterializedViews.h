@@ -254,6 +254,10 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // indices as in the view while generating the cache key.
   std::optional<size_t> lookupBindTargetColumn(
       const std::string& bindCacheKey) const;
+
+  // Dummy variables for internal use.
+  static const Variable& dummyPredicate();
+  static const Variable& dummyObject();
 };
 
 // Shorthand for query rewriting helper class.

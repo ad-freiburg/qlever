@@ -7,13 +7,13 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "global/RuntimeParameters.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -91,6 +91,27 @@ string OptionalJoin::getCacheKeyImpl() const {
   };
   os << "]";
   return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  if (limitOffset._limit.has_value()) {
+    std::optional<uint64_t> safeLimit = std::nullopt;
+    auto limit = limitOffset._limit.value();
+    auto offset = limitOffset._offset;
+    // We have to be careful to not cause an overflow when adding the offset and
+    // the limit.
+    if (limit <= std::numeric_limits<uint64_t>::max() - offset) {
+      safeLimit = limit + offset;
+    }
+    // If we have a limit applied, we can apply limit + offset as a limit to the
+    // left side, since the result of the optional join is at least as large as
+    // the left side. This can significantly speed up the query if the left side
+    // is large and the limit is small. The right side is optional, so reducing
+    // it can drop matches; we leave it untouched.
+    _left = _left->clone();
+    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+  }
 }
 
 // _____________________________________________________________________________
@@ -464,7 +485,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols);
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -618,7 +639,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);
-  auto rightRes = computeResultSkipChild(_right->getRootOperation());
+  auto rightRes = computeResultSkipChild(_right->getRootOperation(), true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{

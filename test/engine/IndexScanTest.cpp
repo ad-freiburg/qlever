@@ -29,11 +29,6 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -159,9 +154,7 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
-            .value());
+    column.push_back(entry.toValueId(qec->getIndex()).value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -179,9 +172,7 @@ void testLazyScanWithColumnThrows(
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
-            .value());
+    column.push_back(entry.toValueId(qec->getIndex()).value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -571,9 +562,10 @@ TEST(IndexScan, getResultSizeOfScan) {
 
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
-  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
-                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
-  auto getId = makeGetId(index);
+  auto index = std::make_shared<Index>(
+      makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                    "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
+  auto getId = makeGetId(*index);
   auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
@@ -581,13 +573,13 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
 
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
 
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
@@ -598,7 +590,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   // Since the rough estimate doesn't know if the delta triples are inserts or
   // deletions, the estimate remains the same regardless of the delta triples.
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
@@ -609,7 +601,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
@@ -618,7 +610,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
@@ -988,7 +980,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1175,10 +1168,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
-  auto indexE =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<e>")});
-  auto indexG =
-      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<g>")});
+  const auto& localVocabContext = qec_->getLocalVocabContext();
+  auto indexE = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<e>"), localVocabContext});
+  auto indexG = extraVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<g>"), localVocabContext});
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1405,7 +1399,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
   IndexScan scan1{qec, Permutation::PSO,
                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
   EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?z"}));
   EXPECT_THROW(scan1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
@@ -1415,7 +1409,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
       SparqlTripleSimple{
           Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
   EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?g"}));
   EXPECT_THROW(scan2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -1425,7 +1419,7 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
                   SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?x"}),
                ad_utility::Exception);
-  EXPECT_TRUE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
+  EXPECT_FALSE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
                ad_utility::Exception);
 }
@@ -1568,13 +1562,25 @@ TEST(IndexScanTest, StripColumns) {
       EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
     }
 
-    // Test functions whose results don't depend on column stripping
-    // These should return the same values for both base and stripped scan
     auto& strippedScanOp =
         dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
 
-    // Test accessor functions
-    EXPECT_EQ(strippedScanOp.getDescriptor(), baseScan.getDescriptor());
+    // The descriptor reflects the stripping: each kept variable appears, each
+    // stripped one does not.
+    const auto descriptor = strippedScanOp.getDescriptor();
+    for (const auto& var : varsToKeep) {
+      EXPECT_THAT(descriptor, ::testing::HasSubstr(var.name()));
+    }
+    for (const auto& [var, _] :
+         baseScan.getExternallyVisibleVariableColumns()) {
+      if (ql::ranges::find(varsToKeep, var) == varsToKeep.end()) {
+        EXPECT_THAT(descriptor,
+                    ::testing::Not(::testing::HasSubstr(var.name())));
+      }
+    }
+
+    // Test accessor functions whose results don't depend on column stripping;
+    // these should return the same values for the base and the stripped scan.
     EXPECT_EQ(strippedScanOp.subject().toString(),
               baseScan.subject().toString());
     EXPECT_EQ(strippedScanOp.predicate().toString(),
@@ -1606,8 +1612,8 @@ TEST(IndexScanTest, StripColumns) {
               baseScan.isIndexScanWithNumVariables(3));
 
     // Test optimization functions
-    EXPECT_EQ(strippedScanOp.supportsLimitOffset(),
-              baseScan.supportsLimitOffset());
+    EXPECT_EQ(strippedScanOp.handlesLimitOffset(),
+              baseScan.handlesLimitOffset());
 
     // Test specification functions
     EXPECT_EQ(strippedScanOp.getScanSpecification().col0Id(),
@@ -1794,8 +1800,10 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       dynamic_cast<IndexScan&>(*baseScanTree->getRootOperation());
 
   // Create prefilter condition: ?x < <s2>
-  auto prefilterPairs = []() {
-    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  auto prefilterPairs = [&qec]() {
+    return makePrefilterVec(
+        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+           Var{"?x"}));
   };
 
   // Test with different variable combinations
@@ -1896,7 +1904,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -2130,4 +2139,18 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
     EXPECT_TRUE(localVocab.empty());
     EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, additionalVariablesInDescriptor) {
+  auto* qec = getQec();
+  IndexScan scan1{qec, Permutation::PSO,
+                  SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}}};
+  EXPECT_EQ(scan1.getDescriptor(), "IndexScan PSO ?s ?p ?o");
+
+  IndexScan scan2{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{
+          Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
+  EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }

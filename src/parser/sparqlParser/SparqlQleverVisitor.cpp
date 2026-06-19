@@ -304,6 +304,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeIsGeoPointExpression);
     } else if (ad_utility::contains(customGeoUnaryFuncs, functionName)) {
       return createUnary(customGeoUnaryFuncs.at(functionName));
+    } else if (functionName == "prefix-match") {
+      return createBinary(&makePrefixMatchExpression);
     }
   }
 
@@ -1289,6 +1291,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == QLPROXY_IRI) {
     return visitMagicServiceQuery<parsedQuery::ProxyQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
+             ql::starts_with(serviceIri.toStringRepresentation(),
+                             EXTERNAL_VALUES_IRI_PREFIX)) {
+    return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
+                                                                    serviceIri);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
@@ -1447,14 +1454,11 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visit(Parser::IrirefContext* ctx) const {
-  if (baseIri_.empty()) {
+  if (!baseIri_.has_value()) {
     return ctx->getText();
   }
-  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
-  // Handle IRIs with base IRI.
   return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.getBaseIri(false),
-             baseIri_.getBaseIri(true))
+             ctx->getText(), baseIri_.value())
       .toStringRepresentation();
 }
 
@@ -1536,7 +1540,9 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
         ctx,
         "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
   }
-  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
+  auto iri =
+      TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
+  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________
@@ -2155,6 +2161,10 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  if (ctx->pathSyntaxExtension()) {
+    return visit(ctx->pathSyntaxExtension());
+  }
+
   std::string mod = ctx->getText();
   if (mod == "*") {
     return {0, std::numeric_limits<size_t>::max()};
@@ -2164,6 +2174,38 @@ std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
     AD_CORRECTNESS_CHECK(mod == "?");
     return {0, 1};
   }
+}
+
+// ____________________________________________________________________________
+std::pair<size_t, size_t> Visitor::visit(
+    Parser::PathSyntaxExtensionContext* ctx) {
+  // Syntax extension from
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax:
+  //
+  //   path{n}    Exactly n repetitions of `path`.
+  //   path{n,m}  Between n and m repetitions of `path`.
+  //   path{n,}   At least n repetitions of `path`.
+  //   path{,n}   At most n repetitions of `path`.
+
+  if (ctx->minMax()) {
+    auto stepsMin = visit(ctx->minMax()->integer(0));
+    auto stepsMax = visit(ctx->minMax()->integer(1));
+    return {stepsMin, stepsMax};
+  }
+
+  if (ctx->exactLength()) {
+    auto stepsExact = visit(ctx->exactLength()->integer());
+    return {stepsExact, stepsExact};
+  }
+
+  if (ctx->onlyMin()) {
+    auto stepsMin = visit(ctx->onlyMin()->integer());
+    return {stepsMin, std::numeric_limits<size_t>::max()};
+  }
+
+  AD_CORRECTNESS_CHECK(ctx->onlyMax());
+  auto stepsMax = visit(ctx->onlyMax()->integer());
+  return {0, stepsMax};
 }
 
 // ____________________________________________________________________________________
@@ -2612,7 +2654,7 @@ ExpressionPtr Visitor::visit(Parser::BrackettedExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
+ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {
@@ -2662,8 +2704,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
-    return makeIriOrUriExpression(std::move(argList[0]),
-                                  std::make_unique<IriExpression>(baseIri_));
+    return makeIriOrUriExpression(
+        std::move(argList[0]),
+        std::make_unique<IriExpression>(
+            baseIri_.has_value()
+                ? TripleComponent::Iri::fromUri(baseIri_.value())
+                : TripleComponent::Iri{}));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {

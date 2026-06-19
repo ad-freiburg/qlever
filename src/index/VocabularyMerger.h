@@ -61,10 +61,11 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-// Concept for a callable that compares two `string_view`s.
+// Concept for a callable that compares two `string_view`s with respective
+// `isExternal` flags.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, std::string_view>;
+    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
@@ -194,8 +195,6 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE();
-
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
@@ -231,6 +230,8 @@ class VocabularyMerger {
       return entry_.iriOrLiteral();
     }
 
+    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
+
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
 
@@ -250,7 +251,7 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
+      void writeQueueWordsToIdMap(std::vector<QueueWord>& buffer,
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
@@ -261,12 +262,6 @@ class VocabularyMerger {
     lastTripleComponent_ = std::nullopt;
     idMaps_.clear();
   }
-
-  // Inner helper function for the parallel pipeline, which performs the actual
-  // write to the IdMaps. Format of argument is `<mapToWriteTo<internalId,
-  // globalId>>`.
-  void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
 // ____________________________________________________________________________
@@ -290,10 +285,9 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-template <typename T>
-void writeMappedIdsToExtVec(const T& input,
-                            const ad_utility::HashMap<Id, Id>& map,
-                            std::unique_ptr<TripleVec>* writePtr);
+void writeMappedIdsToExtVec(
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
@@ -312,7 +306,7 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-ItemVec vocabMapsToVector(ItemMapArray& map);
+ItemVec vocabMapsToVector(const ItemMapArray& map);
 
 // _____________________________________________________________________________________________________________
 /**

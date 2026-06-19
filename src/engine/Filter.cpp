@@ -53,7 +53,7 @@ std::string Filter::getDescriptor() const {
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
-      _expression.getPrefilterExpressionForMetadata();
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
   auto optNewSubTree =
       _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
           std::move(prefilterPairs));
@@ -138,7 +138,8 @@ CPP_template_def(int WIDTH, typename Table)(
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
       cancellationHandle_, deadline_);
 

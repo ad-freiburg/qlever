@@ -26,9 +26,9 @@ using O = std::optional<size_t>;
 // Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
 // with results create from the `inputs`. The children will have disjoint sets
 // of variable as required by the `CartesianProductJoin`. If
-// `useLimitInSuboperations` is true, then the `ValuesForTesting` support the
-// LIMIT operation directly (this makes a difference in the `computeResult`
-// method of `CartesianProductJoin`).
+// `useLimitInSuboperations` is true, then the `ValuesForTesting` handles
+// `LIMIT` directly (this makes a difference in the `computeResult` method of
+// `CartesianProductJoin`).
 CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
   auto qec =
@@ -90,8 +90,8 @@ void testCartesianProductImpl(VectorTable expected,
   }
 }
 // Test that a Cartesian product between the `inputs` yields the `expected`
-// result. Perform the test for children that directly support the LIMIT
-// operation as well for children that don't (see `makeJoin` above for details).
+// result. Perform the test for children that directly handle `LIMIT` as well
+// as for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
                           source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
@@ -757,7 +757,7 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
 TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = getQec();
-  // Without supported limit it should always work
+  // When the child does not handle the limit, it should always work
   {
     std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -781,7 +781,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
   }
-  // With supported limit it should stop working the second time
+  // When the child handles the limit, it should stop working the second time
   {
     std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(

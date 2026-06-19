@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -68,6 +69,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -101,6 +103,8 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ =
       a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
+  target.containsBindSubstitute_ =
+      a.containsBindSubstitute_ || b.containsBindSubstitute_;
 }
 
 // Helper function that assigns the node, filter and text limit ids from
@@ -111,6 +115,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedFilters = source._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
+  target.containsBindSubstitute_ = source.containsBindSubstitute_;
 }
 }  // namespace
 
@@ -218,12 +223,13 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   for (auto& plan : lastRow) {
     // For subqueries the limit has already been applied, for the root query the
-    // exporter will apply LIMIT and OFFSET if `supportsLimit()` is not natively
-    // supported by the `Operation`. Check the documentation of
-    // `ExportQueryExecutionTrees::compensateForLimitOffsetClause to see `how
-    // this is comphandled in the exporter.
-    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
-      plan._qet->applyLimit(pq._limitOffset);
+    // exporter will apply LIMIT and OFFSET if `handlesLimitOffset()` returns
+    // `NONE` for the `Operation`. Check the documentation of
+    // `ExportQueryExecutionTrees::compensateForLimitOffsetClause` to see how
+    // this is handled in the exporter.
+    if (plan._qet->handlesLimitOffset() != LimitOffsetHandling::NONE &&
+        !isSubquery) {
+      plan._qet->applyLimitOffset(pq._limitOffset);
     }
   }
 
@@ -471,7 +477,10 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
-      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+      // An explicit `INTERNAL SORT BY` requests the complete sorted result, so
+      // we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its subtree.
+      tree =
+          QueryExecutionTree::createSortedTree(parent._qet, sortColumns, true);
     } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
@@ -773,8 +782,8 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<SubtreePlan>>& children, TextLimitMap& textLimits)
-    -> PlansAndFilters {
+    const vector<vector<SubtreePlan>>& children,
+    TextLimitMap& textLimits) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -799,13 +808,14 @@ auto QueryPlanner::seedWithScansAndText(
       };
 
       // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
-      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
-      // which we have special handling).
+      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND or
+      // BIND substitute (for which we have special handling).
       using namespace ad_utility::use_type_identity;
       AD_CORRECTNESS_CHECK(
           (newIdPlan._idsOfIncludedFilters == 0 &&
            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
-              is(ti<Bind>) || is(ti<OptionalJoin>) || is(ti<Minus>),
+              is(ti<Bind>) || newIdPlan.containsBindSubstitute_ ||
+              is(ti<OptionalJoin>) || is(ti<Minus>),
           "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
 
       seeds.emplace_back(newIdPlan);
@@ -836,10 +846,13 @@ auto QueryPlanner::seedWithScansAndText(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
-          "necessary also rebuild the index.");
+          "necessary also rebuild the index");
     }
 
-    // Backward compatibility with spatial search predicates
+    // Backward compatibility with spatial search predicates.
+    // GCC's `-Wdangling-reference` cannot trace through `std::visit` to see
+    // that the returned reference points into the variant, not the visitor.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
@@ -850,6 +863,7 @@ auto QueryPlanner::seedWithScansAndText(
               return var.name();
             }},
         node.triple_.p_);
+    GCC_REENABLE_WARNINGS
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         ql::ends_with(input, '>')) {
@@ -1362,6 +1376,8 @@ std::string QueryPlanner::getPruningKey(
   os << ' ' << plan.idsOfIncludedTextLimits_;
   os << " s: ";
   os << ' ' << plan.containsFilterSubstitute_;
+  os << " b: ";
+  os << ' ' << plan.containsBindSubstitute_;
 
   return std::move(os).str();
 }
@@ -1497,6 +1513,7 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
       newPlan.idsOfIncludedTextLimits_ |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
       newPlan.containsFilterSubstitute_ = plan.containsFilterSubstitute_;
+      newPlan.containsBindSubstitute_ = plan.containsBindSubstitute_;
       newPlan.type = plan.type;
       i++;
       if (replace) {
@@ -1861,6 +1878,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
   bool containsFilterSubstitute = false;
+  bool containsBindSubstitute = false;
   ql::ranges::for_each(
       lastDpRowFromComponents |
           ql::views::transform([this](auto& vec) -> decltype(auto) {
@@ -1871,6 +1889,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
         filterIds |= plan._idsOfIncludedFilters;
         textLimitIds |= plan.idsOfIncludedTextLimits_;
         containsFilterSubstitute |= plan.containsFilterSubstitute_;
+        containsBindSubstitute |= plan.containsBindSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
   result.at(0).push_back(
@@ -1880,6 +1899,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
   plan.containsFilterSubstitute_ = containsFilterSubstitute;
+  plan.containsBindSubstitute_ = containsBindSubstitute;
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
@@ -2403,10 +2423,9 @@ std::pair<bool, bool> QueryPlanner::checkProxyOperation(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-auto QueryPlanner::createProxyOperation(const SubtreePlan& a,
-                                        const SubtreePlan& b,
-                                        [[maybe_unused]] const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createProxyOperation(
+    const SubtreePlan& a, const SubtreePlan& b,
+    [[maybe_unused]] const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto [aIs, bIs] = checkProxyOperation(a, b);
 
   // Exactly one of the inputs must be a Proxy.
@@ -2477,10 +2496,9 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs) const
-    -> std::vector<SubtreePlan> {
+auto QueryPlanner::applyJoinDistributivelyToUnion(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
@@ -2589,10 +2607,9 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 }
 
 // __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
-                                                const SubtreePlan& b,
-                                                const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithTransitivePath(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
@@ -2681,10 +2698,9 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithHasPredicateScan(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2720,10 +2736,9 @@ auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
-                                            const SubtreePlan& b,
-                                            const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithPathSearch(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
   auto bRootOp =
@@ -3063,6 +3078,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
+        plan.containsBindSubstitute_ = a.containsBindSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
                             ql::make_move_iterator(vec.begin()),
@@ -3184,6 +3200,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3238,11 +3256,29 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
+    if (getRuntimeParameter<
+            &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+      // Consider pushing down the `BIND` into the subtree.
+      auto pushedDownPlan =
+          a._qet->getRootOperation()->makeTreeWithBindColumn(v);
+      if (pushedDownPlan.has_value()) {
+        // We can replace this `BIND` with a plan that contains an additional
+        // scan column with equivalent values, for example from a materialized
+        // view.
+        auto plan = a;
+        plan._qet = pushedDownPlan.value();
+        plan.containsBindSubstitute_ = true;
+        candidatePlans_.back().push_back(std::move(plan));
+        continue;
+      }
+    }
+
     // Add the query plan for the BIND.
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
     plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
+    plan.containsBindSubstitute_ = a.containsBindSubstitute_;
     candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case where the BIND clause is the first clause (which is
@@ -3289,10 +3325,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& index = planner_._qec->getIndex();
-  const auto& vocab = index.getVocab();
-  auto config =
-      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
+  auto config = pathQuery.toPathSearchConfiguration(planner_._qec->getIndex());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
@@ -3401,6 +3434,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   }
 }
 
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  auto externalValues =
+      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+  auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
+}
+
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
     const parsedQuery::NamedCachedResult& arg) {
@@ -3465,7 +3507,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->applyLimit(arg.get()._limitOffset);
+    plan._qet->applyLimitOffset(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
