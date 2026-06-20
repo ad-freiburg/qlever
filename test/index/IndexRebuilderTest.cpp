@@ -594,8 +594,8 @@ TEST(IndexRebuilder, serverIntegration) {
   std::string indexName = "IndexRebuilder_serverIntegration";
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  server.initialize(indexName, false);
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
+                indexName};
   auto performRequest = [&threadPool, &server](auto& request) {
     using ResT = ad_utility::httpUtils::ResponseT;
     auto task =

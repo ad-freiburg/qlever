@@ -57,24 +57,18 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
+                  const std::string& indexBaseName, bool useText = false,
+                  bool usePatterns = true, bool loadAllPermutations = true,
+                  bool persistUpdates = false,
+                  std::vector<std::string> preloadMaterializedViews = {},
                   bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
- private:
-  //! Initialize the server.
-  void initialize(const std::string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false,
-                  std::vector<std::string> preloadMaterializedViews = {});
-
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const std::string& indexBaseName, bool useText,
-           bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false,
-           std::vector<std::string> preloadMaterializedViews = {});
+  void run();
 
   // Get server statistics.
   json composeStatsJson() const;

@@ -775,8 +775,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   // the `Server` class.
   {
     // Initialize but do not start a `Server` instance on our test index.
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false);
+    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
+                  testIndexBase_};
 
     ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
@@ -791,9 +791,16 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   // Test the preloading of materialized views on server start.
   {
     qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false, true, true, false,
-                      {"testViewForServerPreload"});
+    Server server{4321,
+                  1,
+                  ad_utility::MemorySize::megabytes(1),
+                  "accessToken",
+                  testIndexBase_,
+                  false,
+                  true,
+                  true,
+                  false,
+                  {"testViewForServerPreload"}};
     EXPECT_TRUE(server.qlever_->materializedViewsManager()->isViewLoaded(
         "testViewForServerPreload"));
   }

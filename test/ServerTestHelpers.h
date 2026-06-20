@@ -49,12 +49,16 @@ struct SimulateHttpRequest {
         [](auto request, auto indexName, const ServerSettings& serverSettings,
            auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
-          Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
-                        "accessToken"};
-          server.initialize(indexName, serverSettings.useText,
-                            serverSettings.usePatterns,
-                            serverSettings.loadAllPermutations,
-                            serverSettings.persistUpdates);
+          Server server{4321,
+                        1,
+                        ad_utility::MemorySize::megabytes(1),
+                        "accessToken",
+                        indexName,
+                        serverSettings.useText,
+                        serverSettings.usePatterns,
+                        serverSettings.loadAllPermutations,
+                        serverSettings.persistUpdates};
+
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
 

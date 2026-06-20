@@ -229,9 +229,10 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), noAccessCheck, !noPatterns);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
-               persistUpdates, preloadMaterializedViews);
+                  std::move(accessToken), indexBasename, text, !noPatterns,
+                  !onlyPsoAndPosPermutations, persistUpdates,
+                  preloadMaterializedViews, noAccessCheck, !noPatterns);
+    server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

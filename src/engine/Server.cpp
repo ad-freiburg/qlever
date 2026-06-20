@@ -52,6 +52,9 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
+               const std::string& indexBaseName, bool useText, bool usePatterns,
+               bool loadAllPermutations, bool persistUpdates,
+               std::vector<std::string> preloadMaterializedViews,
                bool noAccessCheck, bool usePatternTrick)
     : maxMem_{maxMem},
       numThreads_(numThreads),
@@ -59,16 +62,12 @@ Server::Server(unsigned short port, size_t numThreads,
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
       enablePatternTrick_(usePatternTrick),
-      queryThreadPool_{numThreads} {}
-
-// __________________________________________________________________________
-void Server::initialize(const std::string& indexBaseName, bool useText,
-                        bool usePatterns, bool loadAllPermutations,
-                        bool persistUpdates,
-                        std::vector<std::string> preloadMaterializedViews) {
+      queryThreadPool_{numThreads} {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   // Creating `EngineConfig` for the `Qlever` object.
+  // The config object is needed only for initiliazitaion of qlever Object,
+  // therefore exists only here.
   qlever::EngineConfig config;
   config.baseName_ = indexBaseName;
   config.loadTextIndex_ = useText;
@@ -104,10 +103,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const std::string& indexBaseName, bool useText,
-                 bool usePatterns, bool loadAllPermutations,
-                 bool persistUpdates,
-                 std::vector<std::string> preloadMaterializedViews) {
+void Server::run() {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -188,8 +184,8 @@ void Server::run(const std::string& indexBaseName, bool useText,
                                std::move(webSocketSessionSupplier)};
 
   // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-             persistUpdates, std::move(preloadMaterializedViews));
+  //  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
+  //           persistUpdates, std::move(preloadMaterializedViews));
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
