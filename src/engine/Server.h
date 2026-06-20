@@ -76,7 +76,6 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-
   // Get server statistics.
   json composeStatsJson() const;
   json composeCacheStatsJson() const;
@@ -385,7 +384,8 @@ class Server {
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 
  private:
-  // Getters for the `Qlever` instance, as well as its data members. (require `initialize()` to be called first).
+  // Getters for the `Qlever` instance, as well as its data members. (require
+  // `initialize()` to be called first).
   qlever::Qlever& qlever() { return qlever_.value(); }
   const qlever::Qlever& qlever() const { return qlever_.value(); }
 

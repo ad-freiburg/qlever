@@ -68,7 +68,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
                         std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
-  // creating engine config for the qlever object
+  // Creating `EngineConfig` for the `Qlever` object.
   qlever::EngineConfig config;
   config.baseName_ = indexBaseName;
   config.loadTextIndex_ = useText;
@@ -79,7 +79,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   // that can be processed simultaneously.
   config.memoryLimit_ = maxMem_;
 
-  // Initialize the Qlever object (in the constructor is the index created)
+  // Initialize the `Qlever` object (in the constructor is the index created).
   qlever_.emplace(config);
 
   // Preload materialized views as requested by the user. This is done in a

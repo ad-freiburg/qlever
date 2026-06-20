@@ -3,8 +3,10 @@
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
+#include <optional>
 
 #include "ServerTestHelpers.h"
 #include "engine/HttpError.h"
@@ -170,8 +172,7 @@ TEST(ServerTest, getQueryId) {
 // _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  AD_EXPECT_THROW_WITH_MESSAGE(server.composeStatsJson(),
-                               testing::HasSubstr("bad optional access"));
+  EXPECT_THROW(server.composeStatsJson(), std::bad_optional_access);
 }
 
 // _____________________________________________________________________________
