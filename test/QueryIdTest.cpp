@@ -203,10 +203,10 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
 
 // _____________________________________________________________________________
 
-TEST(QueryRegistry, statusDefaultsToUnknown) {
+TEST(QueryRegistry, statusDefaultsToFailed) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
-  EXPECT_EQ(owned.status(), QueryStatus::UNKNOWN);
+  EXPECT_EQ(owned.status(), QueryStatus::FAILED);
 }
 
 // _____________________________________________________________________________
@@ -214,13 +214,13 @@ TEST(QueryRegistry, statusDefaultsToUnknown) {
 TEST(QueryRegistry, setStatusIsObservable) {
   QueryRegistry registry{};
   auto owned = registry.uniqueId("my-query");
-  ASSERT_EQ(owned.status(), QueryStatus::UNKNOWN);
+  ASSERT_EQ(owned.status(), QueryStatus::FAILED);
 
   owned.setStatus(QueryStatus::OK);
   EXPECT_EQ(owned.status(), QueryStatus::OK);
 
-  owned.setStatus(QueryStatus::FAILED);
-  EXPECT_EQ(owned.status(), QueryStatus::FAILED);
+  owned.setStatus(QueryStatus::TIMEOUT);
+  EXPECT_EQ(owned.status(), QueryStatus::TIMEOUT);
 }
 
 // _____________________________________________________________________________
@@ -317,8 +317,8 @@ TEST(QueryRegistry, throwingStartCallbackCleansUpEntry) {
 // _____________________________________________________________________________
 
 // Destroying the `OwningQueryId` fires the end callback once. We serialize the
-// event so this also drives `toString(Unknown)` (the `case`, not the trailing
-// fallback) and pins the default `Unknown` status string.
+// event so this also drives `toString(FAILED)` (the `case`, not the trailing
+// fallback) and pins the default `FAILED` status string.
 TEST(QueryRegistry, onEndFiresAtDestructionWithDefaultStatus) {
   QueryRegistry registry{};
   std::vector<nlohmann::ordered_json> ends;
@@ -335,7 +335,7 @@ TEST(QueryRegistry, onEndFiresAtDestructionWithDefaultStatus) {
   EXPECT_EQ(ends.at(0).at("event").get<std::string_view>(), "end");
   EXPECT_EQ(ends.at(0).at("qid").get<std::string_view>(),
             "01123581321345589144");
-  EXPECT_EQ(ends.at(0).at("status").get<std::string_view>(), "unknown");
+  EXPECT_EQ(ends.at(0).at("status").get<std::string_view>(), "failed");
 }
 
 // _____________________________________________________________________________

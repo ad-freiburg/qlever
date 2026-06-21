@@ -715,9 +715,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                              ? TIMEOUT
                              : CANCELLED);
       throw;
-    } catch (...) {
-      queryStatus->store(FAILED);
-      throw;
     }
   };
   auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {

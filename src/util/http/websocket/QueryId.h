@@ -57,7 +57,7 @@ class QueryId {
 };
 
 // Terminal status of a query, observed at `OwningQueryId` destruction.
-enum class QueryStatus { UNKNOWN, OK, FAILED, CANCELLED, TIMEOUT };
+enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT };
 
 inline std::string_view toString(QueryStatus s) noexcept {
   using enum QueryStatus;
@@ -70,8 +70,6 @@ inline std::string_view toString(QueryStatus s) noexcept {
       return "cancelled";
     case TIMEOUT:
       return "timeout";
-    case UNKNOWN:
-      return "unknown";
   }
   return "unknown";
 }
@@ -110,7 +108,7 @@ class OwningQueryId {
   // `~OwningQueryId`; safe to call from any thread.
   void setStatus(QueryStatus s) noexcept { status_->store(s); }
 
-  // Returns `QueryStatus::UNKNOWN` until `setStatus` is invoked.
+  // Returns `QueryStatus::FAILED` until `setStatus` is invoked.
   [[nodiscard]] QueryStatus status() const noexcept { return status_->load(); }
 
   // Shared handle to the atomic; lets a caller publish the status
@@ -220,9 +218,10 @@ class QueryRegistry {
       std::string id, std::string_view query, std::string_view clientIp = {}) {
     auto queryId = QueryId::idFromString(std::move(id));
 
-    // Created before the lambda so the lambda can capture it.
+    // The `end` event reports a failure unless the query thread
+    // overwrites this with an explicit outcome (`OK`/`CANCELLED`/`TIMEOUT`).
     auto status =
-        std::make_shared<std::atomic<QueryStatus>>(QueryStatus::UNKNOWN);
+        std::make_shared<std::atomic<QueryStatus>>(QueryStatus::FAILED);
     // `weak_ptr` so the lambda doesn't keep the registry alive. The
     // end-event push runs unconditionally (one `end` per `start`); the
     // erase is best-effort.
