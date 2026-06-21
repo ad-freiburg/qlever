@@ -15,6 +15,7 @@
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "libqlever/Qlever.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -228,10 +229,15 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
-    Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), indexBasename, text, !noPatterns,
-                  !onlyPsoAndPosPermutations, persistUpdates,
-                  preloadMaterializedViews, noAccessCheck, !noPatterns);
+    qlever::EngineConfig config;
+    config.baseName_ = indexBasename;
+    config.loadTextIndex_ = text;
+    config.noPatterns_ = noPatterns;
+    config.onlyPsoAndPos_ = onlyPsoAndPosPermutations;
+    config.persistUpdates_ = persistUpdates;
+    config.memoryLimit_ = memoryMaxSize;
+    Server server(port, numSimultaneousQueries, std::move(accessToken), config,
+                  preloadMaterializedViews, noAccessCheck);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

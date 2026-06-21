@@ -56,12 +56,9 @@ class Server {
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  ad_utility::MemorySize maxMem, std::string accessToken,
-                  const std::string& indexBaseName, bool useText = false,
-                  bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false,
+                  std::string accessToken, const qlever::EngineConfig& config,
                   std::vector<std::string> preloadMaterializedViews = {},
-                  bool noAccessCheck = false, bool usePatternTrick = true);
+                  bool noAccessCheck = false);
 
   virtual ~Server() = default;
 
@@ -109,14 +106,12 @@ class Server {
   };
 
  private:
-  std::optional<qlever::Qlever> qlever_;
-  ad_utility::MemorySize maxMem_;
+  qlever::Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   bool noAccessCheck_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-  bool enablePatternTrick_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.
@@ -378,10 +373,9 @@ class Server {
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 
  private:
-  // Getters for the `Qlever` instance, as well as its data members. (require
-  // `initialize()` to be called first).
-  qlever::Qlever& qlever() { return qlever_.value(); }
-  const qlever::Qlever& qlever() const { return qlever_.value(); }
+  // Getters for the `Qlever` instance, as well as its data members.
+  qlever::Qlever& qlever() { return qlever_; }
+  const qlever::Qlever& qlever() const { return qlever_; }
 
   Index& index() { return qlever().index(); }
   const Index& index() const { return qlever().index(); }

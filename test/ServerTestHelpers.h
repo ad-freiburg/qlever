@@ -48,16 +48,14 @@ struct SimulateHttpRequest {
         io,
         [](auto request, auto indexName, const ServerSettings& serverSettings,
            auto& io) -> boost::asio::awaitable<ResT> {
+          qlever::EngineConfig config;
+          config.baseName_ = indexName;
+          config.loadTextIndex_ = serverSettings.useText;
+          config.noPatterns_ = !serverSettings.usePatterns;
+          config.onlyPsoAndPos_ = !serverSettings.loadAllPermutations;
+          config.persistUpdates_ = serverSettings.persistUpdates;
           // Initialize but do not start a `Server` instance on our test index.
-          Server server{4321,
-                        1,
-                        ad_utility::MemorySize::megabytes(1),
-                        "accessToken",
-                        indexName,
-                        serverSettings.useText,
-                        serverSettings.usePatterns,
-                        serverSettings.loadAllPermutations,
-                        serverSettings.persistUpdates};
+          Server server{4321, 1, "accessToken", config};
 
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;

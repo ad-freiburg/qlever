@@ -30,6 +30,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
+#include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
@@ -50,43 +51,24 @@ using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken,
-               const std::string& indexBaseName, bool useText, bool usePatterns,
-               bool loadAllPermutations, bool persistUpdates,
+Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
+               const qlever::EngineConfig& config,
                std::vector<std::string> preloadMaterializedViews,
-               bool noAccessCheck, bool usePatternTrick)
-    : maxMem_{maxMem},
+               bool noAccessCheck)
+    : qlever_(config),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      enablePatternTrick_(usePatternTrick),
       queryThreadPool_{numThreads} {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
-
-  // Creating `EngineConfig` for the `Qlever` object.
-  // The config object is needed only for initiliazitaion of qlever Object,
-  // therefore exists only here.
-  qlever::EngineConfig config;
-  config.baseName_ = indexBaseName;
-  config.loadTextIndex_ = useText;
-  config.noPatterns_ = !usePatterns;
-  config.onlyPsoAndPos_ = !loadAllPermutations;
-  config.persistUpdates_ = persistUpdates;
-  // The number of server threads currently also is the number of queries
-  // that can be processed simultaneously.
-  config.memoryLimit_ = maxMem_;
-
-  // Initialize the `Qlever` object (in the constructor is the index created).
-  qlever_.emplace(config);
 
   // Preload materialized views as requested by the user. This is done in a
   // try-catch block to prevent an exception during loading of a view from
   // blocking the server start.
   for (const auto& viewName : preloadMaterializedViews) {
     try {
-      qlever_->loadMaterializedView(viewName);
+      qlever_.loadMaterializedView(viewName);
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;

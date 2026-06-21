@@ -147,8 +147,11 @@ TEST(ServerTest, chooseBestFittingMediaType) {
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
   auto qec = ad_utility::testing::getQec("<a> <b> <c>");
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                qec->getIndex().getOnDiskBase()};
+
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+
+  Server server{9999, 1, "accessToken", config};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
   const auto req = makeGetRequest("/");
@@ -174,8 +177,11 @@ TEST(ServerTest, getQueryId) {
 // _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
   auto qec = ad_utility::testing::getQec("<a> <b> <c>");
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                qec->getIndex().getOnDiskBase()};
+
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+
+  Server server{9999, 1, "accessToken", config};
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
                     {"name-index", ""},
@@ -198,8 +204,11 @@ TEST(ServerTest, composeStatsJson) {
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
   auto qec = ad_utility::testing::getQec("<a> <b> <c>");
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                qec->getIndex().getOnDiskBase()};
+
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+
+  Server server{9999, 1, "accessToken", config};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);
@@ -392,26 +401,23 @@ TEST(ServerTest, configurePinnedResultWithName) {
 // _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   auto qec = ad_utility::testing::getQec("<a> <b> <c>");
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                qec->getIndex().getOnDiskBase()};
+
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+
+  Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.checkAccessToken("invalidAccessToken"),
       testing::HasSubstr("Access token was provided but it was invalid"));
 
-  Server server2{1234,
-                 1,
-                 ad_utility::MemorySize::megabytes(1),
-                 "",
-                 qec->getIndex().getOnDiskBase(),
-                 false,
-                 true,
-                 true,
-                 false,
-                 {},
-                 true,
-                 true};
+  config.persistUpdates_ = false;
+  config.noPatterns_ = false;
+
+  Server server2{
+      1234, 1, "", config, {}, true,
+  };
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
 
