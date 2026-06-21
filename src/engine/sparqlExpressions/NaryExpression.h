@@ -96,6 +96,7 @@ SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
