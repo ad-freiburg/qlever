@@ -69,10 +69,25 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // For each entry in `missIds`, the batch row indices that hold that `Id`.
   std::vector<absl::InlinedVector<size_t, 3>> missRows;
   for (const auto& [rowInBatch, id] : sortedIndices) {
-    auto cached = idCache.tryGet(id);
-    if (cached) {
-      result[rowInBatch] = cached.value();
-    } else if (!missIds.empty() && missIds.back() == id) {
+    // `LocalVocabIndex` Ids must never enter `idCache`. The `LocalVocabEntry`
+    // such an Id points to is owned by the *current* result block's
+    // `LocalVocab`, which is freed as soon as the export advances to the next
+    // block. `idCache`, however, is created once in
+    // `ConstructTripleGenerator::evaluateTables` and outlives individual
+    // blocks. A cached `LocalVocabIndex` key therefore becomes dangling, and a
+    // later lookup that hash-collides with it compares against freed memory
+    // (heap-use-after-free in `LocalVocabEntry::compareThreeWay`). We bypass
+    // the cache for these Ids: treat them as a miss here and resolve them
+    // uncached below. They are still resolved correctly via
+    // `idsToStringAndType`, which uses the current block's `localVocab`.
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      auto cached = idCache.tryGet(id);
+      if (cached) {
+        result[rowInBatch] = cached.value();
+        continue;
+      }
+    }
+    if (!missIds.empty() && missIds.back() == id) {
       missRows.back().push_back(static_cast<size_t>(rowInBatch));
     } else {
       missIds.push_back(id);
@@ -87,10 +102,18 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       ql::exportIds::idsToStringAndType(index, missIds, localVocab);
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
-    const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
-      return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+    // See the note in Phase 1: `LocalVocabIndex` Ids are resolved but never
+    // inserted into the block-spanning `idCache`.
+    std::optional<EvaluatedTerm> evaluated;
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      evaluated = ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
-    });
+    } else {
+      evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
+        return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
+            std::move(resolved));
+      });
+    }
     for (size_t row : rows) {
       result[row] = evaluated;
     }
