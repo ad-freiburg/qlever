@@ -58,7 +58,7 @@ using VectorTable = std::vector<std::vector<IntOrId>>;
 
 // Helper: construct a single-column VectorTable containing the exclusive
 // integer range [a, b). If a >= b, returns an empty table.
-static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
+inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
   VectorTable vt;
   if (a >= b) return vt;
   for (size_t i = a; i < b; ++i) {
