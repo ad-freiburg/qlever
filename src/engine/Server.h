@@ -57,7 +57,6 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   std::string accessToken, const qlever::EngineConfig& config,
-                  std::vector<std::string> preloadMaterializedViews = {},
                   bool noAccessCheck = false);
 
   virtual ~Server() = default;

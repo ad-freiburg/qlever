@@ -190,6 +190,10 @@ struct EngineConfig : CommonConfig {
   // to for each operation query the corresponding runtime parameter.
   QueryExecutionContext::DisableCaching disableCaching_ =
       QueryExecutionContext::DisableCaching::FromRuntimeParameter;
+
+  // Names of materialized views to load from disk during initialization.
+  // If a view doesn't exist, a warning is logged and startup continues.
+  std::vector<std::string> preloadMaterializedViews_ = {};
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See

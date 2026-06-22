@@ -53,6 +53,16 @@ Qlever::Qlever(const EngineConfig& config)
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_->numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+
+  // Preload materialized views as requested by the user.
+  for (const auto& viewName : config.preloadMaterializedViews_) {
+    try {
+      loadMaterializedView(viewName);
+    } catch (const std::exception& ex) {
+      AD_LOG_ERROR << "Preloading materialized view '" << viewName
+                   << "' failed: " << ex.what() << "." << std::endl;
+    }
+  }
 }
 
 // _____________________________________________________________________________

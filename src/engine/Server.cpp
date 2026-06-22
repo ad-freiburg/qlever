@@ -52,9 +52,7 @@ using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
-               const qlever::EngineConfig& config,
-               std::vector<std::string> preloadMaterializedViews,
-               bool noAccessCheck)
+               const qlever::EngineConfig& config, bool noAccessCheck)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -62,18 +60,6 @@ Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
       noAccessCheck_(noAccessCheck),
       queryThreadPool_{numThreads} {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
-
-  // Preload materialized views as requested by the user. This is done in a
-  // try-catch block to prevent an exception during loading of a view from
-  // blocking the server start.
-  for (const auto& viewName : preloadMaterializedViews) {
-    try {
-      qlever_.loadMaterializedView(viewName);
-    } catch (const std::exception& ex) {
-      AD_LOG_ERROR << "Preloading materialized view '" << viewName
-                   << "' failed: " << ex.what() << "." << std::endl;
-    }
-  }
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"

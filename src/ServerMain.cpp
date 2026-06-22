@@ -236,8 +236,9 @@ int main(int argc, char** argv) {
     config.onlyPsoAndPos_ = onlyPsoAndPosPermutations;
     config.persistUpdates_ = persistUpdates;
     config.memoryLimit_ = memoryMaxSize;
+    config.preloadMaterializedViews_ = preloadMaterializedViews;
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  preloadMaterializedViews, noAccessCheck);
+                  noAccessCheck);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
