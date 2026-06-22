@@ -416,7 +416,7 @@ TEST(ServerTest, checkAccessToken) {
   config.noPatterns_ = false;
 
   Server server2{
-      1234, 1, "", config, {}, true,
+      1234, 1, "", config, true,
   };
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
