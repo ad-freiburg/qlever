@@ -18,11 +18,10 @@
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "index/Index.h"
+#include "index/IndexBuilderPipeline.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
-#include "parser/ParallelParseBuffer.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
@@ -58,7 +57,7 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    std::shared_ptr<RdfParserBase> parser) {
+    std::shared_ptr<qlever::parser::AsyncMultifileParser> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
 
@@ -79,7 +78,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+std::unique_ptr<qlever::parser::AsyncMultifileParser> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
@@ -87,8 +86,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
-  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
-                                              parserBufferSize());
+  return std::make_unique<qlever::parser::AsyncMultifileParser>(
+      files, &encodedIriManager(), parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -478,7 +477,8 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
-    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
+    std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
+    size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
@@ -487,14 +487,6 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
-  bool parserExhausted = false;
-
-  // we add extra triples
-  std::vector<size_t> numTriplesPerPartialVocab;
-
-  // Each of these futures corresponds to the processing and writing of one
-  // batch of triples and partial vocabulary.
-  std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
   // Show progress and statistics for the number of triples parsed, in
   // particular, the average processing time for a batch of 10M triples (see
@@ -502,100 +494,23 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   //
   // NOTE: Some input generation processes (for example, `osm2rdf` for the OSM
   // data) have a long startup time before they produce the first triple, but
-  // then produce triples fast. If we would count that startup time towards the
-  // first batch, the reported average batch processing time would be
-  // distorted. We therefore stop the timer here, and then start it when the
-  // first triple is parsed (see `numTriplesParsedTimer.cont()` below).
+  // then produce triples fast. If we would count that startup time towards
+  // the first batch, the reported average batch processing time would be
+  // distorted. We therefore stop the timer here; the pipeline starts it again
+  // when the first triple is parsed.
   size_t numTriplesParsed = 0;
   ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
-  ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
-  numTriplesParsedTimer.stop();
+  progressBar.getTimer().stop();
 
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
-  while (!parserExhausted) {
-    size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
+  qlever::indexBuilder::IndexBuilderPipeline pipeline{
+      this,       std::move(parser),  linesPerPartial, onDiskBase_,
+      &idTriples, &numHasWordTriples, &progressBar,    &numTriplesParsed};
+  std::vector<size_t> numTriplesPerPartialVocab = pipeline.run();
 
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
-
-    {
-      auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
-          parserBatchSize_,
-          // when called, returns an optional to the next triple. If
-          // `linesPerPartial` triples were parsed, return std::nullopt. when
-          // the parser is unable to deliver triples, set parserExhausted to
-          // true and return std::nullopt. this is exactly the behavior we need,
-          // as a first step in the parallel Pipeline.
-          ParserBatcher(parser, linesPerPartial,
-                        [&]() { parserExhausted = true; }),
-          // get the Ids for the original triple and the possibly added language
-          // Tag triples using the provided HashMaps via itemArray. See
-          // documentation of the function for more details
-          getIdMapLambdas(itemArray, linesPerPartial,
-                          &(vocab_.getCaseComparator()), this, itemAlloc,
-                          addHasWordTriples_ ? &numHasWordTriples : nullptr));
-
-      while (auto opt = p.getNextValue()) {
-        numTriplesParsedTimer.cont();
-        const auto& triples = opt.value();
-        actualCurrentPartialSize += triples.size();
-        localWriter.insert(localWriter.end(), triples.begin(), triples.end());
-        numTriplesParsed++;
-        if (progressBar.update()) {
-          AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-        }
-      }
-      AD_LOG_TIMING << "WaitTimes for Pipeline in msecs\n";
-      for (const auto& t : p.getWaitingTime()) {
-        AD_LOG_TIMING
-            << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
-            << " msecs" << std::endl;
-      }
-
-      parser->printAndResetQueueStatistics();
-    }
-
-    // wait until sorting the last partial vocabulary has finished
-    // to control the number of threads and the amount of memory used at the
-    // same time. typically sorting is finished before we reach again here so
-    // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
-    if (writePartialVocabularyFuture[0].valid()) {
-      writePartialVocabularyFuture[0].get();
-    }
-    AD_LOG_TIMING
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs().count() << "ms." << std::endl;
-    auto moveMap = [](std::optional<ItemMapManager>&& el) {
-      return std::move(el.value()).moveMap();
-    };
-    std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
-        ad_utility::transformArray(std::move(itemArray), moveMap);
-    auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    for (auto it = writePartialVocabularyFuture.begin() + 1;
-         it < writePartialVocabularyFuture.end(); ++it) {
-      *(it - 1) = std::move(*it);
-    }
-    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
-        writeNextPartialVocabulary(
-            numTriplesParsed, numTriplesPerPartialVocab.size(),
-            actualCurrentPartialSize, std::move(oldItemPtr),
-            std::move(localWriter), &idTriples);
-    // Save the information how many triples this partial vocabulary actually
-    // deals with we will use this later for mapping from partial to global
-    // ids
-    numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
-  }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  for (auto& future : writePartialVocabularyFuture) {
-    if (future.valid()) {
-      future.get();
-    }
-  }
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
@@ -610,7 +525,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
-    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
+    std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
+    size_t linesPerPartial) {
   auto parsedTriples = buildPartialVocabularies(parser, linesPerPartial);
   const auto numPartialVocabs = parsedTriples.numTriplesPerPartialVocab_.size();
 
@@ -1524,80 +1440,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                    "exception"
                 << std::endl;
   }
-}
-
-// ___________________________________________________________________________
-std::future<void> IndexImpl::writeNextPartialVocabulary(
-    size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::unique_ptr<ItemMapArray> items,
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
-  using namespace ad_utility::vocabulary_merger;
-  AD_LOG_DEBUG << "Input triples read in this section: " << numLines
-               << std::endl;
-  AD_LOG_DEBUG
-      << "Triples processed, also counting internal triples added by QLever: "
-      << actualCurrentPartialSize << std::endl;
-  std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
-
-  auto lambda = [localIds = std::move(localIds), globalWritePtr,
-                 items = std::move(items), vocab = &vocab_, partialFilename,
-                 numFiles]() mutable {
-    auto vec = [&]() {
-      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(*items);
-    }();
-    {
-      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(
-          &vec,
-          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
-            return c.isLessInTotalWithExternalFlag(
-                a.first, a.second.isExternal(), b.first, b.second.isExternal());
-          },
-          true);
-    }
-    auto mapping = [&]() {
-      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
-      return createInternalMapping(vec);
-    }();
-    AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
-    // since now adjacent duplicates also have the same Ids, it suffices to
-    // compare those
-    {
-      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
-      vec.erase(std::unique(vec.begin(), vec.end(),
-                            [](const auto& a, const auto& b) {
-                              return a.second.id() == b.second.id();
-                            }),
-                vec.end());
-    }
-    // The writing to the external vector has to be done in order, to
-    // make the update from local to global ids work.
-
-    auto writeTriplesFuture = std::async(
-        std::launch::async,
-        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
-          globalWritePtr->withWriteLockAndOrdered(
-              [&](auto& writerPtr) {
-                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-              },
-              numFiles);
-        });
-    {
-      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
-      writePartialVocabularyToFile(vec, partialFilename);
-    }
-    AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
-    vec.clear();
-    {
-      ad_utility::TimeBlockAndLog l{"writing to global file"};
-      writeTriplesFuture.get();
-    }
-  };
-
-  return std::async(std::launch::async, std::move(lambda));
 }
 
 // ____________________________________________________________________________

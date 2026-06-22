@@ -73,6 +73,13 @@ constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
 // parser is used.
 constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
 
+// The maximum number of partial-vocabulary finalize jobs (sorting the partial
+// vocab, computing the local-to-partial id mapping, writing the partial vocab
+// file, and writing the id-mapped triples to the global on-disk `TripleVec`)
+// that may run concurrently in the index builder pipeline. Bounds peak RAM
+// usage of the first pass.
+constexpr inline size_t NUM_INFLIGHT_PARTIAL_VOCAB_WRITES = 3;
+
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
 

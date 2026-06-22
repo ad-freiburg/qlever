@@ -13,17 +13,18 @@
 #include <string>
 
 #include "./util/GTestHelpers.h"
+#include "./util/LegacyParserShims.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "parser/ParallelBuffer.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Timer.h"
 
 using std::string;
 using namespace std::literals;
@@ -32,6 +33,18 @@ using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
 using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
 using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
 using NQuadCtreParser = RdfStringParser<NQuadParser<TokenizerCtre>>;
+
+// Legacy compatibility aliases: the old synchronous parser classes have been
+// replaced by `qlever::parser::AsyncStreamingParser`,
+// `AsyncParallelFileParser`, and `AsyncMultifileParser`. The shims in
+// `test/util/LegacyParserShims.h` provide a synchronous, blocking API on top
+// of them so this test file can stay (mostly) unchanged.
+using ParallelFileBuffer = qlever::test::LegacyParallelFileBuffer;
+template <typename T>
+using RdfStreamParser = qlever::test::LegacyStreamParser<T>;
+template <typename T>
+using RdfParallelParser = qlever::test::LegacyParallelParser<T>;
+using RdfMultifileParser = qlever::test::LegacyMultifileParser;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -1312,31 +1325,10 @@ TEST(RdfParserTest, nQuadParser) {
   runTestsForParser(NQuadCtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
-TEST(RdfParserTest, noGetlineInStringParser) {
-  auto runTestsForParser = [](auto parser) {
-    parser.setInputStream("<x> <p> <o> .");
-    TurtleTriple t;
-    EXPECT_ANY_THROW(parser.getLine(t));
-  };
-  runTestsForParser(NQuadRe2Parser{encodedIriManager()});
-  runTestsForParser(NQuadCtreParser{encodedIriManager()});
-  runTestsForParser(re2Parser());
-  runTestsForParser(ctreParser());
-}
-
-// _____________________________________________________________________________
-TEST(RdfParserTest, noGetlineInMultifileParsers) {
-  auto runTestsForParser = [](auto t, [[maybe_unused]] bool interface) {
-    using Parser = typename decltype(t)::type;
-    Parser parser{encodedIriManager()};
-    TurtleTriple triple;
-    // Also test the dummy parse position member.
-    EXPECT_EQ(parser.getParsePosition(), 0u);
-    EXPECT_ANY_THROW(parser.getLine(triple));
-  };
-  forAllMultifileParsers(runTestsForParser);
-}
+// The legacy `noGetlineInStringParser` and `noGetlineInMultifileParsers`
+// tests have been removed: the sync `getLine` / `getLineImpl` API no longer
+// exists on the new async parser hierarchy. The corresponding async
+// guarantees are exercised through `multifileParser` below.
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, multifileParser) {
