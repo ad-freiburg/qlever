@@ -234,7 +234,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{allocator()};
   idTable.setNumColumns(getResultWidth());
 
-  const auto dynSub = subRes->idTable();
+  const IdTableView<0> dynSub = subRes->idTableView();
   if (!dynSub.empty()) {
     auto timer = ad_utility::Timer(ad_utility::Timer::Started);
 

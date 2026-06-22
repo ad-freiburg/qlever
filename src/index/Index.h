@@ -122,16 +122,10 @@ class Index {
   // Get a reference to the GraphNameManager of this Index.
   GraphNameManager& graphNameManager();
   const GraphNameManager& graphNameManager() const;
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t getCardinality(
-      Id id, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;

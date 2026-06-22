@@ -382,7 +382,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const auto r = resultTable.idTable();
+        const IdTable& r = resultTable.idTable();
         ASSERT_LT(0, r.numRows());
         ASSERT_LT(ind, r.numColumns());
         ValueId tableEntry = r.at(0, ind);
@@ -454,7 +454,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const auto r = resultTable.idTable();
+        const IdTable& r = resultTable.idTable();
         ASSERT_LT(0, r.numRows());
         ASSERT_LT(ind, r.numColumns());
 

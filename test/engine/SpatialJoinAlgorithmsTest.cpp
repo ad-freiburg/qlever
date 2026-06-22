@@ -1776,7 +1776,7 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
   auto col = scan->getVariableColumn(Variable{"?geo"});
 
   auto check = [&](size_t row) {
-    return SpatialJoinAlgorithms::getPolyline(result->idTable(), row, col,
+    return SpatialJoinAlgorithms::getPolyline(result->idTableView(), row, col,
                                               qec->getIndex());
   };
 

@@ -251,8 +251,8 @@ Result Union::computeResult(bool requestLaziness) {
 
   AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
 
-  IdTable idTable =
-      computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
+  IdTable idTable = computeUnion(subRes1->idTableView(), subRes2->idTableView(),
+                                 _columnOrigins);
 
   AD_LOG_DEBUG << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -406,7 +406,7 @@ Result::LazyResult Union::computeResultKeepOrder(
   auto toRange = [](const auto& result) {
     return result->isFullyMaterialized()
                ? Range{std::array{
-                     Wrapper{result->idTable(), result->localVocab()}}}
+                     Wrapper{result->idTableView(), result->localVocab()}}}
                : Range{std::move(result->idTables())};
   };
   Range leftRange = toRange(result1);

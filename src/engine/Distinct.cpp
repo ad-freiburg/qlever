@@ -178,7 +178,7 @@ IdTable Distinct::distinct(
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-IdTable Distinct::outOfPlaceDistinct(IdTableView<0> dynInput) const {
+IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
@@ -221,4 +221,12 @@ IdTable Distinct::outOfPlaceDistinct(IdTableView<0> dynInput) const {
 std::unique_ptr<Operation> Distinct::cloneImpl() const {
   return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
                                     keepIndices_);
+}
+
+// ____________________________________________________________________________
+IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
+  size_t width = input.numColumns();
+  return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+    return self->outOfPlaceDistinct<width>(input);
+  });
 }

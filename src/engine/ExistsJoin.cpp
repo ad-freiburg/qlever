@@ -430,7 +430,8 @@ struct LazyExistsJoinImpl
   static ad_utility::InputRangeTypeErased<IdTableView<0>> toRangeView(
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
-      return ad_utility::InputRangeTypeErased{std::array{result->idTable()}};
+      return ad_utility::InputRangeTypeErased{
+          std::array{result->idTableView()}};
     }
     return ad_utility::InputRangeTypeErased{
         ad_utility::CachingTransformInputRange{

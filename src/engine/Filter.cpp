@@ -70,8 +70,7 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result =
-        filterIdTable(subRes->sortedBy(), IdTable{subRes->idTable().clone()});
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};

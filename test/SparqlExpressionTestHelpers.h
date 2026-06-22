@@ -107,6 +107,8 @@ struct TestContext {
     table.push_back({IntId(-1), DoubleId(2.8), DoubleId(3.4), aelpha, x,
                      notInVocabD, Id::makeUndefined()});
 
+    // Refresh the view: `table` was modified after `context` was initialized,
+    // so the spans stored in `_inputTable` are stale.
     context._inputTable = table.asStaticView<0>();
     context._beginIndex = 0;
     context._endIndex = table.size();

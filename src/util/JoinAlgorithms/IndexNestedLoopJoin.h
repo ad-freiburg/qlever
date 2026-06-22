@@ -311,7 +311,7 @@ class IndexNestedLoopJoin {
           };
           if (leftResult_->isFullyMaterialized()) {
             return Result::LazyResult{
-                std::array{matchHelper(IdTable{leftResult_->idTable().clone()},
+                std::array{matchHelper(leftResult_->idTable().clone(),
                                        leftResult_->getCopyOfLocalVocab())}};
           }
           return Result::LazyResult{ad_utility::CachingTransformInputRange{
@@ -379,7 +379,7 @@ class IndexNestedLoopJoin {
          keepJoinColumns](auto JOIN_COLUMNS_PAR) -> Result::LazyResult {
           static constexpr auto JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          const auto leftTable = leftResult_->idTable();
+          const IdTable& leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
               joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
@@ -425,8 +425,8 @@ class IndexNestedLoopJoin {
             auto rightColumns = joinColumnData.jcsRight();
             return Result::LazyResult{detail::OptionalJoinRange{
                 std::move(leftResult_), std::move(rightResult_), leftVocab,
-                leftTable, std::move(rightTables), std::move(matchTracker),
-                resultWidth, std::move(joinColumnData),
+                leftTable.asStaticView<0>(), std::move(rightTables),
+                std::move(matchTracker), resultWidth, std::move(joinColumnData),
                 [leftTableView = std::move(leftTableView),
                  rightColumns = std::move(rightColumns)](
                     detail::Adder& adder, const IdTable& rightTable) {

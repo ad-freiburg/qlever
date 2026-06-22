@@ -34,7 +34,7 @@ struct ContextWrapper {
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {
     return {row,
-            _resultTable.idTable(),
+            _resultTable.idTableView(),
             _resultTable.localVocab(),
             _hashMap,
             _index,

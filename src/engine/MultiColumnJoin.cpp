@@ -78,7 +78,7 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
                << leftResult->idTable().size() << " and "
                << rightResult->idTable().size() << endl;
 
-  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+  computeMultiColumnJoin(leftResult->idTableView(), rightResult->idTableView(),
                          _joinColumns, &idTable);
 
   checkCancellation();

@@ -107,7 +107,7 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
     return InputRangeTypeErased(lazySingleValueRange([&result]() {
-      return TableConstRefWithVocab{result.idTable(), result.localVocab()};
+      return TableConstRefWithVocab{result.idTableView(), result.localVocab()};
     }));
   }
 
@@ -846,7 +846,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimitOffset()) {
+  if (qet.handlesLimitOffset() != LimitOffsetHandling::NONE) {
     limitOffsetClause._offset = 0;
   }
 }

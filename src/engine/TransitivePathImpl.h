@@ -99,7 +99,7 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
     auto nodes = setupNodes(startSide, std::move(startSideResult));
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
@@ -140,8 +140,8 @@ class TransitivePathImpl : public TransitivePathBase {
                                           bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto nodes = setupNodes(sub->idTable(), startSide, edges);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
+    auto nodes = setupNodes(sub->idTableView(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
@@ -370,7 +370,7 @@ class TransitivePathImpl : public TransitivePathBase {
           [toView = std::move(toView),
            columnsToRange = std::move(columnsToRange),
            startSideResult = std::move(startSideResult)]() {
-            const auto idTable = startSideResult->idTable();
+            const IdTable& idTable = startSideResult->idTable();
             return TableColumnWithVocab{toView(idTable),
                                         columnsToRange(idTable),
                                         startSideResult->getCopyOfLocalVocab()};

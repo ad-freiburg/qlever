@@ -604,7 +604,7 @@ Result Join::computeResultForIndexScanAndIdTable(
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        const auto idTable = resultWithIdTable->idTable();
+        const IdTable& idTable = resultWithIdTable->idTable();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         auto permutationIdTable =
@@ -701,7 +701,7 @@ Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
-  join(leftRes->idTable(), rightRes->idTable(), &idTable);
+  join(leftRes->idTableView(), rightRes->idTableView(), &idTable);
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(),
