@@ -6,12 +6,16 @@
 
 #include "libqlever/Qlever.h"
 
+#include <memory>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -248,4 +252,13 @@ void Qlever::loadMaterializedView(std::string name) const {
   materializedViewsManager_->loadView(name);
 }
 
+// ___________________________________________________________________________
+std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) {
+  return std::make_shared<QueryExecutionContext>(
+      sharedIndex(), &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_, materializedViewsManager_, updateCallback,
+      pinSubtrees, pinResult);
+}
 }  // namespace qlever

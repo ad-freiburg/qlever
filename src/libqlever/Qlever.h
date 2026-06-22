@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -291,6 +292,12 @@ class Qlever {
   void readNamedResultCacheFromDisk(Serializer& serializer) {
     namedResultCache_.readFromSerializer(serializer, allocator_, index());
   }
+
+  // Create a Query Execution Context needed for execution of single SPARQL
+  // query.
+  std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
+      std::function<void(std::string)> updateCallback = [](std::string) {},
+      bool pinSubtrees = false, bool pinResult = false);
 
   // Low-level access to the QLever API, use with care.
   std::shared_ptr<const Index> sharedIndex() const { return index_; }

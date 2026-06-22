@@ -272,14 +272,11 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = std::make_shared<QueryExecutionContext>(
-      sharedIndex(), &cache(), allocator(), sortPerformanceEstimator(),
-      &namedResultCache(), materializedViewsManager(),
+  auto qec = qlever().createQueryExecutionContext(
       [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
         (*sharedMessageSender)(std::move(json));
       },
       pinSubtrees, pinResult);
-
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
   return std::make_tuple(std::move(qec), std::move(cancellationHandle),
@@ -1431,9 +1428,7 @@ void Server::writeMaterializedView(
     TimeLimit timeLimit) {
   auto parsedQuery = SparqlParser::parseQuery(
       &index().encodedIriManager(), query.query_, query.datasetClauses_);
-  auto qec = std::make_shared<QueryExecutionContext>(
-      sharedIndex(), &cache(), allocator(), sortPerformanceEstimator(),
-      &namedResultCache(), materializedViewsManager());
+  auto qec = qlever().createQueryExecutionContext();
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
