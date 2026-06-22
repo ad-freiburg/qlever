@@ -54,7 +54,7 @@ TEST(TransparentFunctors, MemberProj) {
   {
     using Pairs = std::vector<Pair>;
     Pairs points{{3, "four"}, {1, "two"}, {5, "six"}};
-    ql::ranges::sort(points, {}, second);
+    ql::ranges::sort(points, {}, first);
     EXPECT_THAT(points, testing::ElementsAreArray(
                             Pairs{{1, "two"}, {3, "four"}, {5, "six"}}));
   }
