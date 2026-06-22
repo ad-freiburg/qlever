@@ -10,8 +10,7 @@
 
 namespace ad_utility {
 
-// ── SyncIoManager methods ──────────────────────────────────────────────────
-
+//______________________________________________________________________________
 SyncIoManager::BatchHandle SyncIoManager::addBatch(
     int fd, ql::span<const size_t> sizes, ql::span<const uint64_t> fileOffsets,
     ql::span<char*> targetPointers) {
@@ -107,10 +106,10 @@ void markAsConsumed(struct io_uring* ring, struct io_uring_cqe* cqe) {
 __u64 getUserDataForCompletionEvent(struct io_uring_cqe* cqe) {
   return io_uring_cqe_get_data64(cqe);
 }
+
 }  // namespace
 
-// ── IoUringManager methods ─────────────────────────────────────────────────
-
+//______________________________________________________________________________
 IoUringManager::IoUringManager(unsigned ringSize) : ringSize_(ringSize) {
   int ret = setupSubmissionAndCompletionQueues(ringSize_, &ring_, 0);
   if (ret < 0) {
@@ -118,8 +117,10 @@ IoUringManager::IoUringManager(unsigned ringSize) : ringSize_(ringSize) {
   }
 }
 
+//______________________________________________________________________________
 IoUringManager::~IoUringManager() { io_uring_queue_exit(&ring_); }
 
+//______________________________________________________________________________
 IoUringManager::BatchHandle IoUringManager::addBatch(
     int fd, ql::span<const size_t> sizes, ql::span<const uint64_t> fileOffsets,
     ql::span<char*> buffers) {
@@ -153,6 +154,7 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
   return handle;
 }
 
+//______________________________________________________________________________
 void IoUringManager::wait(BatchHandle handle) {
   while (remaining_.count(handle) && remaining_[handle] > 0) {
     drainOneCqe();
@@ -160,6 +162,7 @@ void IoUringManager::wait(BatchHandle handle) {
   remaining_.erase(handle);
 }
 
+//______________________________________________________________________________
 void IoUringManager::drainOneCqe() {
   struct io_uring_cqe* cqe = nullptr;
   int ret = waitForCompletionEvent(&ring_, &cqe);

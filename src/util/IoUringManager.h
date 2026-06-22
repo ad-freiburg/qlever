@@ -16,7 +16,6 @@
 
 namespace ad_utility {
 
-// ── SyncIoManager ──────────────────────────────────────────────────────────
 // Synchronous (pread) fallback implementation. Single-threaded use only.
 class SyncIoManager {
  public:
@@ -40,7 +39,6 @@ class SyncIoManager {
   uint64_t nextHandle_ = 0;
 };
 
-// ── IoUringManager ─────────────────────────────────────────────────────────
 // Persistent io_uring manager that accepts multiple named batches, submits
 // all SQEs in addBatch (blocking if the ring is full), and lets the caller
 // block on a specific batch via wait().
