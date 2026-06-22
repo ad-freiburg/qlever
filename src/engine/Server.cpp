@@ -442,6 +442,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "clear the cache for named results");
     namedResultCache_.clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "delta-triples-stats")) {
+    logCommand(cmd, "get delta-triples statistics");
+    auto stats = this->index().deltaTriplesManager().modify<nlohmann::json>(
+        [](auto& deltaTriples) {
+          // Call through a const reference so the public `const` overload of
+          // `DeltaTriples::localVocab()` is selected (the non-const overload
+          // is private).
+          const auto& dt = deltaTriples;
+          const auto counts = dt.getCounts();
+          return nlohmann::json{{"triples-inserted", counts.triplesInserted_},
+                                {"triples-deleted", counts.triplesDeleted_},
+                                {"local-vocab-size", dt.localVocab().size()}};
+        },
+        /*writeToDiskAfterRequest=*/false,
+        /*updateMetadataAfterRequest=*/false);
+    response = createJsonResponse(stats, request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
