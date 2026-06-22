@@ -151,10 +151,6 @@ void Server::run() {
                                std::move(httpSessionHandler),
                                std::move(webSocketSessionSupplier)};
 
-  // Initialize the index
-  //  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-  //           persistUpdates, std::move(preloadMaterializedViews));
-
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
 
