@@ -35,6 +35,37 @@ TEST(TransparentFunctors, SecondOfPair) {
   ASSERT_TRUE(pair.second.empty());
 }
 
+TEST(TransparentFunctors, MemberProj) {
+  using Pair = std::pair<int, std::string>;
+  ad_utility::MemberFieldProj<&Pair::first> first;
+  ad_utility::MemberFieldProj<&Pair::second> second;
+
+  {
+    Pair p{42, "hello"};
+
+    EXPECT_EQ(first(p), 42);
+    EXPECT_EQ(second(p), "hello");
+    EXPECT_EQ(p.second, "hello");
+
+    auto movedLabel = second(std::move(p));
+    EXPECT_EQ(movedLabel, "hello");
+    EXPECT_TRUE(p.second.empty());
+  }
+  {
+    using Pairs = std::vector<Pair>;
+    Pairs points{{3, "four"}, {1, "two"}, {5, "six"}};
+    ql::ranges::sort(points, {}, second);
+    EXPECT_THAT(points, testing::ElementsAreArray(
+                            Pairs{{1, "two"}, {3, "four"}, {5, "six"}}));
+  }
+  {
+    using Pair = std::pair<int, int>;
+    static constexpr Pair cp{10, 11};
+    static constexpr ad_utility::MemberFieldProj<&Pair::second> second;
+    static_assert(second(cp) == 11);
+  }
+}
+
 TEST(TransparentFunctors, OptionalHandling) {
   {
     std::optional<std::string> null = std::nullopt;

@@ -15,10 +15,10 @@ template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
 auto makeZipRange(std::vector<T>& first, std::vector<T>& last, Comp comp = {},
                   Proj proj = {}) {
   return std::make_pair(
-      ad_utility::zipUniqueIterator(first.begin(), first.end(), last.begin(),
-                                    last.end(), comp, proj),
-      ad_utility::zipUniqueIterator(first.end(), first.end(), last.end(),
-                                    last.end(), comp, proj));
+      ad_utility::ZipMergeUniqueIterator(first.begin(), first.end(),
+                                         last.begin(), last.end(), comp, proj),
+      ad_utility::ZipMergeUniqueIterator(first.end(), first.end(), last.end(),
+                                         last.end(), comp, proj));
 }
 
 template <typename T, typename Comp = std::less<>, typename Proj = ql::identity>
