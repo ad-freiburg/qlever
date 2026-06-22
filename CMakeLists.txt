@@ -204,7 +204,7 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
-add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=1 SPATIALJOIN_NO_ZLIB=1)
 
 ################################
 # Threading
