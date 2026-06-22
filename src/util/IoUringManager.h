@@ -60,7 +60,7 @@ class IoUringManager {
   IoUringManager& operator=(const IoUringManager&) = delete;
 
   // Enqueue a batch of reads. Submits all SQEs, blocking to drain CQEs
-  // when the ring is full. Returns a handle that can be passed to wait().
+  // when the ring is full. Returns a handle that can be passed to `wait()`.
   BatchHandle addBatch(int fd, ql::span<const size_t> sizes,
                        ql::span<const uint64_t> fileOffsets,
                        ql::span<char*> targetPointers);
