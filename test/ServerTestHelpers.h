@@ -46,6 +46,7 @@ struct SimulateHttpRequest {
            auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           qlever::EngineConfig config;
+          config.persistUpdates_ = false;
           config.baseName_ = indexName;
           Server server{4321, 1, "accessToken", config};
 
