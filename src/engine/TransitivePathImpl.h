@@ -263,7 +263,10 @@ class TransitivePathImpl : public TransitivePathBase {
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
         start.isVariable() && graphVariable_ == start.getVariable();
-    bool targetNodesAreBound = targetNodes.has_value() && targetId.has_value();
+    // To bind the `targetId` to values, we have to ensure that both sides are bound.
+    bool targetNodesAreBound = targetNodes.has_value() &&
+                                  lhs_.isBoundVariable() &&
+                                  rhs_.isBoundVariable();
 
     for (auto&& [currentColumn, tableColumn] :
          ::ranges::views::enumerate(startNodes)) {
