@@ -298,7 +298,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________________________
 
-void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
+void Join::join(IdTableView<0> a, IdTableView<0> b, IdTable* result) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
@@ -701,7 +701,7 @@ Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
-  join(leftRes->idTable(), rightRes->idTable(), &idTable);
+  join(leftRes->idTableView(), rightRes->idTableView(), &idTable);
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(),

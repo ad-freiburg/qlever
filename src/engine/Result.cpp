@@ -232,7 +232,7 @@ void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds, const IdTable&)>
+    std::function<void(std::chrono::microseconds, const MaterializedTable&)>
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime

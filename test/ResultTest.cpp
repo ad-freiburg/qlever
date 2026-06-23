@@ -428,7 +428,8 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
   {
     auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
     uint32_t callCounter = 0;
-    auto callback = [&](std::chrono::microseconds, const IdTable& innerTable) {
+    auto callback = [&](std::chrono::microseconds,
+                        const Result::MaterializedTable& innerTable) {
       // NOTE: duration can't be tested here, processors are too fast
       EXPECT_EQ(innerTable, comparisonTable);
       ++callCounter;
@@ -454,7 +455,8 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     uint32_t totalRows = 0;
     Result result{std::move(generator), {}};
     result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
+        limitOffset, [&](std::chrono::microseconds,
+                         const Result::MaterializedTable& innerTable) {
           // NOTE: duration can't be tested here, processors are too fast
           for (const auto& row : innerTable) {
             ASSERT_EQ(row.size(), 2);
@@ -492,11 +494,12 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
   {
     uint32_t callCounter = 0;
     Result result{idTable.clone(), {}, LocalVocab{}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          EXPECT_EQ(innerTable.numRows(), 0);
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset,
+                            [&](std::chrono::microseconds,
+                                const Result::MaterializedTable& innerTable) {
+                              EXPECT_EQ(innerTable.numRows(), 0);
+                              ++callCounter;
+                            });
     EXPECT_EQ(callCounter, 1);
   }
 
@@ -504,8 +507,8 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
     uint32_t callCounter = 0;
     Result result{std::move(generator), {}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds,
+                         const Result::MaterializedTable&) { ++callCounter; });
 
     consumeGenerator(result.idTables());
 
@@ -520,28 +523,30 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
   {
     uint32_t callCounter = 0;
     Result result{idTable.clone(), {}, LocalVocab{}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          EXPECT_EQ(innerTable.numRows(), 3);
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset,
+                            [&](std::chrono::microseconds,
+                                const Result::MaterializedTable& innerTable) {
+                              EXPECT_EQ(innerTable.numRows(), 3);
+                              ++callCounter;
+                            });
     EXPECT_EQ(callCounter, 1);
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
     Result result{std::move(generator), {}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          for (const auto& row : innerTable) {
-            ASSERT_EQ(row.size(), 2);
-            // Make sure we never get values that were supposed to be filtered
-            // out.
-            EXPECT_NE(row[0].getVocabIndex().get(), 0);
-            EXPECT_NE(row[1].getVocabIndex().get(), 7);
-          }
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset,
+                            [&](std::chrono::microseconds,
+                                const Result::MaterializedTable& innerTable) {
+                              for (const auto& row : innerTable) {
+                                ASSERT_EQ(row.size(), 2);
+                                // Make sure we never get values that were
+                                // supposed to be filtered out.
+                                EXPECT_NE(row[0].getVocabIndex().get(), 0);
+                                EXPECT_NE(row[1].getVocabIndex().get(), 7);
+                              }
+                              ++callCounter;
+                            });
 
     consumeGenerator(result.idTables());
 
@@ -557,16 +562,16 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   {
     Result result{idTable.clone(), {}, LocalVocab{}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds,
+                         const Result::MaterializedTable&) { ++callCounter; });
     EXPECT_EQ(callCounter, 0);
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds,
+                         const Result::MaterializedTable&) { ++callCounter; });
 
     consumeGenerator(result.idTables());
 

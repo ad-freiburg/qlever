@@ -191,6 +191,8 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
+  using MaterializedTable = IdTable;
+
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
   // generator and passed this new `IdTableVocabPair` along with microsecond
@@ -315,7 +317,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const MaterializedTable&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

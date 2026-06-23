@@ -184,8 +184,8 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                << leftResult->idTable().size() << " and "
                << rightResult->idTable().size() << endl;
 
-  optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
-               &idTable, implementation_);
+  optionalJoin(leftResult->idTableView(), rightResult->idTableView(),
+               _joinColumns, &idTable, implementation_);
 
   checkCancellation();
 
@@ -329,7 +329,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
-    const IdTable& left, const IdTable& right,
+    IdTableView<0> left, IdTableView<0> right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
     -> Implementation {
   auto implementation = Implementation::NoUndef;
@@ -373,7 +373,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
-    const IdTable& left, const IdTable& right,
+    IdTableView<0> left, IdTableView<0> right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases
