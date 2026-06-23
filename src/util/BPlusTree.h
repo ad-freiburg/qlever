@@ -12,7 +12,6 @@
 #include <absl/base/prefetch.h>
 #include <hwy/highway.h>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -25,11 +24,13 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "backports/span.h"
 
 namespace ad_utility {
 
-// Custom allocator that returns memory at 64-byte boundaries so that every
-// node starts at a cache-line boundary.  This guarantees that a single
+// Custom allocator that returns memory aligned to `Alignment` bytes so that
+// every node starts on an alignment boundary.  This guarantees that a single
 // cache-line load fetches the full node without straddling two lines, and that
 // Highway's `LoadU` receives vector-aligned pointers on all supported ISAs.
 // TODO: Replace with the generic `AlignedAllocator` from another PR that
@@ -68,23 +69,23 @@ bool operator!=(const AlignedAllocator<T1, A>&,
   return false;
 }
 
-template <typename T>
-using AlignedVector = std::vector<T, AlignedAllocator<T, 64>>;
+namespace bplus_tree_detail {
 
-namespace detail {
-
-// Counts the number of `keys[i]` that satisfy the predicate determined by
-// `IsUpperBound`: when `false`, counts `keys[i] < query` (lower-bound
-// semantics); when `true`, counts `keys[i] <= query` (upper-bound semantics).
+// Counts the number of `keys[i]` (for `i` in `[0, B)`) that satisfy the
+// predicate determined by `IsUpperBound`: when `false`, counts `keys[i] <
+// query` (lower-bound semantics); when `true`, counts `keys[i] <= query`
+// (upper-bound semantics).
 template <bool IsUpperBound, typename T, std::size_t B>
 inline std::size_t findCountScalar(const T* keys, T query) noexcept {
-  if constexpr (IsUpperBound) {
-    return static_cast<std::size_t>(ql::ranges::count_if(
-        keys, keys + B, [query](T k) noexcept { return k <= query; }));
-  } else {
-    return static_cast<std::size_t>(ql::ranges::count_if(
-        keys, keys + B, [query](T k) noexcept { return k < query; }));
-  }
+  // IIFE: pick the predicate once at compile time, then call `count_if` once.
+  auto pred = [query]() noexcept {
+    if constexpr (IsUpperBound) {
+      return [query](T k) noexcept { return k <= query; };
+    } else {
+      return [query](T k) noexcept { return k < query; };
+    }
+  }();
+  return static_cast<std::size_t>(ql::ranges::count_if(keys, keys + B, pred));
 }
 
 // SIMD variant of `findCountScalar` using Google Highway.
@@ -96,29 +97,37 @@ namespace hn = hwy::HWY_NAMESPACE;
 
 template <bool IsUpperBound, typename T, std::size_t B>
 inline std::size_t findCountHwy(const T* keys, T query) noexcept {
+  // `CappedTag<T, B>`: selects at most `B` SIMD lanes of type `T`, capped to
+  // the native vector width (so at most one cache-line worth of keys per call).
   using D = hn::CappedTag<T, B>;
   D d;
+  // `Set(d, query)`: broadcast the scalar `query` into all lanes of a vector.
   const auto q = hn::Set(d, query);
   std::size_t count = 0;
   for (std::size_t i = 0; i < B; i += hn::Lanes(d)) {
+    // `LoadU(d, ptr)`: load `Lanes(d)` elements without alignment requirement.
     const auto k = hn::LoadU(d, keys + i);
     if constexpr (IsUpperBound) {
+      // `Le(k, q)`: lane-wise mask, lane j = 1 iff keys[i+j] <= query.
+      // `CountTrue(d, mask)`: popcount of the mask.
       count += hn::CountTrue(d, hn::Le(k, q));
     } else {
+      // `Lt(k, q)`: lane-wise mask, lane j = 1 iff keys[i+j] < query.
       count += hn::CountTrue(d, hn::Lt(k, q));
     }
   }
   return count;
 }
 
-// Dispatch struct that selects the SIMD or scalar path at compile time.
-// The SIMD path requires `B` to be a power of two >= 4 so that the
-// cache-line node tiles cleanly over any reasonable vector width.  Small
-// branching factors (2, 3) and non-arithmetic types always use the scalar path.
+// Callable that dispatches to the SIMD or scalar path at compile time.
+// The SIMD path requires `B` to be a power of two >= 4 so that the node width
+// tiles cleanly over any reasonable SIMD vector width; small branching factors
+// and non-arithmetic types always fall back to the scalar path.
+// `operator()` is used so call sites read as a function-object invocation.
 template <bool IsUpperBound, typename T, std::size_t B, bool USE_SIMD>
-struct FindCount {
+struct FindUpperOrLowerBoundInCacheLine {
   static constexpr bool isPowerOfTwo = (B & (B - 1)) == 0;
-  static inline std::size_t apply(const T* keys, T query) noexcept {
+  inline std::size_t operator()(const T* keys, T query) const noexcept {
     if constexpr (USE_SIMD && B >= 4 && isPowerOfTwo &&
                   std::is_arithmetic_v<T>) {
       return findCountHwy<IsUpperBound, T, B>(keys, query);
@@ -128,7 +137,7 @@ struct FindCount {
   }
 };
 
-}  // namespace detail
+}  // namespace bplus_tree_detail
 
 // Read-only, cache-line-optimized flat B+ tree for fast `lowerBound` and
 // `upperBound` lookups on a static sorted sequence.  All data must be provided
@@ -138,64 +147,101 @@ struct FindCount {
 // All values live in the leaves; internal nodes hold only separator keys.  The
 // tree is full and balanced: a sorted input is padded with
 // `std::numeric_limits<T>::max()` so every level has the maximum fan-out
-// (`B+1`).  All nodes (internal nodes first, leaves at the tail) are stored in
-// a single flat 64-byte-aligned array in BFS order, so every traversal step is
-// a single cache-line read and child indices are computed by index arithmetic:
-// no pointers, no branches.
+// (`branchingFactor+1`).  All nodes (internal nodes first, leaves at the tail)
+// are stored in a single flat `cacheLineSize`-byte-aligned array in BFS order,
+// so every traversal step is a single cache-line read and child indices are
+// computed by arithmetic: no pointers, no branches.
 //
 // Template parameters:
-//   `T` – key type; must be arithmetic and have a `std::numeric_limits::max`
-//         sentinel used for padding.
-//   `B` – keys per node; defaults to one 64-byte cache line.
-template <typename T, std::size_t B = 64 / sizeof(T)>
+//   `T`             – key type; must be arithmetic; `numeric_limits<T>::max()`
+//                     is used as a padding sentinel.
+//   `CacheLineSize` – node size in bytes; defaults to 64 (one cache line on
+//                     x86-64 and AArch64).  `sizeof(T)` must divide it evenly;
+//                     the branching factor is derived as `CacheLineSize /
+//                     sizeof(T)`.
+template <typename T, std::size_t CacheLineSize = 64>
 class BPlusTree {
-  static_assert(B >= 2, "B must be at least 2.");
+  // `sizeof(T)` must evenly divide `CacheLineSize` so that exactly one node
+  // fits per cache line with no wasted bytes.
+  static_assert(CacheLineSize % sizeof(T) == 0,
+                "sizeof(T) must divide CacheLineSize evenly.");
   static_assert(std::is_arithmetic_v<T>, "T must be arithmetic.");
 
  public:
-  static constexpr std::size_t branching = B;
+  // Number of keys per node (= `CacheLineSize / sizeof(T)`).
+  static constexpr std::size_t branchingFactor = CacheLineSize / sizeof(T);
 
+  // Node size in bytes used for alignment and branching-factor derivation.
+  // Note: `std::hardware_destructive_interference_size` would be the ideal
+  // value here but it is not available in Clang 18 without target-specific
+  // compilation flags, so the default template argument uses 64 directly.
+  static constexpr std::size_t cacheLineSize = CacheLineSize;
+
+ private:
+  static constexpr std::size_t B = branchingFactor;
+
+  // `std::aligned_alloc` requires a power-of-2 alignment.  Round up
+  // `CacheLineSize` to the next power of two so that tests with small
+  // non-power-of-2 node sizes (e.g. B=3, CacheLineSize=12) are valid.
+  static constexpr std::size_t kAllocAlignment = []() constexpr noexcept {
+    std::size_t p = 1;
+    while (p < CacheLineSize) p <<= 1;
+    return p;
+  }();
+
+  // Vector whose allocator guarantees every element starts on a boundary
+  // compatible with `CacheLineSize` so every node occupies exactly one cache
+  // line (or a single aligned block in tests with smaller node sizes).
+  using AlignedVector = std::vector<T, AlignedAllocator<T, kAllocAlignment>>;
+
+ public:
   BPlusTree() = default;
 
-  explicit BPlusTree(const std::vector<T>& sorted) : n_(sorted.size()) {
+  // Constructs the tree from any forward range of values convertible to `T`.
+  // The range must already be sorted; this is not verified at runtime.
+  CPP_template(typename ForwardRange)(
+      requires ql::ranges::forward_range<ForwardRange> CPP_and
+          std::convertible_to<ql::ranges::range_value_t<ForwardRange>,
+                              T>) explicit BPlusTree(ForwardRange&& range)
+      : n_(static_cast<std::size_t>(ql::ranges::distance(range))) {
     if (n_ == 0) return;
+    // Ceiling integer divide: `numLeaves = ceil(n_ / B)`.
     const std::size_t numLeaves = (n_ + B - 1) / B;
+    // Round up the leaf count to a power of `(B+1)` so the tree is perfectly
+    // full: every internal node has exactly `B+1` children.  Starting from 1
+    // and multiplying by `(B+1)` at each level produces the BFS-complete
+    // layout with all leaves at the same depth.
+    numLeafNodes_ = 1;
     height_ = 0;
-    numLeavesPadded_ = 1;
-    while (numLeavesPadded_ < numLeaves) {
-      numLeavesPadded_ *= (B + 1);
+    while (numLeafNodes_ < numLeaves) {
+      numLeafNodes_ *= (B + 1);
       ++height_;
     }
-    totalInternal_ = (height_ == 0) ? 0 : (numLeavesPadded_ - 1) / B;
-    data_.assign((totalInternal_ + numLeavesPadded_) * B,
+    // For a full `(B+1)`-ary tree of `height_` levels, the total number of
+    // internal nodes is the geometric sum `1 + (B+1) + ... + (B+1)^(height_-1)
+    // = (numLeafNodes_ - 1) / B`.
+    numInternalNodes_ = (height_ == 0) ? 0 : (numLeafNodes_ - 1) / B;
+    // Allocate one slot per key per node (internal + leaf), padded with
+    // `numeric_limits<T>::max()` so unused leaf slots sort to the end.
+    data_.assign((numInternalNodes_ + numLeafNodes_) * B,
                  std::numeric_limits<T>::max());
-    std::copy(sorted.begin(), sorted.end(),
-              data_.begin() + static_cast<ptrdiff_t>(totalInternal_ * B));
-    if (totalInternal_ > 0) {
+    ql::ranges::copy(
+        range, data_.begin() + static_cast<ptrdiff_t>(numInternalNodes_ * B));
+    if (numInternalNodes_ > 0) {
       buildInternalRecurse(0, 0, 0);
     }
   }
 
-  // Constructs the tree from any forward range of values convertible to `T`.
-  // The range must already be sorted; no sorted check is performed here.
-  // Excluded for `std::vector<T>` to avoid ambiguity with the vector overload.
-  template <std::ranges::forward_range R>
-  requires(std::convertible_to<std::ranges::range_value_t<R>, T> &&
-           !std::same_as<std::remove_cvref_t<R>, std::vector<T>>)
-  explicit BPlusTree(R&& range)
-      : BPlusTree(std::vector<T>(std::ranges::begin(range),
-                                 std::ranges::end(range))) {}
-
   std::size_t size() const noexcept { return n_; }
   int height() const noexcept { return height_; }
-  std::size_t internalNodeCount() const noexcept { return totalInternal_; }
-  std::size_t leafNodeCount() const noexcept { return numLeavesPadded_; }
+  std::size_t numInternalNodes() const noexcept { return numInternalNodes_; }
+  std::size_t numLeafNodes() const noexcept { return numLeafNodes_; }
   std::size_t totalMemoryBytes() const noexcept {
     return data_.size() * sizeof(T);
   }
 
   // Returns `{first element >= query, count of elements strictly < query}`.
-  // For queries above all stored values returns `{numeric_limits::max,
+  // For a query above all stored values returns `{numeric_limits::max,
   // size()}`.
   template <bool USE_SIMD = false>
   std::pair<T, std::size_t> lowerBound(T query) const noexcept {
@@ -203,13 +249,13 @@ class BPlusTree {
   }
 
   // Returns `{first element > query, count of elements <= query}`.
-  // For queries >= all stored values returns `{numeric_limits::max, size()}`.
+  // For a query >= all stored values returns `{numeric_limits::max, size()}`.
   template <bool USE_SIMD = false>
   std::pair<T, std::size_t> upperBound(T query) const noexcept {
     return boundImpl<true, USE_SIMD>(query);
   }
 
-  // Processes `n` queries in round-robin batches of `BATCH`, issuing a
+  // Processes `queries` in round-robin batches of `BATCH`, issuing a
   // non-temporal prefetch for the next node immediately after determining the
   // child to descend into.  By the time the round trip brings the same query
   // back to the next level, the prefetch has had ~`BATCH` iterations to
@@ -219,58 +265,75 @@ class BPlusTree {
   // `size()`).
   template <bool IsUpperBound, std::size_t BATCH, bool USE_SIMD = false,
             typename Callback>
-  void multiBound(const T* queries, std::size_t n, Callback cb) const noexcept {
+  requires std::invocable<Callback, std::size_t>
+  void multiBound(ql::span<const T> queries, Callback cb) const noexcept {
     if (n_ == 0) {
-      for (std::size_t i = 0; i < n; ++i) cb(std::size_t{0});
+      for (std::size_t i = 0; i < queries.size(); ++i) cb(std::size_t{0});
       return;
     }
     std::size_t i = 0;
-    for (; i + BATCH <= n; i += BATCH) {
-      multiBoundBatch<IsUpperBound, BATCH, USE_SIMD>(queries + i, cb);
+    for (; i + BATCH <= queries.size(); i += BATCH) {
+      multiBoundBatch<IsUpperBound, BATCH, USE_SIMD>(queries.data() + i, cb);
     }
-    // Handle any remaining queries individually.
-    for (; i < n; ++i) {
+    // Handle any remaining queries that do not fill a full batch individually.
+    for (; i < queries.size(); ++i) {
       cb(boundImpl<IsUpperBound, USE_SIMD>(queries[i]).second);
     }
   }
 
-  // Convenience wrapper for batch `lowerBound` (forwards to `multiBound`).
+  // Convenience wrapper: batch `lowerBound` over `queries` (forwards to
+  // `multiBound<false>`).
   template <std::size_t BATCH, bool USE_SIMD = false, typename Callback>
-  void multiLowerBound(const T* queries, std::size_t n,
-                       Callback cb) const noexcept {
-    multiBound<false, BATCH, USE_SIMD>(queries, n, std::move(cb));
+  requires std::invocable<Callback, std::size_t>
+  void multiLowerBound(ql::span<const T> queries, Callback cb) const noexcept {
+    multiBound<false, BATCH, USE_SIMD>(queries, std::move(cb));
   }
 
-  // Convenience wrapper for batch `upperBound` (forwards to `multiBound`).
+  // Convenience wrapper: batch `upperBound` over `queries` (forwards to
+  // `multiBound<true>`).
   template <std::size_t BATCH, bool USE_SIMD = false, typename Callback>
-  void multiUpperBound(const T* queries, std::size_t n,
-                       Callback cb) const noexcept {
-    multiBound<true, BATCH, USE_SIMD>(queries, n, std::move(cb));
+  requires std::invocable<Callback, std::size_t>
+  void multiUpperBound(ql::span<const T> queries, Callback cb) const noexcept {
+    multiBound<true, BATCH, USE_SIMD>(queries, std::move(cb));
   }
 
  private:
-  // Shared implementation for `lowerBound` and `upperBound`.  Using the same
-  // `IsUpperBound` flag at every level is correct: an internal node key holds
-  // the maximum of its subtree, so `count(max_key < query)` directs lower-bound
-  // traversal and `count(max_key <= query)` directs upper-bound traversal to
-  // the leftmost subtree that could still hold the sought boundary.
+  // Shared implementation for `lowerBound` and `upperBound`.  Applying the
+  // same `IsUpperBound` flag at every tree level is correct: an internal node
+  // key holds the maximum value in its subtree, so `count(max_key < query)`
+  // directs lower-bound traversal and `count(max_key <= query)` directs
+  // upper-bound traversal to the leftmost subtree that could contain the
+  // sought boundary.
   template <bool IsUpperBound, bool USE_SIMD>
   std::pair<T, std::size_t> boundImpl(T query) const noexcept {
     if (n_ == 0) return {std::numeric_limits<T>::max(), 0};
+
+    using Finder =
+        bplus_tree_detail::FindUpperOrLowerBoundInCacheLine<IsUpperBound, T, B,
+                                                            USE_SIMD>;
+    Finder findOffset{};
+    // Count how many keys in the node at `nodeIdx` precede `query` (lower) or
+    // are <= `query` (upper).
+    auto findOffsetInNode = [&](std::size_t nodeIdx) noexcept {
+      return findOffset(&data_[nodeIdx * B], query);
+    };
+
     std::size_t nodeIdx = 0;
     for (int d = 0; d < height_; ++d) {
-      const T* keys = &data_[nodeIdx * B];
-      const std::size_t j =
-          detail::FindCount<IsUpperBound, T, B, USE_SIMD>::apply(keys, query);
+      const std::size_t j = findOffsetInNode(nodeIdx);
+      // In a `(B+1)`-ary BFS layout, child `j` of node `nodeIdx` is at index
+      // `(B+1)*nodeIdx + j + 1`.
       nodeIdx = (B + 1) * nodeIdx + j + 1;
     }
-    const T* leaf = &data_[nodeIdx * B];
-    const std::size_t off =
-        detail::FindCount<IsUpperBound, T, B, USE_SIMD>::apply(leaf, query);
-    const std::size_t leafIdx = nodeIdx - totalInternal_;
+    const std::size_t off = findOffsetInNode(nodeIdx);
+    // The 0-based leaf index among all padded leaves is
+    // `nodeIdx - numInternalNodes_`.  Multiplying by `B` gives the rank of
+    // the first key in this leaf; adding `off` gives the absolute rank of the
+    // result key.
+    const std::size_t leafIdx = nodeIdx - numInternalNodes_;
     const std::size_t rank = leafIdx * B + off;
     if (rank >= n_) return {std::numeric_limits<T>::max(), n_};
-    return {leaf[off], rank};
+    return {data_[nodeIdx * B + off], rank};
   }
 
   // Processes exactly `BATCH` queries through the tree in lock-step,
@@ -279,58 +342,72 @@ class BPlusTree {
   template <bool IsUpperBound, std::size_t BATCH, bool USE_SIMD,
             typename Callback>
   void multiBoundBatch(const T* queries, Callback& cb) const noexcept {
+    using Finder =
+        bplus_tree_detail::FindUpperOrLowerBoundInCacheLine<IsUpperBound, T, B,
+                                                            USE_SIMD>;
+    Finder findOffset{};
+    // Count how many keys in the node at `nodeIdx` precede `queries[qi]`
+    // (lower) or are <= `queries[qi]` (upper).
+    auto findOffsetInNode = [&](std::size_t nodeIdx, std::size_t qi) noexcept {
+      return findOffset(&data_[nodeIdx * B], queries[qi]);
+    };
+
     std::array<std::size_t, BATCH> nodeIdx{};
     if (height_ == 0) {
       for (std::size_t i = 0; i < BATCH; ++i) {
-        const std::size_t off =
-            detail::FindCount<IsUpperBound, T, B, USE_SIMD>::apply(data_.data(),
-                                                                   queries[i]);
+        const std::size_t off = findOffsetInNode(0, i);
         cb((off < n_) ? off : n_);
       }
       return;
     }
     for (int d = 0; d < height_; ++d) {
       for (std::size_t i = 0; i < BATCH; ++i) {
-        const T* keys = &data_[nodeIdx[i] * B];
-        const std::size_t j =
-            detail::FindCount<IsUpperBound, T, B, USE_SIMD>::apply(keys,
-                                                                   queries[i]);
+        const std::size_t j = findOffsetInNode(nodeIdx[i], i);
         nodeIdx[i] = (B + 1) * nodeIdx[i] + j + 1;
         absl::PrefetchToLocalCacheNta(&data_[nodeIdx[i] * B]);
       }
     }
     for (std::size_t i = 0; i < BATCH; ++i) {
-      const T* leaf = &data_[nodeIdx[i] * B];
-      const std::size_t off =
-          detail::FindCount<IsUpperBound, T, B, USE_SIMD>::apply(leaf,
-                                                                 queries[i]);
-      const std::size_t leafIdx = nodeIdx[i] - totalInternal_;
+      const std::size_t off = findOffsetInNode(nodeIdx[i], i);
+      const std::size_t leafIdx = nodeIdx[i] - numInternalNodes_;
       const std::size_t rank = leafIdx * B + off;
       cb((rank < n_) ? rank : n_);
     }
   }
 
+  // Recursively fills the internal node at BFS index `nodeIdx` (tree depth
+  // `depth`, 0 = root) with separator keys derived from the leaf data.
+  // `leafBase` is the 0-based index of the first leaf in this subtree within
+  // the padded leaf array.  Each separator key at slot `j` is the maximum key
+  // of the `(j+1)`-th leaf block within the subtree, which is also the
+  // rightmost key of the last leaf in that block.
   void buildInternalRecurse(std::size_t nodeIdx, int depth,
                             std::size_t leafBase) {
     if (depth >= height_) return;
+    // Number of leaves covered by each child subtree at this depth:
+    // `(B+1)^(height_ - depth - 1)`.
     std::size_t L = 1;
     for (int i = 0; i < height_ - depth - 1; ++i) L *= (B + 1);
     T* keys = &data_[nodeIdx * B];
     for (std::size_t j = 0; j < B; ++j) {
+      // Last leaf in child `j`'s subtree is at index `leafBase + (j+1)*L - 1`.
+      // Its last (maximum) key sits at position
+      // `(numInternalNodes_ + lastLeaf + 1) * B - 1` in `data_`.
       const std::size_t lastLeafInSubtree = leafBase + (j + 1) * L - 1;
-      keys[j] = data_[(totalInternal_ + lastLeafInSubtree + 1) * B - 1];
+      keys[j] = data_[(numInternalNodes_ + lastLeafInSubtree + 1) * B - 1];
     }
+    // Recurse into each of the `B+1` children.
     for (std::size_t j = 0; j <= B; ++j) {
       buildInternalRecurse((B + 1) * nodeIdx + j + 1, depth + 1,
                            leafBase + j * L);
     }
   }
 
-  AlignedVector<T> data_;
+  AlignedVector data_;
   std::size_t n_ = 0;
   int height_ = 0;
-  std::size_t numLeavesPadded_ = 0;
-  std::size_t totalInternal_ = 0;
+  std::size_t numLeafNodes_ = 0;
+  std::size_t numInternalNodes_ = 0;
 };
 
 }  // namespace ad_utility

@@ -434,7 +434,7 @@ set(HWY_ENABLE_INSTALL  OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         highway
         GIT_REPOSITORY https://github.com/google/highway.git
-        GIT_TAG        1.2.0
+        GIT_TAG        457c891775a7397bdb0376bb1031e6e027af1c48 # v1.2.0
         SYSTEM
         EXCLUDE_FROM_ALL
 )

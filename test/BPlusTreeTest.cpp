@@ -40,11 +40,12 @@ std::pair<T, std::size_t> ref_upper_bound(const std::vector<T>& sorted,
   return {value, rank};
 }
 
-// Build a `BPlusTree<T,B>` and verify `lower_bound`, `upper_bound`, and their
-// batch variants (both scalar and SIMD) against the reference implementations.
-template <typename T, std::size_t B = 64 / sizeof(T)>
+// Build a `BPlusTree<T, CacheLineSize>` and verify `lower_bound`,
+// `upper_bound`, and their batch variants (both scalar and SIMD) against the
+// reference implementations.
+template <typename T, std::size_t CacheLineSize = 64>
 void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
-  BPlusTree<T, B> bt(sorted);
+  BPlusTree<T, CacheLineSize> bt(sorted);
   ASSERT_EQ(bt.size(), sorted.size());
 
   for (T q : queries) {
@@ -72,8 +73,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
     bt.template multiLowerBound<8, false>(
-        queries.data(), queries.size(),
-        [&r, &i](std::size_t rank) { r[i++] = rank; });
+        queries, [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
       EXPECT_EQ(r[k], ref_lower_bound(sorted, queries[k]).second)
           << "multi-scalar lb k=" << k << " q=" << queries[k];
@@ -85,8 +85,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
     bt.template multiLowerBound<16, true>(
-        queries.data(), queries.size(),
-        [&r, &i](std::size_t rank) { r[i++] = rank; });
+        queries, [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
       EXPECT_EQ(r[k], ref_lower_bound(sorted, queries[k]).second)
           << "multi-simd lb k=" << k << " q=" << queries[k];
@@ -98,8 +97,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
     bt.template multiUpperBound<8, false>(
-        queries.data(), queries.size(),
-        [&r, &i](std::size_t rank) { r[i++] = rank; });
+        queries, [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
       EXPECT_EQ(r[k], ref_upper_bound(sorted, queries[k]).second)
           << "multi-scalar ub k=" << k << " q=" << queries[k];
@@ -111,8 +109,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
     bt.template multiUpperBound<16, true>(
-        queries.data(), queries.size(),
-        [&r, &i](std::size_t rank) { r[i++] = rank; });
+        queries, [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
       EXPECT_EQ(r[k], ref_upper_bound(sorted, queries[k]).second)
           << "multi-simd ub k=" << k << " q=" << queries[k];
@@ -325,9 +322,10 @@ TEST(BPlusTree, SmallBranching) {
   std::iota(data.begin(), data.end(), 0);
   std::vector<int> queries(55);
   std::iota(queries.begin(), queries.end(), -2);
-  verify<int, 2>(data, queries);
-  verify<int, 3>(data, queries);
-  verify<int, 4>(data, queries);
+  // Pass `CacheLineSize = B * sizeof(int)` to get the desired branching factor.
+  verify<int, 2 * sizeof(int)>(data, queries);
+  verify<int, 3 * sizeof(int)>(data, queries);
+  verify<int, 4 * sizeof(int)>(data, queries);
 }
 
 // ── Tail handling in multi_lower_bound / multi_upper_bound ───────────────────
@@ -344,8 +342,7 @@ TEST(BPlusTree, MultiLookupTail) {
 
   std::vector<std::size_t> r_lb(q.size());
   std::size_t i = 0;
-  bt.multiLowerBound<8>(q.data(), q.size(),
-                        [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
+  bt.multiLowerBound<8>(q, [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_lb[k], ref_lower_bound(data, q[k]).second)
         << "multi lb tail k=" << k;
@@ -353,8 +350,7 @@ TEST(BPlusTree, MultiLookupTail) {
 
   std::vector<std::size_t> r_ub(q.size());
   i = 0;
-  bt.multiUpperBound<8>(q.data(), q.size(),
-                        [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
+  bt.multiUpperBound<8>(q, [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_ub[k], ref_upper_bound(data, q[k]).second)
         << "multi ub tail k=" << k;
@@ -376,7 +372,7 @@ TEST(BPlusTree, MultiBoundMatchesSingle) {
   std::vector<std::size_t> r_lb(q.size());
   std::size_t i = 0;
   bt.multiBound<false, 16, true>(
-      q.data(), q.size(), [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
+      q, [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_lb[k], bt.lowerBound<true>(q[k]).second)
         << "multi vs single lb k=" << k;
@@ -386,7 +382,7 @@ TEST(BPlusTree, MultiBoundMatchesSingle) {
   std::vector<std::size_t> r_ub(q.size());
   i = 0;
   bt.multiBound<true, 16, true>(
-      q.data(), q.size(), [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
+      q, [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_ub[k], bt.upperBound<true>(q[k]).second)
         << "multi vs single ub k=" << k;

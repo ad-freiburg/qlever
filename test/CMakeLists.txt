@@ -155,7 +155,7 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(ExceptionHandlingTest)
 endif ()
 
-addLinkAndDiscoverTest(BPlusTreeTest)
+addLinkAndDiscoverTestNoLibs(BPlusTreeTest)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
