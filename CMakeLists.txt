@@ -424,6 +424,21 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
+################################
+# Google Highway (cross-platform SIMD)
+################################
+set(HWY_ENABLE_TESTS    OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_CONTRIB  OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_INSTALL  OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        highway
+        GIT_REPOSITORY https://github.com/google/highway.git
+        GIT_TAG        1.2.0
+        SYSTEM
+        EXCLUDE_FROM_ALL
+)
+
 
 ################################
 # RE2
@@ -460,7 +475,7 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser highway)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -470,6 +485,7 @@ endif ()
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
+target_compile_options(hwy PRIVATE -Wno-all -Wno-extra -Wno-error)
 include_directories(SYSTEM ${fsst_SOURCE_DIR})
 include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)

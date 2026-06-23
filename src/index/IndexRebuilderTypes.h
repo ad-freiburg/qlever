@@ -11,6 +11,7 @@
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
+#include "util/BPlusTree.h"
 #include "util/BlankNodeManager.h"
 #include "util/HashMap.h"
 
@@ -29,6 +30,9 @@ struct IndexRebuildMapping {
   LocalVocabMapping localVocabMapping_;
   BlankNodeBlocks blankNodeBlocks_;
   uint64_t minBlankNodeIndex_;
+  // B+ tree built from `insertionPositions_` for fast SIMD-accelerated
+  // `upper_bound` lookups in `remapVocabId`.
+  ad_utility::BPlusTree<uint64_t> insertionPositionsTree_;
 };
 }  // namespace qlever::indexRebuilder
 

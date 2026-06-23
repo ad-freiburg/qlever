@@ -31,6 +31,7 @@
 #include "index/IndexRebuilderImpl.h"
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
+#include "util/BPlusTree.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -133,15 +134,13 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
-                                 const InsertionPositions& insertionPositions) {
+AD_ALWAYS_INLINE Id remapVocabId(
+    Id original, const ad_utility::BPlusTree<uint64_t>& insertionTree) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
+  size_t offset =
+      insertionTree.upper_bound<true>(original.getVocabIndex().get()).second;
   return Id::makeFromVocabIndex(
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
@@ -187,11 +186,10 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
-    const InsertionPositions& insertionPositions,
+    const ad_utility::BPlusTree<uint64_t>& insertionTree,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
-  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
@@ -200,7 +198,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState);
 
-  auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
+  auto remapId = [&insertionTree, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
                   mappedId = Id::makeUndefined()](Id& id) mutable {
     if (lastId.getBits() == id.getBits()) {
@@ -211,7 +209,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions);
+      id = remapVocabId(id, insertionTree);
     } else if (datatype == LocalVocabIndex) {
       id = localVocabMapping.at(id.getBits());
     } else if (datatype == BlankNodeIndex) {
@@ -288,14 +286,14 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const Permutation& permutationB, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
-    const InsertionPositions& insertionPositions,
+    const ad_utility::BPlusTree<uint64_t>& insertionTree,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   namespace net = boost::asio;
   auto ex = co_await net::this_coro::executor;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
-            &localVocabMapping, &insertionPositions, &blankNodeBlocks,
+            &localVocabMapping, &insertionTree, &blankNodeBlocks,
             minBlankNodeIndex, &cancellationHandle]() {
       auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
           *locatedTriplesSharedState);
@@ -303,10 +301,10 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           getNumberOfColumnsAndAdditionalColumns(blockMetadataRanges);
       return newIndex.createPermutationWithoutMetadata(
           numColumns,
-          readIndexAndRemap(
-              permutation, blockMetadataRanges, locatedTriplesSharedState,
-              localVocabMapping, insertionPositions, blankNodeBlocks,
-              minBlankNodeIndex, cancellationHandle, additionalColumns),
+          readIndexAndRemap(permutation, blockMetadataRanges,
+                            locatedTriplesSharedState, localVocabMapping,
+                            insertionTree, blankNodeBlocks, minBlankNodeIndex,
+                            cancellationHandle, additionalColumns),
           permutation, isInternal);
     };
   };
@@ -368,6 +366,13 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
+  auto rawPositions =
+      insertionPositions |
+      ql::views::transform([](const VocabIndex& v) { return v.get(); }) |
+      ::ranges::to<std::vector>();
+  ad_utility::BPlusTree<uint64_t> insertionTree(rawPositions);
+
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
@@ -402,14 +407,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   ad_utility::ExceptionCollector exceptionCollector;
 
   if (index.usePatterns()) {
-    net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
-                                                   &insertionPositions]() {
-      newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
-          [&insertionPositions](const Id& oldId) {
-            return remapVocabId(oldId, insertionPositions);
-          });
-      newIndex.writePatternsToFile();
-    }));
+    net::post(threadPool,
+              exceptionCollector.wrap([&newIndex, &index, &insertionTree]() {
+                newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
+                    [&insertionTree](const Id& oldId) {
+                      return remapVocabId(oldId, insertionTree);
+                    });
+                newIndex.writePatternsToFile();
+              }));
   }
 
   using enum Permutation::Enum;
@@ -436,7 +441,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
         threadPool,
         createPermutationWriterTask(
             newIndex, getPermutation(a), getPermutation(b), isInternal,
-            locatedTriplesSharedState, localVocabMapping, insertionPositions,
+            locatedTriplesSharedState, localVocabMapping, insertionTree,
             blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
         std::ref(exceptionCollector));
   }
@@ -448,7 +453,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
 #undef REBUILD_LOG_INFO
   return {std::move(insertionPositions), std::move(localVocabMapping),
-          std::move(blankNodeBlocks), minBlankNodeIndex};
+          std::move(blankNodeBlocks), minBlankNodeIndex,
+          std::move(insertionTree)};
 }
 
 }  // namespace qlever

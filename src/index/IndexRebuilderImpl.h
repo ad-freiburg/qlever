@@ -47,7 +47,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
-    const InsertionPositions& insertionPositions,
+    const ad_utility::BPlusTree<uint64_t>& insertionTree,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns);
@@ -68,7 +68,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const Permutation& permutationB, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
-    const InsertionPositions& insertionPositions,
+    const ad_utility::BPlusTree<uint64_t>& insertionTree,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle);
 
