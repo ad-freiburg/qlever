@@ -9,6 +9,7 @@
 #include "engine/SparqlProtocol.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
@@ -30,7 +31,6 @@ auto ParsedRequestIs =
       AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
                testing::Eq(operation)));
 };
-auto Iri = ad_utility::triple_component::Iri::fromIriref;
 
 const std::string URLENCODED_PLAIN = "application/x-www-form-urlencoded";
 const std::string URLENCODED = URLENCODED_PLAIN + ";charset=UTF-8";
@@ -158,8 +158,8 @@ TEST(SparqlProtocolTest, parseGET) {
                        {"using-graph-uri", {"baz"}},
                        {"using-named-graph-uri", {"cat"}}},
                       Query{"SELECT * WHERE {}",
-                            {DatasetClause{Iri("<foo>"), false},
-                             DatasetClause{Iri("<bar>"), true}}}));
+                            {DatasetClause{iri("<foo>"), false},
+                             DatasetClause{iri("<bar>"), true}}}));
   // Access token is read correctly
   testAccessTokenCombinations(parse, http::verb::get, "/?query=a",
                               Query{"a", {}});
@@ -175,7 +175,7 @@ TEST(SparqlProtocolTest, parseGET) {
   // Graph Store Operation
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                              GraphStoreOperation{Iri("<foo>")}));
+                              GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(parse(makeGetRequest("/?default")),
               ParsedRequestIs("/", std::nullopt, {{"default", {""}}},
                               GraphStoreOperation{DEFAULT{}}));
@@ -241,9 +241,9 @@ TEST(SparqlProtocolTest, parseUrlencodedPOST) {
           {{"default-graph-uri", {"https://w3.org/default"}},
            {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}},
           Query{"SELECT * WHERE {}",
-                {DatasetClause{Iri("<https://w3.org/default>"), false},
-                 DatasetClause{Iri("<https://w3.org/1>"), true},
-                 DatasetClause{Iri("<https://w3.org/2>"), true}}}));
+                {DatasetClause{iri("<https://w3.org/default>"), false},
+                 DatasetClause{iri("<https://w3.org/1>"), true},
+                 DatasetClause{iri("<https://w3.org/2>"), true}}}));
   EXPECT_THAT(
       parse(makePostRequest("/", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-"
@@ -255,8 +255,8 @@ TEST(SparqlProtocolTest, parseUrlencodedPOST) {
                        {"using-graph-uri", {"baz"}},
                        {"using-named-graph-uri", {"cat"}}},
                       Query{"SELECT * WHERE {}",
-                            {DatasetClause{Iri("<foo>"), false},
-                             DatasetClause{Iri("<bar>"), true}}}));
+                            {DatasetClause{iri("<foo>"), false},
+                             DatasetClause{iri("<bar>"), true}}}));
   testAccessTokenCombinationsUrlEncoded(parse,
                                         "query=SELECT%20%2A%20WHERE%20%7B%7D",
                                         Query{"SELECT * WHERE {}", {}});
@@ -282,8 +282,8 @@ TEST(SparqlProtocolTest, parseUrlencodedPOST) {
                           {"using-named-graph-uri", {"cat"}},
                       },
                       Update{"INSERT DATA {}",
-                             {DatasetClause{Iri("<baz>"), false},
-                              DatasetClause{Iri("<cat>"), true}}}));
+                             {DatasetClause{iri("<baz>"), false},
+                              DatasetClause{iri("<cat>"), true}}}));
   testAccessTokenCombinationsUrlEncoded(parse, "update=DELETE%20WHERE%20%7B%7D",
                                         Update{"DELETE WHERE {}", {}});
   // Error conditions
@@ -349,8 +349,8 @@ TEST(SparqlProtocolTest, parseQueryPOST) {
                        {"using-graph-uri", {"baz"}},
                        {"using-named-graph-uri", {"cat"}}},
                       Query{"SELECT * WHERE {}",
-                            {DatasetClause{Iri("<foo>"), false},
-                             DatasetClause{Iri("<bar>"), true}}}));
+                            {DatasetClause{iri("<foo>"), false},
+                             DatasetClause{iri("<bar>"), true}}}));
   // Access token is read correctly
   testAccessTokenCombinations(parse, http::verb::post, "/", Query{"a", {}},
                               {{http::field::content_type, QUERY}}, "a");
@@ -393,8 +393,8 @@ TEST(SparqlProtocolTest, parseUpdatePOST) {
                           {"using-named-graph-uri", {"cat"}},
                       },
                       Update{"INSERT DATA {}",
-                             {DatasetClause{Iri("<baz>"), false},
-                              DatasetClause{Iri("<cat>"), true}}}));
+                             {DatasetClause{iri("<baz>"), false},
+                              DatasetClause{iri("<cat>"), true}}}));
   // Access token is read correctly
   testAccessTokenCombinations(parse, http::verb::post, "/", Update{"a", {}},
                               {{http::field::content_type, UPDATE}}, "a");
@@ -442,13 +442,13 @@ TEST(SparqlProtocolTest, parsePOST) {
   EXPECT_THAT(
       parse(makePostRequest("/?graph=foo", TURTLE, "<foo> <bar> <baz> .")),
       ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                      GraphStoreOperation{Iri("<foo>")}));
+                      GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(
       parse(makePostRequest("/?graph=foo&access-token=secret", TURTLE,
                             "<foo> <bar> <baz> .")),
       ParsedRequestIs("/", {"secret"},
                       {{"graph", {"foo"}}, {"access-token", {"secret"}}},
-                      GraphStoreOperation{Iri("<foo>")}));
+                      GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(parse(makePostRequest("/?default&access-token=foo", TURTLE,
                                     "<f> <g> <h>")),
               ParsedRequestIs("/", "foo",
@@ -499,22 +499,22 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
     EXPECT_THAT(parse(makeRequest(http::verb::get, path,
                                   {{http::field::host, {"example.com"}}})),
                 ParsedRequestIs(path, std::nullopt, {},
-                                GraphStoreOperation{Iri(absl::StrCat(
+                                GraphStoreOperation{iri(absl::StrCat(
                                     "<http://example.com", path, ">"))}));
   }
   // Graph Store Protocol (Indirect Graph Identification)
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                              GraphStoreOperation{Iri("<foo>")}));
+                              GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(parse(makeRequest(http::verb::head, "/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                              GraphStoreOperation{Iri("<foo>")}));
+                              GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(parse(makeRequest(http::verb::delete_, "/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                              GraphStoreOperation{Iri("<foo>")}));
+                              GraphStoreOperation{iri("<foo>")}));
   EXPECT_THAT(parse(makeRequest("TSOP", "/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
-                              GraphStoreOperation{Iri("<foo>")}));
+                              GraphStoreOperation{iri("<foo>")}));
 
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -547,6 +547,6 @@ TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect) {
   EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolDirect(makeRequest(
                   http::verb::get, path, {{http::field::host, "example.com"}})),
               ParsedRequestIs(path, std::nullopt, {},
-                              GraphStoreOperation{Iri(absl::StrCat(
+                              GraphStoreOperation{iri(absl::StrCat(
                                   "<http://example.com", path, ">"))}));
 }
