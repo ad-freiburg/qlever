@@ -13,10 +13,9 @@
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/post.hpp>
-#include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -292,7 +291,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   namespace net = boost::asio;
-  auto ex = co_await net::this_coro::executor;
+  using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
             &localVocabMapping, &insertionPositions, &blankNodeBlocks,
@@ -310,15 +309,11 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  auto taskA =
-      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationA)),
-                    net::use_awaitable);
-  auto taskB =
-      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationB)),
-                    net::use_awaitable);
-
-  auto [_, metaA] = co_await std::move(taskA);
-  auto [__, metaB] = co_await std::move(taskB);
+  auto [resultA, resultB] =
+      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                asCoroutine(makeTaskForPermutation(permutationB)));
+  auto& [_, metaA] = resultA;
+  auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);
 
   auto makeFinalizerTasks =
@@ -329,15 +324,8 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           return newIndex.finalizePermutation(meta, permutation, isInternal);
         };
       };
-  auto taskC =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaA, permutationA)),
-                    net::use_awaitable);
-  auto taskD =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaB, permutationB)),
-                    net::use_awaitable);
-
-  co_await std::move(taskC);
-  co_await std::move(taskD);
+  co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
+            asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
 }  // namespace qlever::indexRebuilder
 
