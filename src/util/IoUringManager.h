@@ -30,7 +30,7 @@ class SyncIoManager {
   // Returns a handle for consistency with IoUringManager.
   BatchHandle addBatch(int fd, ql::span<const size_t> sizes,
                        ql::span<const uint64_t> fileOffsets,
-                       ql::span<char*> targetPointers);
+                       ql::span<char*> targetBuffers);
 
   // No-op: addBatch already completed all reads synchronously.
   void wait(BatchHandle) {}

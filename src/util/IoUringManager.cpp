@@ -13,17 +13,28 @@ namespace ad_utility {
 //______________________________________________________________________________
 SyncIoManager::BatchHandle SyncIoManager::addBatch(
     int fd, ql::span<const size_t> sizes, ql::span<const uint64_t> fileOffsets,
-    ql::span<char*> targetPointers) {
+    ql::span<char*> targetBuffers) {
   for (size_t i = 0; i < sizes.size(); ++i) {
-    size_t bytesRead = 0;
-    while (bytesRead < sizes[i]) {
-      ssize_t ret = pread(
-          fd, targetPointers[i] + bytesRead, sizes[i] - bytesRead,
-          static_cast<off_t>(fileOffsets[i]) + static_cast<off_t>(bytesRead));
-      if (ret < 0) {
+    size_t totalBytesRead = 0;
+
+    while (totalBytesRead < sizes[i]) {
+      void* buf = targetBuffers[i] + totalBytesRead;
+      size_t count = sizes[i] - totalBytesRead;
+      off_t offset = static_cast<off_t>(fileOffsets[i]) +
+                     static_cast<off_t>(totalBytesRead);
+      // reads up to `count` bytes from file descriptor `fd` at offset `offset`
+      // (from the start of the file) into the buffer starting at `buf`. The
+      // file offset is not changed. On success, `pread()` returns the number of
+      // bytes read (a return of zero indicates end of file). On error, -1 is
+      // returned and `errno` is set to indicate the error. See
+      // https://man7.org/linux/man-pages/man2/pread.2.html for more details.
+      ssize_t numBytesRead = pread(fd, buf, count, offset);
+
+      if (numBytesRead < 0) {
         throw std::runtime_error("pread failed in SyncIoManager::addBatch");
       }
-      bytesRead += static_cast<size_t>(ret);
+
+      totalBytesRead += static_cast<size_t>(numBytesRead);
     }
   }
   return nextHandle_++;
