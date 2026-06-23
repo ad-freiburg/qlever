@@ -43,7 +43,8 @@ Qlever::Qlever(const EngineConfig& config)
     index_->addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager_->setOnDiskBase(config.baseName_);
+  materializedViewsManager_->setOnDiskBase(config.baseName_,
+                                           &index_->getImpl());
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(

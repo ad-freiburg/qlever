@@ -8,6 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
 #include <functional>
@@ -483,14 +484,125 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       manager.writeViewToDisk("Something Out!of~the.ordinary",
                               qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView2",
-          qlv().parseAndPlanQuery(
-              "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
-      ::testing::HasSubstr(
-          "The query to write a materialized view returned a string not "
-          "contained in the index (local vocabulary entry)"));
+
+  // A query that produces local vocabulary entries (here via a string-valued
+  // `BIND`, which is not contained in the index) is now supported and can be
+  // written without error (the round-trip is tested in `LocalVocab*` below).
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView2",
+      qlv().parseAndPlanQuery(
+          "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")));
+}
+
+// _____________________________________________________________________________
+// Round-trip test for a materialized view that contains local vocabulary
+// entries (literals and IRIs that are not part of the index) in non-leading
+// columns.
+TEST_F(MaterializedViewsTest, LocalVocabRoundTrip) {
+  const std::string body =
+      "?s ?p ?o . "
+      "BIND(CONCAT(\"v-\", STR(?o)) AS ?lit) "
+      "BIND(IRI(CONCAT(\"http://ex/\", STR(?o))) AS ?iri)";
+  qlv().writeMaterializedView(
+      "lvView", absl::StrCat("SELECT ?s ?lit ?iri { ", body, " }"));
+
+  // The view is not loaded right after writing, so the following reference
+  // query is computed directly and is not rewritten to use the view.
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("lvView"));
+  auto expected = qlv().query(
+      absl::StrCat("SELECT ?s ?lit ?iri { ", body, " } ORDER BY ?s ?lit ?iri"),
+      ad_utility::MediaType::tsv);
+
+  qlv().loadMaterializedView("lvView");
+  auto actual = qlv().query(
+      "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+      "SELECT ?s ?lit ?iri { SERVICE view:lvView { "
+      "_:c view:column-s ?s ; view:column-lit ?lit ; view:column-iri ?iri . "
+      "} } ORDER BY ?s ?lit ?iri",
+      ad_utility::MediaType::tsv);
+
+  // The local vocabulary entries survive the round-trip to disk and back.
+  EXPECT_EQ(actual, expected);
+  EXPECT_THAT(actual, ::testing::HasSubstr("v-abc"));
+  EXPECT_THAT(actual, ::testing::HasSubstr("http://ex/abc"));
+}
+
+// _____________________________________________________________________________
+// Round-trip test for a materialized view where the local vocabulary entry is
+// in the *leading* (indexed) column. This additionally exercises the remapping
+// of the block metadata (which contains local vocab `Id`s) and a scan that
+// fixes the leading column to a local vocabulary value.
+TEST_F(MaterializedViewsTest, LocalVocabLeadingColumn) {
+  const std::string body = "?s ?p ?o . BIND(CONCAT(\"v-\", STR(?o)) AS ?lit)";
+  qlv().writeMaterializedView("lvLead",
+                              absl::StrCat("SELECT ?lit ?s { ", body, " }"));
+
+  // Reference result computed before loading the view (no rewriting).
+  auto expected =
+      qlv().query(absl::StrCat("SELECT ?s { ", body,
+                               " FILTER(?lit = \"v-abc\") } ORDER BY ?s"),
+                  ad_utility::MediaType::tsv);
+
+  qlv().loadMaterializedView("lvLead");
+  // Scan the view, fixing the leading (local vocab) column to "v-abc".
+  auto actual = qlv().query(
+      "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+      "SELECT ?s { SERVICE view:lvLead { "
+      "_:c view:column-lit \"v-abc\" ; view:column-s ?s . } } ORDER BY ?s",
+      ad_utility::MediaType::tsv);
+
+  EXPECT_EQ(actual, expected);
+  // "v-abc" stems from the object "abc" of subject <s1>.
+  EXPECT_THAT(actual, ::testing::HasSubstr("s1"));
+}
+
+// _____________________________________________________________________________
+// Round-trip test for a materialized view that contains local blank nodes
+// (created via `BNODE()`), which are persisted via their (stable) explicit
+// block indices.
+TEST_F(MaterializedViewsTest, LocalVocabBlankNodes) {
+  qlv().writeMaterializedView(
+      "bnView", "SELECT ?s ?b { ?s ?p ?o . BIND(BNODE() AS ?b) }");
+  const std::string viewQuery =
+      "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+      "SELECT ?s ?b { SERVICE view:bnView { "
+      "_:c view:column-s ?s ; view:column-b ?b . } } ORDER BY ?s ?b";
+
+  // Local blank nodes are restored from explicit block indices. Like persisted
+  // updates and cached results, this reservation must happen before any random
+  // blank node is requested from the index's blank node manager. We therefore
+  // load the view in a fresh engine instance (before any blank node is
+  // created), as would happen when preloading a view at server startup. (The
+  // instance `qlv()` that wrote the view already requested random blank nodes
+  // via `BNODE()` and could no longer reserve the explicit blocks.)
+  auto loadAndQuery = [&]() {
+    qlever::EngineConfig config;
+    config.baseName_ = testIndexBase_;
+    qlever::Qlever q{config};
+    q.loadMaterializedView("bnView");
+    return q.query(viewQuery, ad_utility::MediaType::tsv);
+  };
+
+  auto actual = loadAndQuery();
+
+  // The result has one (distinct) blank node per triple in the test data.
+  auto lines = absl::StrSplit(actual, '\n', absl::SkipEmpty());
+  std::vector<std::string> rows{lines.begin(), lines.end()};
+  // Header row + four data rows.
+  ASSERT_EQ(rows.size(), 5u);
+  ad_utility::HashSet<std::string> blankNodes;
+  for (const auto& row : rows | ql::views::drop(1)) {
+    std::vector<std::string> cols = absl::StrSplit(row, '\t');
+    ASSERT_EQ(cols.size(), 2u);
+    EXPECT_THAT(cols.at(1), ::testing::StartsWith("_:"));
+    blankNodes.insert(cols.at(1));
+  }
+  EXPECT_EQ(blankNodes.size(), 4u);
+
+  // Loading the same view from disk in another fresh engine instance yields
+  // exactly the same blank node labels: the local blank node blocks are
+  // reserved deterministically from the values stored on disk.
+  EXPECT_EQ(actual, loadAndQuery());
 }
 
 // _____________________________________________________________________________

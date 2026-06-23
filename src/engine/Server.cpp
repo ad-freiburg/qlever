@@ -95,7 +95,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     index().addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager_->setOnDiskBase(indexBaseName);
+  materializedViewsManager_->setOnDiskBase(indexBaseName, &index().getImpl());
 
   // Preload materialized views as requested by the user. This is done in a
   // try-catch block to prevent an exception during loading of a view from

@@ -78,6 +78,32 @@ void Permutation::loadFromDisk(
 }
 
 // _____________________________________________________________________________
+void Permutation::remapBlockMetadataLocalVocab(
+    const absl::flat_hash_map<Id::T, Id>& mapping) {
+  AD_CORRECTNESS_CHECK(isLoaded_);
+  auto remap = [&mapping](Id& id) {
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = mapping.at(id.getBits());
+    }
+  };
+  auto remapTriple = [&remap](CompressedBlockMetadata::PermutedTriple& triple) {
+    remap(triple.col0Id_);
+    remap(triple.col1Id_);
+    remap(triple.col2Id_);
+    remap(triple.graphId_);
+  };
+  for (auto& block : meta_.blockData()) {
+    remapTriple(block.firstTriple_);
+    remapTriple(block.lastTriple_);
+    if (block.graphInfo_.has_value()) {
+      for (Id& id : block.graphInfo_.value()) {
+        remap(id);
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
 void Permutation::setOriginalMetadataForDeltaTriples(
     DeltaTriples& deltaTriples) const {
   deltaTriples.setOriginalMetadata(permutation(), metaData().blockDataShared(),

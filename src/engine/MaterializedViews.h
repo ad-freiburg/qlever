@@ -10,13 +10,16 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include <absl/container/flat_hash_map.h>
 #include <gtest/gtest_prod.h>
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/LocalVocab.h"
 #include "index/Permutation.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/GraphPatternOperation.h"
@@ -30,11 +33,17 @@
 class QueryExecutionContext;
 class QueryExecutionTree;
 class IndexScan;
+class IndexImpl;
 
 // For the future, materialized views save their version. If we change something
 // about the way materialized views are stored, we can break the existing ones
 // cleanly without breaking the entire index format.
-static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
+//
+// Version history:
+// - 1: initial format (no local vocabulary support).
+// - 2: added support for local vocabulary entries (and local blank nodes),
+//      stored in a separate `.localvocab` file next to the permutation.
+static constexpr size_t MATERIALIZED_VIEWS_VERSION = 2;
 
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
@@ -67,9 +76,17 @@ class MaterializedViewWriter {
   // resulting table has at least four columns.
   uint8_t numAddEmptyColumns_;
 
+  // The local vocabulary entries (and local blank nodes) that occur in the
+  // query result are accumulated here while the result is processed, and
+  // serialized to disk afterwards. This is `mutable` because the result is
+  // processed by `const` member functions (the writer is a throwaway object).
+  mutable LocalVocab accumulatedVocab_;
+
   using RangeOfIdTables = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
-  // SPO comparator
-  using Comparator = SortTriple<0, 1, 2>;
+  // SPO comparator. The comparator is local-vocab-aware (compares by content,
+  // not by raw bits) because the query result may contain `LocalVocabIndex`
+  // `Id`s, for which the raw bits are meaningless memory addresses.
+  using Comparator = SortTriple<0, 1, 2, true, true>;
   // Sorter for SPO permutation with a dynamic number of columns (template
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
@@ -104,9 +121,14 @@ class MaterializedViewWriter {
     return columnPermutation_.size() + numAddEmptyColumns_;
   }
 
-  // Helper to permute an `IdTable` according to `columnPermutation_` and verify
-  // that there are no `LocalVocabEntry` values in any of the selected columns.
-  void permuteIdTableAndCheckNoLocalVocabEntries(IdTable& block) const;
+  // Helper to permute an `IdTable` according to `columnPermutation_` (and pad
+  // with empty columns to reach at least four columns).
+  void permuteIdTable(IdTable& block) const;
+
+  // Merge the given `LocalVocab` (from a block of the query result) into the
+  // accumulated local vocabulary, keeping all its entries alive and ensuring
+  // that they are serialized to disk together with the view.
+  void collectLocalVocab(const LocalVocab& localVocab) const;
 
   // Helper for `computeResultAndWritePermutation`: If the query given by the
   // user is already sorted correctly, this function can be used to obtain the
@@ -135,6 +157,12 @@ class MaterializedViewWriter {
   // files with column names and ordering to disk.
   void writeViewMetadata() const;
 
+  // Helper for `computeResultAndWritePermutation`: Writes the accumulated local
+  // vocabulary (and local blank node blocks) to the view's `.localvocab` file.
+  // The file is only written if there actually are local vocabulary entries or
+  // local blank nodes.
+  void writeLocalVocab() const;
+
   // Actually computes, permutes and if needed externally sorts the query result
   // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
@@ -155,6 +183,19 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   std::optional<std::string> originalQuery_;
   std::optional<ParsedQuery> parsedQuery_;
 
+  // The local vocabulary of this view (loaded from the `.localvocab` file).
+  // Empty for views without local vocabulary entries. It must be kept alive as
+  // long as the view is loaded, because the `Id`s in the permutation reference
+  // its entries (and its local blank node manager keeps the view's blank node
+  // blocks reserved).
+  LocalVocab viewLocalVocab_;
+
+  // Maps the (now invalid) `LocalVocabIndex` `Id` bits stored on disk to the
+  // valid `Id`s in `viewLocalVocab_`. Used to remap the `Id`s read from the
+  // permutation while scanning. `nullptr` for views without local vocabulary
+  // entries.
+  std::shared_ptr<const absl::flat_hash_map<Id::T, Id>> localVocabRemapping_;
+
   // Lookup table for `BIND` statements from the view's query. Maps the cache
   // keys of the `BIND` expressions (based on the column indices in the view) to
   // the target column index.
@@ -162,17 +203,28 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
-  // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
-  // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
+  // Helper to create the `LocatedTriplesState` for `IndexScan`s. Materialized
+  // views do not support updates, so the located triples are always empty, but
+  // the state keeps the view's local vocabulary alive via a `LifetimeExtender`.
+  std::shared_ptr<LocatedTriplesState> makeLocatedTriplesState() const;
+
+  // Helper for the constructor: load the view's local vocabulary from the
+  // `.localvocab` file (if present), remap the block metadata, and install the
+  // remapping on the permutation's reader. `index` is the `LocalVocabContext`
+  // needed to reconstruct the local vocabulary entries; it may be `nullptr`
+  // only if the view has no local vocabulary entries.
+  void loadLocalVocab(const IndexImpl* index);
 
   FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
 
  public:
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
-  // not exist.
-  MaterializedView(std::string onDiskBase, std::string name);
+  // not exist. The `index` is used as the `LocalVocabContext` to reconstruct
+  // the view's local vocabulary entries; it may be `nullptr` for views that do
+  // not contain any local vocabulary entries.
+  MaterializedView(std::string onDiskBase, std::string name,
+                   const IndexImpl* index = nullptr);
 
   // Connect the permutation's back-reference to this view. Must be called
   // after the `MaterializedView` is managed by a `shared_ptr`.
@@ -198,6 +250,10 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // the view. Note that this function does not check for validity or existence.
   static std::string getFilenameBase(std::string_view onDiskBase,
                                      std::string_view name);
+
+  // Return the filename of the view's local vocabulary file, given the view's
+  // filename base (as returned by `getFilenameBase`).
+  static std::string getLocalVocabFilename(std::string_view filenameBase);
 
   // Return a pointer to the open `Permutation` object for this view. Note that
   // this is always an SPO permutation because materialized views are indexed on
@@ -270,6 +326,11 @@ class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
 
+  // The index that owns this manager, used as the `LocalVocabContext` to
+  // reconstruct the local vocabulary entries of loaded views. May be `nullptr`,
+  // in which case only views without local vocabulary entries can be loaded.
+  const IndexImpl* index_ = nullptr;
+
   // Helper struct to unify the locking of loaded views and `QueryPatternCache`.
   struct LoadedViews {
     ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>> views_;
@@ -280,13 +341,16 @@ class MaterializedViewsManager {
 
  public:
   MaterializedViewsManager() = default;
-  explicit MaterializedViewsManager(std::string onDiskBase)
-      : onDiskBase_{std::move(onDiskBase)} {};
+  explicit MaterializedViewsManager(std::string onDiskBase,
+                                    const IndexImpl* index = nullptr)
+      : onDiskBase_{std::move(onDiskBase)}, index_{index} {};
 
-  // For use with the default constructor: set the index basename after creation
-  // of the `MaterializedViewsManager`. This should only be called once and
-  // before any calls to `loadView` and `getView`.
-  void setOnDiskBase(const std::string& onDiskBase);
+  // For use with the default constructor: set the index basename (and the
+  // `index` used as `LocalVocabContext` for loading local vocabularies) after
+  // creation of the `MaterializedViewsManager`. This should only be called once
+  // and before any calls to `loadView` and `getView`.
+  void setOnDiskBase(const std::string& onDiskBase,
+                     const IndexImpl* index = nullptr);
 
   // Check if a materialized view is currently loaded.
   bool isViewLoaded(const std::string& name) const;

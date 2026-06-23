@@ -244,6 +244,25 @@ class Permutation {
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
+  // Set the local vocabulary remapping on the underlying reader. Used by
+  // materialized views that contain local vocabulary entries: the `Id`s stored
+  // in the permutation on disk are remapped to the view's in-memory local
+  // vocabulary while scanning. Must only be called after `loadFromDisk`.
+  void setLocalVocabRemapping(
+      std::shared_ptr<const absl::flat_hash_map<Id::T, Id>> remapping) {
+    AD_CORRECTNESS_CHECK(reader_.has_value());
+    reader_->setLocalVocabRemapping(std::move(remapping));
+  }
+
+  // Apply the given local vocabulary `mapping` to the block metadata of this
+  // permutation, rewriting every `LocalVocabIndex` `Id` in the `firstTriple_`,
+  // `lastTriple_`, and `graphInfo_` of each block. This is required for
+  // materialized views that contain local vocabulary entries, because the
+  // `Id`s stored in the metadata on disk are no longer valid (see
+  // `setLocalVocabRemapping`). Must only be called after `loadFromDisk`.
+  void remapBlockMetadataLocalVocab(
+      const absl::flat_hash_map<Id::T, Id>& mapping);
+
   Enum permutation() const { return permutation_; }
 
   // Provide const access to a linked internal permutation. If no internal

@@ -5,8 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
+#include <absl/container/flat_hash_map.h>
 #include <gtest/gtest_prod.h>
 
+#include <memory>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -714,12 +716,27 @@ class CompressedRelationReader {
   // used for materialized views where repeated rows are meaningful.
   bool useGraphPostProcessing_;
 
+  // If set, this maps the (now invalid) `LocalVocabIndex` `Id` bits that were
+  // stored on disk to the new, valid `Id`s in the in-memory local vocabulary.
+  // This is used by materialized views that contain local vocabulary entries:
+  // every decompressed block is remapped before it is processed further (see
+  // `decompressAndPostprocessBlock`). For the regular index (and views without
+  // local vocab entries) this is `nullptr` and no remapping is performed.
+  std::shared_ptr<const absl::flat_hash_map<Id::T, Id>> localVocabRemapping_;
+
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
                                     bool useGraphPostProcessing = true)
       : allocator_{std::move(allocator)},
         file_{std::move(file)},
         useGraphPostProcessing_{useGraphPostProcessing} {}
+
+  // Set the local vocabulary remapping (see `localVocabRemapping_` above). Used
+  // by materialized views after their local vocabulary has been loaded.
+  void setLocalVocabRemapping(
+      std::shared_ptr<const absl::flat_hash_map<Id::T, Id>> remapping) {
+    localVocabRemapping_ = std::move(remapping);
+  }
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
@@ -874,9 +891,11 @@ class CompressedRelationReader {
   // allocator.
   CompressedRelationReader makeReaderWithReboundAllocator(
       Allocator allocator) const {
-    return CompressedRelationReader{std::move(allocator),
+    CompressedRelationReader reader{std::move(allocator),
                                     ad_utility::File{file_.name(), "r"},
                                     useGraphPostProcessing_};
+    reader.localVocabRemapping_ = localVocabRemapping_;
+    return reader;
   }
 
  private:

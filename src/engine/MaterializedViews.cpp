@@ -33,6 +33,7 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/TripleSerializer.h"
 #include "util/Views.h"
 
 // _____________________________________________________________________________
@@ -79,6 +80,12 @@ std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
 }
 
 // _____________________________________________________________________________
+std::string MaterializedView::getLocalVocabFilename(
+    std::string_view filenameBase) {
+  return absl::StrCat(filenameBase, ".localvocab");
+}
+
+// _____________________________________________________________________________
 std::string MaterializedViewWriter::getFilenameBase() const {
   return MaterializedView::getFilenameBase(onDiskBase_, name_);
 }
@@ -119,8 +126,7 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
-    IdTable& block) const {
+void MaterializedViewWriter::permuteIdTable(IdTable& block) const {
   // The `IdTable` may have a different column ordering from the
   // `SELECT` statement, thus we must permute this to the column
   // ordering we want to have in our materialized view. In
@@ -137,24 +143,17 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
       block.at(row, col) = ValueId::makeUndefined();
     }
   }
+}
 
-  // Check that there are no values of type `LocalVocabIndex` in the selected
-  // columns of the `IdTable` as materialized views do not support them as of
-  // now.
-  bool hasLocalVocab =
-      ql::ranges::any_of(block.getColumns(), [](const auto& col) {
-        return ql::ranges::any_of(col, [](ValueId id) {
-          return id.getDatatype() == Datatype::LocalVocabIndex;
-        });
-      });
-  if (hasLocalVocab) {
-    throw std::runtime_error{
-        "The query to write a materialized view returned a string not "
-        "contained in the index (local vocabulary entry). This could be "
-        "the result of a string-related function in your query or the "
-        "presence of SPARQL UPDATEs in this instance of Qlever. Both are "
-        "currently not supported in materialized views."};
-  }
+// _____________________________________________________________________________
+void MaterializedViewWriter::collectLocalVocab(
+    const LocalVocab& localVocab) const {
+  // Keep all local vocabulary entries (and local blank node blocks) of the
+  // query result alive and ensure they get serialized together with the view.
+  // `mergeWith` only shares the underlying (shared) word sets, so the `Id`s
+  // that reference these entries (and which are written into the permutation)
+  // remain valid.
+  accumulatedVocab_.mergeWith(localVocab);
 }
 
 // _____________________________________________________________________________
@@ -172,18 +171,20 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
     // If we have a fully materialized result, we need to copy it for the
     // necessary modifications (permuting columns).
     IdTable idTableCopyForPermutation = result->idTable().clone();
-    permuteIdTableAndCheckNoLocalVocabEntries(idTableCopyForPermutation);
+    permuteIdTable(idTableCopyForPermutation);
+    collectLocalVocab(result->localVocab());
     std::vector<IdTableStatic<0>> singleIdTable;
     singleIdTable.push_back(std::move(idTableCopyForPermutation));
     return RangeOfIdTables{std::move(singleIdTable)};
   } else {
-    // Transform the lazy result (permute columns)
+    // Transform the lazy result (permute columns and collect the local vocab)
     return RangeOfIdTables{
         ad_utility::OwningView{result->idTables()} |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
-              permuteIdTableAndCheckNoLocalVocabEntries(block);
+              permuteIdTable(block);
+              collectLocalVocab(vocab);
               return std::move(block);
             })};
   }
@@ -200,8 +201,9 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
-  auto processBlock = [&](IdTable& block) {
-    permuteIdTableAndCheckNoLocalVocabEntries(block);
+  auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
+    permuteIdTable(block);
+    collectLocalVocab(vocab);
     totalTriples += block.numRows();
     spoSorter.pushBlock(block);
     if (progressBar.update()) {
@@ -216,12 +218,12 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     // `CompressedExternalIdTableSorter::pushBlock` would also accept
     // `IdTableView`.
     IdTable idTableCopyForPermutation = result->idTable().clone();
-    processBlock(idTableCopyForPermutation);
+    processBlock(idTableCopyForPermutation, result->localVocab());
   } else {
     // Process lazy result blockwise
     auto generator = result->idTables();
     for (auto& [block, vocab] : generator) {
-      processBlock(block);
+      processBlock(block, vocab);
     }
   }
 
@@ -306,6 +308,24 @@ void MaterializedViewWriter::writeViewMetadata() const {
 }
 
 // _____________________________________________________________________________
+void MaterializedViewWriter::writeLocalVocab() const {
+  // Only write the `.localvocab` file if the view actually contains local
+  // vocabulary entries or local blank nodes. Views without them do not need the
+  // file (and thus do not require a `LocalVocabContext` when being loaded).
+  if (accumulatedVocab_.empty() &&
+      accumulatedVocab_.getOwnedLocalBlankNodeBlocks().empty()) {
+    return;
+  }
+  AD_LOG_INFO << "Materialized view \"" << name_ << "\" contains "
+              << accumulatedVocab_.size()
+              << " local vocabulary entries, writing them to disk ..."
+              << std::endl;
+  ad_utility::serializeLocalVocabToFile(
+      MaterializedView::getLocalVocabFilename(getFilenameBase()),
+      accumulatedVocab_);
+}
+
+// _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Run query and sort the result externally (only if necessary).
   AD_LOG_INFO << "Computing query result for materialized view \"" << name_
@@ -322,6 +342,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
   writeViewMetadata();
+  writeLocalVocab();
 
   AD_LOG_INFO << "Statistics for view \"" << name_
               << "\": " << spoMetaData.statistics() << std::endl;
@@ -342,10 +363,9 @@ const Variable& MaterializedView::dummyObject() {
 };
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
-    : onDiskBase_{std::move(onDiskBase)},
-      name_{std::move(name)},
-      locatedTriplesState_{makeEmptyLocatedTriplesState()} {
+MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
+                                   const IndexImpl* index)
+    : onDiskBase_{std::move(onDiskBase)}, name_{std::move(name)} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -426,6 +446,53 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                              Permutation::Type::MATERIALIZED_VIEW,
                              std::move(possiblyUndefinedColumns));
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
+
+  // Load the view's local vocabulary (if any) and set up the remapping of the
+  // permutation's `Id`s. Must happen after `loadFromDisk` (it remaps the block
+  // metadata and the reader) but before `makeLocatedTriplesState` (which keeps
+  // the local vocabulary alive via a `LifetimeExtender`).
+  loadLocalVocab(index);
+  locatedTriplesState_ = makeLocatedTriplesState();
+}
+
+// _____________________________________________________________________________
+void MaterializedView::loadLocalVocab(const IndexImpl* index) {
+  auto vocabFilename =
+      getLocalVocabFilename(getFilenameBase(onDiskBase_, name_));
+  // Views without local vocabulary entries do not have a `.localvocab` file.
+  if (!std::filesystem::exists(vocabFilename)) {
+    return;
+  }
+  if (index == nullptr) {
+    throw std::runtime_error{absl::StrCat(
+        "The materialized view '", name_,
+        "' contains local vocabulary entries, but no index context was "
+        "provided to reconstruct them. This is an internal error.")};
+  }
+  // NOTE: If the view contains local blank nodes, their blocks are reserved
+  // from explicit indices here. Like persisted updates and cached results,
+  // this must happen before any random blank node is requested from the
+  // index's blank node manager. In practice this means that views containing
+  // local blank nodes can only be loaded at server startup (e.g. via the
+  // `preloadMaterializedViews` mechanism), not on demand after queries that
+  // create blank nodes have already run. Views that only contain local
+  // vocabulary literals/IRIs (the common case) are not subject to this
+  // restriction.
+  auto [vocab, mapping] =
+      ad_utility::deserializeLocalVocabAndMapping(vocabFilename, *index);
+  viewLocalVocab_ = std::move(vocab);
+
+  // The `mapping` only contains `LocalVocabIndex` entries. If it is empty, the
+  // view only has local blank nodes (whose `Id`s are stable indices and do not
+  // need remapping); `viewLocalVocab_` still reserves their blocks and is kept
+  // alive, so there is nothing more to do here.
+  if (mapping.empty()) {
+    return;
+  }
+  localVocabRemapping_ = std::make_shared<const absl::flat_hash_map<Id::T, Id>>(
+      std::move(mapping));
+  permutation_->remapBlockMetadataLocalVocab(*localVocabRemapping_);
+  permutation_->setLocalVocabRemapping(localVocabRemapping_);
 }
 
 // _____________________________________________________________________________
@@ -446,7 +513,7 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
   if (lock->views_.contains(name)) {
     return;
   }
-  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  auto view = std::make_shared<MaterializedView>(onDiskBase_, name, index_);
   view->connectPermutationBackReference();
   lock->views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
@@ -634,11 +701,13 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
+void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase,
+                                             const IndexImpl* index) {
   AD_CORRECTNESS_CHECK(
       onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
       "Changing the on disk basename is not allowed.");
   onDiskBase_ = onDiskBase;
+  index_ = index;
 }
 
 // _____________________________________________________________________________
@@ -647,17 +716,21 @@ LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<LocatedTriplesState>
-MaterializedView::makeEmptyLocatedTriplesState() const {
+std::shared_ptr<LocatedTriplesState> MaterializedView::makeLocatedTriplesState()
+    const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
 
+  // Materialized views never have located (delta) triples, but the local
+  // vocabulary of the view must be kept alive as long as any scan result (which
+  // references its entries) is alive. The `LifetimeExtender` of the view's
+  // local vocabulary is stored in the `LocatedTriplesState`, which is shared
+  // with (and outlives) every `IndexScan` on this view.
   return std::make_shared<LocatedTriplesState>(
       LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
-                          emptyVocab.getLifetimeExtender(), 0});
+                          viewLocalVocab_.getLifetimeExtender(), 0});
 }
 
 // _____________________________________________________________________________
