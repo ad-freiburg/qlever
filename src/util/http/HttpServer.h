@@ -302,6 +302,15 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     ChunkBuffer& chunkBuffer_;
     size_t chunkSize_;
 
+    BodyChunkReader(Stream& stream, Buffer& buffer,
+                    RequestParser& requestParser, ChunkBuffer& chunkBuffer,
+                    size_t chunkSize)
+        : stream_(stream),
+          buffer_(buffer),
+          requestParser_(requestParser),
+          chunkBuffer_(chunkBuffer),
+          chunkSize_(chunkSize) {}
+
     net::awaitable<std::optional<std::string_view>> operator()() {
       return [](auto& stream, auto& buffer, auto& requestParser,
                 auto& chunkBuffer, size_t chunkSize)
@@ -314,6 +323,17 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       }(stream_, buffer_, requestParser_, chunkBuffer_, chunkSize_);
     }
   };
+
+  // Factory for `BodyChunkReader` using function template argument deduction,
+  // avoiding CTAD for a nested class template (broken in clang < 18).
+  template <typename Stream, typename Buffer, typename RequestParser,
+            typename ChunkBuffer>
+  static auto makeBodyChunkReader(Stream& stream, Buffer& buffer,
+                                  RequestParser& requestParser,
+                                  ChunkBuffer& chunkBuffer, size_t chunkSize) {
+    return BodyChunkReader<Stream, Buffer, RequestParser, ChunkBuffer>{
+        stream, buffer, requestParser, chunkBuffer, chunkSize};
+  }
 
   // Handle one lazy-mode request: read only the headers, then check for a
   // WebSocket upgrade or pass a `bodyGetter` callable to `httpHandler_`.
@@ -359,8 +379,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     std::vector<char> chunkBuffer(chunkSize);
 
     // `bodyGetter` yields body chunks; see `BodyChunkReader`.
-    BodyChunkReader bodyGetter{stream, buffer, requestParser, chunkBuffer,
-                               chunkSize};
+    auto bodyGetter = makeBodyChunkReader(stream, buffer, requestParser,
+                                          chunkBuffer, chunkSize);
 
     stream.expires_never();
     co_await httpHandler_(std::move(headersReq), sendMessage,

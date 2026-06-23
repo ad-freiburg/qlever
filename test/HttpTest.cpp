@@ -215,9 +215,10 @@ TYPED_TEST(HttpServerBodyTest, EchoPostMultipleChunks) {
   auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
   server.runInOwnThread();
 
-  ad_utility::SlowRandomIntGenerator<char> gen('a', 'z');
+  ad_utility::SlowRandomIntGenerator<int> gen('a', 'z');
   std::string largeBody(3 * this->lazyChunkSize, '\0');
-  std::generate(largeBody.begin(), largeBody.end(), std::ref(gen));
+  std::generate(largeBody.begin(), largeBody.end(),
+                [&gen]() { return static_cast<char>(gen()); });
   auto httpClient = std::make_unique<HttpClient>(
       "localhost", std::to_string(server.getPort()));
   auto response =
