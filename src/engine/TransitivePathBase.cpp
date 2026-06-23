@@ -585,8 +585,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
       side.treeAndCol_ = std::nullopt;
     }
   };
-  setTreeAndCol(lhs, leftOpAndCol, false);
-  setTreeAndCol(rhs, rightOpAndCol, boundVariableIsForEmptyPath_);
+  setTreeAndCol(lhs, leftOpAndCol, boundVariableIsForEmptyPath_);
+  setTreeAndCol(rhs, rightOpAndCol, false);
 
   // We use the cheapest tree that can be created using any of the alternative
   // subtrees. This has the effect that the `TransitivePathBinSearch` will
@@ -609,7 +609,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // Traverse each side of the operation and insert columns which are not
   // related to the join into the plan.
   auto insertPayloadColumnsToPlan = [this, &plan](const auto& opAndCol,
-                                                  const auto& otherCol) {
+                                                  const auto& otherOpAndCol) {
     // Ensure we only bind populated columns.
     if (!opAndCol.has_value()) {
       return;
@@ -622,8 +622,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
       ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
       if (columnIndex == col || variable == graphVariable_ ||
-          (otherCol.has_value() &&
-           (otherCol->second == columnIndex || otherCol->second == col))) {
+          (otherOpAndCol.has_value() && (otherOpAndCol->second == columnIndex ||
+                                         otherOpAndCol->second == col))) {
         continue;
       }
 

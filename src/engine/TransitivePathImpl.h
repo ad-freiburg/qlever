@@ -110,10 +110,6 @@ class TransitivePathImpl : public TransitivePathBase {
       targetNodes =
           std::move(setupNodes(targetSide, std::move(targetSideResult)));
     }
-    // std::optional<const decltype (setupNodes())> targetNodes =
-    // targetSideResult
-    //                        ? setupNodes(targetSide,
-    //                        std::move(targetSideResult)) : std::nullopt;
 
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
@@ -253,6 +249,10 @@ class TransitivePathImpl : public TransitivePathBase {
     // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
     const auto& index = getIndex();
+
+    // TODO<schaetzr>: With our new optimization where we set the targetId, can
+    // this ternary operator be omitted and instead always set nullopt
+    // initially?
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
@@ -263,7 +263,7 @@ class TransitivePathImpl : public TransitivePathBase {
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
         start.isVariable() && graphVariable_ == start.getVariable();
-    bool targetNodesAreBound = targetNodes.has_value();
+    bool targetNodesAreBound = targetNodes.has_value() && targetId.has_value();
 
     for (auto&& [currentColumn, tableColumn] :
          ::ranges::views::enumerate(startNodes)) {
@@ -294,14 +294,14 @@ class TransitivePathImpl : public TransitivePathBase {
               if (targetCurrentColumn != currentColumn) {
                 continue;
               }
-              for (const auto& [targetCurrentRow, pair] :
+              for (const auto& [targetCurrentRow, targetPair] :
                    ::ranges::views::enumerate(tableColumn.nodes_)) {
                 if (targetCurrentRow != currentRow) {
                   continue;
                 }
                 size_t targetCurrentPair = 0;
                 for (const auto& [node, _] : tableColumn.expandUndef(
-                         pair, edges, graphVariable_.has_value())) {
+                         targetPair, edges, graphVariable_.has_value())) {
                   if (currentPair == targetCurrentPair) {
                     targetId = node;
                     break;
