@@ -15,7 +15,9 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -275,8 +277,18 @@ getNumberOfColumnsAndAdditionalColumns(
 }
 
 namespace {
+// Run the synchronous `func` as a distinct task on the current executor. The
+// initial `post` is essential and easy to overlook: `co_spawn` (used by the
+// `&&` operator below) starts a child coroutine *inline* via `dispatch()` on
+// the spawning thread. Because `func` is fully synchronous and never suspends,
+// without this reschedule the first sibling task would run to completion before
+// the second is even started, serializing work that is meant to run in
+// parallel. Posting first yields the thread immediately, so the siblings are
+// queued onto the pool and actually spread across its threads.
 template <typename Func>
 boost::asio::awaitable<std::invoke_result_t<Func>> asCoroutine(Func func) {
+  namespace net = boost::asio;
+  co_await net::post(co_await net::this_coro::executor, net::use_awaitable);
   co_return std::invoke(func);
 }
 }  // namespace
