@@ -289,31 +289,6 @@ class TransitivePathImpl : public TransitivePathBase {
             // Traverse the `targetNodes` object the same amount as the
             // `startNodes` to obtain a potential `targetId` for the graph
             // search.
-            // auto columnIterator = targetNodes.value().begin();
-            // std::advance(columnIterator, currentColumn);
-            // auto&& targetTableColumn = *columnIterator;
-            // auto& targetColumnNodes = columnIterator->nodes_;
-
-            // auto rowIterator = targetColumnNodes.begin();
-            // std::advance(rowIterator, currentRow);
-            // const auto& targetPair = *rowIterator;
-
-            // const auto& pairs = targetTableColumn.expandUndef(targetPair,
-            // edges, graphVariable_.has_value()); auto pairIterator =
-            // pairs.begin(); std::advance(pairIterator, currentPair); const
-            // auto& [targetNode, targetGraphColumn] = *pairIterator;
-            // auto& targetColumn =
-            //     *(::ranges::next(targetNodes.value().begin(),
-            //     currentColumn));
-            // auto& targetRow =
-            //     *::ranges::next(targetColumn.nodes_.begin(), currentRow);
-            // auto expandedPairs = targetColumn.expandUndef(
-            //     targetRow, edges, graphVariable_.has_value());
-            // auto [targetNode, _] = expandedPairs.at(currentPair);
-            // auto targetNode =
-            //     getPairAt(targetNodes, currentColumn, currentRow,
-            //     currentPair);
-
             for (auto&& [targetCurrentColumn, tableColumn] :
                  ::ranges::views::enumerate(targetNodes.value())) {
               if (targetCurrentColumn != currentColumn) {
@@ -331,7 +306,7 @@ class TransitivePathImpl : public TransitivePathBase {
                     targetId = node;
                     break;
                   }
-                  currentPair++;
+                  targetCurrentPair++;
                 }
               }
             }
