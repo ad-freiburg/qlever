@@ -323,8 +323,8 @@ TEST(BPlusTree, SmallBranching) {
   std::vector<int> queries(55);
   std::iota(queries.begin(), queries.end(), -2);
   // Pass `CacheLineSize = B * sizeof(int)` to get the desired branching factor.
+  // `CacheLineSize` must be a power of two, so only powers of 2 are valid.
   verify<int, 2 * sizeof(int)>(data, queries);
-  verify<int, 3 * sizeof(int)>(data, queries);
   verify<int, 4 * sizeof(int)>(data, queries);
 }
 
@@ -387,4 +387,46 @@ TEST(BPlusTree, MultiBoundMatchesSingle) {
     EXPECT_EQ(r_ub[k], bt.upperBound<true>(q[k]).second)
         << "multi vs single ub k=" << k;
   }
+}
+
+// ── Unpadded-leaf edge cases ─────────────────────────────────────────────────
+
+// Sizes where `n` is NOT a multiple of `B` so the last leaf is partial.
+TEST(BPlusTree, UnpaddedLastLeaf) {
+  constexpr std::size_t B = 64 / sizeof(int);
+  // One element in the last leaf.
+  for (std::size_t n : {B + 1, 2 * B + 1, B * (B + 1) + 1}) {
+    std::vector<int> data(n);
+    std::iota(data.begin(), data.end(), 0);
+    std::vector<int> queries(static_cast<int>(n) + 5);
+    std::iota(queries.begin(), queries.end(), -2);
+    verify(data, queries);
+  }
+  // All sizes from B+1 to B*(B+2) to exercise many partial-leaf shapes.
+  for (std::size_t n = B + 1; n <= B * (B + 2); ++n) {
+    std::vector<int> data(n);
+    std::iota(data.begin(), data.end(), 0);
+    std::vector<int> queries(static_cast<int>(n) + 3);
+    std::iota(queries.begin(), queries.end(), -1);
+    verify(data, queries);
+  }
+}
+
+// `upperBound` on the maximum element of a partially-filled leaf returns
+// `{numeric_limits::max, size()}` without going out of bounds.
+TEST(BPlusTree, UpperBoundOnMaxElementUnpadded) {
+  constexpr std::size_t B = 64 / sizeof(int);
+  // n = B + 1: two leaves, second leaf has one real element.
+  const std::size_t n = B + 1;
+  std::vector<int> data(n);
+  std::iota(data.begin(), data.end(), 0);
+  BPlusTree<int> bt(data);
+  // Upper bound on the last real element: rank must equal n.
+  auto [uv, ur] = bt.upperBound(static_cast<int>(n) - 1);
+  EXPECT_EQ(uv, std::numeric_limits<int>::max());
+  EXPECT_EQ(ur, n);
+  // Lower bound on the last real element: value = that element, rank = n-1.
+  auto [lv, lr] = bt.lowerBound(static_cast<int>(n) - 1);
+  EXPECT_EQ(lv, static_cast<int>(n) - 1);
+  EXPECT_EQ(lr, n - 1);
 }
