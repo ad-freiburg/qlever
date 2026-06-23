@@ -245,23 +245,26 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       http::request_parser<http::buffer_body>& requestParser,
       std::span<char> outputBuffer) {
-    size_t totalRead = 0;
-    while (!requestParser.is_done() && totalRead < outputBuffer.size()) {
-      requestParser.get().body().data = outputBuffer.data() + totalRead;
-      requestParser.get().body().size = outputBuffer.size() - totalRead;
-      boost::system::error_code ec;
-      co_await http::async_read_some(
-          stream, buffer, requestParser,
-          boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-      if (ec && ec != http::error::need_buffer) {
-        throw boost::system::system_error{ec};
+    return [](auto& stream, auto& buffer, auto& requestParser,
+              auto outputBuffer) -> net::awaitable<size_t> {
+      size_t totalRead = 0;
+      while (!requestParser.is_done() && totalRead < outputBuffer.size()) {
+        requestParser.get().body().data = outputBuffer.data() + totalRead;
+        requestParser.get().body().size = outputBuffer.size() - totalRead;
+        boost::system::error_code ec;
+        co_await http::async_read_some(
+            stream, buffer, requestParser,
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if (ec && ec != http::error::need_buffer) {
+          throw boost::system::system_error{ec};
+        }
+        totalRead +=
+            (outputBuffer.size() - totalRead) - requestParser.get().body().size;
+        // `need_buffer` means the buffer segment is full; stop here.
+        if (ec == http::error::need_buffer) break;
       }
-      totalRead +=
-          (outputBuffer.size() - totalRead) - requestParser.get().body().size;
-      // `need_buffer` means the buffer segment is full; stop here.
-      if (ec == http::error::need_buffer) break;
-    }
-    co_return totalRead;
+      co_return totalRead;
+    }(stream, buffer, requestParser, outputBuffer);
   }
 
   // Reads at most `bodyLimit` bytes from `requestParser` into a string and
@@ -270,16 +273,20 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       http::request_parser<http::buffer_body>& requestParser,
       size_t bodyLimit) {
-    std::string result;
-    std::vector<char> chunk(std::min(bodyLimit, size_t{4096}));
-    while (!requestParser.is_done() && result.size() < bodyLimit) {
-      const size_t toRead = std::min(bodyLimit - result.size(), chunk.size());
-      const size_t bytesRead = co_await readIntoBuffer(
-          stream, buffer, requestParser, std::span<char>{chunk.data(), toRead});
-      result.append(chunk.data(), bytesRead);
-      if (bytesRead == 0) break;
-    }
-    co_return result;
+    return [](auto& stream, auto& buffer, auto& requestParser,
+              size_t bodyLimit) -> net::awaitable<std::string> {
+      std::string result;
+      std::vector<char> chunk(std::min(bodyLimit, size_t{4096}));
+      while (!requestParser.is_done() && result.size() < bodyLimit) {
+        const size_t toRead = std::min(bodyLimit - result.size(), chunk.size());
+        const size_t bytesRead = co_await HttpServer::readIntoBuffer(
+            stream, buffer, requestParser,
+            std::span<char>{chunk.data(), toRead});
+        result.append(chunk.data(), bytesRead);
+        if (bytesRead == 0) break;
+      }
+      co_return result;
+    }(stream, buffer, requestParser, bodyLimit);
   }
 
   // Callable passed to the lazy-mode `httpHandler_` as `bodyGetter`. Holds
@@ -296,11 +303,15 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     size_t chunkSize_;
 
     net::awaitable<std::optional<std::string_view>> operator()() {
-      const size_t bytesRead = co_await HttpServer::readIntoBuffer(
-          stream_, buffer_, requestParser_,
-          std::span<char>{chunkBuffer_.data(), chunkSize_});
-      if (bytesRead == 0) co_return std::nullopt;
-      co_return std::string_view{chunkBuffer_.data(), bytesRead};
+      return [](auto& stream, auto& buffer, auto& requestParser,
+                auto& chunkBuffer, size_t chunkSize)
+                 -> net::awaitable<std::optional<std::string_view>> {
+        const size_t bytesRead = co_await HttpServer::readIntoBuffer(
+            stream, buffer, requestParser,
+            std::span<char>{chunkBuffer.data(), chunkSize});
+        if (bytesRead == 0) co_return std::nullopt;
+        co_return std::string_view{chunkBuffer.data(), bytesRead};
+      }(stream_, buffer_, requestParser_, chunkBuffer_, chunkSize_);
     }
   };
 
