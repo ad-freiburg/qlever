@@ -1453,7 +1453,7 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
 
 // _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
-    Id col0Id, size_t numDistinctC1, IdTableView<0> relation) {
+    Id col0Id, size_t numDistinctC1, const IdTable& relation) {
   AD_CORRECTNESS_CHECK(!relation.empty());
   size_t numRows = relation.numRows();
   // Make sure that the blocks don't become too large: If the previously

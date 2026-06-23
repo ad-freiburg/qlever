@@ -114,8 +114,7 @@ struct CompressedRelationWriter::PermutationWriter {
   ad_utility::AllocatorWithLimit<ValueId> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 
-  // TODO<joka921> Use call_fixed_size if there is benefit to it.
-  IdTableStatic<0> relation_{numColumns_, alloc_};
+  IdTable relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
   using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
@@ -223,7 +222,7 @@ struct CompressedRelationWriter::PermutationWriter {
       // Small relations are written in one go.
       [[maybe_unused]] auto md1 = writer1_->addSmallRelation(
           col0IdCurrentRelation_.value(), distinctCol1Counter_.getAndReset(),
-          relation_.asStaticView<0>());
+          relation_);
       // We don't need to do anything for the twin permutation and writer2,
       // because we have set up `writer1.smallBlocksCallback_` to do that work
       // for us (see above).
