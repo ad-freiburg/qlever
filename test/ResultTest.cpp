@@ -553,8 +553,8 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
         limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
           for (const auto& row : innerTable) {
             ASSERT_EQ(row.size(), 2);
-            // Make sure we never get values that were
-            // supposed to be filtered out.
+            // Make sure we never get values that were supposed to be filtered
+            // out.
             EXPECT_NE(row[0].getVocabIndex().get(), 0);
             EXPECT_NE(row[1].getVocabIndex().get(), 7);
           }
