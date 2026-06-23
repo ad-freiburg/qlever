@@ -1,8 +1,9 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold, UFR
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -73,8 +74,8 @@ class Server {
            bool persistUpdates = false,
            std::vector<std::string> preloadMaterializedViews = {});
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  Index& index() { return *index_; }
+  const Index& index() const { return *index_; }
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -121,10 +122,11 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
+  std::shared_ptr<Index> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
@@ -253,7 +255,7 @@ class Server {
   //  Prepare the execution of an operation
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
-                        ad_utility::websocket::MessageSender& messageSender,
+                        ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;

@@ -50,6 +50,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Disable nlohmann implicit conversions (e.g. json → std::string) globally so
+# all TUs, including those compiled via PCH, see the same flag value.
+add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
@@ -60,6 +64,8 @@ if (CHEAPER_COMPILATION)
     # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
     # even with debug builds.
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    # General flag used throughout the codebase to opt into cheaper-to-compile alternatives.
+    add_compile_definitions(QLEVER_CHEAPER_COMPILATION)
 endif()
 
 # Coroutines require an additional compiler flag that is called differently
@@ -81,7 +87,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
-        add_compile_options(-fcoroutines)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
@@ -141,6 +147,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -153,6 +160,7 @@ FetchContent_Declare(
         nlohmann-json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -166,6 +174,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -180,6 +189,7 @@ FetchContent_Declare(
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -190,6 +200,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
@@ -272,7 +283,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -286,6 +297,18 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
+# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# that cross the system-header boundary (e.g. absl containers instantiated with
+# user types, std::variant). Suppress for the affected version range so the
+# flag can be re-enabled easily once GCC fixes the false-positive behavior.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    # False positives from template instantiation crossing system-header boundaries.
+    add_compile_options(-Wno-maybe-uninitialized)
+    # Unreliable on large translation units; formatting is enforced by clang-format anyway.
+    add_compile_options(-Wno-misleading-indentation)
+endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
@@ -297,7 +320,7 @@ endif ()
 
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
 
 if (${PERFTOOLS_PROFILER})
@@ -322,6 +345,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -396,6 +420,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -410,24 +435,43 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
+
+
+################################
+# uriparser
+################################
+FetchContent_Declare(
+        uriparser
+        GIT_REPOSITORY https://github.com/uriparser/uriparser.git
+        GIT_TAG 04d8b8df5e0c6bf6c06e472540c015943a613bd2 # 1.0.0
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
+)
+
+set(URIPARSER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
-include_directories(${ctre_SOURCE_DIR}/single-header)
+include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
-include_directories(${fsst_SOURCE_DIR})
-include_directories(${range-v3_SOURCE_DIR}/include)
+include_directories(SYSTEM ${fsst_SOURCE_DIR})
+include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
@@ -471,11 +515,9 @@ set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
-if (CMAKE_BUILD_TYPE MATCHES DEBUG)
-    set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
-else ()
-    set(LOGLEVEL INFO CACHE STRING "The loglevel")
-endif ()
+set(LOGLEVEL DEBUG CACHE STRING
+    "The maximum log level QLever is compiled with. Less verbose log levels can be chosen at runtime via the 'log-level' runtime parameter."
+)
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
@@ -487,22 +529,73 @@ if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "
   message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
-##################################################
-# Precompiled headers
-set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
-
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
-if (USE_PRECOMPILED_HEADERS)
-    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
-    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
-endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+
+##################################################
+# Precompiled headers
+#
+# PRECOMPILED_HEADER_FILES_EXTERNAL: stable third-party headers that never change
+# and are expensive to parse. Applied to every library target.
+set(PRECOMPILED_HEADER_FILES_EXTERNAL
+    <absl/strings/str_cat.h>
+    <absl/container/flat_hash_map.h>
+    <absl/container/flat_hash_set.h>
+    <range/v3/all.hpp>
+    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
+    # nlohmann header already sees the correct flag value.
+    <nlohmann/json.hpp>
+)
+
+# PRECOMPILED_HEADER_FILES_WITH_BEAST: extends EXTERNAL with boost networking and
+# iostreams. Applied to targets that transitively include beast.h or
+# boost::iostreams (engine, index, http). Without this, the index target would
+# still parse beast.h (~8 s) on every TU that reaches it via
+# Operation.h → QueryExecutionContext.h → ResponseMiddleware.h → beast.h, even
+# though it is already covered for engine TUs.
+set(PRECOMPILED_HEADER_FILES_WITH_BEAST
+    <util/http/beast.h>
+    <boost/iostreams/filter/gzip.hpp>
+    <boost/iostreams/filtering_stream.hpp>
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_ENGINE
+    src/util/HashMap.h
+    src/engine/Operation.h
+    src/engine/QueryExecutionTree.h
+    ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+set(PRECOMPILED_HEADER_FILES_PARSER
+    src/engine/sparqlExpressions/AggregateExpression.h
+    ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp
+    ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS
+   src/engine/sparqlExpressions/SparqlExpression.h
+   ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+    target_precompile_headers(sparqlExpressions PRIVATE ${PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS})
+    # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
+    # and `boost::iostreams` via `ResponseMiddleware.h` / `CompressorStream.h`.
+    target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        target_precompile_headers(http PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    endif ()
+    target_precompile_headers(rdfTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(rdfEscaping PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+endif ()
+
 add_subdirectory(benchmark)
 
 enable_testing()

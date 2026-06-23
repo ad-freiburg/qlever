@@ -91,7 +91,7 @@ class MemorySize {
 
   /*
   Return the internal memory amount in the wanted memory unit format.
-  For example: If the internal memory amount is 1000 bytes, than `kilobytes()`
+  For example: If the internal memory amount is 1000 bytes, then `kilobytes()`
   would return `1.0`.
   */
   constexpr size_t getBytes() const;

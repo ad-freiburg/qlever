@@ -68,6 +68,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -221,11 +222,12 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   for (auto& plan : lastRow) {
     // For subqueries the limit has already been applied, for the root query the
-    // exporter will apply LIMIT and OFFSET if `supportsLimitOffset()` is not
-    // natively supported by the `Operation`. Check the documentation of
+    // exporter will apply LIMIT and OFFSET if `handlesLimitOffset()` returns
+    // `NONE` for the `Operation`. Check the documentation of
     // `ExportQueryExecutionTrees::compensateForLimitOffsetClause` to see how
     // this is handled in the exporter.
-    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
+    if (plan._qet->handlesLimitOffset() != LimitOffsetHandling::NONE &&
+        !isSubquery) {
       plan._qet->applyLimitOffset(pq._limitOffset);
     }
   }
@@ -474,7 +476,10 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
-      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+      // An explicit `INTERNAL SORT BY` requests the complete sorted result, so
+      // we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its subtree.
+      tree =
+          QueryExecutionTree::createSortedTree(parent._qet, sortColumns, true);
     } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
@@ -776,8 +781,8 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<SubtreePlan>>& children, TextLimitMap& textLimits)
-    -> PlansAndFilters {
+    const vector<vector<SubtreePlan>>& children,
+    TextLimitMap& textLimits) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -843,7 +848,10 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index");
     }
 
-    // Backward compatibility with spatial search predicates
+    // Backward compatibility with spatial search predicates.
+    // GCC's `-Wdangling-reference` cannot trace through `std::visit` to see
+    // that the returned reference points into the variant, not the visitor.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
@@ -854,6 +862,7 @@ auto QueryPlanner::seedWithScansAndText(
               return var.name();
             }},
         node.triple_.p_);
+    GCC_REENABLE_WARNINGS
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         ql::ends_with(input, '>')) {
@@ -2435,10 +2444,9 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs) const
-    -> std::vector<SubtreePlan> {
+auto QueryPlanner::applyJoinDistributivelyToUnion(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
@@ -2547,11 +2555,18 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 #endif
 }
 
+<<<<<<< bind_multicolumn
 // _____________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
+=======
+// __________________________________________________________________________________________________________________
+auto QueryPlanner::createJoinWithTransitivePath(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
+>>>>>>> master
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
@@ -2659,10 +2674,9 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithHasPredicateScan(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2698,10 +2712,9 @@ auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
-                                            const SubtreePlan& b,
-                                            const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithPathSearch(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
   auto bRootOp =

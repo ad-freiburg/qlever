@@ -41,7 +41,8 @@ void TurtleParser<Tokenizer_T>::clear() {
   activePredicate_ = TripleComponent::Iri::fromIriref("<>");
   activePrefix_.clear();
 
-  prefixMap_ = prefixMapDefault_;
+  prefixMap_ = {};
+  baseIri_.reset();
 
   tok_.reset(nullptr, 0);
   triples_.clear();
@@ -111,9 +112,7 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      const auto& iri = lastParseResult_.getIri();
-      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
-      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
+      setBaseIriOrThrow(lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -143,9 +142,7 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      const auto& iri = lastParseResult_.getIri();
-      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
-      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
+      setBaseIriOrThrow(lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -626,6 +623,18 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
   prefixMap_[key] = prefix;
 }
 
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
+    const ad_utility::triple_component::Iri& iri) {
+  qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
+  if (useSimplifiedGrammar_ &&
+      (!baseIri_.has_value() || baseIri_.value() != uri)) {
+    raiseDisallowedPrefixOrBaseError();
+  }
+  baseIri_ = std::move(uri);
+}
+
 // ______________________________________________________________________
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
@@ -899,13 +908,21 @@ bool TurtleParser<T>::iriref() {
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
   }
+
+  auto resolveIri = [this](std::string_view iri) {
+    if (baseIri_.has_value()) {
+      lastParseResult_ =
+          TripleComponent::Iri::fromIrirefConsiderBase(iri, baseIri_.value());
+    } else {
+      lastParseResult_ = TripleComponent::Iri::fromIriref(iri);
+    }
+  };
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
   if constexpr (T::UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
-    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
-        view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
+    resolveIri(view.substr(0, endPos + 1));
     return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
@@ -915,9 +932,7 @@ bool TurtleParser<T>::iriref() {
         return false;
       }
     }
-    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
-        lastParseResult_.getString(), baseForRelativeIri(),
-        baseForAbsoluteIri());
+    resolveIri(lastParseResult_.getString());
     return true;
   }
 }
@@ -1030,22 +1045,20 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
         // (maybe the failure was due to statements crossing our block).
         if (resetStateAndRead(&b)) {
           // we have successfully extended our buffer
-          if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
-            auto d = tok_.view();
+          if (byteVec_.size() > RDF_PARSER_MAX_TOTAL_BUFFER_SIZE().getBytes()) {
+            std::string_view unparsed = tok_.view();
             AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                         << " Within " << (BZIP2_MAX_TOTAL_BUFFER_SIZE >> 10)
-                         << "MB of Turtle input\n";
+                         << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
+                         << " of Turtle input\n";
             AD_LOG_ERROR << "If you really have Turtle input with such a "
                             "long structure please recompile with adjusted "
                             "constants in ConstantsIndexCreation.h or "
                             "decompress your file and "
                             "use --file-format mmap\n";
-            auto s = std::min(size_t(1000), size_t(d.size()));
             AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-            AD_LOG_INFO << std::string_view(d.data(), s) << std::endl;
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             if (ex.has_value()) {
               throw ex.value();
-
             } else {
               this->raise(
                   "Too many bytes parsed without finishing a turtle "
@@ -1065,15 +1078,14 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
             // triples parsed so far, check if we have indeed parsed through
             // the complete input
             tok_.skipWhitespaceAndComments();
-            auto d = tok_.view();
-            if (!d.empty()) {
+            std::string_view unparsed = tok_.view();
+            if (!unparsed.empty()) {
               AD_LOG_INFO
                   << "Parsing of line has Failed, but parseInput is not "
                      "yet exhausted. Remaining bytes: "
-                  << d.size() << '\n';
-              auto s = std::min(size_t(1000), size_t(d.size()));
+                  << unparsed.size() << '\n';
               AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-              AD_LOG_INFO << std::string_view(d.data(), s) << std::endl;
+              AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             }
             isParserExhausted_ = true;
             break;
@@ -1116,7 +1128,7 @@ template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-    parser.prefixMap_ = this->prefixMap_;
+    this->copyHeaderFrom(*this, parser);
     parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     // Ensure that all sub-parsers use the same file-level blank node prefix
@@ -1207,7 +1219,7 @@ void RdfParallelParser<T>::initialize(
       break;
     }
   }
-  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+  this->copyHeaderFrom(std::move(declarationParser), *this);
   remainingBatchFromInitialization.reserve(remainder.size());
   ql::ranges::copy(remainder,
                    std::back_inserter(remainingBatchFromInitialization));

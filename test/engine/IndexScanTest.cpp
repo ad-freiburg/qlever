@@ -562,9 +562,10 @@ TEST(IndexScan, getResultSizeOfScan) {
 
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
-  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
-                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
-  auto getId = makeGetId(index);
+  auto index = std::make_shared<Index>(
+      makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                    "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
+  auto getId = makeGetId(*index);
   auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
@@ -572,13 +573,13 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
 
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
 
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
@@ -589,7 +590,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   // Since the rough estimate doesn't know if the delta triples are inserts or
   // deletions, the estimate remains the same regardless of the delta triples.
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
@@ -600,7 +601,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
@@ -609,7 +610,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
-    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{a, a, a, g}}});
       deltaTriples.deleteTriples(cancellationHandle,
@@ -1561,13 +1562,25 @@ TEST(IndexScanTest, StripColumns) {
       EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
     }
 
-    // Test functions whose results don't depend on column stripping
-    // These should return the same values for both base and stripped scan
     auto& strippedScanOp =
         dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
 
-    // Test accessor functions
-    EXPECT_EQ(strippedScanOp.getDescriptor(), baseScan.getDescriptor());
+    // The descriptor reflects the stripping: each kept variable appears, each
+    // stripped one does not.
+    const auto descriptor = strippedScanOp.getDescriptor();
+    for (const auto& var : varsToKeep) {
+      EXPECT_THAT(descriptor, ::testing::HasSubstr(var.name()));
+    }
+    for (const auto& [var, _] :
+         baseScan.getExternallyVisibleVariableColumns()) {
+      if (ql::ranges::find(varsToKeep, var) == varsToKeep.end()) {
+        EXPECT_THAT(descriptor,
+                    ::testing::Not(::testing::HasSubstr(var.name())));
+      }
+    }
+
+    // Test accessor functions whose results don't depend on column stripping;
+    // these should return the same values for the base and the stripped scan.
     EXPECT_EQ(strippedScanOp.subject().toString(),
               baseScan.subject().toString());
     EXPECT_EQ(strippedScanOp.predicate().toString(),
@@ -1599,8 +1612,8 @@ TEST(IndexScanTest, StripColumns) {
               baseScan.isIndexScanWithNumVariables(3));
 
     // Test optimization functions
-    EXPECT_EQ(strippedScanOp.supportsLimitOffset(),
-              baseScan.supportsLimitOffset());
+    EXPECT_EQ(strippedScanOp.handlesLimitOffset(),
+              baseScan.handlesLimitOffset());
 
     // Test specification functions
     EXPECT_EQ(strippedScanOp.getScanSpecification().col0Id(),

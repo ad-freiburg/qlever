@@ -70,10 +70,12 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   };
 
   auto firstSorter = convertPartialToGlobalIds(
-      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
-      NUM_TRIPLES_PER_PARTIAL_VOCAB, isQleverInternalTriple);
+      *indexBuilderData.parsedTriples_.idTriples_,
+      indexBuilderData.parsedTriples_.numTriplesPerPartialVocab_,
+      isQleverInternalTriple);
 
-  return {indexBuilderData, std::move(firstSorter)};
+  return {std::move(indexBuilderData.vocabularyMetaData_),
+          std::move(firstSorter)};
 }
 
 // _____________________________________________________________________________
@@ -475,24 +477,20 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 // _____________________________________________________________________________
-IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
+BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
-                                  allocator_));
+      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
+                                  2_MB * NumColumnsIndexBuilding, allocator_));
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
   bool parserExhausted = false;
 
-  // already count the numbers of triples that will be used for the language
-  // filter
-  size_t numFiles = 0;
-
   // we add extra triples
-  std::vector<size_t> actualPartialSizes;
+  std::vector<size_t> numTriplesPerPartialVocab;
 
   // Each of these futures corresponds to the processing and writing of one
   // batch of triples and partial vocabulary.
@@ -537,9 +535,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
-              &itemArray, linesPerPartial, &(vocab_.getCaseComparator()), this,
-              itemAlloc, addHasWordTriples_ ? &numHasWordTriples : nullptr));
+          getIdMapLambdas(itemArray, linesPerPartial,
+                          &(vocab_.getCaseComparator()), this, itemAlloc,
+                          addHasWordTriples_ ? &numHasWordTriples : nullptr));
 
       while (auto opt = p.getNextValue()) {
         numTriplesParsedTimer.cont();
@@ -561,7 +559,6 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
       parser->printAndResetQueueStatistics();
     }
 
-    // localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
@@ -585,13 +582,13 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(
-            numTriplesParsed, numFiles, actualCurrentPartialSize,
-            std::move(oldItemPtr), std::move(localWriter), &idTriples);
-    numFiles++;
+            numTriplesParsed, numTriplesPerPartialVocab.size(),
+            actualCurrentPartialSize, std::move(oldItemPtr),
+            std::move(localWriter), &idTriples);
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
-    actualPartialSizes.push_back(actualCurrentPartialSize);
+    numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   for (auto& future : writePartialVocabularyFuture) {
@@ -606,61 +603,64 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     AD_LOG_INFO << "Number of `ql:has-word` triples created: "
                 << numHasWordTriples.load() << std::endl;
   }
-  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
-              << std::endl;
+  AD_LOG_INFO << "Number of partial vocabularies created: "
+              << numTriplesPerPartialVocab.size() << std::endl;
+  return {std::move(numTriplesPerPartialVocab), std::move(*idTriples.wlock())};
+}
+
+// _____________________________________________________________________________
+IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
+    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
+  auto parsedTriples = buildPartialVocabularies(parser, linesPerPartial);
+  const auto numPartialVocabs = parsedTriples.numTriplesPerPartialVocab_.size();
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
-  const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
-                                                          std::string_view b) {
-      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
+  ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](
+                        std::string_view a, bool aIsExternal,
+                        std::string_view b, bool bIsExternal) {
+      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numPartialVocabs, sortPred, wordCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
     return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
-  IndexBuilderDataAsExternalVector res;
-  res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
   AD_LOG_INFO << "Number of words in external vocabulary: "
-              << res.vocabularyMetaData_.numWordsTotal() -
-                     sizeInternalVocabulary
-              << std::endl;
-
-  res.idTriples = std::move(*idTriples.wlock());
-  res.actualPartialSizes = std::move(actualPartialSizes);
+              << mergeRes.numWordsTotal() - sizeInternalVocabulary << std::endl;
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
-  for (size_t n = 0; n < numFiles; ++n) {
+  for (size_t n = 0; n < numPartialVocabs; ++n) {
     deleteTemporaryFile(
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
-  return res;
+  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
+               << std::endl;
+
+  return {std::move(mergeRes), std::move(parsedTriples)};
 }
 
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-    size_t linesPerPartial, Func isQLeverInternalTriple)
+    Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
-  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
-               << std::endl;
 
   // Iterate over all partial vocabularies.
   auto resultPtr =
@@ -1071,7 +1071,8 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    graphNameManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
+    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
+        onDiskBase + ".allocated-graphs-state");
   }
 }
 
@@ -1357,12 +1358,11 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
-    if (idIfNotString.has_value()) {
-      resultTriple[index] = idIfNotString.value();
-    } else {
-      // `toRdfLiteral` handles literals as well as IRIs correctly.
-      resultTriple[index] = std::move(el);
-    }
+    resultTriple[index] =
+        idIfNotString.has_value()
+            ? TripleComponent{idIfNotString.value()}
+            // `toRdfLiteral` handles literals as well as IRIs correctly.
+            : std::move(el);
   };
   handleStringOrId(&TurtleTriple::subject_, 0);
   handleStringOrId(&TurtleTriple::predicate_, 1);
@@ -1374,13 +1374,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
-  for (auto& el : resultTriple) {
-    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
+  for (auto& component : resultTriple) {
+    if (component.tripleComponent_.isId()) {
       // If we already have an ID, we can just continue;
       continue;
     }
-    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    const auto& iriOrLiteral = component.iriOrLiteral_;
+    const auto& iriOrLiteral = component.tripleComponent_;
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
@@ -1431,9 +1430,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1531,7 +1529,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 // ___________________________________________________________________________
 std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::unique_ptr<ItemMapArray> items, auto localIds,
+    std::unique_ptr<ItemMapArray> items,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
@@ -1539,7 +1538,6 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
-  std::future<void> resultFuture;
   std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
@@ -1550,14 +1548,15 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
       return vocabMapsToVector(*items);
     }();
-    const auto identicalPred = [&c = vocab->getCaseComparator()](
-                                   const auto& a, const auto& b) {
-      return c(a.second.splitVal_, b.second.splitVal_,
-               decltype(vocab_)::SortLevel::TOTAL);
-    };
     {
       ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(&vec, identicalPred, true);
+      sortVocabVector(
+          &vec,
+          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
+            return c.isLessInTotalWithExternalFlag(
+                a.first, a.second.isExternal(), b.first, b.second.isExternal());
+          },
+          true);
     }
     auto mapping = [&]() {
       ad_utility::TimeBlockAndLog l{"creating internal mapping"};
@@ -1570,7 +1569,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
       vec.erase(std::unique(vec.begin(), vec.end(),
                             [](const auto& a, const auto& b) {
-                              return a.second.id_ == b.second.id_;
+                              return a.second.id() == b.second.id();
                             }),
                 vec.end());
     }
@@ -1686,18 +1685,6 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
     default:
       AD_FAIL();
   }
-}
-
-// ___________________________________________________________________________
-size_t IndexImpl::getCardinality(
-    Id id, Permutation::Enum permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesState);
-      meta.has_value()) {
-    return meta.value().numRows_;
-  }
-  return 0;
 }
 
 // ___________________________________________________________________________
@@ -1983,10 +1970,9 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    auto tables = permutation.lazyScan(
+    auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        std::nullopt, additionalColumns, cancellationHandle,
-        *locatedTriplesSharedState);
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
