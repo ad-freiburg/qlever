@@ -340,9 +340,10 @@ void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   if (ql::starts_with(input, '+')) {
     input.remove_prefix(1);
   }
+  const char* end = input.data() + input.size();
   auto [firstNonMatching, errorCode] =
-      absl::from_chars(input.data(), input.data() + input.size(), result);
-  if (firstNonMatching != input.end() || errorCode != std::errc{}) {
+      absl::from_chars(input.data(), end, result);
+  if (firstNonMatching != end || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
@@ -378,7 +379,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
           "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } else if (firstNonMatching != input.end()) {
+  } else if (firstNonMatching != input.data() + input.size()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
@@ -944,7 +945,7 @@ RdfStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
   b.numBlankNodes_ = this->numBlankNodes_;
   b.numTriples_ = this->triples_.size();
-  b.tokenizerPosition_ = this->tok_.data().begin();
+  b.tokenizerPosition_ = this->tok_.data().data();
   b.tokenizerSize_ = this->tok_.data().size();
   return b;
 }
@@ -976,7 +977,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
   // function "raise").
   numBytesBeforeCurrentBatch_ += byteVec_.size() - tok_.data().size();
   buf.resize(tok_.data().size() + nextBytes.size());
-  memcpy(buf.data(), tok_.data().begin(), tok_.data().size());
+  memcpy(buf.data(), tok_.data().data(), tok_.data().size());
   memcpy(buf.data() + tok_.data().size(), nextBytes.data(), nextBytes.size());
   byteVec_ = std::move(buf);
   tok_.reset(byteVec_.data(), byteVec_.size());
