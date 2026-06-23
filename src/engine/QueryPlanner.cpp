@@ -781,8 +781,8 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<SubtreePlan>>& children,
-    TextLimitMap& textLimits) -> PlansAndFilters {
+    const vector<vector<SubtreePlan>>& children, TextLimitMap& textLimits)
+    -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -2444,9 +2444,10 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
+auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
+                                                  const SubtreePlan& b,
+                                                  const JoinColumns& jcs) const
+    -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
@@ -2555,18 +2556,11 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 #endif
 }
 
-<<<<<<< bind_multicolumn
-// _____________________________________________________________________________
+// __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
-=======
-// __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
->>>>>>> master
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
@@ -2674,9 +2668,10 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
+                                                  const SubtreePlan& b,
+                                                  const JoinColumns& jcs)
+    -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2712,9 +2707,10 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
+                                            const SubtreePlan& b,
+                                            const JoinColumns& jcs)
+    -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
   auto bRootOp =
