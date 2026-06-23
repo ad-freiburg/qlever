@@ -117,6 +117,22 @@ __u64 getUserDataForCompletionEvent(struct io_uring_cqe* cqe) {
   return io_uring_cqe_get_data64(cqe);
 }
 
+// Gets the next available submission queue entry (SQE) from the submission
+// queue (SQ) belonging to the `ring`. On success, `getSQEFromSQ` returns a
+// pointer to the SQE. On failure, `nullptr` is returned. If `nullptr` is
+// returned, the SQ ring is currently full and entries must be submitted for
+// processing before new ones can get allocated. If a SQE is returned, it should
+// be filled out via one of the preparation functions such as
+// `io_uring_prep_read` and submitted via `io_uring_submit`. Note that neither
+// `io_uring_get_sqe` nor the preparation functions set (or clear) the
+// `user_data` field of the SQE. If the caller expects `io_uring_cqe_get_data`
+// or `io_uring_cqe_get_data64` to return valid data when reaping IO completions
+// either `io_uring_sqe_set_data` or `io_uring_sqe_set_data64` must have been
+// called before submitting the request.
+struct io_uring_sqe* getSQEFromSQ(struct io_uring* ring) {
+  return io_uring_get_sqe(ring);
+}
+
 }  // namespace
 
 //______________________________________________________________________________
@@ -145,19 +161,16 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
 
   for (size_t i = 0; i < numberOfRequests; ++i) {
     // When the ring is full, submit pending SQEs and drain CQEs to free space.
-    if (inFlight_ >= ringSize_) {
+    if (numberOfInFlightRequests_ >= ringSize_) {
       submit(&ring_);
-      while (inFlight_ >= ringSize_) {
+      while (numberOfInFlightRequests_ >= ringSize_) {
         drainOneCqe();
       }
     }
-
-    struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-    // `io_uring_prep_read` prepares an IO read request. The submission queue
-    // entry `sqe` is is setup to
+    struct io_uring_sqe* sqe = getSQEFromSQ(&ring_);
     prepareSQEFOrReadRequest(sqe, fd, buffers[i], sizes[i], fileOffsets[i]);
     setUserData(sqe, &handle);
-    inFlight_++;
+    numberOfInFlightRequests_++;
   }
 
   submit(&ring_);
@@ -185,7 +198,7 @@ void IoUringManager::drainOneCqe() {
   }
   BatchHandle batchId = getUserDataForCompletionEvent(cqe);
   markAsConsumed(&ring_, cqe);
-  inFlight_--;
+  numberOfInFlightRequests_--;
 
   if (remaining_.count(batchId)) {
     remaining_[batchId]--;

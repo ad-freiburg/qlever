@@ -48,6 +48,7 @@ class SyncIoManager {
 // all SQEs in addBatch (blocking if the ring is full), and lets the caller
 // block on a specific batch via wait().
 // Single-threaded use only.
+// See https://github.com/axboe/liburing for more details.
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringManager {
@@ -69,13 +70,13 @@ class IoUringManager {
                        ql::span<char*> targetPointers);
 
   // Block until every read in `handle` has completed.
-  // Throws std::runtime_error on any I/O error.
+  // Throws `std::runtime_error` on any I/O error.
   void wait(BatchHandle handle);
 
  private:
   io_uring ring_{};
   unsigned ringSize_;
-  size_t inFlight_ = 0;
+  size_t numberOfInFlightRequests_ = 0;
   uint64_t nextHandle_ = 0;
 
   // Maps batch ID to number of not-yet-completed reads.
