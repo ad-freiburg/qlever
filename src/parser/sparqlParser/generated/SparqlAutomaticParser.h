@@ -288,62 +288,67 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RulePathElt = 97,
     RulePathEltOrInverse = 98,
     RulePathMod = 99,
-    RulePathPrimary = 100,
-    RulePathNegatedPropertySet = 101,
-    RulePathOneInPropertySet = 102,
-    RuleInteger = 103,
-    RuleTriplesNode = 104,
-    RuleBlankNodePropertyList = 105,
-    RuleTriplesNodePath = 106,
-    RuleBlankNodePropertyListPath = 107,
-    RuleCollection = 108,
-    RuleCollectionPath = 109,
-    RuleGraphNode = 110,
-    RuleGraphNodePath = 111,
-    RuleVarOrTerm = 112,
-    RuleVarOrIri = 113,
-    RuleVar = 114,
-    RuleGraphTerm = 115,
-    RuleExpression = 116,
-    RuleConditionalOrExpression = 117,
-    RuleConditionalAndExpression = 118,
-    RuleValueLogical = 119,
-    RuleRelationalExpression = 120,
-    RuleNumericExpression = 121,
-    RuleAdditiveExpression = 122,
-    RuleMultiplicativeExpressionWithSign = 123,
-    RulePlusSubexpression = 124,
-    RuleMinusSubexpression = 125,
-    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 126,
-    RuleMultiplicativeExpression = 127,
-    RuleMultiplyOrDivideExpression = 128,
-    RuleMultiplyExpression = 129,
-    RuleDivideExpression = 130,
-    RuleUnaryExpression = 131,
-    RulePrimaryExpression = 132,
-    RuleBrackettedExpression = 133,
-    RuleBuiltInCall = 134,
-    RuleRegexExpression = 135,
-    RuleLangExpression = 136,
-    RuleSubstringExpression = 137,
-    RuleStrReplaceExpression = 138,
-    RuleExistsFunc = 139,
-    RuleNotExistsFunc = 140,
-    RuleAggregate = 141,
-    RuleIriOrFunction = 142,
-    RuleRdfLiteral = 143,
-    RuleNumericLiteral = 144,
-    RuleNumericLiteralUnsigned = 145,
-    RuleNumericLiteralPositive = 146,
-    RuleNumericLiteralNegative = 147,
-    RuleBooleanLiteral = 148,
-    RuleString = 149,
-    RuleIri = 150,
-    RulePrefixedName = 151,
-    RuleBlankNode = 152,
-    RuleIriref = 153,
-    RulePnameLn = 154,
-    RulePnameNs = 155
+    RulePathSyntaxExtension = 100,
+    RuleExactLength = 101,
+    RuleOnlyMin = 102,
+    RuleMinMax = 103,
+    RuleOnlyMax = 104,
+    RulePathPrimary = 105,
+    RulePathNegatedPropertySet = 106,
+    RulePathOneInPropertySet = 107,
+    RuleInteger = 108,
+    RuleTriplesNode = 109,
+    RuleBlankNodePropertyList = 110,
+    RuleTriplesNodePath = 111,
+    RuleBlankNodePropertyListPath = 112,
+    RuleCollection = 113,
+    RuleCollectionPath = 114,
+    RuleGraphNode = 115,
+    RuleGraphNodePath = 116,
+    RuleVarOrTerm = 117,
+    RuleVarOrIri = 118,
+    RuleVar = 119,
+    RuleGraphTerm = 120,
+    RuleExpression = 121,
+    RuleConditionalOrExpression = 122,
+    RuleConditionalAndExpression = 123,
+    RuleValueLogical = 124,
+    RuleRelationalExpression = 125,
+    RuleNumericExpression = 126,
+    RuleAdditiveExpression = 127,
+    RuleMultiplicativeExpressionWithSign = 128,
+    RulePlusSubexpression = 129,
+    RuleMinusSubexpression = 130,
+    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 131,
+    RuleMultiplicativeExpression = 132,
+    RuleMultiplyOrDivideExpression = 133,
+    RuleMultiplyExpression = 134,
+    RuleDivideExpression = 135,
+    RuleUnaryExpression = 136,
+    RulePrimaryExpression = 137,
+    RuleBrackettedExpression = 138,
+    RuleBuiltInCall = 139,
+    RuleRegexExpression = 140,
+    RuleLangExpression = 141,
+    RuleSubstringExpression = 142,
+    RuleStrReplaceExpression = 143,
+    RuleExistsFunc = 144,
+    RuleNotExistsFunc = 145,
+    RuleAggregate = 146,
+    RuleIriOrFunction = 147,
+    RuleRdfLiteral = 148,
+    RuleNumericLiteral = 149,
+    RuleNumericLiteralUnsigned = 150,
+    RuleNumericLiteralPositive = 151,
+    RuleNumericLiteralNegative = 152,
+    RuleBooleanLiteral = 153,
+    RuleString = 154,
+    RuleIri = 155,
+    RulePrefixedName = 156,
+    RuleBlankNode = 157,
+    RuleIriref = 158,
+    RulePnameLn = 159,
+    RulePnameNs = 160
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -463,6 +468,11 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class PathEltContext;
   class PathEltOrInverseContext;
   class PathModContext;
+  class PathSyntaxExtensionContext;
+  class ExactLengthContext;
+  class OnlyMinContext;
+  class MinMaxContext;
+  class OnlyMaxContext;
   class PathPrimaryContext;
   class PathNegatedPropertySetContext;
   class PathOneInPropertySetContext;
@@ -1977,12 +1987,78 @@ class SparqlAutomaticParser : public antlr4::Parser {
    public:
     PathModContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
+    PathSyntaxExtensionContext* pathSyntaxExtension();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
   };
 
   PathModContext* pathMod();
+
+  class PathSyntaxExtensionContext : public antlr4::ParserRuleContext {
+   public:
+    PathSyntaxExtensionContext(antlr4::ParserRuleContext* parent,
+                               size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    ExactLengthContext* exactLength();
+    OnlyMinContext* onlyMin();
+    MinMaxContext* minMax();
+    OnlyMaxContext* onlyMax();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+  };
+
+  PathSyntaxExtensionContext* pathSyntaxExtension();
+
+  class ExactLengthContext : public antlr4::ParserRuleContext {
+   public:
+    ExactLengthContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    IntegerContext* integer();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+  };
+
+  ExactLengthContext* exactLength();
+
+  class OnlyMinContext : public antlr4::ParserRuleContext {
+   public:
+    OnlyMinContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    IntegerContext* integer();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+  };
+
+  OnlyMinContext* onlyMin();
+
+  class MinMaxContext : public antlr4::ParserRuleContext {
+   public:
+    MinMaxContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    std::vector<IntegerContext*> integer();
+    IntegerContext* integer(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+  };
+
+  MinMaxContext* minMax();
+
+  class OnlyMaxContext : public antlr4::ParserRuleContext {
+   public:
+    OnlyMaxContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    IntegerContext* integer();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+  };
+
+  OnlyMaxContext* onlyMax();
 
   class PathPrimaryContext : public antlr4::ParserRuleContext {
    public:

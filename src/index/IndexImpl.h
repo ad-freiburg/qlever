@@ -126,7 +126,6 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   std::vector<WordIndex> blockBoundaries_;
-  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
@@ -203,8 +202,6 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
   GraphNameManager graphNameManager_ = GraphNameManager();
-  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
-      std::nullopt;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -266,10 +263,6 @@ class IndexImpl {
 
   GraphNameManager& graphNameManager() { return graphNameManager_; }
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const {
-    return graphNameManagerStateFile_;
-  }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
@@ -295,15 +288,6 @@ class IndexImpl {
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesState&) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation,
-                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -540,7 +524,8 @@ class IndexImpl {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, auto localIds,
+      std::unique_ptr<ItemMapArray> items,
+      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
   // Return a Turtle parser that parses the given file. The parser will be
@@ -553,7 +538,7 @@ class IndexImpl {
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, Func isQLeverInternalTriple);
+      Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

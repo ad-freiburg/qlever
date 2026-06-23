@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
+#include "util/ParsedUri.h"
 #undef EOF
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
@@ -103,7 +104,7 @@ class SparqlQleverVisitor {
   PrefixMap prefixMap_{};
 
   // The `BASE` IRI of the query if any.
-  ad_utility::triple_component::Iri baseIri_{};
+  std::optional<qlever::util::ParsedUri> baseIri_{};
 
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
@@ -179,6 +180,10 @@ class SparqlQleverVisitor {
 
   void setParseModeToInsideConstructTemplateForTesting() {
     treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
+  }
+
+  void setBaseIriForTesting(std::string_view uri) {
+    baseIri_ = qlever::util::ParsedUri{uri};
   }
 
   // ___________________________________________________________________________
@@ -421,6 +426,12 @@ class SparqlQleverVisitor {
   // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
   // lower and upper bounds of the path length.
   static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
+
+  // Same, but for the brace-quantifier shortcuts `{n}`, `{n,m}`, `{n,}`,
+  // `{,n}` from the W3C Property Paths note (see
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax).
+  static std::pair<size_t, size_t> visit(
+      Parser::PathSyntaxExtensionContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
