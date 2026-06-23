@@ -30,10 +30,8 @@ namespace indexRebuilder {
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
-// Defined in the header (and force-inlined) on purpose: it is called from
-// several translation units, and force-inlining a function defined in a `.cpp`
-// is not possible (the body has to be visible at every call site).
+// rebuild. To make `AD_ALWAYS_INLINE` work properly, this function has to be
+// defined in the header.
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
