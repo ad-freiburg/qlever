@@ -295,7 +295,7 @@ class Qlever {
   // Create a Query Execution Context needed for execution of single SPARQL
   // query.
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
-      std::function<void(const std::string&)> updateCallback =
+      std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false);
 
