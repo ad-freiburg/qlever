@@ -3708,18 +3708,19 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                   {Variable{"?g"}}, {3})))),
           h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
-  // Double bind is currently not supported
-  h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-            h::MultiColumnJoin(
-                h::Sort(h::transitivePath(
-                    left, right1, 1, std::numeric_limits<size_t>::max(),
-                    // The sort is because of missing graph permutations.
-                    h::Sort(h::IndexScanFromStrings(
-                        "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {Variable{"?g"}}, {3})))),
-                h::IndexScanFromStrings("?s", "<b>", "?o")),
-            qec);
+  // This tests double binding (both columns at once).
+  h::expect(
+      "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
+
+
+      h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::Sort(h::IndexScanFromStrings(
+                                    "?_QLever_internal_variable_qp_0", "<a>",
+                                    "?_QLever_internal_variable_qp_1", {},
+                                    NamedTag{}, {Variable{"?g"}}, {3}) )),
+      qec);
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};
   h::expect("SELECT * { { GRAPH ?g { ?s <a>+ ?g } ?s <b> ?s2 } . ?g <b> ?g2 }",
