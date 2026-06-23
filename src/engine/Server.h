@@ -61,7 +61,6 @@ class Server {
 
   virtual ~Server() = default;
 
- public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run();
@@ -371,7 +370,6 @@ class Server {
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 
- private:
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
