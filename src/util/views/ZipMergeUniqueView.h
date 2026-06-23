@@ -16,11 +16,12 @@
 #include "backports/concepts.h"
 #include "backports/functional.h"
 #include "backports/iterator.h"
+#include "backports/type_traits.h"
 #include "util/Views.h"
 
 namespace ad_utility {
 
-// Lazily merges and deduplicates two sorted forward ranges into a single sorted
+// Lazily merges and deduplicates two sorted ranges into a single sorted
 // sequence.
 //
 // Elements are yielded one at a time. The `Compare` function is applied to the
@@ -30,8 +31,8 @@ namespace ad_utility {
 // *first* range is skipped (last-wins tie-break).
 CPP_template(typename V1, typename V2, typename Compare = std::less<>,
              class Projection = ql::identity)(
-    requires ql::ranges::forward_range<V1>&& ql::ranges::view<V1>&&
-        ql::ranges::forward_range<V2>&&
+    requires ql::ranges::input_range<V1>&& ql::ranges::view<V1>&&
+        ql::ranges::input_range<V2>&&
             ql::ranges::view<V2>) class ZipMergeUniqueView
     : public ql::ranges::view_interface<
           ZipMergeUniqueView<V1, V2, Compare, Projection>> {
@@ -41,25 +42,40 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
   [[no_unique_address]] Compare comp_;
   [[no_unique_address]] Projection proj_;
 
-  class Iterator {
-   public:
-    using It1 = ql::ranges::iterator_t<V1>;
-    using Se1 = ql::ranges::sentinel_t<V1>;
-    using It2 = ql::ranges::iterator_t<V2>;
-    using Se2 = ql::ranges::sentinel_t<V2>;
+  template <bool IsConst>
+  class IteratorImpl {
+   private:
+    using V1_ = std::conditional_t<IsConst, const V1, V1>;
+    using V2_ = std::conditional_t<IsConst, const V2, V2>;
 
-    using iterator_category = std::forward_iterator_tag;
-    using iterator_concept = std::forward_iterator_tag;
-    using value_type = ql::ranges::range_value_t<V1>;
-    using reference = ql::ranges::range_reference_t<V1>;
-    using difference_type = ql::ranges::range_difference_t<V1>;
+   public:
+    using It1 = ql::ranges::iterator_t<V1_>;
+    using Se1 = ql::ranges::sentinel_t<V1_>;
+    using It2 = ql::ranges::iterator_t<V2_>;
+    using Se2 = ql::ranges::sentinel_t<V2_>;
+
+    static constexpr bool IsForwardIterator =
+        ql::ranges::forward_range<V1_> && ql::ranges::forward_range<V2_>;
+    using iterator_category =
+        std::conditional_t<IsForwardIterator, std::forward_iterator_tag,
+                           std::input_iterator_tag>;
+    using iterator_concept = iterator_category;
+    using value_type = std::common_type_t<ql::ranges::range_value_t<V1_>,
+                                          ql::ranges::range_value_t<V2_>>;
+    using reference =
+        ql::common_reference_t<ql::ranges::range_reference_t<V1_>,
+                               ql::ranges::range_reference_t<V2_>>;
+    using difference_type = ql::ranges::range_difference_t<V1_>;
     using pointer = std::add_pointer_t<reference>;
 
    private:
     It1 it1_;
-    Se1 end1_;
     It2 it2_;
-    Se2 end2_;
+    // We also need to store the sentinels of the iterators, because one
+    // iterator can be exhausted before the other, and we need to be able to
+    // detect that.
+    [[no_unique_address]] Se1 end1_;
+    [[no_unique_address]] Se2 end2_;
     const Compare* comp_;
     const Projection* proj_;
 
@@ -82,12 +98,12 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
     }
 
    public:
-    Iterator() = default;
-    Iterator(It1 b1, Se1 e1, It2 b2, Se2 e2, const Compare* comp,
-             const Projection* proj)
+    IteratorImpl() = default;
+    IteratorImpl(It1 b1, Se1 e1, It2 b2, Se2 e2, const Compare* comp,
+                 const Projection* proj)
         : it1_(std::move(b1)),
-          end1_(std::move(e1)),
           it2_(std::move(b2)),
+          end1_(std::move(e1)),
           end2_(std::move(e2)),
           comp_(comp),
           proj_(proj) {
@@ -99,7 +115,7 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
     }
     pointer operator->() const { return std::addressof(**this); }
 
-    Iterator& operator++() {
+    IteratorImpl& operator++() {
       switch (decision_) {
         case Decision::UseFirst:
           ++it1_;
@@ -115,30 +131,36 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
       decision_ = decide();
       return *this;
     }
-    Iterator operator++(int) {
-      Iterator tmp = *this;
+    IteratorImpl operator++(int) requires(IsForwardIterator) {
+      IteratorImpl tmp = *this;
       ++(*this);
       return tmp;
     }
+    void operator++(int) requires(!IsForwardIterator) { ++(*this); }
 
-    bool operator==(const Iterator& o) const {
+    bool operator==(const IteratorImpl& o) const {
       return it1_ == o.it1_ && it2_ == o.it2_;
     }
-    bool operator!=(const Iterator& o) const { return !(*this == o); }
+    bool operator!=(const IteratorImpl& o) const { return !(*this == o); }
 
     bool operator==(ql::default_sentinel_t) const {
       return it1_ == end1_ && it2_ == end2_;
     }
     bool operator!=(ql::default_sentinel_t s) const { return !(*this == s); }
-    friend bool operator==(ql::default_sentinel_t s, const Iterator& it) {
+    friend bool operator==(ql::default_sentinel_t s, const IteratorImpl& it) {
       return it == s;
     }
-    friend bool operator!=(ql::default_sentinel_t s, const Iterator& it) {
+    friend bool operator!=(ql::default_sentinel_t s, const IteratorImpl& it) {
       return it != s;
     }
   };
 
+  using Iterator = IteratorImpl<false>;
+  using ConstIterator = IteratorImpl<true>;
+
  public:
+  using value_type = typename Iterator::value_type;
+
   ZipMergeUniqueView() = default;
   ZipMergeUniqueView(V1 v1, V2 v2, Compare comp = {}, Projection proj = {})
       : v1_(std::move(v1)),
@@ -164,7 +186,18 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
                     &proj_};
   }
 
+  ConstIterator begin() const
+      requires ql::ranges::range<const V1> && ql::ranges::range<const V2> {
+    return ConstIterator{ql::ranges::begin(v1_),
+                         ql::ranges::end(v1_),
+                         ql::ranges::begin(v2_),
+                         ql::ranges::end(v2_),
+                         &comp_,
+                         &proj_};
+  }
+
   ql::default_sentinel_t end() { return {}; }
+  ql::default_sentinel_t end() const { return {}; }
 };
 
 // Deduction guides.
