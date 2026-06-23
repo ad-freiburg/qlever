@@ -28,7 +28,12 @@ class SyncIoManager {
 
   // Enqueue and immediately execute a batch of reads synchronously.
   // Returns a handle for consistency with IoUringManager.
-  BatchHandle addBatch(int fd, ql::span<const size_t> sizes,
+  // For each read call `i` (the number of read call is implicitly given by the
+  // length of `numbytesToRead`, `fileOffsets`, `targetBuffers`, which should
+  // all have the same length), reads up to `numBytesToRead[i]` bytes from file
+  // descriptor `fd` at offset `fileOffsets[i]` (from the start of the file)
+  // into the buffer starting at `targetBuffers[i]`.
+  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToRead,
                        ql::span<const uint64_t> fileOffsets,
                        ql::span<char*> targetBuffers);
 

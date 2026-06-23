@@ -12,14 +12,14 @@ namespace ad_utility {
 
 //______________________________________________________________________________
 SyncIoManager::BatchHandle SyncIoManager::addBatch(
-    int fd, ql::span<const size_t> sizes, ql::span<const uint64_t> fileOffsets,
-    ql::span<char*> targetBuffers) {
-  for (size_t i = 0; i < sizes.size(); ++i) {
+    int fd, ql::span<const size_t> numBytesToRead,
+    ql::span<const uint64_t> fileOffsets, ql::span<char*> targetBuffers) {
+  for (size_t i = 0; i < numBytesToRead.size(); ++i) {
     size_t totalBytesRead = 0;
 
-    while (totalBytesRead < sizes[i]) {
+    while (totalBytesRead < numBytesToRead[i]) {
       void* buf = targetBuffers[i] + totalBytesRead;
-      size_t count = sizes[i] - totalBytesRead;
+      size_t count = numBytesToRead[i] - totalBytesRead;
       off_t offset = static_cast<off_t>(fileOffsets[i]) +
                      static_cast<off_t>(totalBytesRead);
       // reads up to `count` bytes from file descriptor `fd` at offset `offset`
@@ -33,7 +33,6 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
       if (numBytesRead < 0) {
         throw std::runtime_error("pread failed in SyncIoManager::addBatch");
       }
-
       totalBytesRead += static_cast<size_t>(numBytesRead);
     }
   }
