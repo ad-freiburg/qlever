@@ -50,19 +50,19 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
   for (T q : queries) {
     // Single lower_bound.
     auto exp_lb = ref_lower_bound(sorted, q);
-    auto a0 = bt.template lower_bound<false>(q);
+    auto a0 = bt.template lowerBound<false>(q);
     EXPECT_EQ(a0.first, exp_lb.first) << "scalar lb value, q=" << q;
     EXPECT_EQ(a0.second, exp_lb.second) << "scalar lb rank, q=" << q;
-    auto a1 = bt.template lower_bound<true>(q);
+    auto a1 = bt.template lowerBound<true>(q);
     EXPECT_EQ(a1.first, exp_lb.first) << "simd lb value, q=" << q;
     EXPECT_EQ(a1.second, exp_lb.second) << "simd lb rank, q=" << q;
 
     // Single upper_bound.
     auto exp_ub = ref_upper_bound(sorted, q);
-    auto b0 = bt.template upper_bound<false>(q);
+    auto b0 = bt.template upperBound<false>(q);
     EXPECT_EQ(b0.first, exp_ub.first) << "scalar ub value, q=" << q;
     EXPECT_EQ(b0.second, exp_ub.second) << "scalar ub rank, q=" << q;
-    auto b1 = bt.template upper_bound<true>(q);
+    auto b1 = bt.template upperBound<true>(q);
     EXPECT_EQ(b1.first, exp_ub.first) << "simd ub value, q=" << q;
     EXPECT_EQ(b1.second, exp_ub.second) << "simd ub rank, q=" << q;
   }
@@ -71,7 +71,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
   {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
-    bt.template multi_lower_bound<8, false>(
+    bt.template multiLowerBound<8, false>(
         queries.data(), queries.size(),
         [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
@@ -84,7 +84,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
   {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
-    bt.template multi_lower_bound<16, true>(
+    bt.template multiLowerBound<16, true>(
         queries.data(), queries.size(),
         [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
@@ -97,7 +97,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
   {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
-    bt.template multi_upper_bound<8, false>(
+    bt.template multiUpperBound<8, false>(
         queries.data(), queries.size(),
         [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
@@ -110,7 +110,7 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
   {
     std::vector<std::size_t> r(queries.size(), ~std::size_t{0});
     std::size_t i = 0;
-    bt.template multi_upper_bound<16, true>(
+    bt.template multiUpperBound<16, true>(
         queries.data(), queries.size(),
         [&r, &i](std::size_t rank) { r[i++] = rank; });
     for (std::size_t k = 0; k < queries.size(); ++k) {
@@ -125,10 +125,10 @@ void verify(const std::vector<T>& sorted, const std::vector<T>& queries) {
 TEST(BPlusTree, Empty) {
   BPlusTree<int> bt(std::vector<int>{});
   EXPECT_EQ(bt.size(), 0u);
-  auto [lv, lr] = bt.lower_bound(42);
+  auto [lv, lr] = bt.lowerBound(42);
   EXPECT_EQ(lv, std::numeric_limits<int>::max());
   EXPECT_EQ(lr, 0u);
-  auto [uv, ur] = bt.upper_bound(42);
+  auto [uv, ur] = bt.upperBound(42);
   EXPECT_EQ(uv, std::numeric_limits<int>::max());
   EXPECT_EQ(ur, 0u);
 }
@@ -207,10 +207,10 @@ TEST(BPlusTree, QueryBelowMin) {
 
 TEST(BPlusTree, QueryAboveMax) {
   std::vector<int> data = {10, 20, 30};
-  auto [lv, lr] = BPlusTree<int>(data).lower_bound(100);
+  auto [lv, lr] = BPlusTree<int>(data).lowerBound(100);
   EXPECT_EQ(lv, std::numeric_limits<int>::max());
   EXPECT_EQ(lr, 3u);
-  auto [uv, ur] = BPlusTree<int>(data).upper_bound(100);
+  auto [uv, ur] = BPlusTree<int>(data).upperBound(100);
   EXPECT_EQ(uv, std::numeric_limits<int>::max());
   EXPECT_EQ(ur, 3u);
 }
@@ -231,10 +231,10 @@ TEST(BPlusTree, UpperBoundAllSameAsQuery) {
   // When all elements equal the query, upper_bound rank == size.
   std::vector<int> data(20, 42);
   BPlusTree<int> bt(data);
-  auto [uv, ur] = bt.upper_bound<false>(42);
+  auto [uv, ur] = bt.upperBound<false>(42);
   EXPECT_EQ(uv, std::numeric_limits<int>::max());
   EXPECT_EQ(ur, 20u);
-  auto [uv2, ur2] = bt.upper_bound<true>(42);
+  auto [uv2, ur2] = bt.upperBound<true>(42);
   EXPECT_EQ(uv2, std::numeric_limits<int>::max());
   EXPECT_EQ(ur2, 20u);
 }
@@ -243,7 +243,7 @@ TEST(BPlusTree, UpperBoundBelowAll) {
   // When query < all elements, upper_bound rank == 0 and lower_bound rank == 0.
   std::vector<int> data = {10, 20, 30};
   BPlusTree<int> bt(data);
-  auto [uv, ur] = bt.upper_bound(5);
+  auto [uv, ur] = bt.upperBound(5);
   EXPECT_EQ(uv, 10);
   EXPECT_EQ(ur, 0u);
 }
@@ -253,10 +253,10 @@ TEST(BPlusTree, UpperBoundVsLowerBoundOnDuplicates) {
   // upper_bound points past the last.
   std::vector<int> data = {1, 3, 3, 3, 7};
   BPlusTree<int> bt(data);
-  auto [lv, lr] = bt.lower_bound(3);
+  auto [lv, lr] = bt.lowerBound(3);
   EXPECT_EQ(lv, 3);
   EXPECT_EQ(lr, 1u);
-  auto [uv, ur] = bt.upper_bound(3);
+  auto [uv, ur] = bt.upperBound(3);
   EXPECT_EQ(uv, 7);
   EXPECT_EQ(ur, 4u);
 }
@@ -344,8 +344,8 @@ TEST(BPlusTree, MultiLookupTail) {
 
   std::vector<std::size_t> r_lb(q.size());
   std::size_t i = 0;
-  bt.multi_lower_bound<8>(q.data(), q.size(),
-                          [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
+  bt.multiLowerBound<8>(q.data(), q.size(),
+                        [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_lb[k], ref_lower_bound(data, q[k]).second)
         << "multi lb tail k=" << k;
@@ -353,8 +353,8 @@ TEST(BPlusTree, MultiLookupTail) {
 
   std::vector<std::size_t> r_ub(q.size());
   i = 0;
-  bt.multi_upper_bound<8>(q.data(), q.size(),
-                          [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
+  bt.multiUpperBound<8>(q.data(), q.size(),
+                        [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
     EXPECT_EQ(r_ub[k], ref_upper_bound(data, q[k]).second)
         << "multi ub tail k=" << k;
@@ -375,20 +375,20 @@ TEST(BPlusTree, MultiBoundMatchesSingle) {
   // lower_bound.
   std::vector<std::size_t> r_lb(q.size());
   std::size_t i = 0;
-  bt.multi_bound<false, 16, true>(
+  bt.multiBound<false, 16, true>(
       q.data(), q.size(), [&r_lb, &i](std::size_t rank) { r_lb[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
-    EXPECT_EQ(r_lb[k], bt.lower_bound<true>(q[k]).second)
+    EXPECT_EQ(r_lb[k], bt.lowerBound<true>(q[k]).second)
         << "multi vs single lb k=" << k;
   }
 
   // upper_bound.
   std::vector<std::size_t> r_ub(q.size());
   i = 0;
-  bt.multi_bound<true, 16, true>(
+  bt.multiBound<true, 16, true>(
       q.data(), q.size(), [&r_ub, &i](std::size_t rank) { r_ub[i++] = rank; });
   for (std::size_t k = 0; k < q.size(); ++k) {
-    EXPECT_EQ(r_ub[k], bt.upper_bound<true>(q[k]).second)
+    EXPECT_EQ(r_ub[k], bt.upperBound<true>(q[k]).second)
         << "multi vs single ub k=" << k;
   }
 }

@@ -725,22 +725,23 @@ void DeltaTriples::addFromSnapshotDiff(
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+  const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
+               minBlankNodeIndex] = idMapping;
   auto type = id.getDatatype();
   if (type == Datatype::VocabIndex) {
-    id = qlever::indexRebuilder::remapVocabId(
-        id, idMapping.insertionPositionsTree_);
+    id = qlever::indexRebuilder::remapVocabId(id, insertionPositions);
   } else if (type == Datatype::LocalVocabIndex) {
-    auto it = idMapping.localVocabMapping_.find(id.getBits());
+    auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
     // vocab index out of it and we have to do the same. If we don't have a
     // mapping it will remain a local vocab index that is then copied into the
     // delta triples vocabulary and remapped then.
-    if (it != idMapping.localVocabMapping_.end()) {
+    if (it != localVocabMapping.end()) {
       id = it->second;
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
-        id, idMapping.blankNodeBlocks_, idMapping.minBlankNodeIndex_);
+        id, blankNodeBlocks, minBlankNodeIndex);
     // If we have a mapping for the given blank node index, this means that the
     // block was remapped by the index rebuild. We might potentially map blank
     // node indices that were added after the mapping was created, but still

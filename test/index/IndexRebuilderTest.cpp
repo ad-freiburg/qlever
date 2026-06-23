@@ -76,6 +76,13 @@ void deleteVocabFiles(const std::string& vocabBasename,
     ad_utility::deleteFile(vocabBasename + suffix);
   }
 }
+
+// Builds an `InsertionPositionsTree` from a vector of `VocabIndex` values.
+InsertionPositionsTree makeTree(const std::vector<VocabIndex>& positions) {
+  return InsertionPositionsTree(
+      positions |
+      ql::views::transform([](const VocabIndex& v) { return v.get(); }));
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -197,35 +204,25 @@ TEST(IndexRebuilder, flattenBlankNodeBlocks) {
   EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre(4, 7, 42, 77));
 }
 
-// Helper that builds a `BPlusTree` from an `InsertionPositions` vector.
-ad_utility::BPlusTree<uint64_t> makeTree(const InsertionPositions& positions) {
-  std::vector<uint64_t> raw;
-  raw.reserve(positions.size());
-  for (const auto& v : positions) raw.push_back(v.get());
-  return ad_utility::BPlusTree<uint64_t>{raw};
-}
-
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapVocabId) {
-  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
-                                  VocabIndex::make(7)};
-  auto treeA = makeTree(insertionPositionsA);
+  InsertionPositionsTree insertionPositionsA =
+      makeTree({VocabIndex::make(3), VocabIndex::make(5), VocabIndex::make(7)});
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsA), V(0));
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsA), V(1));
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA), V(2));
+  EXPECT_EQ(remapVocabId(V(3), insertionPositionsA), V(4));
+  EXPECT_EQ(remapVocabId(V(4), insertionPositionsA), V(5));
+  EXPECT_EQ(remapVocabId(V(5), insertionPositionsA), V(7));
+  EXPECT_EQ(remapVocabId(V(6), insertionPositionsA), V(8));
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsA), V(10));
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA), V(11));
 
-  EXPECT_EQ(remapVocabId(V(0), treeA), V(0));
-  EXPECT_EQ(remapVocabId(V(1), treeA), V(1));
-  EXPECT_EQ(remapVocabId(V(2), treeA), V(2));
-  EXPECT_EQ(remapVocabId(V(3), treeA), V(4));
-  EXPECT_EQ(remapVocabId(V(4), treeA), V(5));
-  EXPECT_EQ(remapVocabId(V(5), treeA), V(7));
-  EXPECT_EQ(remapVocabId(V(6), treeA), V(8));
-  EXPECT_EQ(remapVocabId(V(7), treeA), V(10));
-  EXPECT_EQ(remapVocabId(V(8), treeA), V(11));
-
-  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
-  auto treeB = makeTree(insertionPositionsB);
-  EXPECT_EQ(remapVocabId(V(0), treeB), V(1));
-  EXPECT_EQ(remapVocabId(V(1), treeB), V(3));
-  EXPECT_EQ(remapVocabId(V(2), treeB), V(4));
+  InsertionPositionsTree insertionPositionsB =
+      makeTree({VocabIndex::make(0), VocabIndex::make(1)});
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsB), V(1));
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsB), V(3));
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsB), V(4));
 }
 
 // _____________________________________________________________________________
@@ -312,9 +309,8 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       {Id::makeFromLocalVocabIndex(vocabEntries.at(1)).getBits(),
        Id::makeFromVocabIndex(VocabIndex::make(5))}};
 
-  std::vector<VocabIndex> insertionPositions{VocabIndex::make(1),
-                                             VocabIndex::make(4)};
-  auto insertionTree = makeTree(insertionPositions);
+  InsertionPositionsTree insertionPositions =
+      makeTree({VocabIndex::make(1), VocabIndex::make(4)});
   std::vector<uint64_t> blankNodeBlocks{rawBlocks.at(0).blockIndices_.at(0)};
   uint64_t minBlankNodeIndex = 1;
   std::vector<ColumnIndex> additionalColumns{
@@ -322,7 +318,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
 
   auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
-                                 localVocabMapping, insertionTree,
+                                 localVocabMapping, insertionPositions,
                                  blankNodeBlocks, minBlankNodeIndex,
                                  cancellationHandle, additionalColumns);
 
@@ -331,7 +327,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   auto U = Id::makeUndefined();
   auto patternId = Id::makeFromInt(std::numeric_limits<int32_t>::max());
-  auto newG = remapVocabId(g, insertionTree);
+  auto newG = remapVocabId(g, insertionPositions);
 
   ASSERT_EQ(idTables.size(), 1);
   EXPECT_EQ(idTables.at(0),
@@ -421,13 +417,13 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   ad_utility::HashMap<Id::T, Id> localVocabMapping;
-  std::vector<VocabIndex> insertionPositions;
-  auto insertionTree = makeTree(insertionPositions);
+  InsertionPositionsTree insertionPositions = makeTree({});
   std::vector<uint64_t> blankNodeBlocks;
   auto task = createPermutationWriterTask(
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
       index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
-      localVocabMapping, insertionTree, blankNodeBlocks, 1, cancellationHandle);
+      localVocabMapping, insertionPositions, blankNodeBlocks, 1,
+      cancellationHandle);
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
