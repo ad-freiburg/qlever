@@ -153,6 +153,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
+    AD_CORRECTNESS_CHECK(blocksize_ > 0);
 
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
@@ -172,6 +173,7 @@ struct CompressedRelationWriter::PermutationWriter {
     // This logic only works for permutations that have the graph as the fourth
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
+    AD_CORRECTNESS_CHECK(blocksize_ > 0);
   };
 
   // Write a block of a large relation with `writer1` and also push the block
@@ -262,7 +264,6 @@ struct CompressedRelationWriter::PermutationWriter {
   // 2. The current triple has different first three columns than the last
   //    triple in the buffer (to ensure equal triples stay in same block)
   bool isEndOfBlockForLargeRelation(const auto& curRemainingCols) {
-    AD_CORRECTNESS_CHECK(blocksize_ > 0);
     if (relation_.size() < blocksize_) {
       return false;
     }
