@@ -298,7 +298,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________________________
 
-void Join::join(IdTableView<0> a, IdTableView<0> b, IdTable* result) const {
+void Join::join(const IdTableView<0>& a, const IdTableView<0>& b,
+                IdTable* result) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";

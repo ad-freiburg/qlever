@@ -232,7 +232,7 @@ void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds, const MaterializedTable&)>
+    std::function<void(std::chrono::microseconds, const IdTable&)>
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
@@ -381,6 +381,9 @@ const IdTableView<0>& Result::idTableView() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::get<IdTableSharedLocalVocabPair>(data_).idTableView();
 }
+
+// _____________________________________________________________________________
+IdTable Result::cloneIdTable() const { return IdTable{idTable().clone()}; }
 
 // _____________________________________________________________________________
 Result::LazyResult Result::idTables() const {
