@@ -35,33 +35,6 @@ std::string toString(cppcoro::generator<ql::span<std::byte>> generator) {
 }
 }  // namespace
 
-// Unit test for `getHeaderOnlyRequest` (defined in `HttpUtils.h`).
-TEST(HttpUtils, GetHeaderOnlyRequest) {
-  http::request<http::string_body> original;
-  original.method(verb::post);
-  original.target("/api/test");
-  original.version(11);
-  original.keep_alive(true);
-  original.set(http::field::content_type, "text/plain");
-  original.set(http::field::authorization, "Bearer token123");
-  original.body() = "some body that must not appear in the header-only copy";
-
-  auto headerOnly = ad_utility::httpUtils::getHeaderOnlyRequest(original);
-
-  EXPECT_EQ(headerOnly.method(), verb::post);
-  EXPECT_EQ(headerOnly.target(), "/api/test");
-  EXPECT_EQ(headerOnly.version(), 11);
-  EXPECT_TRUE(headerOnly.keep_alive());
-  EXPECT_EQ(headerOnly.at(http::field::content_type), "text/plain");
-  EXPECT_EQ(headerOnly.at(http::field::authorization), "Bearer token123");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Typed tests: run the same body-echo scenarios for both BodyReadMode::Eager
-// and BodyReadMode::Lazy.  A small chunk size (100 bytes) is used for lazy
-// mode so that multi-chunk tests do not need large bodies.
-// ─────────────────────────────────────────────────────────────────────────────
-
 namespace {
 
 // Returns a string representation of an HTTP verb for use in echo responses.
@@ -76,64 +49,51 @@ std::string_view verbName(verb v) {
   }
 }
 
-// Returns an echo handler for eager mode: echoes "METHOD\nTARGET\nBODY".
-auto makeEagerEchoHandler() {
-  return [](auto req, auto&& send) -> boost::asio::awaitable<void> {
-    co_await send(createOkResponse(std::string(verbName(req.method())) + "\n" +
-                                       std::string(toStd(req.target())) + "\n" +
-                                       req.body(),
-                                   req, ad_utility::MediaType::textPlain));
-  };
+// Assembles the full request body from an eager-mode request (reads from
+// `req.body()`) or a lazy-mode `bodyGetter` (accumulates chunks). Both
+// overloads return `net::awaitable<std::string>` so callers can uniformly
+// use `co_await consumeBody(req, args...)`.
+boost::asio::awaitable<std::string> consumeBody(
+    http::request<http::string_body> req) {
+  co_return req.body();
+}
+boost::asio::awaitable<std::string> consumeBody(const auto& /*req*/,
+                                                auto bodyGetter) {
+  std::string body;
+  while (auto chunk = co_await bodyGetter()) body += *chunk;
+  co_return body;
 }
 
-// Returns an echo handler for lazy mode: assembles body from chunks and echoes
-// "METHOD\nTARGET\nBODY".
-auto makeLazyEchoHandler() {
-  return [](auto req, auto bodyGetter,
-            auto&& send) -> boost::asio::awaitable<void> {
-    std::string body;
-    while (auto chunk = co_await bodyGetter()) {
-      body += *chunk;
-    }
-    co_await send(createOkResponse(std::string(verbName(req.method())) + "\n" +
-                                       std::string(toStd(req.target())) + "\n" +
-                                       body,
-                                   req, ad_utility::MediaType::textPlain));
-  };
+// Echo handler: sends "METHOD\nTARGET\nBODY". Works for both eager mode
+// (no extra args) and lazy mode (bodyGetter as last arg) via variadic `args`.
+auto makeEchoHandler() {
+  return
+      [](auto req, auto&& send, auto... args) -> boost::asio::awaitable<void> {
+        std::string body = co_await consumeBody(req, args...);
+        co_await send(
+            createOkResponse(std::string(verbName(req.method())) + "\n" +
+                                 std::string(toStd(req.target())) + "\n" + body,
+                             req, ad_utility::MediaType::textPlain));
+      };
 }
 
 // Creates an echo server for `mode` with the given chunk size and returns it.
 template <BodyReadMode mode>
 auto makeEchoServer(size_t chunkSize) {
-  if constexpr (mode == BodyReadMode::Eager) {
-    return TestHttpServer<decltype(makeEagerEchoHandler()), mode>(
-        makeEagerEchoHandler(), chunkSize);
-  } else {
-    return TestHttpServer<decltype(makeLazyEchoHandler()), mode>(
-        makeLazyEchoHandler(), chunkSize);
-  }
+  auto handler = makeEchoHandler();
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
 
 // Creates an ignore-body server for `mode`: always responds with a fixed
 // string without reading the request body.
 template <BodyReadMode mode>
 auto makeIgnoreBodyServer(size_t chunkSize) {
-  if constexpr (mode == BodyReadMode::Eager) {
-    auto handler = [](auto req, auto&& send) -> boost::asio::awaitable<void> {
-      co_await send(createOkResponse("ignored body", req,
-                                     ad_utility::MediaType::textPlain));
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  } else {
-    auto handler = [](auto req, auto /*bodyGetter*/,
-                      auto&& send) -> boost::asio::awaitable<void> {
-      co_await send(createOkResponse("ignored body", req,
-                                     ad_utility::MediaType::textPlain));
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  }
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    co_await send(createOkResponse("ignored body", req,
+                                   ad_utility::MediaType::textPlain));
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
 
 // Sends an echo response (METHOD\nTARGET\nBODY) and then rethrows `exception`.
@@ -151,25 +111,12 @@ boost::asio::awaitable<void> throwingEchoBody(const auto& req, auto& send,
 // Creates an echo server that throws `exception` after sending the response.
 template <BodyReadMode mode>
 auto makeThrowingEchoServer(std::exception_ptr exception, size_t chunkSize) {
-  if constexpr (mode == BodyReadMode::Eager) {
-    auto handler = [exception](auto req,
-                               auto&& send) -> boost::asio::awaitable<void> {
-      co_return co_await throwingEchoBody(req, send, req.body(), exception);
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  } else {
-    auto handler = [exception](auto req, auto bodyGetter,
-                               auto&& send) -> boost::asio::awaitable<void> {
-      std::string body;
-      while (auto chunk = co_await bodyGetter()) {
-        body += *chunk;
-      }
-      co_return co_await throwingEchoBody(req, send, body, exception);
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  }
+  auto handler = [exception](auto req, auto&& send,
+                             auto... args) -> boost::asio::awaitable<void> {
+    std::string body = co_await consumeBody(req, args...);
+    co_return co_await throwingEchoBody(req, send, body, exception);
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
 
 // Common redirect/success handler logic: inspects URL parameters to redirect
@@ -202,24 +149,15 @@ boost::asio::awaitable<void> redirectHandlerCore(const auto& req, auto& send,
 }
 
 // Creates a redirect/success server for `mode`. The redirect logic is
-// body-mode-agnostic; the lazy variant simply ignores `bodyGetter`.
+// body-mode-agnostic; `args` is empty in eager mode or holds `bodyGetter`
+// in lazy mode.
 template <BodyReadMode mode>
 auto makeRedirectServer(std::string& lastTarget, size_t chunkSize) {
-  if constexpr (mode == BodyReadMode::Eager) {
-    auto handler = [&lastTarget](auto req,
-                                 auto&& send) -> boost::asio::awaitable<void> {
-      co_return co_await redirectHandlerCore(req, send, lastTarget);
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  } else {
-    auto handler = [&lastTarget](auto req, auto /*bodyGetter*/,
-                                 auto&& send) -> boost::asio::awaitable<void> {
-      co_return co_await redirectHandlerCore(req, send, lastTarget);
-    };
-    return TestHttpServer<decltype(handler), mode>(std::move(handler),
-                                                   chunkSize);
-  }
+  auto handler = [&lastTarget](auto req, auto&& send,
+                               auto...) -> boost::asio::awaitable<void> {
+    co_return co_await redirectHandlerCore(req, send, lastTarget);
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
 
 }  // namespace
@@ -502,6 +440,10 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
          &expectRequestHelper](const ad_utility::MemorySize& requestBodySize) {
           const ad_utility::MemorySize currentLimit =
               getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
+          // For large requests we get an exception while writing to the request
+          // stream when going over the limit. For small requests we get the
+          // response normally. We would need the HttpClient to return the
+          // response even if it couldn't send the request fully in that case.
           expectRequestHelper(
               requestBodySize,
               "Request body size exceeds the allowed size (" +
@@ -517,19 +459,26 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
                               ResponseMetadata(status::ok, "text/plain"));
         };
     constexpr auto testingRequestBodyLimit = 50_kB;
+
     // Set a smaller limit for testing. The default of 100 MB is quite large.
     setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
+    // Requests with bodies smaller than the request body limit are processed.
     expectRequestSucceeds(3_B);
+    // Exactly the limit is allowed.
     expectRequestSucceeds(testingRequestBodyLimit);
+    // Larger than the limit is forbidden.
     expectRequestFails(testingRequestBodyLimit + 1_B);
 
+    // Setting a smaller request-body limit.
     setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(1_B);
     expectRequestFails(3_B);
-    // An empty body is allowed even when the limit is 1 byte.
+    // Only the request body size counts. The empty body is allowed even if the
+    // body is limited to 1 byte.
     expectRequestSucceeds(0_B);
 
-    // Disable the limit (0 = unlimited).
+    // Disable the request body limit, by setting it to 0.
     setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(0_B);
+    // Arbitrarily large requests are now allowed.
     expectRequestSucceeds(10_kB);
     expectRequestSucceeds(5_MB);
   } else {
@@ -564,6 +513,7 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
         absl::StrCat("http://localhost:", server.getPort(),
                      "/?status=", redirectStatus, "&location=%2Fok");
 
+    // Send request with `maxRedirects = 1'.
     auto response = sendHttpOrHttpsRequest(Url{redirectUrl}, this->handle_,
                                            verb::get, "", "", "", 1);
     EXPECT_EQ(response.status_, status::ok);
@@ -613,6 +563,7 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
         "http://localhost:", server.getPort(),
         "/?status=301&location=%2Fredirect%3Fstatus%3D301%26location%3D%2Fok");
 
+    // With maxRedirects=1, this should fail (needs 2 redirects)
     AD_EXPECT_THROW_WITH_MESSAGE(
         sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get, "", "", "",
                                1),

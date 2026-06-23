@@ -43,6 +43,27 @@ TEST(HttpUtils, Url) {
   ASSERT_ANY_THROW(Url("http://host.name:8x"));
 }
 
+TEST(HttpUtils, GetHeaderOnlyRequest) {
+  namespace http = boost::beast::http;
+  http::request<http::string_body> original;
+  original.method(http::verb::post);
+  original.target("/api/test");
+  original.version(11);
+  original.keep_alive(true);
+  original.set(http::field::content_type, "text/plain");
+  original.set(http::field::authorization, "Bearer token123");
+  original.body() = "some body that must not appear in the header-only copy";
+
+  auto headerOnly = ad_utility::httpUtils::getHeaderOnlyRequest(original);
+
+  EXPECT_EQ(headerOnly.method(), http::verb::post);
+  EXPECT_EQ(headerOnly.target(), "/api/test");
+  EXPECT_EQ(headerOnly.version(), 11);
+  EXPECT_TRUE(headerOnly.keep_alive());
+  EXPECT_EQ(headerOnly.at(http::field::content_type), "text/plain");
+  EXPECT_EQ(headerOnly.at(http::field::authorization), "Bearer token123");
+}
+
 TEST(HttpUtils, GetStringBodyRequest) {
   namespace http = boost::beast::http;
   http::request<http::string_body> original;
