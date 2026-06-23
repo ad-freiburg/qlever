@@ -41,8 +41,7 @@ struct CommonConfig {
   // An upper bound on the amount of memory that QLever will use during index
   // building and query processing. If more memory is required, an exception
   // is thrown.
-  std::optional<ad_utility::MemorySize> memoryLimit_ =
-      ad_utility::MemorySize::gigabytes(1);
+  std::optional<ad_utility::MemorySize> memoryLimit_ = std::nullopt;
 
   // Option to disable the pre-computation of QLever's so-called "patterns". If
   // enabled, QLever pre-computes the set of distinct predicates for each
