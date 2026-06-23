@@ -62,11 +62,8 @@ Qlever::Qlever(const EngineConfig& config)
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      loadMaterializedView(viewName);
-    } catch (const std::runtime_error& ex) {
-      // Any failure while preloading a view should only be logged.
-      // The preloading/initiliazit can continue to operate without the
-      // preloaded view.
+      materializedViewsManager_->loadView(viewName);
+    } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
     }
@@ -258,7 +255,7 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::function<void(const std::string&)> updateCallback, bool pinSubtrees,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) {
   return std::make_shared<QueryExecutionContext>(
       sharedIndex(), &cache_, allocator_, sortPerformanceEstimator_,
