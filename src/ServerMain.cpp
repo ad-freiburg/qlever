@@ -75,8 +75,9 @@ int main(int argc, char** argv) {
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size,m",
-      po::value<ad_utility::MemorySize>()->notifier(
-          [&config](auto v) { config.memoryLimit_ = v; }),
+      po::value<ad_utility::MemorySize>()
+          ->default_value(DEFAULT_MEM_FOR_QUERIES)
+          ->notifier([&config](auto v) { config.memoryLimit_ = v; }),
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
