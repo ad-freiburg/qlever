@@ -444,9 +444,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              item.toSparql()));
+      return PropertyPath::fromIri(item);
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
@@ -948,7 +946,6 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     }
   };
 
-  using Iri = TripleComponent::Iri;
   // The graph specified in the `WITH` clause or `std::monostate{}` if there was
   // no with clause.
   auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
@@ -1272,7 +1269,6 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
   VarOrIri varOrIri = visit(ctx->varOrIri());
-  using Iri = TripleComponent::Iri;
   auto serviceIri =
       std::visit(ad_utility::OverloadCallOperator{
                      [&ctx](const Variable&) -> Iri {
@@ -1867,17 +1863,12 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    // This is an artefact of there being two distinct Iri types.
-    return std::visit(ad_utility::OverloadCallOperator{
-                          [](const Variable& v) -> GraphTerm { return v; },
-                          [](const TripleComponent::Iri& i) -> GraphTerm {
-                            return Iri(i.toStringRepresentation());
-                          }},
+    return std::visit(ad_utility::staticCast<GraphTerm>,
                       visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{a.toStringRepresentation()}};
+    return GraphTerm{a};
   }
 }
 
@@ -2063,9 +2054,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              term.toSparql()));
+      return PropertyPath::fromIri(std::get<Iri>(term));
     }
   };
   for (auto& triple : objectList.second) {
@@ -2299,7 +2288,8 @@ template <typename TripleType, typename Func>
 TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
                                     Func iriStringToPredicate) {
   typename TripleType::second_type triples;
-  GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+  GraphTerm nextTerm{Iri::fromIrirefValidated(
+      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")};
   for (auto& graphNode : ql::ranges::reverse_view(elements)) {
     GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
@@ -2320,9 +2310,10 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri{std::move(iri)}};
-  });
+  return toRdfCollection(visitVector(ctx->graphNode()),
+                         [](const std::string& iri) {
+                           return GraphTerm{Iri::fromIrirefValidated(iri)};
+                         });
 }
 
 // _____________________________________________________________________________
@@ -2371,10 +2362,10 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
   if (ctx->blankNode()) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
-    // TODO<joka921> Unify.
-    return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
+    return visit(ctx->iri());
   } else if (ctx->NIL()) {
-    return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+    return Iri::fromIrirefValidated(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
   } else {
     return visitAlternative<Literal>(ctx->numericLiteral(),
                                      ctx->booleanLiteral(), ctx->rdfLiteral());

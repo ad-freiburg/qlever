@@ -1255,11 +1255,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
-                results.push_back(json{createResponseMetadataForUpdate(
+                results.push_back(createResponseMetadataForUpdate(
                     index(),
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree(),
-                    updateMetadata, tracer)});
+                    updateMetadata, tracer));
                 metadatas.push_back(std::move(updateMetadata));
 
                 AD_LOG_INFO << "Done processing update, total time was "
