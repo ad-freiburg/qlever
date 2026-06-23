@@ -953,14 +953,11 @@ inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
   if (table.numRows() != view.numRows()) {
     return false;
   }
-  const auto& cols = table.getColumns();
-  const auto& viewCols = view.getColumns();
-  for (size_t i = 0; i < table.numColumns(); ++i) {
-    if (!ql::ranges::equal(cols[i], viewCols[i])) {
-      return false;
-    }
-  }
-  return true;
+  return ql::ranges::all_of(
+      ::ranges::views::zip(table.getColumns(), view.getColumns()),
+      [](const auto& pair) {
+        return ql::ranges::equal(pair.first, pair.second);
+      });
 }
 
 template <int COLS>
