@@ -35,32 +35,44 @@ using VocabLookupOutput =
 
 template <typename BufferType>
 class LookupDataCommonBase {
-  // Buffer for the materialized string data (used by disk-based vocabularies).
-  BufferType buffer_;
+ public:
+  // Mutable access to the buffer that holds the materialized string data, for
+  // the producer to fill before calling `asResult`.
+  BufferType& buffer() { return buffer_; }
 
-  // One string_view per looked-up index, each pointing into `buffer`.
-  std::vector<std::string_view> views_;
+  // Mutable access to the views (one `string_view` per looked-up index, each
+  // pointing into `buffer()`), for the producer to fill before calling
+  // `asResult`.
+  std::vector<std::string_view>& views() { return views_; }
 
-  // The span over `views`, populated by `finalize()` and exposed by
-  // `asResult()`.
-  ql::span<std::string_view> span_;
-
-  // Set up `span` over `views`. Call after `views` is fully filled. Do not
-  // modify `views` afterward, as `span` would be invalidated.
-  void finalize() { span_ = ql::span<std::string_view>{views_}; }
-
-  // Convert a filled `VocabBatchLookupData` into the public result type
+  // Convert a filled lookup-data object into the public result type
   // `VocabBatchLookupResult`. `self` must be the owning shared_ptr of the
-  // `VocabBatchLookupData` to convert. The returned aliasing shared_ptr exposes
-  // only `self->span` but keeps the whole struct (and thus the `buffer`/`views`
-  // the span points into) alive as long as the result lives.
+  // object to convert. The returned aliasing shared_ptr exposes only the span
+  // over `views()`, but keeps the whole object (and thus the
+  // `buffer()`/`views()` that the span points into) alive as long as the result
+  // lives.
   static VocabBatchLookupResult asResult(
       std::shared_ptr<LookupDataCommonBase> self) {
     self->finalize();
-    auto* spanPtr = &self->span;
+    auto* spanPtr = &self->span_;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
                                                        spanPtr);
   }
+
+ private:
+  // Buffer for the materialized string data (used by disk-based vocabularies).
+  BufferType buffer_;
+
+  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  std::vector<std::string_view> views_;
+
+  // The span over `views_`, populated by `finalize()` and exposed by
+  // `asResult()`.
+  ql::span<std::string_view> span_;
+
+  // Set up `span_` over `views_`. Call after `views_` is fully filled; do not
+  // modify `views_` afterward, as `span_` would be invalidated.
+  void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
 // Helper struct for batch-lookup results. Holds the materialized string data

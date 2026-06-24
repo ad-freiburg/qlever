@@ -12,9 +12,11 @@
 
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/IoUringManager.h"
 
 namespace {
@@ -97,6 +99,8 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
 // empty spans returns a handle that `wait()` must accept without blocking or
 // throwing. Note the file descriptor is `-1`: with zero read requests the file
 // descriptor is never touched, so an empty batch
+// TODO<ms2144>: Throw for an invalid file descriptor, irrespective of the fact
+// that the batch is empty.
 TYPED_TEST(IoUringManagerTest, EmptyBatch) {
   TypeParam IoManager(64);
   auto batchHandle = IoManager.addBatch(-1, {}, {}, {});
@@ -374,6 +378,36 @@ TEST(ReadFullyOrThrow, InvalidFdThrows) {
   EXPECT_THROW(ad_utility::readFullyOrThrow(-1, targetBuffer.data(), 4,
                                             /*fileOffset=*/0),
                std::runtime_error);
+}
+
+// Tests for `LookupDataCommonBase` (via the concrete `VocabBatchLookupData`).
+
+// `asResult` exposes the span over the filled views, and the returned aliasing
+// shared_ptr keeps the backing buffer/views alive after the original owning
+// shared_ptr is dropped (the whole point of the aliasing shared_ptr).
+TEST(LookupDataCommonBase, AsResultExposesViewsAndKeepsDataAlive) {
+  auto data = std::make_shared<VocabBatchLookupData>();
+  data->buffer() = {'f', 'o', 'o', 'b', 'a', 'r'};
+  data->views().emplace_back(data->buffer().data(), 3);      // "foo"
+  data->views().emplace_back(data->buffer().data() + 3, 3);  // "bar"
+
+  VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
+
+  ASSERT_EQ(result->size(), 2u);
+  EXPECT_EQ((*result)[0], "foo");
+  EXPECT_EQ((*result)[1], "bar");
+
+  // Drop our reference; the aliasing shared_ptr must keep the data alive.
+  data.reset();
+  EXPECT_EQ((*result)[0], "foo");
+  EXPECT_EQ((*result)[1], "bar");
+}
+
+// An empty lookup result is valid: no views, empty span.
+TEST(LookupDataCommonBase, AsResultEmpty) {
+  auto data = std::make_shared<VocabBatchLookupData>();
+  VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
+  EXPECT_TRUE(result->empty());
 }
 
 }  // namespace
