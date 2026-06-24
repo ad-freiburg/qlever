@@ -46,7 +46,7 @@ static FILE* openFile(const TempFile& tmp) {
 }
 
 // Typed test fixture: runs all tests against both `IoUringManager` and
-// `SyncIoManager` when io_uring is present. Runs tests only aginat
+// `SyncIoManager` when io_uring is present. Runs tests only against
 // `SyncIoManager` when io_uring is not present.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
