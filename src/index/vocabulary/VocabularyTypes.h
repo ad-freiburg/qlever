@@ -25,13 +25,14 @@
 // alive.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
-// Type-erased input range of batches (each batch is a vector of indices).
+// Type-erased input range of batches (each batch is a vector of indices into
+// the underlying Vocabulary).
 using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
-// Type-erased output range of batch lookup results.
+// Type-erased output range of batch-lookup results.
 using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
-// Helper struct for batch lookup results. Holds the materialized string data
+// Helper struct for batch-lookup results. Holds the materialized string data
 // and the views into that materialized string data. Use `finalize()` after
 // filling `views` to set up the span, then use `asResult()` to get a
 // `VocabBatchLookupResult` via aliasing shared_ptr.
