@@ -159,7 +159,7 @@ Result Bind::computeResult(bool requestLaziness) {
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
-    IdTable result = applyBind(IdTable{subRes->idTable().clone()}, &localVocab);
+    IdTable result = applyBind(subRes->cloneIdTable(), &localVocab);
     AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }

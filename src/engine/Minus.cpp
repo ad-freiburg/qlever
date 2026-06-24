@@ -138,10 +138,11 @@ auto Minus::makeUndefRangesChecker(bool left,
 }
 
 // _____________________________________________________________________________
-template <typename Left, typename T>
+template <typename IdTableT, typename T>
 IdTable Minus::copyMatchingRows(
-    const Left& left, T reference,
+    const IdTableT& left, T reference,
     const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const {
+  static_assert(IdTableLike<IdTableT>);
   IdTable result{getResultWidth(), left.getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 

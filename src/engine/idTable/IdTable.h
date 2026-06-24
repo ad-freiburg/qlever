@@ -928,16 +928,41 @@ using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
 
+// Concept that matches any type that is or inherits from any instantiation of
+// `columnBasedIdTable::IdTable` — including `IdTable`, `IdTableStatic<COLS>`,
+// and `IdTableView<COLS>`.
+namespace detail {
+template <typename ValType, int NumCols, typename Storage,
+          columnBasedIdTable::IsView isView>
+std::true_type isIdTableLike(
+    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
+std::false_type isIdTableLike(...);
+}  // namespace detail
+
+template <typename T>
+CPP_concept IdTableLike =
+    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
+
 // Free-function `operator==` to allow comparing `IdTableView` with `IdTable`
 // and vice versa. The member `operator==` is only defined for non-view types.
 template <int COLS>
-inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
-  return table == view.clone();
+inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
+  if (table.numColumns() != view.numColumns()) {
+    return table.empty() && view.empty();
+  }
+  if (table.numRows() != view.numRows()) {
+    return false;
+  }
+  return ql::ranges::all_of(
+      ::ranges::views::zip(table.getColumns(), view.getColumns()),
+      [](const auto& pair) {
+        return ql::ranges::equal(pair.first, pair.second);
+      });
 }
 
 template <int COLS>
-inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
-  return table == view.clone();
+inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
+  return table == view;
 }
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
