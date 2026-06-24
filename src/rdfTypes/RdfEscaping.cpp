@@ -262,9 +262,11 @@ std::string unescapeIriref(std::string_view iriref) {
 std::string unescapePrefixedIri(std::string_view literal) {
   std::string_view origLiteral = literal;
   std::string res;
-  ad_utility::HashSet<char> m{'_', '~',  '.', '-', '-', '!', '$',
-                              '&', '\'', '(', ')', '*', '+', ',',
-                              ';', '=',  '/', '?', '#', '@', '%'};
+  // TODO<joka921> Could even be a completely global variable, without the
+  // synchronization bit for function local static variables.
+  static ad_utility::HashSet<char> m{'_', '~',  '.', '-', '-', '!', '$',
+                                     '&', '\'', '(', ')', '*', '+', ',',
+                                     ';', '=',  '/', '?', '#', '@', '%'};
   auto pos = literal.find('\\');
   while (pos != literal.npos) {
     res.append(literal.begin(), literal.begin() + pos);

@@ -169,6 +169,16 @@ const ad_utility::MemorySize& Index::parserBufferSize() const {
 }
 
 // ____________________________________________________________________________
+std::optional<size_t>& Index::numIndexBuilderThreads() {
+  return pimpl_->numIndexBuilderThreads();
+}
+
+// ____________________________________________________________________________
+const std::optional<size_t>& Index::numIndexBuilderThreads() const {
+  return std::as_const(*pimpl_).numIndexBuilderThreads();
+}
+
+// ____________________________________________________________________________
 ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
   return pimpl_->blocksizePermutationPerColumn();
 }

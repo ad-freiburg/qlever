@@ -15,7 +15,7 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/dispatch.hpp>
-#include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -65,13 +65,32 @@ struct Sentinel {
 
 using WorkMsg = std::variant<Chunk, Sentinel>;
 
-using ParserCh =
-    net::experimental::channel<void(ec_t, std::vector<TurtleTriple>)>;
-using WorkCh = net::experimental::channel<void(ec_t, WorkMsg)>;
+using ParserCh = net::experimental::concurrent_channel<void(
+    ec_t, std::vector<TurtleTriple>)>;
+using WorkCh = net::experimental::concurrent_channel<void(ec_t, WorkMsg)>;
 
 }  // namespace
 
 struct IndexBuilderPipeline::Impl {
+  // Resolve the number of worker threads: the value requested by the caller,
+  // or the hardware concurrency if unspecified, clamped to at least 1.
+  static size_t resolveNumWorkers(std::optional<size_t> numThreads) {
+    return std::max<size_t>(
+        1, numThreads.value_or(std::thread::hardware_concurrency()));
+  }
+
+  // The dedicated thread pool that runs every callback in this pipeline. It is
+  // deliberately the FIRST member so that it has the longest lifetime and is
+  // destroyed LAST: all the other members below (the channels and strands, as
+  // well as the `parser_` whose own channels and strands are bound to this
+  // pool's executor) reference this pool's execution context, so they must be
+  // destroyed while it is still alive.
+  net::thread_pool pool_;
+
+  // Number of workers (one `ItemMapManager` each); also the number of slots
+  // that the gatherer needs to collect per partial-vocab batch.
+  size_t numWorkers_;
+
   // Constants and references injected from the caller.
   IndexImpl* index_;
   std::shared_ptr<qlever::parser::AsyncMultifileParser> parser_;
@@ -81,13 +100,6 @@ struct IndexBuilderPipeline::Impl {
   std::atomic<size_t>* numHasWordTriples_;
   ad_utility::ProgressBar* progressBar_;
   size_t* numTriplesParsedRef_;
-
-  // Number of workers (one `ItemMapManager` each); also the number of slots
-  // that the gatherer needs to collect per partial-vocab batch.
-  size_t numWorkers_;
-
-  // The dedicated thread pool that runs every callback in this pipeline.
-  net::thread_pool pool_;
 
   // Memory pool shared by all per-worker hash maps; matches the original
   // single-pool-per-build-pass usage.
@@ -166,8 +178,11 @@ struct IndexBuilderPipeline::Impl {
        size_t linesPerPartial, std::string onDiskBase,
        ad_utility::Synchronized<std::unique_ptr<TripleVec>>* idTriples,
        std::atomic<size_t>* numHasWordTriples,
-       ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef)
-      : index_{index},
+       ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef,
+       std::optional<size_t> numThreads)
+      : pool_{resolveNumWorkers(numThreads)},
+        numWorkers_{resolveNumWorkers(numThreads)},
+        index_{index},
         parser_{std::move(parser)},
         linesPerPartial_{linesPerPartial},
         onDiskBase_{std::move(onDiskBase)},
@@ -175,8 +190,6 @@ struct IndexBuilderPipeline::Impl {
         numHasWordTriples_{numHasWordTriples},
         progressBar_{progressBar},
         numTriplesParsedRef_{numTriplesParsedRef},
-        numWorkers_{std::max<size_t>(1, std::thread::hardware_concurrency())},
-        pool_{numWorkers_},
         parserCh_{pool_.get_executor(), /*max_buffer_size=*/4},
         parserStrand_{net::make_strand(pool_.get_executor())},
         dispatcherStrand_{net::make_strand(pool_.get_executor())},
@@ -574,6 +587,17 @@ struct IndexBuilderPipeline::Impl {
     }
     donePromise_.get_future().wait();
 
+    // The pipeline has now consumed the parser to EOF, so all of the parser's
+    // work is done. Tear the parser down *here*, while the pool is still alive:
+    // its channels and strands are bound to `pool_`'s executor, so they must
+    // not outlive the pool. `cancel()` closes the (already drained) channels;
+    // `reset()` then destroys the parser (the pipeline is its sole owner) so
+    // that its asio state is released against a still-valid execution context.
+    if (parser_) {
+      parser_->cancel();
+      parser_.reset();
+    }
+
     pool_.stop();
     pool_.join();
 
@@ -598,10 +622,12 @@ IndexBuilderPipeline::IndexBuilderPipeline(
     size_t linesPerPartial, std::string onDiskBase,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* idTriples,
     std::atomic<size_t>* numHasWordTriples,
-    ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef)
-    : impl_{std::make_unique<Impl>(
-          index, std::move(parser), linesPerPartial, std::move(onDiskBase),
-          idTriples, numHasWordTriples, progressBar, numTriplesParsedRef)} {}
+    ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef,
+    std::optional<size_t> numThreads)
+    : impl_{std::make_unique<Impl>(index, std::move(parser), linesPerPartial,
+                                   std::move(onDiskBase), idTriples,
+                                   numHasWordTriples, progressBar,
+                                   numTriplesParsedRef, numThreads)} {}
 
 // ____________________________________________________________________________
 IndexBuilderPipeline::~IndexBuilderPipeline() = default;

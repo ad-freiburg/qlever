@@ -37,8 +37,15 @@ struct AsyncMultifileParser::Impl {
     std::optional<TripleBatch> batch;
     std::exception_ptr error;
   };
-  using OutputCh = net::experimental::channel<void(ec_t, BatchOrError)>;
-  using TokenCh = net::experimental::channel<void(ec_t, bool)>;
+  // NOTE: These must be `concurrent_channel` (thread-safe), not the plain
+  // `channel` (which uses a `null_mutex` and is therefore unsynchronized).
+  // The channels are accessed concurrently from several strands/pool threads
+  // (e.g. multiple per-file `pumpFile` continuations send to `outputCh_` at
+  // the same time), so an unsynchronized channel corrupts its internal
+  // op-queues and crashes.
+  using OutputCh =
+      net::experimental::concurrent_channel<void(ec_t, BatchOrError)>;
+  using TokenCh = net::experimental::concurrent_channel<void(ec_t, bool)>;
   using Strand = net::strand<net::any_io_executor>;
 
   std::once_flag started_;

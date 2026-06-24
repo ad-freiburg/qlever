@@ -506,8 +506,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::atomic<size_t> numHasWordTriples = 0;
 
   qlever::indexBuilder::IndexBuilderPipeline pipeline{
-      this,       std::move(parser),  linesPerPartial, onDiskBase_,
-      &idTriples, &numHasWordTriples, &progressBar,    &numTriplesParsed};
+      this,         std::move(parser), linesPerPartial,
+      onDiskBase_,  &idTriples,        &numHasWordTriples,
+      &progressBar, &numTriplesParsed, numIndexBuilderThreads_};
   std::vector<size_t> numTriplesPerPartialVocab = pipeline.run();
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
@@ -527,7 +528,13 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
     size_t linesPerPartial) {
-  auto parsedTriples = buildPartialVocabularies(parser, linesPerPartial);
+  // Hand ownership of the parser to `buildPartialVocabularies` (and through it
+  // to the `IndexBuilderPipeline`). The pipeline must be the parser's sole
+  // owner, so that the parser (whose async state is bound to the pipeline's
+  // thread pool) is torn down inside the pipeline, while that pool is still
+  // alive. `parser` is not used again in this function.
+  auto parsedTriples =
+      buildPartialVocabularies(std::move(parser), linesPerPartial);
   const auto numPartialVocabs = parsedTriples.numTriplesPerPartialVocab_.size();
 
   size_t sizeInternalVocabulary = 0;

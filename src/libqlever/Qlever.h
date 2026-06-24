@@ -81,6 +81,11 @@ struct IndexBuilderConfig : CommonConfig {
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
 
+  // The number of threads used for the first phase of index building (parsing
+  // the input and creating the partial vocabularies). If not specified, the
+  // value is deduced from the number of available hardware threads.
+  std::optional<size_t> numIndexBuilderThreads_;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.

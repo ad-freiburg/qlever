@@ -11,7 +11,7 @@
 #define QLEVER_SRC_PARSER_ASYNCMULTIFILEPARSER_H
 
 #include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/strand.hpp>
 #include <memory>
 #include <mutex>

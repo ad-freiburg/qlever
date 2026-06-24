@@ -11,7 +11,7 @@
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/dispatch.hpp>
-#include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <cstring>
@@ -373,10 +373,14 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
     std::optional<TripleBatch> batch;
     std::exception_ptr error;
   };
-  using OutputCh = net::experimental::channel<void(ec_t, BatchOrEof)>;
+  // Thread-safe channel (real per-channel mutex): `dispatchParse` sends to
+  // `outputCh_` concurrently from multiple parse tasks on the pool, so a plain
+  // `channel` (which uses a `null_mutex`) would race and corrupt its queues.
+  using OutputCh =
+      net::experimental::concurrent_channel<void(ec_t, BatchOrEof)>;
   // A token is a `bool` placeholder; we use `bool` so the channel signature
   // is the moral equivalent of "semaphore of unit tokens".
-  using TokenCh = net::experimental::channel<void(ec_t, bool)>;
+  using TokenCh = net::experimental::concurrent_channel<void(ec_t, bool)>;
   using Strand = net::strand<net::any_io_executor>;
 
   // Initialization runs once on the feeder strand. It parses the prefix

@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,8 @@ namespace qlever::indexBuilder {
 //      `Synchronized<unique_ptr<TripleVec>>` (in `idTriples`).
 //
 // The implementation is built on `boost::asio` with a dedicated
-// `net::thread_pool` sized to `std::thread::hardware_concurrency()`. Work is
+// `net::thread_pool` sized to `numThreads` (deduced from
+// `std::thread::hardware_concurrency()` when not specified). Work is
 // load-balanced across `M` workers; each worker owns its own `ItemMapManager`
 // (no locks). Partial-vocab batch boundaries are propagated through per-worker
 // channels as sentinels. A reorder buffer in the gatherer collects the `M`
@@ -58,13 +60,17 @@ class IndexBuilderPipeline {
     size_t numTriplesInPartial_ = 0;
   };
 
+  // `numThreads` is the size of the dedicated thread pool used by the
+  // pipeline. If `std::nullopt`, it is deduced from
+  // `std::thread::hardware_concurrency()`.
   IndexBuilderPipeline(
       IndexImpl* index,
       std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
       size_t linesPerPartial, std::string onDiskBase,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* idTriples,
       std::atomic<size_t>* numHasWordTriples,
-      ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef);
+      ad_utility::ProgressBar* progressBar, size_t* numTriplesParsedRef,
+      std::optional<size_t> numThreads = std::nullopt);
 
   ~IndexBuilderPipeline();
 

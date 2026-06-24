@@ -144,6 +144,11 @@ class IndexImpl {
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
+  // The number of threads used for the first phase of index building (parsing
+  // the input and creating the partial vocabularies). `std::nullopt` means
+  // that the value is deduced from `std::thread::hardware_concurrency()`.
+  std::optional<size_t> numIndexBuilderThreads_ = std::nullopt;
+
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
   NumNormalAndInternal numObjects_;
@@ -438,6 +443,13 @@ class IndexImpl {
   ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
   const ad_utility::MemorySize& parserBufferSize() const {
     return parserBufferSize_;
+  }
+
+  std::optional<size_t>& numIndexBuilderThreads() {
+    return numIndexBuilderThreads_;
+  }
+  const std::optional<size_t>& numIndexBuilderThreads() const {
+    return numIndexBuilderThreads_;
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
