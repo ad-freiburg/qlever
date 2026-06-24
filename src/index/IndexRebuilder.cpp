@@ -181,6 +181,119 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
   return value.value();
 }
 
+namespace {
+
+// Scratch buffers reused across `IdTable` blocks and chunks to avoid repeated
+// heap allocation inside the column-remapping loop.  `vocabBuf` accumulates
+// raw `VocabIndex` values for the batch B+ tree lookup; `vocabResults` holds
+// the corresponding remapped `Id` values computed inside the
+// `multiUpperBound` callback; `nonVocabBuf` holds eagerly remapped
+// non-`VocabIndex` IDs; `bits` records, for each position in the chunk,
+// whether the original ID was a `VocabIndex` (1) or not (0), so the scatter
+// pass can reconstruct the original order without branching on the type.
+struct VocabRemapBuffers {
+  std::vector<uint64_t> vocabBuf;
+  std::vector<Id> vocabResults;
+  std::vector<Id> nonVocabBuf;
+  std::vector<uint8_t> bits;
+};
+
+// Remaps a non-`VocabIndex` `Id` using the provided mappings.  Returns the
+// `Id` unchanged for datatypes other than `LocalVocabIndex` and
+// `BlankNodeIndex`.
+AD_ALWAYS_INLINE Id remapNonVocabId(Id id, const LocalVocabMapping& lvm,
+                                    const BlankNodeBlocks& bnb,
+                                    uint64_t minBni) {
+  using enum Datatype;
+  auto dt = id.getDatatype();
+  if (dt == LocalVocabIndex) return lvm.at(id.getBits());
+  if (dt == BlankNodeIndex) return remapBlankNodeId(id, bnb, minBni);
+  return id;
+}
+
+// Remaps any `Id` using the B+ tree for `VocabIndex` and the appropriate
+// mapping for other datatypes.  Used in the all-same fast path where a single
+// lookup result is broadcast across the whole chunk.
+AD_ALWAYS_INLINE Id remapSingleId(Id id, const InsertionPositionsTree& tree,
+                                  const LocalVocabMapping& lvm,
+                                  const BlankNodeBlocks& bnb, uint64_t minBni) {
+  if (id.getDatatype() == Datatype::VocabIndex) return remapVocabId(id, tree);
+  return remapNonVocabId(id, lvm, bnb, minBni);
+}
+
+// Remaps all IDs in `col` in-place, using `buf` as scratch storage to avoid
+// repeated heap allocation.  The column is processed in chunks of
+// `INDEX_REBUILD_VOCAB_CHUNK_SIZE` rows; within each chunk the following
+// three-pass strategy is used:
+//   1. Collect: classify each ID as `VocabIndex` or non-vocab; push raw
+//      `uint64_t` values to `buf.vocabBuf` and eagerly remapped non-vocab
+//      results to `buf.nonVocabBuf`; record the classification in `buf.bits`.
+//   2. Batch lookup: call
+//      `multiUpperBound<INDEX_REBUILD_VOCAB_PREFETCH_BATCH>` on
+//      `buf.vocabBuf`, computing the remapped `Id` for each entry inside the
+//      callback and appending it to `buf.vocabResults`.
+//   3. Scatter: write remapped values back to `col` using `buf.bits` to
+//      select between `buf.vocabResults` and `buf.nonVocabBuf`.
+// If `INDEX_REBUILD_ENABLE_ALLSAME_OPT` is `true`, each chunk is first
+// checked for the all-same case (all IDs identical); if so, a single lookup
+// fills the whole chunk without going through the three-pass path.
+void remapColumnChunked(ql::span<Id> col, VocabRemapBuffers& buf,
+                        const InsertionPositionsTree& tree,
+                        const LocalVocabMapping& lvm,
+                        const BlankNodeBlocks& bnb, uint64_t minBni) {
+  constexpr std::size_t CHUNK = INDEX_REBUILD_VOCAB_CHUNK_SIZE;
+  constexpr std::size_t BATCH = INDEX_REBUILD_VOCAB_PREFETCH_BATCH;
+  for (std::size_t chunkStart = 0; chunkStart < col.size();
+       chunkStart += CHUNK) {
+    const std::size_t chunkSize = std::min(CHUNK, col.size() - chunkStart);
+    auto chunk = col.subspan(chunkStart, chunkSize);
+    if constexpr (INDEX_REBUILD_ENABLE_ALLSAME_OPT) {
+      Id first = chunk[0];
+      if (ql::ranges::adjacent_find(chunk, [](Id a, Id b) {
+            return a.getBits() != b.getBits();
+          }) == chunk.end()) {
+        ql::ranges::fill(chunk, remapSingleId(first, tree, lvm, bnb, minBni));
+        continue;
+      }
+    }
+    // Collect pass.
+    buf.vocabBuf.clear();
+    buf.vocabResults.clear();
+    buf.nonVocabBuf.clear();
+    buf.bits.clear();
+    buf.vocabBuf.reserve(chunkSize);
+    buf.vocabResults.reserve(chunkSize);
+    buf.nonVocabBuf.reserve(chunkSize);
+    buf.bits.reserve(chunkSize);
+    for (Id id : chunk) {
+      uint8_t b = (id.getDatatype() == Datatype::VocabIndex) ? 1 : 0;
+      buf.bits.push_back(b);
+      if (b) {
+        buf.vocabBuf.push_back(id.getVocabIndex().get());
+      } else {
+        buf.nonVocabBuf.push_back(remapNonVocabId(id, lvm, bnb, minBni));
+      }
+    }
+    // Batch upper bound.
+    std::size_t vi = 0;
+    tree.multiUpperBound<BATCH>(buf.vocabBuf, [&buf, &vi](std::size_t rank) {
+      buf.vocabResults.push_back(
+          Id::makeFromVocabIndex(VocabIndex::make(buf.vocabBuf[vi] + rank)));
+      ++vi;
+    });
+    // Scatter pass: the ternary on `b` compiles to a branch-free CMOV.
+    std::size_t vj = 0, nj = 0;
+    for (std::size_t k = 0; k < chunkSize; ++k) {
+      uint8_t b = buf.bits[k];
+      chunk[k] = b ? buf.vocabResults[vj] : buf.nonVocabBuf[nj];
+      vj += b;
+      nj += static_cast<std::size_t>(!b);
+    }
+  }
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
@@ -199,37 +312,21 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState);
 
-  auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
-                  minBlankNodeIndex, lastId = Id::makeUndefined(),
-                  mappedId = Id::makeUndefined()](Id& id) mutable {
-    if (lastId.getBits() == id.getBits()) {
-      id = mappedId;
-      return;
-    }
-    lastId = id;
-    using enum Datatype;
-    auto datatype = id.getDatatype();
-    if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions);
-    } else if (datatype == LocalVocabIndex) {
-      id = localVocabMapping.at(id.getBits());
-    } else if (datatype == BlankNodeIndex) {
-      id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
-    }
-    mappedId = id;
-  };
-
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
-          std::move(fullScan), [remapId = std::move(remapId),
-                                reader = std::move(reader)](IdTable& idTable) {
+          std::move(fullScan),
+          [buffers = VocabRemapBuffers{}, reader = std::move(reader),
+           &insertionPositions, &localVocabMapping, &blankNodeBlocks,
+           minBlankNodeIndex](IdTable& idTable) mutable {
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
             // remapped.
             constexpr size_t REGULAR_COLUMNS = 4;
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
-              ql::ranges::for_each(col, remapId);
+              remapColumnChunked(col, buffers, insertionPositions,
+                                 localVocabMapping, blankNodeBlocks,
+                                 minBlankNodeIndex);
             }
             AD_EXPENSIVE_CHECK(ql::ranges::all_of(
                 allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {

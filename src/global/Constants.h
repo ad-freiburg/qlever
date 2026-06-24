@@ -343,4 +343,22 @@ constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
     "http-graph-store";
 
+// Prefetch depth for the B+ tree `multiUpperBound` call in the
+// `IndexRebuilder` column-remapping loop.  Higher values hide more memory
+// latency at the cost of a larger register/stack footprint per permutation
+// thread.
+constexpr inline size_t INDEX_REBUILD_VOCAB_PREFETCH_BATCH = 16;
+
+// Number of rows processed per collect→lookup→scatter cycle in the
+// `IndexRebuilder` column-remapping loop.  Smaller values keep the working
+// set (`vocabBuf`, `bits`, `nonVocabBuf`, `vocabResults`) in L1/L2 cache
+// between the collect and scatter passes.
+constexpr inline size_t INDEX_REBUILD_VOCAB_CHUNK_SIZE = 512;
+
+// When `true`, each chunk in the column-remapping loop is first checked for
+// the all-same case (every ID in the chunk is identical).  If true, the B+
+// tree lookup is replaced by a single `remapVocabId` call and a fill.  Set to
+// `false` to benchmark the batch path in isolation.
+constexpr inline bool INDEX_REBUILD_ENABLE_ALLSAME_OPT = true;
+
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H
