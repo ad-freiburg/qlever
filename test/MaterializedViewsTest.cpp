@@ -1261,7 +1261,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   // view) or a `StripColumns` operation containing a regular `IndexScan`.
   {
     auto [qet, qec, parsed] =
-        qlv().parseAndPlanQuery("SELECT * { ?s <p2> ?o }");
+        qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     EXPECT_FALSE(
         qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
     auto stripCols =
