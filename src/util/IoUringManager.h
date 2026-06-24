@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "util/Exception.h"
 #include "util/HashMap.h"
 
 #ifdef QLEVER_HAS_IO_URING
@@ -24,81 +25,70 @@
 
 namespace ad_utility {
 
-template <typename Derived>
-class IoManager {
+using BatchHandle = uint64_t;
+
+template <typename Policy>
+class BatchManager {
  public:
-  using BatchHandle = uint64_t;
+  using BatchHandle = ad_utility::BatchHandle;
 
-  explicit IoManager(unsigned ringSize = 256) : ringSize_(ringSize) {}
-  ~IoManager() = default;
+  explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
 
-  // delete copy and move constructors, since `IoManager` and its derived
-  // classes should own their resources.
-  IoManager(const IoManager&) = delete;
-  IoManager& operator=(const IoManager&) = delete;
+  BatchManager(const BatchManager&) = delete;
+  BatchManager& operator=(const BatchManager&) = delete;
 
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
-                       ql::span<const uint64_t> fileOffsetPerRequest,
-                       ql::span<char*> targetBufferPerRequest) {
-    if (!validate_same_length(numBytesToReadPerRequest, fileOffsetPerRequest,
-                              targetBufferPerRequest)) {
-      throw std::invalid_argument("spans should have same length");
-    };
-    return static_cast<Derived*>(this)->addBatch(fd, numBytesToReadPerRequest,
-                                                 fileOffsetPerRequest,
-                                                 targetBufferPerRequest);
+  BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
+                       ql::span<const uint64_t> offsets,
+                       ql::span<char*> buffers) {
+    if (!validateSameLength(numBytes, offsets, buffers)) {
+      AD_THROW("spans should have same length");
+    }
+
+    BatchHandle handle = nextBatchHandle_++;
+
+    // Delegate the I/O work to the policy.
+    policy_.addBatch(fd, numBytes, offsets, buffers, handle);
+
+    return handle;
   }
 
-  void wait(BatchHandle handle) { static_cast<Derived*>(this)->wait(handle); };
-
- protected:
-  unsigned ringSize_;
-  // Monotonically increasing counter that mints a unique `BatchHandle` for each
-  // `addBatch` call: the call `addBatch` returns the current value and
-  // increments it, so every batch gets a unique handle.
-  BatchHandle nextBatchHandleToAssign_ = 0;
+  // Block until every read in `handle` has completed.
+  void wait(BatchHandle handle) { policy_.wait(handle); }
 
  private:
+  Policy policy_;
+  BatchHandle nextBatchHandle_ = 0;
+
   template <typename Span0, typename... Spans>
-  static bool validate_same_length(const Span0& first, const Spans&... rest) {
+  static bool validateSameLength(const Span0& first, const Spans&... rest) {
     const auto n = first.size();
     return ((rest.size() == n) && ...);
   }
 };
 
-// Fallback implementation for the `IoUringManager` below. Schedules pread calls
-// in a synchronous (blocking) manner. The interfaces are compatible.
-// Single-threaded use only.
-class SyncIoManager : IoManager<SyncIoManager> {
- public:
-  using BatchHandle = uint64_t;
+// Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
+// in a synchronous (blocking) manner. Single-threaded use only.
+struct SyncIoPolicy {
+  // `ringSize` is ignored; it exists only so the policy is constructible the
+  // same way as `IoUringPolicy`.
+  explicit SyncIoPolicy(unsigned /*ringSize*/ = 256) {}
 
-  // The unused dummy parameter specified here is only needed in order to
-  // mirror the interface of `IoUringManager`.
-  explicit SyncIoManager(unsigned /*ringSize*/ = 256) {}
-  ~SyncIoManager() = default;
-  SyncIoManager(const SyncIoManager&) = delete;
-  SyncIoManager& operator=(const SyncIoManager&) = delete;
+  ~SyncIoPolicy() = default;
+  SyncIoPolicy(const SyncIoPolicy&) = delete;
+  SyncIoPolicy& operator=(const SyncIoPolicy&) = delete;
 
-  // Enqueue and immediately execute a batch of reads synchronously.
-  // This blocks the thread. Returns a handle for consistency with
-  // `IoUringManager`. The three spans must all have the same length, which
-  // implicitly defines the number of reads: read `i` reads up to
-  // `numBytesToReadPerRequest[i]` bytes from file descriptor `fd`, starting at
-  // offset `fileOffsetPerRequest[i]` (from the start of the file), into the
-  // buffer starting at `targetBufferPerRequest[i]`.
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
-                       ql::span<const uint64_t> fileOffsetPerRequest,
-                       ql::span<char*> targetBufferPerRequest);
+  // Immediately execute a batch of reads synchronously. This blocks the calling
+  // thread. Read `i` reads `numBytesToReadPerRequest[i]` bytes from file
+  // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
+  // start of the file), into the buffer starting at
+  // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
+  // `addBatch` returns).
+  void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                ql::span<const uint64_t> fileOffsetPerRequest,
+                ql::span<char*> targetBufferPerRequest, BatchHandle handle);
 
   // No-op: `addBatch` already completed all reads synchronously.
   void wait(BatchHandle) {}
-
- private:
-  // Monotonically increasing counter that mints a unique `BatchHandle` for each
-  // `addBatch` call: the call `addBatch` returns the current value and
-  // increments it, so every batch gets a unique handle.
-  BatchHandle nextBatchHandleToAssign_ = 0;
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to
@@ -108,31 +98,26 @@ class SyncIoManager : IoManager<SyncIoManager> {
 // for more details.
 #ifdef QLEVER_HAS_IO_URING
 
-class IoUringManager {
+class IoUringPolicy {
  public:
-  using BatchHandle = uint64_t;
+  IoUringPolicy(const IoUringPolicy&) = delete;
+  IoUringPolicy& operator=(const IoUringPolicy&) = delete;
 
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
-  explicit IoUringManager(unsigned ringSize = 256);
-  ~IoUringManager();
-
-  // Non-copyable, non-movable (owns ring resources).
-  IoUringManager(const IoUringManager&) = delete;
-  IoUringManager& operator=(const IoUringManager&) = delete;
+  explicit IoUringPolicy(unsigned ringSize);
+  ~IoUringPolicy();
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain
-  // completion queue entries and free slots in the submission queue. The three
-  // spans (parameters) must all have the same length, which implicitly defines
-  // the number of reads: read `i` reads up to `numBytesToReadPerRequest[i]`
-  // bytes from file descriptor `fd`, starting at offset
-  // `fileOffsetPerReqest[i]` (from the start of the file), into the buffer
-  // starting at `targetBufferPerRequest[i]`. Returns a handle that can be
-  // passed to `wait()` to block until this batch has completed.
-  [[nodiscard]] BatchHandle addBatch(
-      int fd, ql::span<const size_t> numBytesToReadPerRequest,
-      ql::span<const uint64_t> fileOffsetPerRequest,
-      ql::span<char*> targetBufferPerRequest);
+  // completion queue entries and free slots in the submission queue. The number
+  // of reads is given by the (equal) span lengths: read `i` reads
+  // `numBytesToRead[i]` bytes from file descriptor `fd`, starting at offset
+  // `offsets[i]` (from the start of the file), into the buffer starting at
+  // `buffers[i]`. The reads are tracked under `handle`, which can be passed to
+  // `wait()` to block until this batch has completed.
+  void addBatch(int fd, ql::span<const size_t> numBytesToRead,
+                ql::span<const uint64_t> offsets, ql::span<char*> buffers,
+                BatchHandle handle);
 
   // Block until every read in `handle` has completed.
   // Throws `std::runtime_error` on any I/O error.
@@ -147,31 +132,19 @@ class IoUringManager {
   // not yet completed. Used to detect whether the ring is full.
   size_t numInFlightReadRequests_ = 0;
 
-  // Monotonically increasing counter that mints a unique `BatchHandle` for each
-  // `addBatch` call: the call `addBatch` returns the current value and
-  // increments it, so every batch gets a unique handle.
-  BatchHandle nextBatchHandleToAssign_ = 0;
-
   // The same in-flight reads as `numInFlight_`, but broken down per batch:
   // maps a batch handle to the number of its reads that have not yet completed
   // (are "in flight"). An entry for a batch (identified by `BatchHandle`) is
   // removed once `wait()` has observed all of its reads complete.
   ad_utility::HashMap<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
 
-  // Per-read metadata, kept until the read is fully satisfied. A read may
-  // complete in several partial steps (the kernel can return fewer bytes than
-  // requested, see https://man7.org/linux/man-pages/man2/pread.2.html), so we
-  // keep enough state to re-issue the read for the unread tail: the batch it
-  // belongs to, the fd, the target buffer base, the original file offset, the
-  // total number of bytes to read, and how many have been read so far. See
+  // Per-read metadata needed when a completion is reaped: which batch the read
+  // belongs to, and how many bytes it was supposed to read (so that reading
+  // fewer bytes than expected can be detected). See
   // `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
-    int fd;
-    char* targetBuffer;
-    uint64_t fileOffset;
     size_t expectedNumBytes;
-    size_t numBytesReadSoFar;
   };
 
   // Monotonically increasing counter that mints a unique request id for each
@@ -184,19 +157,13 @@ class IoUringManager {
   // `drainOneCqe`.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Claim a free SQE, prepare a read of `numBytes` from `fileOffset` into
-  // `targetBuffer`, tag it with `requestId`, and count it as in flight. The
-  // caller must ensure a free submission slot exists.
-  void prepareAndTagRead(uint64_t requestId, int fd, char* targetBuffer,
-                         size_t numBytes, uint64_t fileOffset);
-
   // Wait for one CQE and update the in-flight bookkeeping.
   void drainOneCqe();
 };
 
-using BatchIoManager = IoUringManager;
+using BatchIoManager = BatchManager<IoUringPolicy>;
 #else
-using BatchIoManager = SyncIoManager;
+using BatchIoManager = BatchManager<SyncIoPolicy>;
 #endif
 
 }  // namespace ad_utility

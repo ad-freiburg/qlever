@@ -19,10 +19,11 @@
 namespace ad_utility {
 
 //______________________________________________________________________________
-SyncIoManager::BatchHandle SyncIoManager::addBatch(
-    int fd, ql::span<const size_t> numBytesToReadPerRequest,
-    ql::span<const uint64_t> fileOffsetPerRequest,
-    ql::span<char*> targetBufferPerRequest) {
+void SyncIoPolicy::addBatch(int fd,
+                            ql::span<const size_t> numBytesToReadPerRequest,
+                            ql::span<const uint64_t> fileOffsetPerRequest,
+                            ql::span<char*> targetBufferPerRequest,
+                            BatchHandle /*handle*/) {
   for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
     // `pread` reads up to `numBytesToReadPerRequest[i]` bytes from file
     // descriptor `fd` at offset `fileOffsetPerRequest[i]` (from the start of
@@ -35,22 +36,21 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
               static_cast<off_t>(fileOffsetPerRequest[i]));
 
     if (numBytesRead < 0) {
-      throw std::runtime_error("pread failed in SyncIoManager::addBatch");
+      throw std::runtime_error("pread failed in SyncIoPolicy::addBatch");
     }
     // A result smaller than requested (a partial read, or 0 at end of file)
     // means we read fewer bytes than expected, which we treat as an error.
     if (static_cast<size_t>(numBytesRead) != numBytesToReadPerRequest[i]) {
       throw std::runtime_error(
-          "read fewer bytes than requested in SyncIoManager::addBatch");
+          "read fewer bytes than requested in SyncIoPolicy::addBatch");
     }
   }
-  return nextBatchHandleToAssign_++;
 }
 
 #ifdef QLEVER_HAS_IO_URING
 
 //______________________________________________________________________________
-IoUringManager::IoUringManager(unsigned ringSize) : ringSize_(ringSize) {
+IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   // Set up the submission and completion queues, shared between this process
   // and the kernel, with (at least) `ringSize_` submission slots in the
   // submission queue. liburing rounds the requested size up to a power of two,
@@ -66,37 +66,18 @@ IoUringManager::IoUringManager(unsigned ringSize) : ringSize_(ringSize) {
 }
 
 //______________________________________________________________________________
-IoUringManager::~IoUringManager() { io_uring_queue_exit(&ring_); }
+IoUringPolicy::~IoUringPolicy() { io_uring_queue_exit(&ring_); }
 
 //______________________________________________________________________________
-void IoUringManager::prepareAndTagRead(uint64_t requestId, int fd,
-                                       char* targetBuffer, size_t numBytes,
-                                       uint64_t fileOffset) {
-  // Claim the next free SQE. The caller guarantees a slot is available, so
-  // `io_uring_get_sqe` must not return `nullptr` here.
-  io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-  AD_CORRECTNESS_CHECK(sqe != nullptr);
-
-  // Record the read's parameters in the SQE (this only sets the SQE's fields;
-  // the request is not handed to the kernel until a later `io_uring_submit`),
-  // tag it with the request id (copied verbatim into the matching CQE), and
-  // count it as in flight.
-  io_uring_prep_read(sqe, fd, targetBuffer, static_cast<unsigned>(numBytes),
-                     static_cast<__u64>(fileOffset));
-  io_uring_sqe_set_data64(sqe, requestId);
-  numInFlightReadRequests_++;
-}
-
-//______________________________________________________________________________
-IoUringManager::BatchHandle IoUringManager::addBatch(
-    int fd, ql::span<const size_t> numBytesToReadPerRequest,
-    ql::span<const uint64_t> fileOffsetPerRequest,
-    ql::span<char*> targetBufferPerRequest) {
-  const BatchHandle handle = nextBatchHandleToAssign_++;
+void IoUringPolicy::addBatch(int fd,
+                             ql::span<const size_t> numBytesToReadPerRequest,
+                             ql::span<const uint64_t> fileOffsetPerRequest,
+                             ql::span<char*> targetBufferPerRequest,
+                             BatchHandle handle) {
   const size_t numReadRequestsToPerform = numBytesToReadPerRequest.size();
 
   if (numReadRequestsToPerform == 0) {
-    return handle;
+    return;
   }
   numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
@@ -104,7 +85,7 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
     if (numInFlightReadRequests_ >= ringSize_) {
-      // FLush the SQEs prepared so far to the kernel so the kernel can start
+      // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
       io_uring_submit(&ring_);
       while (numInFlightReadRequests_ >= ringSize_) {
@@ -112,29 +93,36 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
       }
     }
 
-    // Record this read's metadata under a unique request id, then prepare and
-    // tag its SQE. io_uring copies the request id (the SQE's `user_data`)
-    // verbatim into the matching completion, so `drainOneCqe` can recover it.
+    // Claim the next free SQE. The check above guarantees a slot is available,
+    // so `io_uring_get_sqe` must not return `nullptr` here.
+    io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+    AD_CORRECTNESS_CHECK(sqe != nullptr);
+
+    // Record the read's parameters in the SQE (this only sets the SQE's fields;
+    // the request is not handed to the kernel until a later `io_uring_submit`).
+    io_uring_prep_read(sqe, fd, targetBufferPerRequest[i],
+                       static_cast<unsigned>(numBytesToReadPerRequest[i]),
+                       static_cast<__u64>(fileOffsetPerRequest[i]));
+
+    // Tag the SQE with a unique request id and record its metadata (the batch
+    // it belongs to and how many bytes it should read). io_uring copies the
+    // request id (the SQE's `user_data`) verbatim into the matching completion,
+    // so `drainOneCqe` can recover it, attribute the completion to its batch,
+    // and detect a read that returned fewer bytes than requested.
     const uint64_t requestId = nextRequestIdToAssign_++;
     inFlightReadsByRequestId_[requestId] =
-        InFlightRead{handle,
-                     fd,
-                     targetBufferPerRequest[i],
-                     fileOffsetPerRequest[i],
-                     numBytesToReadPerRequest[i],
-                     0};
-    prepareAndTagRead(requestId, fd, targetBufferPerRequest[i],
-                      numBytesToReadPerRequest[i], fileOffsetPerRequest[i]);
+        InFlightRead{handle, numBytesToReadPerRequest[i]};
+    io_uring_sqe_set_data64(sqe, requestId);
+    numInFlightReadRequests_++;
   }
   // Flush the remaining prepared SQEs to the kernel (the loop above only
   // submits when the submission queue is full, so the last group of SQEs has
   // not yet been submitted).
   io_uring_submit(&ring_);
-  return handle;
 }
 
 //______________________________________________________________________________
-void IoUringManager::wait(BatchHandle handle) {
+void IoUringPolicy::wait(BatchHandle handle) {
   auto it = numInFlightReadRequestsPerBatch_.find(handle);
   while (it != numInFlightReadRequestsPerBatch_.end() && it->second > 0) {
     drainOneCqe();
@@ -146,12 +134,12 @@ void IoUringManager::wait(BatchHandle handle) {
 }
 
 //______________________________________________________________________________
-void IoUringManager::drainOneCqe() {
+void ad_utility::IoUringPolicy::drainOneCqe() {
   // Block until at least one completion queue entry (CQE) is available.
   io_uring_cqe* cqe = nullptr;
   int ret = io_uring_wait_cqe(&ring_, &cqe);
   if (ret < 0) {
-    throw std::runtime_error("io_uring_wait_cqe failed in IoUringManager");
+    throw std::runtime_error("io_uring_wait_cqe failed in IoUringPolicy");
   }
 
   // Recover the read's result (`cqe->res`) and the request id we stored in the
@@ -165,43 +153,25 @@ void IoUringManager::drainOneCqe() {
   // inserted in `addBatch`, so the entry must be present.
   auto reqIt = inFlightReadsByRequestId_.find(requestId);
   AD_CORRECTNESS_CHECK(reqIt != inFlightReadsByRequestId_.end());
-  InFlightRead& inFlightRead = reqIt->second;
+  const InFlightRead inFlightRead = reqIt->second;
+  inFlightReadsByRequestId_.erase(reqIt);
 
   // `cqe->res` < 0 is `-errno`.
   if (numBytesRead < 0) {
-    throw std::runtime_error("I/O error in IoUringManager read operation");
+    throw std::runtime_error("I/O error in IoUringPolicy read operation");
   }
-  // 0 means end of file: no bytes were read although more were requested, so we
-  // cannot make progress. The file is shorter than expected; treat as an error.
-  if (numBytesRead == 0) {
+  // A result smaller than requested (a partial read, or 0 at end of file) means
+  // we read fewer bytes than expected, which we treat as an error.
+  if (static_cast<size_t>(numBytesRead) != inFlightRead.expectedNumBytes) {
     throw std::runtime_error(
-        "read fewer bytes than requested in IoUringManager");
+        "read fewer bytes than requested in IoUringPolicy");
   }
 
-  // The kernel may satisfy a read in several steps, returning fewer bytes than
-  // requested without that being an error. If bytes remain, re-issue a read for
-  // the unread bytes (reusing the same request id and metadata). We just reaped
-  // a CQE, so a submission slot is free.
-  if (inFlightRead.numBytesReadSoFar < inFlightRead.expectedNumBytes) {
-    const size_t numBytesRemaining =
-        inFlightRead.expectedNumBytes - inFlightRead.numBytesReadSoFar;
-    prepareAndTagRead(
-        requestId, inFlightRead.fd,
-        inFlightRead.targetBuffer + inFlightRead.numBytesReadSoFar,
-        numBytesRemaining,
-        inFlightRead.fileOffset + inFlightRead.numBytesReadSoFar);
-    io_uring_submit(&ring_);
-    return;
-  }
-
-  // The read is fully satisfied. Attribute the completion to its batch,
-  // decrement that batch's in-flight count, and drop the per-read metadata. The
-  // batch entry must still be present: a batch is only erased (in `wait()`)
-  // after its count reaches zero, which happens only once all of its reads have
-  // completed.
-  const BatchHandle batchHandle = inFlightRead.batchHandle;
-  inFlightReadsByRequestId_.erase(reqIt);
-  auto it = numInFlightReadRequestsPerBatch_.find(batchHandle);
+  // Attribute the completion to its batch and decrement that batch's in-flight
+  // count. The batch entry must still be present: a batch is only erased (in
+  // `wait()`) after its count reaches zero, which happens only once all of its
+  // reads have completed.
+  auto it = numInFlightReadRequestsPerBatch_.find(inFlightRead.batchHandle);
   AD_CORRECTNESS_CHECK(it != numInFlightReadRequestsPerBatch_.end());
   it->second--;
 }

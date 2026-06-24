@@ -45,18 +45,20 @@ static FILE* openFile(const TempFile& tmp) {
   return f;
 }
 
-// Typed test fixture: runs all tests against both `IoUringManager` and
-// `SyncIoManager` when io_uring is present. Runs tests only against
-// `SyncIoManager` when io_uring is present. Runs tests only against
-// `SyncIoManager` when io_uring is not present.
+// Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
+// concrete I/O policy. When io_uring is present the tests run against both the
+// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present,
+// they run against `SyncIoPolicy` only.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
 
 #ifdef QLEVER_HAS_IO_URING
 using ManagerTypes =
-    ::testing::Types<ad_utility::IoUringManager, ad_utility::SyncIoManager>;
+    ::testing::Types<ad_utility::BatchManager<ad_utility::IoUringPolicy>,
+                     ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
 #else
-using ManagerTypes = ::testing::Types<ad_utility::SyncIoManager>;
+using ManagerTypes =
+    ::testing::Types<ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
 #endif
 
 TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
@@ -263,8 +265,8 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 }
 
 // Reading from an invalid fd (-1) must throw std::runtime_error.
-// `SyncIoManager` throws in `addBatch` (it reads immediately); `IoUringManager`
-// throws in wait (the error surfaces as a completion). Both calls sit in one
+// `SyncIoPolicy` throws in `addBatch` (it reads immediately); `IoUringPolicy`
+// throws in `wait` (the error surfaces as a completion). Both calls sit in one
 // EXPECT_THROW block so the test passes regardless of which one throws.
 TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
   TypeParam IOManager(64);
@@ -282,9 +284,9 @@ TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
 }
 
 // Request more bytes than the file contains, i.e. read past EOF. A read that
-// cannot be fully satisfied is a short read, which both managers must report as
-// an error (`std::runtime_error`). `SyncIoManager` throws in `addBatch`,
-// `IoUringManager` in `wait`, so both calls sit in one `EXPECT_THROW` block.
+// cannot be fully satisfied is a short read, which both policies must report as
+// an error (`std::runtime_error`). `SyncIoPolicy` throws in `addBatch`,
+// `IoUringPolicy` in `wait`, so both calls sit in one `EXPECT_THROW` block.
 TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   std::string content = "AAAABBBB";  // 8 bytes
   TempFile tmp(content);
@@ -335,8 +337,8 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 // handle: currently a silent no-op (erase of absent key), Is that intended?
 
 // TODO<ms2144>: destructor with un-waited, in-flight batches. Nothing tests
-// dropping a manager (or never calling wait) while completions are outstanding
-// ~IoUringManager only calls io_uring_queue_exit. Whether that's clean with
+// dropping a manager (or never calling wait) while completions are outstanding.
+// ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
 
 }  // namespace
