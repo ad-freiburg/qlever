@@ -86,8 +86,6 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     }
   }
 
-  logMissSetSize(missIds.size());
-
   // Phase 2: resolve cache misses. `missIds` is deduplicated and sorted
   // (inherited from `sortedIndices`), satisfying the `idsToStringAndType`
   // precondition for sequential VocabIndex I/O. The `use-batch-vocab-lookup`
@@ -106,9 +104,6 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
           ql::exportIds::idToStringAndType(index, id, localVocab));
     }
   }
-  logLookupTimeMicros(std::chrono::duration_cast<std::chrono::microseconds>(
-                          std::chrono::steady_clock::now() - lookupStart)
-                          .count());
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     const auto& evaluated = idCache.getOrCompute(id, [&resolved](const Id&) {
