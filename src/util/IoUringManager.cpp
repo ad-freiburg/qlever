@@ -19,31 +19,35 @@
 namespace ad_utility {
 
 //______________________________________________________________________________
+void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
+                      uint64_t fileOffset) {
+  // `pread` reads up to `numBytes` bytes from file descriptor `fd` at offset
+  // `fileOffset` (from the start of the file) into `targetBuffer`. The file
+  // offset is not changed. On success, it returns the number of bytes read (0
+  // indicates end of file); on error it returns -1 and sets `errno`. See
+  // https://man7.org/linux/man-pages/man2/pread.2.html for more details.
+  const ssize_t numBytesRead =
+      pread(fd, targetBuffer, numBytes, static_cast<off_t>(fileOffset));
+
+  if (numBytesRead < 0) {
+    AD_THROW("pread failed in readFullyOrThrow");
+  }
+  // A result smaller than requested (a partial read, or 0 at end of file) means
+  // we read fewer bytes than expected, which we treat as an error.
+  if (static_cast<size_t>(numBytesRead) != numBytes) {
+    AD_THROW("read fewer bytes than requested in readFullyOrThrow");
+  }
+}
+
+//______________________________________________________________________________
 void SyncIoPolicy::addBatch(int fd,
                             ql::span<const size_t> numBytesToReadPerRequest,
                             ql::span<const uint64_t> fileOffsetPerRequest,
                             ql::span<char*> targetBufferPerRequest,
                             BatchHandle /*handle*/) {
   for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
-    // `pread` reads up to `numBytesToReadPerRequest[i]` bytes from file
-    // descriptor `fd` at offset `fileOffsetPerRequest[i]` (from the start of
-    // the file) into `targetBufferPerRequest[i]`. The file offset is not
-    // changed. On success, it returns the number of bytes read (0 indicates end
-    // of file); on error it returns -1 and sets `errno`. See
-    // https://man7.org/linux/man-pages/man2/pread.2.html for more details.
-    const ssize_t numBytesRead =
-        pread(fd, targetBufferPerRequest[i], numBytesToReadPerRequest[i],
-              static_cast<off_t>(fileOffsetPerRequest[i]));
-
-    if (numBytesRead < 0) {
-      throw std::runtime_error("pread failed in SyncIoPolicy::addBatch");
-    }
-    // A result smaller than requested (a partial read, or 0 at end of file)
-    // means we read fewer bytes than expected, which we treat as an error.
-    if (static_cast<size_t>(numBytesRead) != numBytesToReadPerRequest[i]) {
-      throw std::runtime_error(
-          "read fewer bytes than requested in SyncIoPolicy::addBatch");
-    }
+    readFullyOrThrow(fd, targetBufferPerRequest[i], numBytesToReadPerRequest[i],
+                     fileOffsetPerRequest[i]);
   }
 }
 

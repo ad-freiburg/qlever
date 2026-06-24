@@ -341,4 +341,39 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 // ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
 
+// Direct unit tests for the `readFullyOrThrow` helper (the single-read building
+// block that `SyncIoPolicy::addBatch` is built on).
+
+// A read that is fully satisfied returns the requested bytes from the requested
+// offset.
+TEST(ReadFullyOrThrow, FullReadSucceeds) {
+  TempFile tmp("AAAABBBB");
+  FILE* file = openFile(tmp);
+  std::vector<char> targetBuffer(4);
+  ad_utility::readFullyOrThrow(fileno(file), targetBuffer.data(), 4,
+                               /*fileOffset=*/4);
+  std::fclose(file);
+  EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
+}
+
+// Requesting more bytes than the file contains (read past EOF) is a short read
+// and must throw.
+TEST(ReadFullyOrThrow, ShortReadThrows) {
+  TempFile tmp("AAAABBBB");  // 8 bytes
+  FILE* file = openFile(tmp);
+  std::vector<char> targetBuffer(16);
+  EXPECT_THROW(ad_utility::readFullyOrThrow(fileno(file), targetBuffer.data(),
+                                            16, /*fileOffset=*/0),
+               std::runtime_error);
+  std::fclose(file);
+}
+
+// Reading from an invalid file descriptor must throw.
+TEST(ReadFullyOrThrow, InvalidFdThrows) {
+  std::vector<char> targetBuffer(4);
+  EXPECT_THROW(ad_utility::readFullyOrThrow(-1, targetBuffer.data(), 4,
+                                            /*fileOffset=*/0),
+               std::runtime_error);
+}
+
 }  // namespace

@@ -35,16 +35,16 @@ using VocabLookupOutput =
 
 template <typename BufferType>
 class LookupDataCommonBase {
-  BufferType buffer;
+  BufferType buffer_;
 
   // One string_view per looked-up index, each pointing into `buffer`.
-  std::vector<std::string_view> views;
+  std::vector<std::string_view> views_;
 
   // The span over `views`, populated by `finalize()` and exposed by
   // `asResult()`.
-  ql::span<std::string_view> span;
+  ql::span<std::string_view> span_;
 
-  void finalize() { span = ql::span<std::string_view>{views}; }
+  void finalize() { span_ = ql::span<std::string_view>{views_}; }
 
   static VocabBatchLookupResult asResult(
       std::shared_ptr<LookupDataCommonBase> self) {
