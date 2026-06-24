@@ -305,8 +305,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(unaryInternalFuncs.at(functionName));
     } else if (functionName == "prefix-match") {
       return createBinary(&makePrefixMatchExpression);
-    } else if (functionName == "simplifyPolygon") {
-      return createBinary(&makeSimplifyPolygonExpression);
+    } else if (functionName == "simplifyGeometry") {
+      return createBinary(&makeSimplifyGeometryExpression);
     }
   }
 

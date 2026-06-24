@@ -1765,14 +1765,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 }
 
 // ________________________________________________________________________________________
-TEST(SparqlExpression, geoSimplifyPolygon) {
-  // `ql:simplifyPolygon(?geometry, ?tolerance)` simplifies a WKT geometry using
-  // the Douglas-Peucker algorithm. The tolerance is given in the coordinate
-  // units of the geometry (degrees for WGS84). It is intended primarily for
-  // (multi-)polygons, but lines are simplified as well and points are returned
-  // unchanged.
+TEST(SparqlExpression, geoSimplifyGeometry) {
+  // `ql:simplifyGeometry(?geometry, ?tolerance)` simplifies a WKT geometry
+  // using the Douglas-Peucker algorithm. The tolerance is given in the
+  // coordinate units of the geometry (degrees for WGS84). It is intended
+  // primarily for (multi-)polygons, but lines are simplified as well and points
+  // are returned unchanged.
   auto checkSimplify =
-      std::bind_front(testNaryExpression, &makeSimplifyPolygonExpression);
+      std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
 
   const IdOrLocalVocabEntryVec geometries{
       // 1. Undefined input geometry.

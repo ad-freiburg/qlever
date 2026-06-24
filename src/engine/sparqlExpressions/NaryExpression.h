@@ -81,7 +81,7 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
-SparqlExpression::Ptr makeSimplifyPolygonExpression(
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
