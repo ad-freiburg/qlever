@@ -173,10 +173,23 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // Maximum number of semi-naive reasoning rounds (0 = run until fixpoint).
+  SizeT reasonerMaxRounds_{0, "reasoner-max-rounds"};
+  
   // The runtime log level. Messages with a higher level are suppressed. The
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
                               "log-level"};
+
+  // When true, each successful SPARQL UPDATE automatically triggers an
+  // incremental OWL/RDFS materialisation seeded with the predicates that
+  // appear in the UPDATE's INSERT/DELETE templates. The materialisation runs
+  // in a separate transaction after the UPDATE commits; only rules whose
+  // input predicates overlap with the seed are activated (semi-naive from
+  // round 0), so the overhead for updates that touch no ontology predicates
+  // is a single no-op round. Has no effect when no OWL/RDFS axioms are
+  // present.
+  Bool autoMaterializeAfterUpdate_{false, "auto-materialize-after-update"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

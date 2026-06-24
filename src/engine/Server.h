@@ -19,6 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Reasoner.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
@@ -68,6 +69,26 @@ class Server {
   // Get server statistics.
   json composeStatsJson() const;
   json composeCacheStatsJson() const;
+
+  // Build the JSON response returned after a successful `cmd=materialize`
+  // operation. Exposed as public so that tests can verify the JSON structure
+  // without going through the full HTTP stack.
+  static nlohmann::ordered_json createResponseMetadataForMaterialize(
+      const Reasoner::MaterializationResult& result,
+      const ad_utility::Timer& timer);
+
+  // Run OWL/RDFS forward-chaining materialisation to a fixpoint, inserting the
+  // inferred triples into `deltaTriples`, and return the JSON response
+  // metadata.
+  //
+  // When `seedPredicates` is non-empty, the run is incremental: only rules
+  // whose input predicates overlap with the seeds fire in round 0 (semi-naive
+  // from the start). An empty vector gives the default "full" run where all
+  // rules fire in round 0.
+  nlohmann::ordered_json processMaterialize(
+      DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+      ad_utility::SharedCancellationHandle handle,
+      std::vector<std::string> seedPredicates = {});
 
   // Helper struct bundling a parsed query with a query execution tree.
   // As the `QueryExecutionTree` stores a raw pointer to the

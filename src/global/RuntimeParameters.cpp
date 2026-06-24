@@ -58,6 +58,8 @@ RuntimeParameters::RuntimeParameters() {
   add(permutationWriterNumThreads_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
+  add(reasonerMaxRounds_);
+  add(autoMaterializeAfterUpdate_);
   add(logLevel_);
 
   // Propagate runtime log level changes immediately to the global atomic in

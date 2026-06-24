@@ -6,7 +6,10 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/UpdateMetadata.h"
+#include "global/Constants.h"
 #include "index/IndexImpl.h"
+#include "parser/SparqlTriple.h"
+#include "util/Log.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
@@ -218,14 +221,13 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
           ExecuteUpdate::IdTriplesAndLocalVocab>
 ExecuteUpdate::computeGraphUpdateQuads(
-    const Index& index, const ParsedQuery& query, const Result& result,
-    const VariableToColumnMap& variableColumns,
+    const Index& index,
+    const std::vector<SparqlTripleSimpleWithGraph>& toInsertTriples,
+    const std::vector<SparqlTripleSimpleWithGraph>& toDeleteTriples,
+    const Result& result, const VariableToColumnMap& variableColumns,
+    const LimitOffsetClause& limitOffset,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
     ad_utility::timer::TimeTracer& tracer) {
-  AD_CONTRACT_CHECK(query.hasUpdateClause());
-  const auto& updateClause = query.updateClause();
-  const auto& graphUpdate = updateClause.op_;
-
   // Start the timer once the where clause has been evaluated.
   tracer.beginTrace("computeIds");
 
@@ -247,15 +249,15 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   tracer.beginTrace("vocabLookup");
   auto [toInsertTemplates, toInsert, localVocabInsert] =
-      prepareTemplateAndResultContainer(graphUpdate.toInsert_.triples_);
+      prepareTemplateAndResultContainer(toInsertTriples);
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
-      prepareTemplateAndResultContainer(graphUpdate.toDelete_.triples_);
+      prepareTemplateAndResultContainer(toDeleteTriples);
   tracer.endTrace("vocabLookup");
 
   tracer.beginTrace("resultInterpolation");
   uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
-           query._limitOffset, result, resultSize)) {
+           limitOffset, result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (const uint64_t i : range) {
       computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);
@@ -281,6 +283,22 @@ ExecuteUpdate::computeGraphUpdateQuads(
 }
 
 // _____________________________________________________________________________
+std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+          ExecuteUpdate::IdTriplesAndLocalVocab>
+ExecuteUpdate::computeGraphUpdateQuads(
+    const Index& index, const ParsedQuery& query, const Result& result,
+    const VariableToColumnMap& variableColumns,
+    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+    ad_utility::timer::TimeTracer& tracer) {
+  AD_CONTRACT_CHECK(query.hasUpdateClause());
+  const auto& graphUpdate = query.updateClause().op_;
+  return computeGraphUpdateQuads(
+      index, graphUpdate.toInsert_.triples_, graphUpdate.toDelete_.triples_,
+      result, variableColumns, query._limitOffset, cancellationHandle, metadata,
+      tracer);
+}
+
+// _____________________________________________________________________________
 void ExecuteUpdate::sortAndRemoveDuplicates(
     std::vector<IdTriple<>>& container) {
   ql::ranges::sort(container);
@@ -295,4 +313,55 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
   reducedToDelete.reserve(a.size());
   ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
   return reducedToDelete;
+}
+
+// _____________________________________________________________________________
+UpdateMetadata ExecuteUpdate::executeConstructInsert(
+    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
+    DeltaTriples& deltaTriples,
+    const ad_utility::triple_component::Iri& targetGraph,
+    const CancellationHandle& cancellationHandle,
+    ad_utility::timer::TimeTracer& tracer) {
+  AD_CONTRACT_CHECK(query.hasConstructClause(),
+                    "executeConstructInsert requires a CONSTRUCT query.");
+  UpdateMetadata metadata{};
+
+  // Execute the WHERE clause.
+  tracer.beginTrace("evaluateWhere");
+  auto result = qet.getResult(false);
+  tracer.endTrace("evaluateWhere");
+
+  // Convert CONSTRUCT template triples into the `SparqlTripleSimpleWithGraph`
+  // format used by the UPDATE pipeline, pinned to `targetGraph`. We then reuse
+  // the exact same interpolation/deduplication path as `executeUpdate` by
+  // passing these as the insert templates (with no delete templates).
+  const auto& constructTriples = query.constructClause().triples_;
+  std::vector<SparqlTripleSimpleWithGraph> toInsertTriples;
+  toInsertTriples.reserve(constructTriples.size());
+  for (const auto& triple : constructTriples) {
+    toInsertTriples.emplace_back(triple[0].toTripleComponent(),
+                                 triple[1].toTripleComponent(),
+                                 triple[2].toTripleComponent(), targetGraph);
+  }
+
+  auto [toInsert, toDelete] = computeGraphUpdateQuads(
+      index, toInsertTriples, /*toDeleteTriples=*/{}, *result,
+      qet.getVariableColumns(), query._limitOffset, cancellationHandle,
+      metadata, tracer);
+
+  // Log a summary line for observability.
+  AD_LOG_INFO << "CONSTRUCT INSERT: " << toInsert.idTriples_.size()
+              << " unique triple(s) to insert into graph <"
+              << targetGraph.toStringRepresentation() << ">" << std::endl;
+
+  // Insert the deduplicated triples; the local vocab stays alive inside
+  // `toInsert` so its IDs remain valid during insertion.
+  tracer.beginTrace("insertTriples");
+  if (!toInsert.idTriples_.empty()) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               std::move(toInsert.idTriples_), tracer);
+  }
+  tracer.endTrace("insertTriples");
+
+  return metadata;
 }
