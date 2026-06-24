@@ -126,7 +126,9 @@ class IoUringPolicy {
                 ql::span<const uint64_t> offsets, ql::span<char*> buffers,
                 BatchHandle handle);
 
-  // Blocks until
+  // Block until every read in the batch that is represented by the `handle` has
+  // completed. (The `handle` was submitted along the read requests using
+  // `addBatch`.) Throws on any I/O error.
   void wait(BatchHandle handle);
 
  private:
