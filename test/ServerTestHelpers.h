@@ -8,8 +8,12 @@
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
 #include <boost/beast/http.hpp>
+#include <string>
+#include <utility>
 
 #include "engine/Server.h"
+#include "libqlever/Qlever.h"
+#include "util/IndexTestHelpers.h"
 #include "util/metrics/Metrics.h"
 
 namespace serverTestHelpers {
@@ -25,14 +29,6 @@ struct SimulateHttpRequest {
   // Optional MetricsReader injected into the Server. Defaults to nullptr
   // (metrics disabled), matching the behaviour of all existing tests.
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_ = nullptr;
-
-  struct ServerSettings {
-    bool useText = false;
-    bool usePatterns = true;
-    bool loadAllPermutations = true;
-    bool persistUpdates = false;
-  };
-  ServerSettings serverSettings_{};
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
@@ -50,17 +46,14 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName, const ServerSettings& serverSettings,
-           auto metricsReader, auto& io) -> boost::asio::awaitable<ResT> {
+        [](auto request, auto indexName, auto metricsReader,
+           auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
-          Server server{
-              4321,          1,     ad_utility::MemorySize::megabytes(1),
-              "accessToken", false, true,
-              metricsReader};
-          server.initialize(indexName, serverSettings.useText,
-                            serverSettings.usePatterns,
-                            serverSettings.loadAllPermutations,
-                            serverSettings.persistUpdates);
+          qlever::EngineConfig config;
+          config.persistUpdates_ = false;
+          config.baseName_ = indexName;
+          Server server{4321, 1, "accessToken", config, false, metricsReader};
+
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
 
@@ -70,7 +63,7 @@ struct SimulateHttpRequest {
                   .template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, serverSettings_, metricsReader_, io),
+        }(request, indexBaseName_, metricsReader_, io),
         boost::asio::use_future);
     io.run();
     return fut.get();
@@ -104,6 +97,15 @@ struct SimulateHttpRequest {
     return bodyToString(std::move(response.body()));
   }
 };
+
+// Helper function creating a simple config for testing.
+inline qlever::EngineConfig getDefaultConfig() {
+  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+  config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
+  return config;
+}
 
 }  // namespace serverTestHelpers
 

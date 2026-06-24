@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
+#include "libqlever/Qlever.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -56,30 +58,16 @@ class Server {
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool noAccessCheck = false, bool usePatternTrick = true,
+                  std::string accessToken, const qlever::EngineConfig& config,
+                  bool noAccessCheck = false,
                   std::shared_ptr<ad_utility::metrics::MetricsReader>
                       metricsReader = nullptr);
 
   virtual ~Server() = default;
 
- private:
-  //! Initialize the server.
-  void initialize(const std::string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false,
-                  std::vector<std::string> preloadMaterializedViews = {});
-
- public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const std::string& indexBaseName, bool useText,
-           bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false,
-           std::vector<std::string> preloadMaterializedViews = {});
-
-  Index& index() { return *index_; }
-  const Index& index() const { return *index_; }
+  void run();
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -120,21 +108,12 @@ class Server {
   };
 
  private:
+  qlever::Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   bool noAccessCheck_;
-  ad_utility::MemorySize maxMem_;
-  QueryResultCache cache_;
-  NamedResultCache namedResultCache_;
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
-      std::make_shared<MaterializedViewsManager>();
-  ad_utility::AllocatorWithLimit<Id> allocator_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
-  std::shared_ptr<Index> index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-
-  bool enablePatternTrick_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.
@@ -400,6 +379,38 @@ class Server {
   // index. This assumes that the access token has already been checked and no
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+
+  // Getters for the `Qlever` instance, as well as its data members.
+  qlever::Qlever& qlever() { return qlever_; }
+  const qlever::Qlever& qlever() const { return qlever_; }
+
+  Index& index() { return qlever().index(); }
+  const Index& index() const { return qlever().index(); }
+  std::shared_ptr<const Index> sharedIndex() const {
+    return qlever().sharedIndex();
+  }
+
+  QueryResultCache& cache() { return qlever().cache(); }
+  const QueryResultCache& cache() const { return qlever().cache(); }
+  ad_utility::AllocatorWithLimit<Id>& allocator() {
+    return qlever().allocator();
+  }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return qlever().allocator();
+  }
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return qlever().sortPerformanceEstimator();
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return qlever().sortPerformanceEstimator();
+  }
+  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
+  const NamedResultCache& namedResultCache() const {
+    return qlever().namedResultCache();
+  }
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return qlever().materializedViewsManager();
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H
