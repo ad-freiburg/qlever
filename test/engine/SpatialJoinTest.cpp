@@ -34,7 +34,6 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
-#include "gmock/gmock.h"
 #include "index/ExportIds.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
@@ -710,11 +709,12 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
 
   // `getMultiplicity` does not return meaningful results here, but its
   // assertion should throw as expected.
-  EXPECT_NO_THROW(spatialJoin->getMultiplicity(0));
-  EXPECT_NO_THROW(spatialJoin->getMultiplicity(1));
-  EXPECT_NO_THROW(spatialJoin->getMultiplicity(2));
-  EXPECT_ANY_THROW(spatialJoin->getMultiplicity(3));
-  EXPECT_ANY_THROW(spatialJoin->getMultiplicity(4));
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_NO_THROW(spatialJoin->getMultiplicity(i));
+  }
+  for (size_t i = 0; i < 2; ++i) {
+    EXPECT_ANY_THROW(spatialJoin->getMultiplicity(3 + i));
+  }
 
   // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
   // columns from the left child and from the right child only the requested
