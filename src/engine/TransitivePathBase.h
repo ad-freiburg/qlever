@@ -182,6 +182,12 @@ class TransitivePathBase : public Operation {
   std::shared_ptr<TransitivePathBase> bindRightSide(
       std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
 
+  // Returns a new `TransitivePath` operation, similar to `bindLeftSide` or
+  // `bindRightSide` but with having both sides bound at the same time.
+  std::shared_ptr<TransitivePathBase> bindBothSides(
+      std::shared_ptr<QueryExecutionTree> leftOp, size_t leftCol,
+      std::shared_ptr<QueryExecutionTree> rightOp, size_t rightCol) const;
+
   bool isBoundOrId() const;
 
   /**
@@ -244,8 +250,8 @@ class TransitivePathBase : public Operation {
   // Return how many columns would be joined given the passed `tree`. Return 1
   // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
   // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
-                            ColumnIndex joinColumn) const;
+  size_t numJoinColumnsWidth(const std::shared_ptr<QueryExecutionTree>& tree,
+                             ColumnIndex joinColumn) const;
 
  public:
   std::string getDescriptor() const override;
@@ -306,7 +312,7 @@ class TransitivePathBase : public Operation {
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the useBinSearch flag.
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
@@ -359,11 +365,13 @@ class TransitivePathBase : public Operation {
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
-  // The internal implementation of `bindLeftSide` and `bindRightSide` which
-  // share a lot of code.
+  // The internal implementation of `bindLeftSide`, `bindRightSide` and
+  // `bindBothSides` which share a lot of code.
   std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
-      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-      bool isLeft) const;
+      std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
+          leftOpAndCol,
+      std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
+          rightOpAndCol) const;
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
