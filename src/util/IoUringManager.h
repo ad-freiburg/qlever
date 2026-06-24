@@ -14,6 +14,8 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "util/HashMap.h"
+
 #ifdef QLEVER_HAS_IO_URING
 #include <liburing.h>
 #endif
@@ -107,7 +109,39 @@ class IoUringManager {
   // maps a batch handle to the number of its reads that have not yet completed
   // (are "in flight"). An entry for a batch (identified by `BatchHandle`) is
   // removed once `wait()` has observed all of its reads complete.
-  std::unordered_map<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
+  ad_utility::HashMap<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
+
+  // Per-read metadata, kept until the read is fully satisfied. A read may
+  // complete in several partial steps (the kernel can return fewer bytes than
+  // requested, see https://man7.org/linux/man-pages/man2/pread.2.html), so we
+  // keep enough state to re-issue the read for the unread tail: the batch it
+  // belongs to, the fd, the target buffer base, the original file offset, the
+  // total number of bytes to read, and how many have been read so far. See
+  // `inFlightReadsByRequestId_`.
+  struct InFlightRead {
+    BatchHandle batchHandle;
+    int fd;
+    char* targetBuffer;
+    uint64_t fileOffset;
+    size_t expectedNumBytes;
+    size_t numBytesReadSoFar;
+  };
+
+  // Monotonically increasing counter that mints a unique request id for each
+  // individual read. The id is stored in the SQE's `user_data` and recovered
+  // from the matching CQE to look up the read's `InFlightRead` metadata.
+  uint64_t nextRequestIdToAssign_ = 0;
+
+  // Maps a read's request id to its metadata. An entry is inserted when the
+  // read is prepared in `addBatch` and erased when its completion is reaped in
+  // `drainOneCqe`.
+  ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
+
+  // Claim a free SQE, prepare a read of `numBytes` from `fileOffset` into
+  // `targetBuffer`, tag it with `requestId`, and count it as in flight. The
+  // caller must ensure a free submission slot exists.
+  void prepareAndTagRead(uint64_t requestId, int fd, char* targetBuffer,
+                         size_t numBytes, uint64_t fileOffset);
 
   // Wait for one CQE and update the in-flight bookkeeping.
   void drainOneCqe();

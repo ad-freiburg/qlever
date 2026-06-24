@@ -47,6 +47,7 @@ static FILE* openFile(const TempFile& tmp) {
 
 // Typed test fixture: runs all tests against both `IoUringManager` and
 // `SyncIoManager` when io_uring is present. Runs tests only against
+// `SyncIoManager` when io_uring is present. Runs tests only against
 // `SyncIoManager` when io_uring is not present.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
@@ -279,5 +280,63 @@ TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
       },
       std::runtime_error);
 }
+
+// Request more bytes than the file contains, i.e. read past EOF. A read that
+// cannot be fully satisfied is a short read, which both managers must report as
+// an error (`std::runtime_error`). `SyncIoManager` throws in `addBatch`,
+// `IoUringManager` in `wait`, so both calls sit in one `EXPECT_THROW` block.
+TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
+  std::string content = "AAAABBBB";  // 8 bytes
+  TempFile tmp(content);
+  FILE* file = openFile(tmp);
+  int fd = fileno(file);
+
+  TypeParam ioManager(64);
+  std::vector<char> targetBuffer(16, '\0');
+  std::vector<size_t> numBytesToRead{16};  // request more than the 8 available
+  std::vector<uint64_t> fileOffsets{0};
+  std::vector<char*> ptrsToTargetBuffers{targetBuffer.data()};
+
+  EXPECT_THROW(
+      {
+        auto batchHandle = ioManager.addBatch(fd, numBytesToRead, fileOffsets,
+                                              ptrsToTargetBuffers);
+        ioManager.wait(batchHandle);
+      },
+      std::runtime_error);
+  std::fclose(file);
+}
+
+// TODO<ms2144>: add test cases that test "larger than trivial reads". All
+// reads tested currently are 4 bytes. A multi-KB read (bigger than a page)
+// (TODO: what is a page in this context?) would give real confidence (TODO:
+// why?) that offsets/length are handled at scale, and is the realistic
+// vocabulary lookup size (TODO: is that true?)
+TYPED_TEST(IoUringManagerTest, LargeReads) {
+  std::string content = "TODO";  // TODO bytes
+  TempFile tmp(content);
+  FILE* file = openFile(tmp);
+  int fd = fileno(file);
+
+  TypeParam ioManager(64);
+  std::vector<char> targetBuffer(16, '\0');
+  std::vector<size_t> numBytesToRead{9999};  // TODO
+  std::vector<uint64_t> fileOffsets{0};
+  std::vector<char*> ptrsToTargetBuffers{targetBuffer.data()};
+}
+
+// TODO<ms2144>: heterogeneous read sizes within a batch. No test issues reads
+// where the numBytesTOread differs between the individual calls.
+
+// TODO<ms2144>: zero-length reads interleaved with non-zero reads in one batch.
+
+// TODO<ms2144>: wait() edge cases: wait() on an already completed and erased
+// handle (double wait) -> should be a no-op, wait() on a never issued/bogus
+// handle: currently a silent no-op (erase of absent key), Is that intended?
+
+// TODO<ms2144>: destructor with un-waited, in-flight batches. Nothing tests
+// dropping a manager (or never calling wait) while completions are outstanding
+// ~IoUringManager only calls io_uring_queue_exit. Whether that's clean with
+// pending CQEs is unverified.
 
 }  // namespace
