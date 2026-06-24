@@ -8,8 +8,12 @@
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
 #include <boost/beast/http.hpp>
+#include <string>
+#include <utility>
 
 #include "engine/Server.h"
+#include "libqlever/Qlever.h"
+#include "util/IndexTestHelpers.h"
 
 namespace serverTestHelpers {
 
@@ -21,14 +25,6 @@ using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 // Test the HTTP request processing of the `Server` class.
 struct SimulateHttpRequest {
   std::string indexBaseName_;
-
-  struct ServerSettings {
-    bool useText = false;
-    bool usePatterns = true;
-    bool loadAllPermutations = true;
-    bool persistUpdates = false;
-  };
-  ServerSettings serverSettings_{};
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
@@ -46,15 +42,14 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName, const ServerSettings& serverSettings,
+        [](auto request, auto indexName,
            auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
-          Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
-                        "accessToken"};
-          server.initialize(indexName, serverSettings.useText,
-                            serverSettings.usePatterns,
-                            serverSettings.loadAllPermutations,
-                            serverSettings.persistUpdates);
+          qlever::EngineConfig config;
+          config.persistUpdates_ = false;
+          config.baseName_ = indexName;
+          Server server{4321, 1, "accessToken", config};
+
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
 
@@ -64,7 +59,7 @@ struct SimulateHttpRequest {
                   .template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, serverSettings_, io),
+        }(request, indexBaseName_, io),
         boost::asio::use_future);
     io.run();
     return fut.get();
@@ -98,6 +93,15 @@ struct SimulateHttpRequest {
     return bodyToString(std::move(response.body()));
   }
 };
+
+// Helper function creating a simple config for testing.
+inline qlever::EngineConfig getDefaultConfig() {
+  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+  qlever::EngineConfig config;
+  config.baseName_ = qec->getIndex().getOnDiskBase();
+  config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
+  return config;
+}
 
 }  // namespace serverTestHelpers
 

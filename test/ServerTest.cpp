@@ -3,8 +3,10 @@
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
+#include <optional>
 
 #include "ServerTestHelpers.h"
 #include "engine/HttpError.h"
@@ -144,7 +146,8 @@ TEST(ServerTest, chooseBestFittingMediaType) {
 // _____________________________________________________________________________
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
   const auto req = makeGetRequest("/");
@@ -169,25 +172,29 @@ TEST(ServerTest, getQueryId) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
                     {"name-index", ""},
                     {"name-text-index", ""},
                     {"num-entity-occurrences", 0},
-                    {"num-permutations", 2},
-                    {"num-predicates-internal", 0},
-                    {"num-predicates-normal", 0},
+                    {"num-objects-internal", 0},
+                    {"num-objects-normal", 1},
+                    {"num-permutations", 6},
+                    {"num-predicates-internal", 1},
+                    {"num-predicates-normal", 1},
+                    {"num-subjects-internal", 0},
+                    {"num-subjects-normal", 1},
                     {"num-text-records", 0},
-                    {"num-triples-internal", 0},
-                    {"num-triples-normal", 0},
+                    {"num-triples-internal", 1},
+                    {"num-triples-normal", 1},
                     {"num-word-occurrences", 0}};
   EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
 }
 
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);
@@ -379,14 +386,19 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  auto config = serverTestHelpers::getDefaultConfig();
+  Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.checkAccessToken("invalidAccessToken"),
       testing::HasSubstr("Access token was provided but it was invalid"));
 
-  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  config.persistUpdates_ = false;
+
+  Server server2{
+      1234, 1, "", config, true,
+  };
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
 
