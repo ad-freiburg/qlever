@@ -50,7 +50,7 @@ class SyncIoManager {
   // Monotonically increasing counter that mints a unique `BatchHandle` for each
   // `addBatch` call: the call `addBatch` returns the current value and
   // increments it, so every batch gets a unique handle.
-  BatchHandle nextHandle_ = 0;
+  BatchHandle nextBatchHandleToAssign_ = 0;
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to
@@ -101,7 +101,7 @@ class IoUringManager {
   // Monotonically increasing counter that mints a unique `BatchHandle` for each
   // `addBatch` call: the call `addBatch` returns the current value and
   // increments it, so every batch gets a unique handle.
-  BatchHandle nextHandle_ = 0;
+  BatchHandle nextBatchHandleToAssign_ = 0;
 
   // The same in-flight reads as `numInFlight_`, but broken down per batch:
   // maps a batch handle to the number of its reads that have not yet completed

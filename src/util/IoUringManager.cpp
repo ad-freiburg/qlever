@@ -45,7 +45,7 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
       totalBytesReadForRequest += static_cast<size_t>(numBytesRead);
     }
   }
-  return nextHandle_++;
+  return nextBatchHandleToAssign_++;
 }
 
 #ifdef QLEVER_HAS_IO_URING
@@ -71,7 +71,7 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     int fd, ql::span<const size_t> numBytesToReadPerRequest,
     ql::span<const uint64_t> fileOffsetPerRequest,
     ql::span<char*> targetBufferPerRequest) {
-  const BatchHandle handle = nextHandle_++;
+  const BatchHandle handle = nextBatchHandleToAssign_++;
   const size_t numReadRequestsToPerform = numBytesToReadPerRequest.size();
 
   if (numReadRequestsToPerform == 0) {
