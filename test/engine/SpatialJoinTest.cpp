@@ -709,11 +709,12 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
 
   // `getMultiplicity` does not return meaningful results here, but its
   // assertion should throw as expected.
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < spatialJoin->getResultWidth(); ++i) {
     EXPECT_NO_THROW(spatialJoin->getMultiplicity(i));
   }
-  for (size_t i = 0; i < 2; ++i) {
-    EXPECT_ANY_THROW(spatialJoin->getMultiplicity(3 + i));
+  for (size_t i = spatialJoin->getResultWidth();
+       i < qet1->getResultWidth() + qet2->getResultWidth(); ++i) {
+    EXPECT_ANY_THROW(spatialJoin->getMultiplicity(i));
   }
 
   // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
