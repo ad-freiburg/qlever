@@ -24,11 +24,57 @@
 
 namespace ad_utility {
 
-// Synchronous (pread) fallback implementation. Single-threaded use only.
-class SyncIoManager {
+template <typename Derived>
+class IoManager {
  public:
   using BatchHandle = uint64_t;
 
+  explicit IoManager(unsigned ringSize = 256) : ringSize_(ringSize) {}
+  ~IoManager() = default;
+
+  // delete copy and move constructors, since `IoManager` and its derived
+  // classes should own their resources.
+  IoManager(const IoManager&) = delete;
+  IoManager& operator=(const IoManager&) = delete;
+
+  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                       ql::span<const uint64_t> fileOffsetPerRequest,
+                       ql::span<char*> targetBufferPerRequest) {
+    if (!validate_same_length(numBytesToReadPerRequest, fileOffsetPerRequest,
+                              targetBufferPerRequest)) {
+      throw std::invalid_argument("spans should have same length");
+    };
+    return static_cast<Derived*>(this)->addBatch(fd, numBytesToReadPerRequest,
+                                                 fileOffsetPerRequest,
+                                                 targetBufferPerRequest);
+  }
+
+  void wait(BatchHandle handle) { static_cast<Derived*>(this)->wait(handle); };
+
+ protected:
+  unsigned ringSize_;
+  // Monotonically increasing counter that mints a unique `BatchHandle` for each
+  // `addBatch` call: the call `addBatch` returns the current value and
+  // increments it, so every batch gets a unique handle.
+  BatchHandle nextBatchHandleToAssign_ = 0;
+
+ private:
+  template <typename Span0, typename... Spans>
+  static bool validate_same_length(const Span0& first, const Spans&... rest) {
+    const auto n = first.size();
+    return ((rest.size() == n) && ...);
+  }
+};
+
+// Fallback implementation for the `IoUringManager` below. Schedules pread calls
+// in a synchronous (blocking) manner. The interfaces are compatible.
+// Single-threaded use only.
+class SyncIoManager : IoManager<SyncIoManager> {
+ public:
+  using BatchHandle = uint64_t;
+
+  // The unused dummy parameter specified here is only needed in order to
+  // mirror the interface of `IoUringManager`.
   explicit SyncIoManager(unsigned /*ringSize*/ = 256) {}
   ~SyncIoManager() = default;
   SyncIoManager(const SyncIoManager&) = delete;
@@ -83,9 +129,10 @@ class IoUringManager {
   // `fileOffsetPerReqest[i]` (from the start of the file), into the buffer
   // starting at `targetBufferPerRequest[i]`. Returns a handle that can be
   // passed to `wait()` to block until this batch has completed.
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
-                       ql::span<const uint64_t> fileOffsetPerRequest,
-                       ql::span<char*> targetBufferPerRequest);
+  [[nodiscard]] BatchHandle addBatch(
+      int fd, ql::span<const size_t> numBytesToReadPerRequest,
+      ql::span<const uint64_t> fileOffsetPerRequest,
+      ql::span<char*> targetBufferPerRequest);
 
   // Block until every read in `handle` has completed.
   // Throws `std::runtime_error` on any I/O error.
