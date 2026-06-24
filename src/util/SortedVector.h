@@ -19,7 +19,7 @@
 #include "backports/functional.h"
 #include "backports/span.h"
 #include "util/Exception.h"
-#include "util/ZipMergeUniqueIterator.h"
+#include "util/views/ZipMergeUniqueView.h"
 
 namespace ad_utility {
 
@@ -64,7 +64,7 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     AD_CORRECTNESS_CHECK(smallPartIsSorted_);
     Storage merged;
     merged.reserve(elements_.capacity());
-    ql::ranges::move(*this, std::back_insert_iterator(merged));
+    ql::ranges::move(getSortedView(), std::back_insert_iterator(merged));
     elements_.swap(merged);
     numItemsLargePart_ = elements_.size();
     smallPartIsSorted_ = true;
@@ -81,17 +81,6 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
   // through `elements_.begin() + numItemsLargePart_`.
   bool isClean() const {
     return smallPartIsSorted_ && numItemsLargePart_ <= elements_.size();
-  }
-
-  template <typename Self>
-  static auto iterImpl(Self& self, bool atEnd) {
-    AD_CONTRACT_CHECK(self.isClean());
-    using Iter =
-        std::conditional_t<std::is_const_v<Self>, const_iterator, iterator>;
-    auto mid = self.elements_.begin() + self.numItemsLargePart_;
-    return Iter(atEnd ? mid : self.elements_.begin(), mid,
-                atEnd ? self.elements_.end() : mid, self.elements_.end(),
-                self.comp_, self.proj_);
   }
 
   FRIEND_TEST(SortedVectorTest, eraseSortedSubRange);
@@ -174,17 +163,20 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     smallPartIsSorted_ = false;
   }
 
-  using iterator =
-      detail::ZipMergeUniqueIteratorImpl<typename Storage::iterator, Compare,
-                                         Projection>;
-  using const_iterator =
-      detail::ZipMergeUniqueIteratorImpl<typename Storage::const_iterator,
-                                         Compare, Projection>;
-
-  iterator begin() { return iterImpl(*this, false); }
-  const_iterator begin() const { return iterImpl(*this, false); }
-  iterator end() { return iterImpl(*this, true); }
-  const_iterator end() const { return iterImpl(*this, true); }
+  auto getSortedView() {
+    AD_CONTRACT_CHECK(isClean());
+    auto mid = elements_.begin() + numItemsLargePart_;
+    return ZipMergeUniqueView(ql::ranges::subrange(elements_.begin(), mid),
+                              ql::ranges::subrange(mid, elements_.end()), comp_,
+                              proj_);
+  }
+  auto getSortedView() const {
+    AD_CONTRACT_CHECK(isClean());
+    auto mid = elements_.begin() + numItemsLargePart_;
+    return ZipMergeUniqueView(ql::ranges::subrange(elements_.begin(), mid),
+                              ql::ranges::subrange(mid, elements_.end()), comp_,
+                              proj_);
+  }
 
   const ValueType& back() const {
     AD_CONTRACT_CHECK(!empty());
@@ -199,6 +191,21 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
   }
   ValueType& back() {
     return const_cast<ValueType&>(std::as_const(*this).back());
+  }
+
+  const ValueType& front() const {
+    AD_CONTRACT_CHECK(!empty());
+    AD_CONTRACT_CHECK(isClean());
+    if (numItemsLargePart_ == elements_.size()) {
+      return elements_.front();
+    }
+    auto& firstLargePart = elements_.front();
+    auto& firstSmallpart = elements_.at(numItemsLargePart_);
+    return comp_(proj_(firstSmallpart), proj_(firstLargePart)) ? firstLargePart
+                                                               : firstSmallpart;
+  }
+  ValueType& front() {
+    return const_cast<ValueType&>(std::as_const(*this).front());
   }
 
   // Erase a single or multiple elements.
@@ -241,8 +248,8 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
   }
   // Returns an exact size but reads the whole vector for this.
   size_t sizeForTesting() const {
-    AD_CONTRACT_CHECK(isClean());
-    return std::distance(begin(), end());
+    auto sorted = getSortedView();
+    return ql::ranges::distance(sorted.begin(), sorted.end());
   }
 
   bool empty() const {
@@ -258,7 +265,8 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
 
   friend std::ostream& operator<<(std::ostream& os, const SortedVector& sv) {
     os << "{ ";
-    ql::ranges::copy(sv, std::ostream_iterator<ValueType>(os, " "));
+    ql::ranges::copy(sv.getSortedView(),
+                     std::ostream_iterator<ValueType>(os, " "));
     os << "}";
     return os;
   }

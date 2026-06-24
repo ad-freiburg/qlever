@@ -16,9 +16,6 @@
 #include "util/GTestHelpers.h"
 #include "util/views/ZipMergeUniqueView.h"
 
-// Needed for range-v3's range `operator<<` which prints elements with `<<`.
-// Without this, printing `ZipMergeUniqueView<..., std::pair<int,int>>` fails
-// to compile on compilers building in C++17 mode.
 template <typename T, typename U>
 std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
   return os << '(' << p.first << ", " << p.second << ')';

@@ -14,6 +14,11 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
 
+template <typename T, typename U>
+std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
+  return os << '(' << p.first << ", " << p.second << ')';
+}
+
 namespace ad_utility {
 namespace {
 
@@ -70,23 +75,19 @@ namespace {
 auto StateIs = SortedVectorPairsTestHelper::stateIs;
 }  // namespace
 
-static_assert(ql::ranges::range<SV>);
-
 TEST(SortedVectorTest, constructor) {
   {
     SV s{};
     EXPECT_THAT(s, SizesAre(0, 0));
     EXPECT_TRUE(s.empty());
-    EXPECT_THAT(s, ElementsAre());
-    EXPECT_EQ(s.begin(), s.end());
+    EXPECT_THAT(s.getSortedView(), ElementsAre());
     EXPECT_THAT(s, StateIs({}, 0, true));
   }
   {
     SV s = SV::fromSorted({});
     EXPECT_THAT(s, SizesAre(0, 0));
     EXPECT_TRUE(s.empty());
-    EXPECT_THAT(s, ElementsAre());
-    EXPECT_EQ(s.begin(), s.end());
+    EXPECT_THAT(s.getSortedView(), ElementsAre());
     EXPECT_THAT(s, StateIs({}, 0, true));
   }
   {
@@ -105,8 +106,7 @@ TEST(SortedVectorTest, constructor) {
     SV s = SV::fromSorted({p10, p20});
     EXPECT_THAT(s, SizesAre(2, 2));
     EXPECT_FALSE(s.empty());
-    EXPECT_THAT(s, ElementsAre(p10, p20));
-    EXPECT_NE(s.begin(), s.end());
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20));
     EXPECT_THAT(s, StateIs({p10, p20}, 2, true));
   }
 }
@@ -264,7 +264,9 @@ TEST(SortedVectorTest, iteration) {
                             source_location l = AD_CURRENT_SOURCE_LOC()) {
     testConstOverloads(
         sv,
-        [&expected](auto& sv) { EXPECT_THAT(sv, ElementsAreArray(expected)); },
+        [&expected](auto& sv) {
+          EXPECT_THAT(sv.getSortedView(), ElementsAreArray(expected));
+        },
         l);
   };
   {
@@ -289,12 +291,8 @@ TEST(SortedVectorTest, iteration) {
     s.insert(p10);
     // `begin()` and `end()` are implemented using a static impl function which
     // results in a slightly different assertion message.
-    auto NotClean = AssertionFailed("self.isClean()");
-    testConstOverloads(s, [&NotClean](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.begin(), NotClean);
-    });
-    testConstOverloads(s, [&NotClean](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.end(), NotClean);
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotClean);
     });
   }
 }
