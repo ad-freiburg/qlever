@@ -702,6 +702,10 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   // The `PayloadVariables` requests only one of the columns from the right
   // child, so we expect a total of 3 columns to be exported by the
   // `SpatialJoin`.
+  EXPECT_EQ(qet1->getResultWidth(), 3);
+  EXPECT_EQ(qet1->getVariableColumns().size(), 2);
+  EXPECT_EQ(qet2->getResultWidth(), 3);
+  EXPECT_EQ(qet2->getVariableColumns().size(), 2);
   EXPECT_EQ(spatialJoin->getResultWidth(), 3);
 
   // `getMultiplicity` does not return meaningful results here, but its
