@@ -23,6 +23,7 @@
 #include <util/geo/Geo.h>
 
 #include <cmath>
+#include <filesystem>
 #include <set>
 
 #include "backports/three_way_comparison.h"
@@ -512,8 +513,19 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   };
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
+  auto basePath = std::filesystem::path(qec_->getIndex().getOnDiskBase());
+
+  std::string sweeperTmpPath = basePath.parent_path().string();
+
+  // `parent_path()` returns `""` if parent path is empty, not `"."`
+  if (sweeperTmpPath.empty()) sweeperTmpPath = ".";
+
+  std::string baseName = basePath.filename().string();
+
+  // the prefix added before each spatialjoin file
+  std::string sweeperPrefix = baseName + ".spatialjoin";
+
+  sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
