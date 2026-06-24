@@ -133,7 +133,7 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   std::string content = "AAAABBBB";
   TempFile tmp(content);
   FILE* file = openFile(tmp);
-  int fd = fileno(f);
+  int fd = fileno(file);
 
   TypeParam IOManager(64);
 
