@@ -34,10 +34,11 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices)
+           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
-      sortColumnIndices_{std::move(sortColumnIndices)} {}
+      sortColumnIndices_{std::move(sortColumnIndices)},
+      explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
 std::string Sort::getCacheKeyImpl() const {
@@ -68,6 +69,12 @@ std::string Sort::getDescriptor() const {
 
 // _____________________________________________________________________________
 void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  // For an explicit `INTERNAL SORT BY` we deliberately keep the complete sorted
+  // result and let the `LIMIT`/`OFFSET` be applied externally (see
+  // `handlesLimitOffset()`), so we must not push it down to the subtree.
+  if (explicitSort_) {
+    return;
+  }
   subtree_ = subtree_->clone();
   subtree_->applyLimitOffset(limitOffset);
 }
@@ -249,13 +256,13 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
   return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                             sortColumns);
+                                             sortColumns, explicitSort_);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
-                                sortColumnIndices_);
+                                sortColumnIndices_, explicitSort_);
 }
 
 // _____________________________________________________________________________
@@ -284,6 +291,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(
-      getExecutionContext(), std::move(subtree), sortColumnIndices);
+  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
+                                             std::move(subtree),
+                                             sortColumnIndices, explicitSort_);
 }
