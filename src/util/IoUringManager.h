@@ -50,11 +50,11 @@ class SyncIoManager {
   uint64_t nextHandle_ = 0;
 };
 
-// Persistent io_uring manager that accepts multiple named batches, submits
-// all SQEs in `addBatch` (blocking if the ring is full), and lets the caller
-// block on a specific batch via `wait()`.
-// Single-threaded use only. See https://github.com/axboe/liburing for more
-// details.
+// Persistent io_uring manager that accepts multiple named batches of indices to
+// be read from the underlying storage medium, submits all SQEs in `addBatch`
+// (blocking if the ring is full), and lets the caller block on a specific batch
+// via `wait()`. Single-threaded use only. See https://github.com/axboe/liburing
+// for more details.
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringManager {
@@ -69,8 +69,8 @@ class IoUringManager {
   IoUringManager(const IoUringManager&) = delete;
   IoUringManager& operator=(const IoUringManager&) = delete;
 
-  // Enqueue a batch of reads and submit them to the kernel, blocking to drain
-  // completions only when the ring is full. The three spans must all have the
+  // Enqueue a batch of reads and submit them to the kernel. Only blocks to
+  // drain completions when the ring is full. The three spans must all have the
   // same length, which implicitly defines the number of reads: read `i` reads
   // up to `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
   // offset `fileOffsets[i]` (from the start of the file), into the buffer
