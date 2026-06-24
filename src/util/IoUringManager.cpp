@@ -94,16 +94,15 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
       }
     }
 
-    // Grab a free submission queue entry (SQE) and prepare it. The check above
-    // guarantees a slot in the ring buffer is available, so `io_uring_get_sqe`
-    // must not return `nullptr` here.
+    // Claim the next free submisiosn queue entry (SQE) from the submission
+    // queue. The check above guarantees a slot in the ring buffer is available,
+    // so `io_uring_get_sqe` must not return `nullptr` here.
     io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
     AD_CORRECTNESS_CHECK(sqe != nullptr);
 
-    // Describe read `i` into the SQE (which fd, how many bytes, at which file
-    // offset, into which buffer). This only writes the read's parameters into
-    // the SQE's fields. The request is not submitted to the kernel until a
-    // later `io_uring_submit`.
+    // Record read `i` in the SQE: which fd, how many bytes, at which file
+    // offset, into which buffer. This only sets the SQE's fields. The request
+    // is not handed to the kernel until a later `io_uring_submit`.
     io_uring_prep_read(sqe, fd, targetBufferPerRequest[i],
                        static_cast<unsigned>(numBytesToReadPerRequest[i]),
                        static_cast<__u64>(fileOffsetPerRequest[i]));
