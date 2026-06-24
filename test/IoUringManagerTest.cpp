@@ -128,33 +128,32 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   std::fclose(f);
 }
 
-// ---------------------------------------------------------------------------
 // WaitOutOfOrder: submit batch A then B, wait(B) first, then wait(A).
-// ---------------------------------------------------------------------------
 TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   std::string content = "AAAABBBB";
   TempFile tmp(content);
-  FILE* f = openFile(tmp);
+  FILE* file = openFile(tmp);
   int fd = fileno(f);
 
-  TypeParam mgr(64);
+  TypeParam IOManager(64);
 
   std::vector<char> targetBuffersA(4);
   std::vector<char> targetBuffersB(4);
   std::vector<size_t> numBytesToReadA{4};
   std::vector<size_t> numBytesToReadB{4};
-  std::vector<uint64_t> offsetsA{0}, offsetsB{4};
-  std::vector<char*> ptrsToBuffersA{targetBuffersA.data()};
-  std::vector<char*> ptrsToBuffersB{targetBuffersB.data()};
+  std::vector<uint64_t> offsetsA{0};
+  std::vector<uint64_t> offsetsB{0};
+  std::vector<char*> ptrsToTargetBuffersA{targetBuffersA.data()};
+  std::vector<char*> ptrsToTargetBuffersB{targetBuffersB.data()};
 
   auto batchHandleA =
-      mgr.addBatch(fd, numBytesToReadA, offsetsA, ptrsToBuffersA);
+      IOManager.addBatch(fd, numBytesToReadA, offsetsA, ptrsToTargetBuffersA);
   auto batchHandleB =
-      mgr.addBatch(fd, numBytesToReadB, offsetsB, ptrsToBuffersB);
+      IOManager.addBatch(fd, numBytesToReadB, offsetsB, ptrsToTargetBuffersB);
 
-  mgr.wait(batchHandleB);
-  mgr.wait(batchHandleA);
-  std::fclose(f);
+  IOManager.wait(batchHandleB);
+  IOManager.wait(batchHandleA);
+  std::fclose(file);
 
   EXPECT_EQ(std::string(targetBuffersA.data(), 4), "AAAA");
   EXPECT_EQ(std::string(targetBuffersB.data(), 4), "BBBB");
