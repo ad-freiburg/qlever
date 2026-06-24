@@ -4,16 +4,20 @@
 
 #include <gmock/gmock.h>
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2latlng.h>
+#include <s2/s2polyline.h>
 
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "absl/types/span.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoConverters.h"
 
 namespace {
 
@@ -185,5 +189,147 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
                          SpatialJoinCachedIndexTest, ::testing::Bool());
+
+// Helper: build an `S2Polyline` from a list of (lng, lat) degree pairs.
+S2Polyline makePolyline(
+    std::initializer_list<std::pair<double, double>> coords) {
+  std::vector<S2LatLng> latlngs;
+  latlngs.reserve(coords.size());
+  for (auto [lng, lat] : coords) {
+    latlngs.push_back(S2LatLng::FromDegrees(lat, lng));
+  }
+  return S2Polyline{absl::MakeConstSpan(latlngs)};
+}
+
+// _____________________________________________________________________________
+TEST(SimplifyPolylineTest, NoSimplificationWithNonPositiveError) {
+  // A 4-vertex polyline: simplification with error <= 0 must return all
+  // vertices unchanged.
+  S2Polyline polyline = makePolyline(
+      {{7.84, 47.99}, {7.841, 47.991}, {7.842, 47.992}, {7.85, 47.99}});
+  EXPECT_EQ(polyline.num_vertices(), 4);
+
+  auto result = geometryConverters::simplifyPolyline(polyline, 0.0);
+  EXPECT_EQ(result.num_vertices(), 4);
+
+  auto result2 = geometryConverters::simplifyPolyline(polyline, -5.0);
+  EXPECT_EQ(result2.num_vertices(), 4);
+}
+
+// _____________________________________________________________________________
+TEST(SimplifyPolylineTest, SimplificationReducesVertices) {
+  // Build a polyline where the middle vertex is only ~1 m off the direct path.
+  // A 10 m tolerance should simplify it away; a 0.001 m tolerance should not.
+  // The first and last vertex are on a ~1.5 km segment. The middle vertex is
+  // offset by a tiny amount, well within 10 m.
+  S2Polyline polyline =
+      makePolyline({{7.840000, 47.999000},
+                    {7.840045, 47.999050},  // ~6 m off the direct line
+                    {7.841000, 47.999900}});
+  EXPECT_EQ(polyline.num_vertices(), 3);
+
+  auto simplified = geometryConverters::simplifyPolyline(polyline, 10.0);
+  EXPECT_EQ(simplified.num_vertices(), 2);
+
+  auto notSimplified = geometryConverters::simplifyPolyline(polyline, 0.001);
+  EXPECT_EQ(notSimplified.num_vertices(), 3);
+}
+
+// _____________________________________________________________________________
+TEST(SimplifyPolylineTest, AlwaysKeepsFirstAndLastVertex) {
+  S2Polyline polyline = makePolyline(
+      {{7.84, 47.99}, {7.841, 47.991}, {7.842, 47.992}, {7.85, 47.99}});
+  auto simplified = geometryConverters::simplifyPolyline(polyline, 100000.0);
+  ASSERT_GE(simplified.num_vertices(), 2);
+  EXPECT_EQ(simplified.vertex(0), polyline.vertex(0));
+  EXPECT_EQ(simplified.vertex(simplified.num_vertices() - 1),
+            polyline.vertex(polyline.num_vertices() - 1));
+}
+
+// _____________________________________________________________________________
+TEST(SimplifyPolygonTest, NoSimplificationWithNonPositiveError) {
+  // Build a simple triangle polygon and verify that error <= 0 keeps all loops
+  // and vertex counts intact.
+  std::vector<std::unique_ptr<S2Loop>> loops;
+  loops.push_back(std::make_unique<S2Loop>(
+      std::vector<S2Point>{S2LatLng::FromDegrees(0, 0).ToPoint(),
+                           S2LatLng::FromDegrees(0, 1).ToPoint(),
+                           S2LatLng::FromDegrees(1, 0).ToPoint()}));
+  loops[0]->Normalize();
+  S2Polygon polygon{std::move(loops)};
+  EXPECT_EQ(polygon.num_loops(), 1);
+  EXPECT_EQ(polygon.loop(0)->num_vertices(), 3);
+
+  auto result = geometryConverters::simplifyPolygon(polygon, 0.0);
+  EXPECT_EQ(result.num_loops(), 1);
+  EXPECT_EQ(result.loop(0)->num_vertices(), 3);
+}
+
+// _____________________________________________________________________________
+// Tests for `SpatialJoinCachedIndex` with and without simplification.
+class SpatialJoinCachedIndexSimplificationTest
+    : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
+  bool shouldSerialize = GetParam();
+  // A 3-vertex linestring: without simplification all 3 vertices (= 2 edges)
+  // must be stored in the S2 shape index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // 3 vertices → 2 edges, stored as a single shape.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 2);
+}
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
+  bool shouldSerialize = GetParam();
+  // Same 3-vertex linestring, but the middle vertex is only ~6 m off the
+  // direct path, so a 10 m simplification tolerance should remove it, leaving
+  // 2 vertices (= 1 edge) in the index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}, 10.0};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // Middle vertex removed by simplification: 2 vertices → 1 edge.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 1);
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexSimplificationTest,
+                         ::testing::Bool());
 
 }  // namespace
