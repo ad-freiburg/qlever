@@ -36,12 +36,12 @@ class SyncIoManager {
   // This blocks the thread. Returns a handle for consistency with
   // `IoUringManager`. The three spans must all have the same length, which
   // implicitly defines the number of reads: read `i` reads up to
-  // `numBytesToRead[i]` bytes from file descriptor `fd`, starting at offset
-  // `fileOffsets[i]` (from the start of the file), into the buffer starting at
-  // `targetBuffers[i]`.
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToRead,
-                       ql::span<const uint64_t> fileOffsets,
-                       ql::span<char*> targetBuffers);
+  // `numBytesToReadPerRequest[i]` bytes from file descriptor `fd`, starting at
+  // offset `fileOffsetPerRequest[i]` (from the start of the file), into the
+  // buffer starting at `targetBufferPerRequest[i]`.
+  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                       ql::span<const uint64_t> fileOffsetPerRequest,
+                       ql::span<char*> targetBufferPerRequest);
 
   // No-op: `addBatch` already completed all reads synchronously.
   void wait(BatchHandle) {}
@@ -73,14 +73,14 @@ class IoUringManager {
   // calling thread only when the submission queue is full, in order to drain
   // completion queue entries and free slots in the submission queue. The three
   // spans (parameters) must all have the same length, which implicitly defines
-  // the number of reads: read `i` reads up to `numBytesToRead[i]` bytes from
-  // file descriptor `fd`, starting at offset `fileOffsets[i]` (from the start
-  // of the file), into the buffer starting at `targetBuffers[i]`. Returns a
-  // handle that can be passed to `wait()` to block until this batch has
-  // completed.
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToRead,
-                       ql::span<const uint64_t> fileOffsets,
-                       ql::span<char*> targetBuffers);
+  // the number of reads: read `i` reads up to `numBytesToReadPerRequest[i]`
+  // bytes from file descriptor `fd`, starting at offset
+  // `fileOffsetPerReqest[i]` (from the start of the file), into the buffer
+  // starting at `targetBufferPerRequest[i]`. Returns a handle that can be
+  // passed to `wait()` to block until this batch has completed.
+  BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                       ql::span<const uint64_t> fileOffsetPerRequest,
+                       ql::span<char*> targetBufferPerRequest);
 
   // Block until every read in `handle` has completed.
   // Throws `std::runtime_error` on any I/O error.

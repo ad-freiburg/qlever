@@ -21,14 +21,15 @@ namespace ad_utility {
 //______________________________________________________________________________
 SyncIoManager::BatchHandle SyncIoManager::addBatch(
     int fd, ql::span<const size_t> numBytesToReadPerRequest,
-    ql::span<const uint64_t> fileOffsets, ql::span<char*> targetBuffers) {
+    ql::span<const uint64_t> fileOffsetPerRequest,
+    ql::span<char*> targetBufferPerRequest) {
   for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
     size_t totalBytesRead = 0;
 
     while (totalBytesRead < numBytesToReadPerRequest[i]) {
-      void* buf = targetBuffers[i] + totalBytesRead;
+      void* buf = targetBufferPerRequest[i] + totalBytesRead;
       size_t count = numBytesToReadPerRequest[i] - totalBytesRead;
-      off_t offset = static_cast<off_t>(fileOffsets[i]) +
+      off_t offset = static_cast<off_t>(fileOffsetPerRequest[i]) +
                      static_cast<off_t>(totalBytesRead);
       // reads up to `count` bytes from file descriptor `fd` at offset `offset`
       // (from the start of the file) into the buffer starting at `buf`. The
@@ -68,7 +69,8 @@ IoUringManager::~IoUringManager() { io_uring_queue_exit(&ring_); }
 //______________________________________________________________________________
 IoUringManager::BatchHandle IoUringManager::addBatch(
     int fd, ql::span<const size_t> numBytesToReadPerRequest,
-    ql::span<const uint64_t> fileOffsets, ql::span<char*> targetBuffers) {
+    ql::span<const uint64_t> fileOffsetPerRequest,
+    ql::span<char*> targetBufferPerRequest) {
   const BatchHandle handle = nextHandle_++;
   const size_t numReadRequestsToPerform = numBytesToReadPerRequest.size();
 
@@ -92,9 +94,9 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     // cannot return `nullptr` here.
     io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
     AD_CORRECTNESS_CHECK(sqe != nullptr);
-    io_uring_prep_read(sqe, fd, targetBuffers[i],
+    io_uring_prep_read(sqe, fd, targetBufferPerRequest[i],
                        static_cast<unsigned>(numBytesToReadPerRequest[i]),
-                       static_cast<__u64>(fileOffsets[i]));
+                       static_cast<__u64>(fileOffsetPerRequest[i]));
     // Tag the request with its batch handle (by value, not by pointer) so that
     // the matching completion can be attributed back to this batch in
     // `drainOneCqe`.

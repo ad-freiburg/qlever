@@ -27,6 +27,7 @@ using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 // indices into the underlying Vocabulary specifying which terms' string
 // representations need to be read from the underlying Vocabulary).
 using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
+
 // Type-erased output range of batch-lookup results (which are the string
 // representations of the terms specified to be read by `VocabLookupInput`).
 using VocabLookupOutput =
