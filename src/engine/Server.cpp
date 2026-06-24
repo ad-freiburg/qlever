@@ -30,6 +30,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
+#include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
@@ -50,73 +51,21 @@ using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken,
-               bool noAccessCheck, bool usePatternTrick)
-    : numThreads_(numThreads),
+Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
+               const qlever::EngineConfig& config, bool noAccessCheck)
+    : qlever_(config),
+      numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
-                 [this](ad_utility::MemorySize numMemoryToAllocate) {
-                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                                   numMemoryToAllocate);
-                 }},
-      indexAndViews_{
-          IndexAndViews{std::make_shared<Index>(allocator_),
-                        std::make_shared<MaterializedViewsManager>()}},
-      enablePatternTrick_(usePatternTrick),
-      // The number of server threads currently also is the number of queries
-      // that can be processed simultaneously.
       queryThreadPool_{numThreads} {
-  // This also directly triggers the update functions and propagates the
-  // values of the parameters to the cache.
-  globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
-      [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
-  globalRuntimeParameters.wlock()->cacheMaxSizeSingleEntry_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) {
-        cache_.setMaxSizeSingleEntry(newValue);
-      });
-}
-
-// __________________________________________________________________________
-void Server::initialize(const std::string& indexBaseName, bool useText,
-                        bool usePatterns, bool loadAllPermutations,
-                        bool persistUpdates,
-                        std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
-  originalBasename_ = indexBaseName;
-  auto index = this->index();
-  index->usePatterns() = usePatterns;
-  index->loadAllPermutations() = loadAllPermutations;
-
-  // Init the index.
-  index->createFromOnDiskIndex(indexBaseName, persistUpdates);
-  if (useText) {
-    index->addTextFromOnDiskIndex();
-  }
-
-  auto manager = this->materializedViewsManager();
-  manager->setOnDiskBase(indexBaseName);
-
-  // Preload materialized views as requested by the user. This is done in a
-  // try-catch block to prevent an exception during loading of a view from
-  // blocking the server start.
-  for (const auto& viewName : preloadMaterializedViews) {
-    try {
-      manager->loadView(viewName);
-    } catch (const std::exception& ex) {
-      AD_LOG_ERROR << "Preloading materialized view '" << viewName
-                   << "' failed: " << ex.what() << "." << std::endl;
-    }
-  }
-
-  sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index->numTriples().normalAndInternal_() *
-                      PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+  // Remember the base name of the initially loaded index. A later index rebuild
+  // requires the new index to live in the same directory (see `rebuildIndex`).
+  // The actual index loading (including preloading of materialized views) is
+  // performed by the `Qlever` instance `qlever_`.
+  originalBasename_ = config.baseName_;
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
@@ -128,10 +77,7 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const std::string& indexBaseName, bool useText,
-                 bool usePatterns, bool loadAllPermutations,
-                 bool persistUpdates,
-                 std::vector<std::string> preloadMaterializedViews) {
+void Server::run() {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -210,10 +156,6 @@ void Server::run(const std::string& indexBaseName, bool useText,
   auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
                                std::move(httpSessionHandler),
                                std::move(webSocketSessionSupplier)};
-
-  // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-             persistUpdates, std::move(preloadMaterializedViews));
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -334,14 +276,12 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = std::make_shared<QueryExecutionContext>(
-      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(materializedViewsManager),
+  auto qec = qlever().createQueryExecutionContext(
+      std::move(index), std::move(materializedViewsManager),
       [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
         (*sharedMessageSender)(std::move(json));
       },
       pinSubtrees, pinResult);
-
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
   return std::make_tuple(std::move(qec), std::move(cancellationHandle),
@@ -442,17 +382,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
-    cache_.clearUnpinnedOnly();
+    cache().clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
-    cache_.clearAll();
+    cache().clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
-    namedResultCache_.clear();
+    namedResultCache().clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -877,14 +817,14 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-results-unpinned"] = cache_.numNonPinnedEntries();
-  result["num-results-pinned-unnamed"] = cache_.numPinnedEntries();
-  result["num-results-pinned-named"] = namedResultCache_.numEntries();
+  result["num-results-unpinned"] = cache().numNonPinnedEntries();
+  result["num-results-pinned-unnamed"] = cache().numPinnedEntries();
+  result["num-results-pinned-named"] = namedResultCache().numEntries();
 
   // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
   // converter.
-  result["cache-size-unpinned"] = cache_.nonPinnedSize().getBytes();
-  result["cache-size-pinned"] = cache_.pinnedSize().getBytes();
+  result["cache-size-unpinned"] = cache().nonPinnedSize().getBytes();
+  result["cache-size-pinned"] = cache().pinnedSize().getBytes();
   return result;
 }
 
@@ -1197,8 +1137,8 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
-  cache_.clearAll();
-  namedResultCache_.clear();
+  cache().clearAll();
+  namedResultCache().clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
@@ -1502,9 +1442,7 @@ void Server::writeMaterializedView(
   auto [index, manager] = indexAndViewsSnapshot();
   auto parsedQuery = SparqlParser::parseQuery(
       &index->encodedIriManager(), query.query_, query.datasetClauses_);
-  auto qec = std::make_shared<QueryExecutionContext>(
-      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, manager);
+  auto qec = qlever().createQueryExecutionContext(index, manager);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
@@ -1563,7 +1501,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         auto mapping = qlever::materializeToIndex(
             *index, indexBaseName, currentSnapshot, localVocabCopy, ownedBlocks,
             handle, logFileName);
-        auto newIndex = std::make_shared<Index>(allocator_);
+        auto newIndex = std::make_shared<Index>(allocator());
         newIndex->usePatterns() = index->usePatterns();
         newIndex->loadAllPermutations() = index->loadAllPermutations();
         newIndex->createFromOnDiskIndex(
@@ -1595,9 +1533,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         // filename.
         // TODO<RobinTF> add this function
         // oldIndex->removeOnDestruction();
-        auto lock = indexAndViews_.wlock();
-        lock->index_ = std::move(newIndex);
-        lock->materializedViewsManager_ = std::move(newManager);
+        qlever().swapIndexAndViews(std::move(newIndex), std::move(newManager));
       },
       handle);
   co_await std::move(swapRoutine);

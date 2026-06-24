@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
+#include "libqlever/Qlever.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -47,6 +49,7 @@ struct SimulateHttpRequest;
 class Server {
   using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
@@ -55,34 +58,14 @@ class Server {
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool noAccessCheck = false, bool usePatternTrick = true);
+                  std::string accessToken, const qlever::EngineConfig& config,
+                  bool noAccessCheck = false);
 
   virtual ~Server() = default;
 
- private:
-  //! Initialize the server.
-  void initialize(const std::string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false,
-                  std::vector<std::string> preloadMaterializedViews = {});
-
- public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const std::string& indexBaseName, bool useText,
-           bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false,
-           std::vector<std::string> preloadMaterializedViews = {});
-
-  std::shared_ptr<Index> index() { return indexAndViews_.rlock()->index_; }
-  std::shared_ptr<const Index> index() const {
-    return indexAndViews_.rlock()->index_;
-  }
-
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return indexAndViews_.rlock()->materializedViewsManager_;
-  }
+  void run();
 
   // Get server statistics.
   static json composeStatsJson(const Index& index);
@@ -123,34 +106,12 @@ class Server {
   };
 
  private:
+  qlever::Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   bool noAccessCheck_;
-  QueryResultCache cache_;
-  NamedResultCache namedResultCache_;
-  ad_utility::AllocatorWithLimit<Id> allocator_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
-  // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
-  // so that an index rebuild can atomically swap both in, while other threads
-  // continue to read the previous instances via the `shared_ptr`s they hold.
-  struct IndexAndViews {
-    std::shared_ptr<Index> index_;
-    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
-  };
-  ad_utility::Synchronized<IndexAndViews> indexAndViews_;
-
-  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
-  // under a single read lock, so that all code paths handling a single request
-  // observe a matching pair even if a concurrent rebuild swaps the pointers
-  // between two reads.
-  IndexAndViews indexAndViewsSnapshot() const {
-    return *indexAndViews_.rlock();
-  }
-
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-
-  bool enablePatternTrick_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.
@@ -414,6 +375,46 @@ class Server {
   // index. This assumes that the access token has already been checked and no
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+
+  // Getters for the `Qlever` instance, as well as its data members.
+  qlever::Qlever& qlever() { return qlever_; }
+  const qlever::Qlever& qlever() const { return qlever_; }
+
+  Index& index() { return qlever().index(); }
+  const Index& index() const { return qlever().index(); }
+  std::shared_ptr<const Index> sharedIndex() const {
+    return qlever().sharedIndex();
+  }
+
+  QueryResultCache& cache() { return qlever().cache(); }
+  const QueryResultCache& cache() const { return qlever().cache(); }
+  ad_utility::AllocatorWithLimit<Id>& allocator() {
+    return qlever().allocator();
+  }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return qlever().allocator();
+  }
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return qlever().sortPerformanceEstimator();
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return qlever().sortPerformanceEstimator();
+  }
+  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
+  const NamedResultCache& namedResultCache() const {
+    return qlever().namedResultCache();
+  }
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return qlever().materializedViewsManager();
+  }
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  qlever::Qlever::IndexAndViews indexAndViewsSnapshot() const {
+    return qlever().indexAndViewsSnapshot();
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

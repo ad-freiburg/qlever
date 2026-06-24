@@ -652,6 +652,11 @@ void DeltaTriples::readFromDisk() {
       triples.emplace_back(
           std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
     }
+    // `insertTriples` and `deleteTriples` require the triples to be sorted.
+    // `writeToDisk` serializes the triples in the order returned by the
+    // HashMap, which is not necessarily sorted. Sort the triples when reading
+    // them from disk.
+    ql::ranges::sort(triples);
     return triples;
   };
   auto cancellationHandle =

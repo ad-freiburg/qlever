@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -18,12 +19,18 @@
 #include "engine/Result.h"
 #include "index/Index.h"
 #include "parser/data/Types.h"
+#include "rdfTypes/Iri.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
 
 namespace {
+
+using Iri = ad_utility::triple_component::Iri;
+// Validating variant, used to test that invalid IRIs are rejected.
+auto iriV = Iri::fromIrirefValidated;
+
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
@@ -143,58 +150,60 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
-  EXPECT_THROW(Iri{"http://linkwithoutangularbrackets"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<<nestedangularbrackets>>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<duplicatedangularbracker>>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<<duplicatedangularbracker>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<noend"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"nostart>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<\"withdoublequote>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<{withcurlybrace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<}withcurlybrace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<|withpipesymbol>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<^withcaret>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<\\withbackslash>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<`withbacktick>"}, ad_utility::Exception);
+  EXPECT_THROW(iriV("http://linkwithoutangularbrackets"),
+               ad_utility::Exception);
+  EXPECT_THROW(iriV("<<nestedangularbrackets>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<duplicatedangularbracker>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<<duplicatedangularbracker>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<noend"), ad_utility::Exception);
+  EXPECT_THROW(iriV("nostart>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\"withdoublequote>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<{withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<}withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<|withpipesymbol>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<^withcaret>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\\withbackslash>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<`withbacktick>"), ad_utility::Exception);
   // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
   // but the following two are probably the most common cases
-  EXPECT_THROW(Iri{"<with whitespace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<with\r\nnewline>"}, ad_utility::Exception);
+  EXPECT_THROW(iriV("<with whitespace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<with\r\nnewline>"), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  ASSERT_EQ(Iri{"<http://valid-iri>"}.iri(), "<http://valid-iri>");
+  EXPECT_EQ(iriV("<http://valid-iri>").toStringRepresentation(),
+            "<http://valid-iri>");
 }
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
-  Iri iri{iriString};
+  Iri iriVal = iriV(iriString);
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, OBJECT), Optional(iriString));
 
   ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Iri iri{"<http://some-iri>"};
+  Iri iriVal = iriV("<http://some-iri>");
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(evaluate(iri, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(iriVal, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {

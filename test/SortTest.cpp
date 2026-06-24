@@ -443,3 +443,28 @@ TEST(Sort, limitOffsetIsPropagated) {
   // We expect that the original subtree is unchanged.
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
 }
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  auto tree = QueryExecutionTree::createSortedTree(subtree, {0}, true);
+  auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+  ASSERT_NE(sort, nullptr);
+  EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);
+
+  sort->applyLimitOffset({2, 1});
+
+  EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
+  EXPECT_TRUE(sort->getChildren()
+                  .at(0)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
+  EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
