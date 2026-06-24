@@ -159,6 +159,8 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
+addLinkAndDiscoverTest(VariableCounterTest parser engine)
+
 addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
