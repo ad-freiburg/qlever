@@ -24,10 +24,10 @@ namespace qlever {
 
 namespace indexRebuilder {
 
-// Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
-Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+// Map old vocab `Id`s to new vocab `Id`s using the B+ tree built from the
+// insertion positions.  This is the most performance-critical code of the
+// rebuild; the B+ tree enables SIMD-accelerated `upperBound` lookups.
+Id remapVocabId(Id original, const InsertionPositionsTree& insertionPositions);
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
 // id space left by random allocation of blank node ids. Return an empty

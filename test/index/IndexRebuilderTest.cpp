@@ -77,6 +77,13 @@ void deleteVocabFiles(const std::string& vocabBasename,
     ad_utility::deleteFile(vocabBasename + suffix);
   }
 }
+
+// Builds an `InsertionPositionsTree` from a vector of `VocabIndex` values.
+InsertionPositionsTree makeTree(const std::vector<VocabIndex>& positions) {
+  return InsertionPositionsTree(
+      positions |
+      ql::views::transform([](const VocabIndex& v) { return v.get(); }));
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -200,9 +207,8 @@ TEST(IndexRebuilder, flattenBlankNodeBlocks) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapVocabId) {
-  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
-                                  VocabIndex::make(7)};
-
+  InsertionPositionsTree insertionPositionsA =
+      makeTree({VocabIndex::make(3), VocabIndex::make(5), VocabIndex::make(7)});
   EXPECT_EQ(remapVocabId(V(0), insertionPositionsA), V(0));
   EXPECT_EQ(remapVocabId(V(1), insertionPositionsA), V(1));
   EXPECT_EQ(remapVocabId(V(2), insertionPositionsA), V(2));
@@ -213,7 +219,8 @@ TEST(IndexRebuilder, remapVocabId) {
   EXPECT_EQ(remapVocabId(V(7), insertionPositionsA), V(10));
   EXPECT_EQ(remapVocabId(V(8), insertionPositionsA), V(11));
 
-  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
+  InsertionPositionsTree insertionPositionsB =
+      makeTree({VocabIndex::make(0), VocabIndex::make(1)});
   EXPECT_EQ(remapVocabId(V(0), insertionPositionsB), V(1));
   EXPECT_EQ(remapVocabId(V(1), insertionPositionsB), V(3));
   EXPECT_EQ(remapVocabId(V(2), insertionPositionsB), V(4));
@@ -303,8 +310,8 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       {Id::makeFromLocalVocabIndex(vocabEntries.at(1)).getBits(),
        Id::makeFromVocabIndex(VocabIndex::make(5))}};
 
-  std::vector<VocabIndex> insertionPositions{VocabIndex::make(1),
-                                             VocabIndex::make(4)};
+  InsertionPositionsTree insertionPositions =
+      makeTree({VocabIndex::make(1), VocabIndex::make(4)});
   std::vector<uint64_t> blankNodeBlocks{rawBlocks.at(0).blockIndices_.at(0)};
   uint64_t minBlankNodeIndex = 1;
   std::vector<ColumnIndex> additionalColumns{
@@ -411,7 +418,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   ad_utility::HashMap<Id::T, Id> localVocabMapping;
-  std::vector<VocabIndex> insertionPositions;
+  InsertionPositionsTree insertionPositions = makeTree({});
   std::vector<uint64_t> blankNodeBlocks;
   auto task = createPermutationWriterTask(
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),

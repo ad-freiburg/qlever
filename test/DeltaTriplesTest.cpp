@@ -1094,7 +1094,8 @@ TEST_F(DeltaTriplesTest, remapId) {
   EXPECT_EQ(remap(B(37)), B(37));
 
   EXPECT_EQ(remap(V(10)), V(10));
-  idMapping.insertionPositions_.push_back(VocabIndex::make(5));
+  idMapping.insertionPositions_ =
+      qlever::indexRebuilder::InsertionPositionsTree(std::vector<uint64_t>{5});
   EXPECT_EQ(remap(V(10)), V(11));
   EXPECT_EQ(remap(V(5)), V(6));
   EXPECT_EQ(remap(V(4)), V(4));
@@ -1117,10 +1118,12 @@ qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
   Id thirdNewEntry =
       Id::fromBits(originalVocab.at(2)->positionInVocab().upperBound_.get());
 
-  idMapping.insertionPositions_.push_back(firstNewEntry.getVocabIndex());
-  idMapping.insertionPositions_.push_back(secondNewEntry.getVocabIndex());
-  idMapping.insertionPositions_.push_back(thirdNewEntry.getVocabIndex());
-  ql::ranges::sort(idMapping.insertionPositions_);
+  std::vector<uint64_t> rawPositions{firstNewEntry.getVocabIndex().get(),
+                                     secondNewEntry.getVocabIndex().get(),
+                                     thirdNewEntry.getVocabIndex().get()};
+  ql::ranges::sort(rawPositions);
+  idMapping.insertionPositions_ =
+      qlever::indexRebuilder::InsertionPositionsTree(rawPositions);
   idMapping.localVocabMapping_.emplace(
       Id::makeFromLocalVocabIndex(originalVocab.at(0)).getBits(),
       firstNewEntry);
