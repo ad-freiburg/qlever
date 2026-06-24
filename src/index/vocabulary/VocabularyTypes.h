@@ -20,15 +20,15 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 
-// The result type for batch vocabulary lookups. It is a shared_ptr to a span
-// of string_views, using the aliasing constructor to keep the underlying data
-// alive.
+// The result type for batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
-// Type-erased input range of batches (each batch is a vector of indices into
-// the underlying Vocabulary).
+// Type-erased input range of batches (each batch is represented by a vector of
+// indices into the underlying Vocabulary specifying which terms' string
+// representations need to be read from the underlying Vocabulary).
 using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
-// Type-erased output range of batch-lookup results.
+// Type-erased output range of batch-lookup results (which are the string
+// representations of the terms specified to be read by `VocabLookupInput`).
 using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
