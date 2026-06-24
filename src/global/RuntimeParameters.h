@@ -173,6 +173,9 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // Maximum number of semi-naive reasoning rounds (0 = run until fixpoint).
+  SizeT reasonerMaxRounds_{0, "reasoner-max-rounds"};
+  
   // The runtime log level. Messages with a higher level are suppressed. The
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},

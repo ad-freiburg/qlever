@@ -10,6 +10,7 @@
 #include "engine/UpdateMetadata.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
+#include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
@@ -24,6 +25,19 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const CancellationHandle& cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Execute a CONSTRUCT query and insert the resulting triples into the index
+  // as new delta triples in `targetGraph`. Triples with any unbound component
+  // are skipped, and duplicates are removed before insertion. `query` must have
+  // a CONSTRUCT clause. This shares the same interpolation/deduplication and
+  // insertion path as `executeUpdate` via `computeGraphUpdateQuads`.
+  static UpdateMetadata executeConstructInsert(
+      const Index& index, const ParsedQuery& query,
+      const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const ad_utility::triple_component::Iri& targetGraph,
       const CancellationHandle& cancellationHandle,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
@@ -58,9 +72,24 @@ class ExecuteUpdate {
     std::vector<IdTriple<>> idTriples_;
     LocalVocab localVocab_;
   };
-  // Compute the set of quads to insert and delete for the given update. The
-  // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
-  // must be a GraphUpdate.
+  // Compute the set of quads to insert and delete by interpolating the given
+  // insert/delete triple templates over the query `result`. The result is
+  // deduplicated and the inserted triples are removed from the delete set
+  // (SPARQL 1.1 Update semantics). The templates are passed explicitly so this
+  // can be reused both by `executeUpdate` (via the `ParsedQuery` overload) and
+  // by `executeConstructInsert`, which has no UPDATE clause.
+  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
+  computeGraphUpdateQuads(
+      const Index& index,
+      const std::vector<SparqlTripleSimpleWithGraph>& toInsertTriples,
+      const std::vector<SparqlTripleSimpleWithGraph>& toDeleteTriples,
+      const Result& result, const VariableToColumnMap& variableColumns,
+      const LimitOffsetClause& limitOffset,
+      const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Convenience overload for an UPDATE operation. The ParsedQuery's clause must
+  // be an UpdateClause whose operation is a GraphUpdate.
   static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
                           const Result& result,

@@ -25,6 +25,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Reasoner.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
@@ -533,6 +534,48 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "materialize")) {
+    requireValidAccessToken("materialize");
+    logCommand(cmd, "run OWL/RDFS forward-chaining materialisation");
+
+    auto materializeHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    std::optional<TimeLimit> materializeTimeLimit =
+        co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send);
+    if (!materializeTimeLimit.has_value()) {
+      co_return;
+    }
+    auto cancelMaterializeTimeout =
+        cancelAfterDeadline(materializeHandle, materializeTimeLimit.value());
+
+    // Create a QueryExecutionContext on the coroutine stack; it outlives
+    // the co_await below because the coroutine frame is heap-allocated and
+    // stays alive until the awaitable completes.
+    QueryExecutionContext materializeQec(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        &namedResultCache_, materializedViewsManager_);
+
+    auto materializeCoroutine = computeInNewThread(
+        updateThreadPool_,
+        [this, &materializeQec,
+         &materializeHandle]() -> nlohmann::ordered_json {
+          return index_->deltaTriplesManager().modify<nlohmann::ordered_json>(
+              [this, &materializeQec,
+               &materializeHandle](DeltaTriples& deltaTriples) {
+                materializeQec.setLocatedTriplesForEvaluation(
+                    deltaTriples.getLocatedTriplesSharedStateReference());
+                return processMaterialize(deltaTriples, materializeQec,
+                                          materializeHandle);
+              });
+        },
+        materializeHandle);
+    auto materializeResultJson = co_await std::move(materializeCoroutine);
+    AD_LOG_INFO << "Done processing materialisation, total time was "
+                << requestTimer.msecs().count() << " ms" << std::endl;
+    co_return co_await send(ad_utility::httpUtils::createJsonResponse(
+        std::move(materializeResultJson), request));
   }
 
   // Ping with or without message.
@@ -1415,6 +1458,52 @@ template ad_utility::websocket::MessageSender
 Server::createMessageSender<http::request<http::string_body>>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
     const http::request<http::string_body>&, std::string_view);
+
+// _____________________________________________________________________________
+nlohmann::ordered_json Server::createResponseMetadataForMaterialize(
+    const Reasoner::MaterializationResult& result,
+    const ad_utility::Timer& timer) {
+  nlohmann::ordered_json response;
+  response["status"] = "OK";
+  response["warnings"] = nlohmann::json::array(
+      {"OWL/RDFS materialisation for QLever is experimental."});
+  response["materialize"]["total-new-triples"] = result.totalNewTriples;
+  response["materialize"]["num-rounds"] = result.numRounds;
+  response["materialize"]["rules-fired"] = result.numRulesActivated;
+  nlohmann::ordered_json ruleStats = nlohmann::ordered_json::array();
+  for (const auto& [name, count] : result.triplesPerRule) {
+    nlohmann::ordered_json entry;
+    entry["rule"] = name;
+    entry["new-triples"] = count;
+    ruleStats.push_back(std::move(entry));
+  }
+  response["materialize"]["rules"] = std::move(ruleStats);
+  response["delta-triples"]["inserted-before"] = result.numInsertedBefore;
+  response["delta-triples"]["inserted-after"] = result.numInsertedAfter;
+  response["delta-triples"]["new"] =
+      result.numInsertedAfter - result.numInsertedBefore;
+  response["time"]["total"] = absl::StrCat(timer.msecs().count(), "ms");
+  return response;
+}
+
+// _____________________________________________________________________________
+nlohmann::ordered_json Server::processMaterialize(
+    DeltaTriples& deltaTriples, QueryExecutionContext& qec,
+    SharedCancellationHandle handle) {
+  ad_utility::Timer timer(ad_utility::Timer::Started);
+
+  const auto targetGraph =
+      ad_utility::triple_component::Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
+
+  Reasoner::MaterializationResult result =
+      Reasoner::materialize(*index_, deltaTriples, qec, targetGraph, handle);
+
+  // Cache invalidation: new delta triples invalidate all cached results.
+  cache_.clearAll();
+  namedResultCache_.clear();
+
+  return createResponseMetadataForMaterialize(result, timer);
+}
 
 // _____________________________________________________________________________
 void Server::writeMaterializedView(
