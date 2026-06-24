@@ -20,7 +20,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 
-// The result type for batch of vocabulary lookups.
+// The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
 // Type-erased input range of batches (each batch is represented by a vector of
