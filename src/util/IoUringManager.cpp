@@ -86,6 +86,8 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
     if (numInFlightReadRequests_ >= ringSize_) {
+      // FLush the SQEs prepared so far to the kernel so the kernel can start
+      // servicing them. Their completions will free up submission slots.
       io_uring_submit(&ring_);
       while (numInFlightReadRequests_ >= ringSize_) {
         drainOneCqe();
@@ -94,9 +96,14 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
 
     // Grab a free submission queue entry (SQE) and prepare it. The check above
     // guarantees a slot in the ring buffer is available, so `io_uring_get_sqe`
-    // cannot return `nullptr` here.
+    // must not return `nullptr` here.
     io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
     AD_CORRECTNESS_CHECK(sqe != nullptr);
+
+    // Describe read `i` into the SQE (which fd, how many bytes, at which file
+    // offset, into which buffer). This only writes the read's parameters into
+    // the SQE's fields. The request is not submitted to the kernel until a
+    // later `io_uring_submit`.
     io_uring_prep_read(sqe, fd, targetBufferPerRequest[i],
                        static_cast<unsigned>(numBytesToReadPerRequest[i]),
                        static_cast<__u64>(fileOffsetPerRequest[i]));
@@ -106,7 +113,9 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     io_uring_sqe_set_data64(sqe, handle);
     numInFlightReadRequests_++;
   }
-
+  // Flush the remaining prepared SQEs to the kernel (the loop above only
+  // submits when the submission queue is full, so the last group of SQEs has
+  // not yet been submitted).
   io_uring_submit(&ring_);
   return handle;
 }
