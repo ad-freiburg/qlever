@@ -67,22 +67,22 @@ IoUringManager::~IoUringManager() { io_uring_queue_exit(&ring_); }
 
 //______________________________________________________________________________
 IoUringManager::BatchHandle IoUringManager::addBatch(
-    int fd, ql::span<const size_t> numBytesToRead,
+    int fd, ql::span<const size_t> numBytesToReadPerRequest,
     ql::span<const uint64_t> fileOffsets, ql::span<char*> targetBuffers) {
   const BatchHandle handle = nextHandle_++;
-  const size_t numRequests = numBytesToRead.size();
+  const size_t numReadRequestsToPerform = numBytesToReadPerRequest.size();
 
-  if (numRequests == 0) {
+  if (numReadRequestsToPerform == 0) {
     return handle;
   }
-  inFlightPerBatch_[handle] = numRequests;
+  numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
-  for (size_t i = 0; i < numRequests; ++i) {
+  for (size_t i = 0; i < numReadRequestsToPerform; ++i) {
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
-    if (numInFlight_ >= ringSize_) {
+    if (numInFlightReadRequests_ >= ringSize_) {
       io_uring_submit(&ring_);
-      while (numInFlight_ >= ringSize_) {
+      while (numInFlightReadRequests_ >= ringSize_) {
         drainOneCqe();
       }
     }
@@ -93,13 +93,13 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
     io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
     AD_CORRECTNESS_CHECK(sqe != nullptr);
     io_uring_prep_read(sqe, fd, targetBuffers[i],
-                       static_cast<unsigned>(numBytesToRead[i]),
+                       static_cast<unsigned>(numBytesToReadPerRequest[i]),
                        static_cast<__u64>(fileOffsets[i]));
     // Tag the request with its batch handle (by value, not by pointer) so that
     // the matching completion can be attributed back to this batch in
     // `drainOneCqe`.
     io_uring_sqe_set_data64(sqe, handle);
-    numInFlight_++;
+    numInFlightReadRequests_++;
   }
 
   io_uring_submit(&ring_);
@@ -108,14 +108,14 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
 
 //______________________________________________________________________________
 void IoUringManager::wait(BatchHandle handle) {
-  auto it = inFlightPerBatch_.find(handle);
-  while (it != inFlightPerBatch_.end() && it->second > 0) {
+  auto it = numInFlightReadRequestsPerBatch_.find(handle);
+  while (it != numInFlightReadRequestsPerBatch_.end() && it->second > 0) {
     drainOneCqe();
     // `drainOneCqe` may have erased the batch (when it completed) or rehashed
     // the map, so re-look up the entry on every iteration.
-    it = inFlightPerBatch_.find(handle);
+    it = numInFlightReadRequestsPerBatch_.find(handle);
   }
-  inFlightPerBatch_.erase(handle);
+  numInFlightReadRequestsPerBatch_.erase(handle);
 }
 
 //______________________________________________________________________________
@@ -137,12 +137,12 @@ void IoUringManager::drainOneCqe() {
   // Recover the batch handle we stored in the SQE and consume the CQE.
   const BatchHandle handle = io_uring_cqe_get_data64(cqe);
   io_uring_cqe_seen(&ring_, cqe);
-  numInFlight_--;
+  numInFlightReadRequests_--;
 
   // The batch may already have been erased by `wait()`, so look before
   // decrementing.
-  auto it = inFlightPerBatch_.find(handle);
-  if (it != inFlightPerBatch_.end()) {
+  auto it = numInFlightReadRequestsPerBatch_.find(handle);
+  if (it != numInFlightReadRequestsPerBatch_.end()) {
     it->second--;
   }
 }
