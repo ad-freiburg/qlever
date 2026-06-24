@@ -32,11 +32,11 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Helper struct for batch lookup results. Holds the materialized string data
-// and the views into it. Use `finalize()` after filling `views` to set up the
-// span, then use `asResult()` to get a VocabBatchLookupResult via aliasing
-// shared_ptr.
+// and the views into that materialized string data. Use `finalize()` after
+// filling `views` to set up the span, then use `asResult()` to get a
+// `VocabBatchLookupResult` via aliasing shared_ptr.
 struct VocabBatchLookupData {
-  // Buffer for materialized string data (used by disk-based vocabularies).
+  // Buffer for the materialized string data (used by disk-based vocabularies).
   std::string buffer;
   // The individual string_views, one per looked-up index.
   std::vector<std::string_view> views;
