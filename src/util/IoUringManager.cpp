@@ -59,9 +59,8 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   // and the kernel, with (at least) `ringSize_` submission slots in the
   // submission queue. liburing rounds the requested size up to a power of two,
   // so the actual ring may be larger than `ringSize`; `ringSize_` is therefore
-  // a conservative (lower) bound for the "ring full"
-  // check below. See io_uring_queue_init(3).
-  // See https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
+  // a conservative (lower) bound for the "ring full" check below. See
+  // https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
   // details.
   int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
   if (ret < 0) {
@@ -111,8 +110,7 @@ void IoUringPolicy::addBatch(int fd,
     // Tag the SQE with a unique request id and record its metadata (the batch
     // it belongs to and how many bytes it should read). io_uring copies the
     // request id (the SQE's `user_data`) verbatim into the matching completion,
-    // so `drainOneCqe` can recover it, attribute the completion to its batch,
-    // and detect a read that returned fewer bytes than requested.
+    // so `drainOneCqe` can recover it.
     const uint64_t requestId = nextRequestIdToAssign_++;
     inFlightReadsByRequestId_[requestId] =
         InFlightRead{handle, numBytesToReadPerRequest[i]};
@@ -162,13 +160,12 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
 
   // `cqe->res` < 0 is `-errno`.
   if (numBytesRead < 0) {
-    throw std::runtime_error("I/O error in IoUringPolicy read operation");
+    AD_THROW("I/O error in IoUringPolicy read operation");
   }
   // A result smaller than requested (a partial read, or 0 at end of file) means
   // we read fewer bytes than expected, which we treat as an error.
   if (static_cast<size_t>(numBytesRead) != inFlightRead.expectedNumBytes) {
-    throw std::runtime_error(
-        "read fewer bytes than requested in IoUringPolicy");
+    AD_THROW("read fewer bytes than requested in IoUringPolicy");
   }
 
   // Attribute the completion to its batch and decrement that batch's in-flight
