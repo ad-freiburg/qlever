@@ -17,7 +17,7 @@ BasicGraphPatternsInvariantTo::BasicGraphPatternsInvariantTo(
 // _____________________________________________________________________________
 bool BasicGraphPatternsInvariantTo::operator()(
     const parsedQuery::Bind& bind) const {
-  return checkVariable(bind._target);
+  return variableAppearsAtMostOnce(bind._target);
 }
 
 // _____________________________________________________________________________
@@ -28,12 +28,14 @@ bool BasicGraphPatternsInvariantTo::operator()(
       // There is exactly one row inside the `VALUES`.
       values.size() == 1 &&
       // The `VALUES` doesn't bind to any of the `variables_`.
-      ql::ranges::all_of(
-          variables, [this](const auto& var) { return checkVariable(var); });
+      ql::ranges::all_of(variables, [this](const auto& var) {
+        return variableAppearsAtMostOnce(var);
+      });
 }
 
 // _____________________________________________________________________________
-bool BasicGraphPatternsInvariantTo::checkVariable(const Variable& var) const {
+bool BasicGraphPatternsInvariantTo::variableAppearsAtMostOnce(
+    const Variable& var) const {
   const auto& counts = variableCounts_.counts();
   auto it = counts.find(var);
   return it == counts.end() || it->second <= 1;
