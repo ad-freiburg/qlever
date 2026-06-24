@@ -60,7 +60,9 @@ boost::asio::awaitable<std::string> consumeBody(
 boost::asio::awaitable<std::string> consumeBody(const auto& /*req*/,
                                                 auto bodyGetter) {
   std::string body;
-  while (auto chunk = co_await bodyGetter()) body += *chunk;
+  while (auto chunk = co_await bodyGetter()) {
+    body += chunk.value();
+  }
   co_return body;
 }
 

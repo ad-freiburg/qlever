@@ -61,7 +61,7 @@ class TestHttpServer {
     server_ = std::make_shared<
         HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
         0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier,
-        lazyBodyChunkSize);
+        ad_utility::MemorySize::bytes(lazyBodyChunkSize));
   }
 
   // Get port on which this server is running.

@@ -67,11 +67,15 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         const http::request<http::string_body>&,
         tcp::socket>) class HttpServer {
  private:
+  // Returned by `handleEagerRequest` and `handleLazyRequest` to indicate
+  // whether the session loop should close the connection after this request.
+  enum class SessionControl { Continue, Close };
+
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
   WebSocketHandler webSocketHandler_;
-  size_t lazyBodyChunkSize_;
+  ad_utility::MemorySize lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
@@ -107,8 +111,10 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
                                                 HandlerSupplier
                                                     webSocketHandlerSupplier =
                                                         {},
-                                                size_t lazyBodyChunkSize =
-                                                    1u << 20u)
+                                                ad_utility::MemorySize
+                                                    lazyBodyChunkSize =
+                                                        ad_utility::MemorySize::
+                                                            megabytes(1))
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
@@ -209,13 +215,12 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
 
   // Handle one eager-mode request: read the full body, then dispatch to
   // `httpHandler_` (or `handleWebsocketUpgrade` for WebSocket upgrades).
-  // Returns true when the session should exit (WebSocket was handled), false
-  // when the session should continue accepting further requests.
+  // Returns `SessionControl::Close` when the session should exit (WebSocket was
+  // handled), `SessionControl::Continue` otherwise.
   template <typename SendMessage, typename ReleaseConnection>
-  net::awaitable<bool> handleEagerRequest(beast::tcp_stream& stream,
-                                          beast::flat_buffer& buffer,
-                                          SendMessage& sendMessage,
-                                          ReleaseConnection& releaseConnection)
+  net::awaitable<SessionControl> handleEagerRequest(
+      beast::tcp_stream& stream, beast::flat_buffer& buffer,
+      SendMessage& sendMessage, ReleaseConnection& releaseConnection)
       requires(bodyReadMode == BodyReadMode::Eager) {
     http::request_parser<http::string_body> requestParser;
     auto bodyLimit = getRequestBodyLimit().getBytes();
@@ -228,19 +233,24 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     if (beast::websocket::is_upgrade(req)) {
       co_await handleWebsocketUpgrade(stream, req, sendMessage,
                                       releaseConnection);
-      co_return true;
+      co_return SessionControl::Close;
     }
     // Currently there is no timeout on the server side, this is handled by
     // QLever's timeout mechanism.
     stream.expires_never();
     co_await httpHandler_(std::move(req), sendMessage);
-    co_return false;
+    co_return SessionControl::Continue;
   }
 
   // Reads bytes from `requestParser` into `outputBuffer` until the buffer is
   // full or the body is exhausted. Returns the number of bytes written.
   // `need_buffer` (buffer segment full, more data remains) is treated as a
   // non-error stop condition; all other errors are thrown.
+  //
+  // The outer function is a non-coroutine factory that returns an
+  // immediately-invoked coroutine lambda. This pattern works around a GCC 11
+  // internal compiler error (ICE) that occurs when a `static` member function
+  // is itself a coroutine and calls another coroutine `static` member function.
   static net::awaitable<size_t> readIntoBuffer(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       http::request_parser<http::buffer_body>& requestParser,
@@ -269,6 +279,9 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
 
   // Reads at most `bodyLimit` bytes from `requestParser` into a string and
   // returns it.
+  //
+  // Uses the same IIFE factory pattern as `readIntoBuffer` to avoid a GCC 11
+  // ICE (see comment there for details).
   static net::awaitable<std::string> materializeBody(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       http::request_parser<http::buffer_body>& requestParser,
@@ -293,6 +306,10 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // references to the stream state; `operator()` reads the next body chunk
   // (up to `chunkSize_` bytes) into `chunkBuffer_` and returns a `string_view`
   // into it, or `nullopt` when the body is exhausted.
+  //
+  // `operator()` cannot be implemented as a nested coroutine lambda because
+  // that triggers the same GCC 11 ICE described in `readIntoBuffer`. The
+  // IIFE factory pattern is used instead.
   template <typename Stream, typename Buffer, typename RequestParser,
             typename ChunkBuffer>
   struct BodyChunkReader {
@@ -338,20 +355,24 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // Handle one lazy-mode request: read only the headers, then check for a
   // WebSocket upgrade or pass a `bodyGetter` callable to `httpHandler_`.
   // For WebSocket upgrades the remaining body is materialized and
-  // `handleWebsocketUpgrade` is called; returns `true` so the caller exits
-  // the session loop. For normal requests each `co_await bodyGetter()` reads
-  // the next chunk (up to `lazyBodyChunkSize_` bytes) into a buffer that
-  // lives in this function's stack frame and returns a `string_view` into it;
-  // the view is valid only until the next call; `nullopt` signals end-of-body;
-  // throws on network errors. Returns `false` for normal requests.
+  // `handleWebsocketUpgrade` is called; returns `SessionControl::Close` so the
+  // caller exits the session loop. For normal requests each
+  // `co_await bodyGetter()` reads the next chunk (up to `lazyBodyChunkSize_`
+  // bytes) into a buffer that lives in this function's stack frame and returns
+  // a `string_view` into it; the view is valid only until the next call;
+  // `nullopt` signals end-of-body; throws on network errors. Returns
+  // `SessionControl::Continue` for normal requests.
   template <typename SendMessage, typename ReleaseConnection>
-  net::awaitable<bool> handleLazyRequest(beast::tcp_stream& stream,
-                                         beast::flat_buffer& buffer,
-                                         SendMessage& sendMessage,
-                                         ReleaseConnection& releaseConnection)
+  net::awaitable<SessionControl> handleLazyRequest(
+      beast::tcp_stream& stream, beast::flat_buffer& buffer,
+      SendMessage& sendMessage, ReleaseConnection& releaseConnection)
       requires(bodyReadMode == BodyReadMode::Lazy) {
     http::request_parser<http::buffer_body> requestParser;
-    requestParser.body_limit(boost::none);
+    // Apply the configured body limit (same as eager mode) to guard against
+    // excessively large requests.
+    const auto bodyLimit = getRequestBodyLimit().getBytes();
+    requestParser.body_limit(
+        bodyLimit == 0 ? boost::none : boost::optional<uint64_t>(bodyLimit));
     co_await http::async_read_header(stream, buffer, requestParser,
                                      boost::asio::use_awaitable);
 
@@ -359,23 +380,23 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         ad_utility::httpUtils::getHeaderOnlyRequest(requestParser.get());
 
     if (beast::websocket::is_upgrade(headersReq)) {
-      static constexpr size_t kMaxWebSocketBodyBytes = 100'000;
-      const size_t configLimit = getRequestBodyLimit().getBytes();
-      const size_t wsBodyLimit =
-          std::min(configLimit != 0 ? configLimit : kMaxWebSocketBodyBytes,
-                   kMaxWebSocketBodyBytes);
+      static constexpr size_t maxWebSocketBodyBytes = 100'000;
+      const size_t configBodyLimit = getRequestBodyLimit().getBytes();
+      const size_t wsBodyLimit = std::min(
+          configBodyLimit != 0 ? configBodyLimit : maxWebSocketBodyBytes,
+          maxWebSocketBodyBytes);
       std::string body =
           co_await materializeBody(stream, buffer, requestParser, wsBodyLimit);
       auto stringReq = ad_utility::httpUtils::getStringBodyRequest(
           headersReq, std::move(body));
       co_await handleWebsocketUpgrade(stream, stringReq, sendMessage,
                                       releaseConnection);
-      co_return true;
+      co_return SessionControl::Close;
     }
 
     // Buffer for body chunks; its lifetime covers the entire handler
     // invocation.
-    const size_t chunkSize = lazyBodyChunkSize_;
+    const size_t chunkSize = lazyBodyChunkSize_.getBytes();
     std::vector<char> chunkBuffer(chunkSize);
 
     // `bodyGetter` yields body chunks; see `BodyChunkReader`.
@@ -385,7 +406,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     stream.expires_never();
     co_await httpHandler_(std::move(headersReq), sendMessage,
                           std::move(bodyGetter));
-    co_return false;
+    co_return SessionControl::Continue;
   }
 
   // The loop which accepts TCP connections and delegates their handling
@@ -471,13 +492,13 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         stream.expires_after(std::chrono::seconds(30));
 
         if constexpr (bodyReadMode == BodyReadMode::Eager) {
-          bool shouldExit = co_await handleEagerRequest(
+          auto control = co_await handleEagerRequest(
               stream, buffer, sendMessage, releaseConnection);
-          if (shouldExit) co_return;
+          if (control == SessionControl::Close) co_return;
         } else {
-          bool shouldExit = co_await handleLazyRequest(
-              stream, buffer, sendMessage, releaseConnection);
-          if (shouldExit) co_return;
+          auto control = co_await handleLazyRequest(stream, buffer, sendMessage,
+                                                    releaseConnection);
+          if (control == SessionControl::Close) co_return;
           // Reusing the stream for keep-alive is only safe if the full request
           // body has been consumed. In lazy mode the handler controls body
           // consumption, so we cannot guarantee it. This could be improved in
