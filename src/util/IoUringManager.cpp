@@ -24,17 +24,17 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
     ql::span<const uint64_t> fileOffsetPerRequest,
     ql::span<char*> targetBufferPerRequest) {
   for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
-    size_t totalBytesRead = 0;
+    size_t totalBytesReadForRequest = 0;
 
-    while (totalBytesRead < numBytesToReadPerRequest[i]) {
-      void* buf = targetBufferPerRequest[i] + totalBytesRead;
-      size_t count = numBytesToReadPerRequest[i] - totalBytesRead;
+    while (totalBytesReadForRequest < numBytesToReadPerRequest[i]) {
+      void* buf = targetBufferPerRequest[i] + totalBytesReadForRequest;
+      size_t count = numBytesToReadPerRequest[i] - totalBytesReadForRequest;
       off_t offset = static_cast<off_t>(fileOffsetPerRequest[i]) +
-                     static_cast<off_t>(totalBytesRead);
+                     static_cast<off_t>(totalBytesReadForRequest);
       // reads up to `count` bytes from file descriptor `fd` at offset `offset`
       // (from the start of the file) into the buffer starting at `buf`. The
       // file offset is not changed. On success, `pread()` returns the number of
-      // bytes read (a return of zero indicates end of file). On error, -1 is
+      // bytes read (a return of zero indicates end of file). On error, `-1` is
       // returned and `errno` is set to indicate the error. See
       // https://man7.org/linux/man-pages/man2/pread.2.html for more details.
       ssize_t numBytesRead = pread(fd, buf, count, offset);
@@ -42,7 +42,7 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
       if (numBytesRead < 0) {
         throw std::runtime_error("pread failed in SyncIoManager::addBatch");
       }
-      totalBytesRead += static_cast<size_t>(numBytesRead);
+      totalBytesReadForRequest += static_cast<size_t>(numBytesRead);
     }
   }
   return nextHandle_++;
