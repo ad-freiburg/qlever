@@ -18,8 +18,10 @@
 #include "../printers/VariablePrinters.h"
 #include "../printers/VariableToColumnMapPrinters.h"
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -27,11 +29,14 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "gmock/gmock.h"
 #include "index/ExportIds.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
@@ -665,6 +670,59 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinVarColParamTest,
                                             ::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool()));
+
+// Regression test for #2992: When a child of `SpatialJoin` contained invisible
+// columns, `SpatialJoin` used `QueryExecutionTree::getResultWidth` which
+// returned the number of columns *including* the invisible ones, but later
+// accessed columns by `QueryExecutionTree::getVariableColumns` which *only
+// includes externally visible columns*. This led to an out-of-bounds error.
+TEST(SpatialJoinVarColTest, ChildResultWidth) {
+  auto* qec = ad_utility::testing::getQec();
+
+  // Both these children have some hidden columns.
+  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
+      false);
+  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3}}),
+      std::vector<std::optional<Variable>>{std::nullopt, V{"?c"}, V{"?d"}},
+      true);
+
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?c"}, std::nullopt,
+          PayloadVariables{{V{"?c"}}}, SpatialJoinAlgorithm::LIBSPATIALJOIN,
+          SpatialJoinType::INTERSECTS},
+      qet1, qet2);
+
+  // Of all the 6 columns in the children (3 in `childLeft_` and 3 in
+  // `childRight_`) only 4 are present in the respective `VariableToColumnMap`s.
+  // The `PayloadVariables` requests only one of the columns from the right
+  // child, so we expect a total of 3 columns to be exported by the
+  // `SpatialJoin`.
+  EXPECT_EQ(spatialJoin->getResultWidth(), 3);
+
+  // `getMultiplicity` does not return meaningful results here, but its
+  // assertion should throw as expected.
+  EXPECT_NO_THROW(spatialJoin->getMultiplicity(0));
+  EXPECT_NO_THROW(spatialJoin->getMultiplicity(1));
+  EXPECT_NO_THROW(spatialJoin->getMultiplicity(2));
+  EXPECT_ANY_THROW(spatialJoin->getMultiplicity(3));
+  EXPECT_ANY_THROW(spatialJoin->getMultiplicity(4));
+
+  // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
+  // columns from the left child and from the right child only the requested
+  // ones.
+  VariableToColumnMap expectedVarToCol{
+      {V{"?a"}, makeAlwaysDefinedColumn(0)},
+      {V{"?b"}, makeAlwaysDefinedColumn(1)},
+      {V{"?c"}, makeAlwaysDefinedColumn(2)},
+  };
+  EXPECT_THAT(spatialJoin->getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVarToCol));
+}
 
 }  // namespace variableColumnMapAndResultWidth
 
