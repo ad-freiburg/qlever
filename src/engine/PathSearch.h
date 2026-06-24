@@ -58,13 +58,13 @@ using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
  *
  */
 class BinSearchWrapper {
-  const IdTable& table_;
+  IdTableView<0> table_;
   size_t startCol_;
   size_t endCol_;
   std::vector<size_t> edgeCols_;
 
  public:
-  BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
+  BinSearchWrapper(const IdTableView<0>& table, size_t startCol, size_t endCol,
                    std::vector<size_t> edgeCols);
 
   /**

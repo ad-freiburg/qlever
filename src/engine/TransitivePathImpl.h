@@ -99,7 +99,7 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
     auto nodes = setupNodes(startSide, std::move(startSideResult));
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
@@ -140,8 +140,8 @@ class TransitivePathImpl : public TransitivePathBase {
                                           bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto nodes = setupNodes(sub->idTable(), startSide, edges);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
+    auto nodes = setupNodes(sub->idTableView(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
@@ -297,7 +297,7 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edges Templated datastructure representing the edges of the graph
    * @return Set A set of starting nodes for the transitive hull computation
    */
-  SetWithGraph setupNodes(const IdTable& sub,
+  SetWithGraph setupNodes(const IdTableView<0>& sub,
                           const TransitivePathSide& startSide,
                           const T& edges) const {
     AD_CORRECTNESS_CHECK(minDist_ != 0,
@@ -361,7 +361,7 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     auto toView = [columnsWithoutJoinColumns = std::move(
-                       columnsWithoutJoinColumns)](const IdTable& idTable) {
+                       columnsWithoutJoinColumns)](const auto& idTable) {
       return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
     };
 
@@ -391,7 +391,7 @@ class TransitivePathImpl : public TransitivePathBase {
         }));
   }
 
-  virtual T setupEdgesMap(const IdTable& dynSub,
+  virtual T setupEdgesMap(const IdTableView<0>& dynSub,
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 

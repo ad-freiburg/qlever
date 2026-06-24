@@ -463,8 +463,8 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
-    return std::pair{idTablePtr, std::move(resTable)};
+    IdTableView<0> view = resTable->idTableView();
+    return std::pair{view, std::move(resTable)};
   };
 
   // Swap sides for within spatial join type computed using contains
