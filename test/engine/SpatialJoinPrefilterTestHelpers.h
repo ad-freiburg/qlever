@@ -255,13 +255,13 @@ inline void runParsingAndSweeper(
     auto varToCol = spatialJoin->computeVariableToColumnMap();
     auto leftCol = varToCol.at(varLeft).columnIndex_;
     auto rightCol = varToCol.at(varRight).columnIndex_;
-    auto resultNumRows = result.idTable().numRows();
+    auto resultNumRows = result.idTableView().numRows();
     testResult = SweeperTestResult{};
     testResult.results_.reserve(resultNumRows);
-    for (size_t i = 0; i < result.idTable().numRows(); i++) {
+    for (size_t i = 0; i < result.idTableView().numRows(); i++) {
       testResult.results_.emplace_back(sjTask.joinType_,
-                                       result.idTable().at(i, leftCol),
-                                       result.idTable().at(i, rightCol), 0);
+                                       result.idTableView().at(i, leftCol),
+                                       result.idTableView().at(i, rightCol), 0);
     }
     if (spatialJoin->runtimeInfo().details_.contains(
             "num-geoms-dropped-by-prefilter")) {
@@ -336,9 +336,9 @@ inline void runParsingAndSweeper(
     }
 
     const auto [sjType, leftIdx, rightIdx] = results.at(0).at(row);
-    auto valIdLeft = prepared.idTableLeft_.at(leftIdx, prepared.leftJoinCol_);
+    auto valIdLeft = prepared.idTableLeft_->at(leftIdx, prepared.leftJoinCol_);
     auto valIdRight =
-        prepared.idTableRight_.at(rightIdx, prepared.rightJoinCol_);
+        prepared.idTableRight_->at(rightIdx, prepared.rightJoinCol_);
 
     resultMatched.emplace_back(sjType, valIdLeft, valIdRight, dist);
   }

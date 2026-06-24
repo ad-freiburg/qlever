@@ -119,7 +119,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   static constexpr auto batchSize =
       ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
   static_assert(batchSize > 0);
-  size_t requiredBatches = (idTable.size() + batchSize - 1ULL) / batchSize;
+  size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
   numThreads = std::min(numThreads, requiredBatches);
 
   // Initialize the parser.
@@ -129,9 +129,9 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser.
-  const auto& geoms = idTable.getColumn(column);
+  const auto& geoms = idTable->getColumn(column);
   ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
-      0, idTable.size(),
+      0, idTable->size(),
       [&parser, &geoms, &leftOrRightSide, &idTable,
        &boundingBoxes](size_t row) {
         parser.addValueIdToQueue(
@@ -145,20 +145,20 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   parser.done();
 
   auto numGeomsDropped = parser.getPrefilterCounter();
-  auto numGeomsParsed = idTable.size() - numGeomsDropped;
+  auto numGeomsParsed = idTable->size() - numGeomsDropped;
   return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::BoundingBox>
 SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
-    const IdTableView<0>& idTable,
+    const IdTableView<0>* idTable,
     const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
   if (!boundingBoxes.has_value()) {
     return std::nullopt;
   }
-  auto idLowerLeft = idTable.at(row, boundingBoxes.value().first);
-  auto idUpperRight = idTable.at(row, boundingBoxes.value().second);
+  auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
+  auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
   if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
       idUpperRight.getDatatype() != Datatype::GeoPoint) {
     return std::nullopt;
@@ -180,8 +180,8 @@ size_t SpatialJoinAlgorithms::getNumThreads() {
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
-    const IdTableView<0>& restable, size_t row, ColumnIndex col) {
-  auto id = restable.at(row, col);
+    const IdTableView<0>* restable, size_t row, ColumnIndex col) {
+  auto id = restable->at(row, col);
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
              : std::nullopt;
@@ -219,7 +219,7 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 }
 
 std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
-    const IdTableView<0>& idtable, size_t row, size_t col) {
+    const IdTableView<0>* idtable, size_t row, size_t col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
@@ -246,7 +246,7 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
   // precision), and then the full geometry would only need to be read, when
   // the exact distance is wanted
   std::string str(betweenQuotes(ql::exportIds::idToStringAndType(
-                                    qec_->getIndex(), idtable.at(row, col), {})
+                                    qec_->getIndex(), idtable->at(row, col), {})
                                     .value()
                                     .first));
   AnyGeometry geometry;
@@ -309,23 +309,23 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
 
 // ____________________________________________________________________________
 void SpatialJoinAlgorithms::addResultTableEntry(
-    IdTable* result, const IdTableView<0>& idTableLeft,
-    const IdTableView<0>& idTableRight, size_t rowLeft, size_t rowRight,
+    IdTable* result, const IdTableView<0>* idTableLeft,
+    const IdTableView<0>* idTableRight, size_t rowLeft, size_t rowRight,
     Id distance) const {
   // this lambda function copies values from copyFrom into the table res only if
   // the column of the value is specified in sourceColumns. If sourceColumns is
   // nullopt, all columns are added. It copies them into the row rowIndRes and
   // column column colIndRes. It returns the column number until which elements
   // were copied
-  auto addColumns = [](IdTable* res, const IdTableView<0>& copyFrom,
+  auto addColumns = [](IdTable* res, const IdTableView<0>* copyFrom,
                        size_t rowIndRes, size_t colIndRes, size_t rowIndCopy,
                        std::optional<std::vector<ColumnIndex>> sourceColumns =
                            std::nullopt) {
     size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
-                                             : copyFrom.numColumns();
+                                             : copyFrom->numColumns();
     for (size_t i = 0; i < nCols; i++) {
       auto col = sourceColumns.has_value() ? sourceColumns.value()[i] : i;
-      res->at(rowIndRes, colIndRes + i) = copyFrom.at(rowIndCopy, col);
+      res->at(rowIndRes, colIndRes + i) = (*copyFrom).at(rowIndCopy, col);
     }
     return colIndRes + nCols;
   };
@@ -361,7 +361,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 
   // cartesian product between the two tables, pairs are restricted according to
   // `maxDistance_` and `maxResults_`
-  for (size_t rowLeft = 0; rowLeft < idTableLeft.size(); rowLeft++) {
+  for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
     // This priority queue stores the intermediate best results if `maxResults_`
     // is used. Each intermediate result is stored as a pair of its `rowRight`
     // and distance. Since the queue will hold at most `maxResults_ + 1` items,
@@ -378,7 +378,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
     auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
 
     // Inner loop of cartesian product
-    for (size_t rowRight = 0; rowRight < idTableRight.size(); rowRight++) {
+    for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
 
       if (!entryLeft || !entryRight) {
@@ -558,7 +558,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   LibSpatialJoinParseInput rightTableAndCol{idTableRight, rightJoinCol,
                                             bbRight};
   bool nonEmptyChildren =
-      idTableLeft.size() < idTableRight.size()
+      idTableLeft->size() < idTableRight->size()
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
 
@@ -620,12 +620,12 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   // Optimization: If we only search by maximum distance, the operation is
   // symmetric, so the larger table can be used for the index
   bool indexOfRight =
-      (maxResults.has_value() || (idTableLeft.size() > idTableRight.size()));
+      (maxResults.has_value() || (idTableLeft->size() > idTableRight->size()));
   auto indexTable = indexOfRight ? idTableRight : idTableLeft;
   auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
   // Populate the index
-  for (size_t row = 0; row < indexTable.size(); row++) {
+  for (size_t row = 0; row < indexTable->size(); row++) {
     auto p = getPoint(indexTable, row, indexJoinCol);
     if (p.has_value()) {
       s2index.Add(toS2Point(p.value()), row);
@@ -649,7 +649,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
   // Use the index to lookup the points of the other table
-  for (size_t searchRow = 0; searchRow < searchTable.size(); searchRow++) {
+  for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
       continue;
@@ -698,7 +698,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   ad_utility::Timer timerWrite{ad_utility::Timer::Stopped};
 
   // Use the index to lookup the points of the other table
-  for (size_t rowLeft = 0; rowLeft < idTableLeft.size(); rowLeft++) {
+  for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
     auto p = getPoint(idTableLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
@@ -958,7 +958,7 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 
 // ____________________________________________________________________________
 std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
-    const IdTableView<0>& idTable, const size_t row, const ColumnIndex col) {
+    const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("getRtreeEntry is not supported in this build");
 #else
@@ -1028,7 +1028,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   bool leftResSmaller = true;
   auto smallerResJoinCol = leftJoinCol;
   auto otherResJoinCol = rightJoinCol;
-  if (idTableLeft.numRows() > idTableRight.numRows()) {
+  if (idTableLeft->numRows() > idTableRight->numRows()) {
     std::swap(smallerResult, otherResult);
     leftResSmaller = false;
     std::swap(smallerResJoinCol, otherResJoinCol);
@@ -1039,7 +1039,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
              bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
-  for (size_t i = 0; i < smallerResult.numRows(); i++) {
+  for (size_t i = 0; i < smallerResult->numRows(); i++) {
     throwIfCancelled();
 
     // add every box together with the additional information into the rtree
@@ -1058,7 +1058,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   // query rtree with the other child
   std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
       qec_->getAllocator()};
-  for (size_t i = 0; i < otherResult.numRows(); i++) {
+  for (size_t i = 0; i < otherResult->numRows(); i++) {
     throwIfCancelled();
 
     std::optional<RtreeEntry> entry =
