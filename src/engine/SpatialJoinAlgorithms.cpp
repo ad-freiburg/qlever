@@ -518,7 +518,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   std::string sweeperTmpPath = basePath.parent_path().string();
 
   // `parent_path()` returns `""` if parent path is empty, not `"."`
-  if (sweeperTmpPath.empty()) sweeperTmpPath = ".";
+  if (sweeperTmpPath.empty()) {
+    sweeperTmpPath = ".";
+  }
 
   std::string baseName = basePath.filename().string();
 
