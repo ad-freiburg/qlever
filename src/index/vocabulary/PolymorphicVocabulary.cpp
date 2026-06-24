@@ -45,7 +45,7 @@ VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
 VocabLookupOutput PolymorphicVocabulary::lookupBatchesStreamed(
     VocabLookupInput input) const {
   return std::visit(
-      [&](const auto& vocab) {
+      [&input](const auto& vocab) {
         return vocab.lookupBatchesStreamed(std::move(input));
       },
       vocab_);
