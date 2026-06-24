@@ -34,7 +34,7 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 template <typename BufferType>
-class LookupDataBase {
+class LookupDataCommonBase {
   BufferType buffer;
 
   // One string_view per looked-up index, each pointing into `buffer`.
@@ -46,7 +46,8 @@ class LookupDataBase {
 
   void finalize() { span = ql::span<std::string_view>{views}; }
 
-  static VocabBatchLookupResult asResult(std::shared_ptr<LookupDataBase> self) {
+  static VocabBatchLookupResult asResult(
+      std::shared_ptr<LookupDataCommonBase> self) {
     self->finalize();
     auto* spanPtr = &self->span;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
@@ -59,7 +60,7 @@ class LookupDataBase {
 //
 // NOTE: Use `finalize()` after filling `views` to set up the span, then use
 // `asResult()` to get a `VocabBatchLookupResult` via aliasing shared_ptr.
-struct VocabBatchLookupData : LookupDataBase<std::vector<char>> {};
+struct VocabBatchLookupData : LookupDataCommonBase<std::vector<char>> {};
 
 // Backing for a batch-lookup result when words are produced incrementally with
 // sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
@@ -68,7 +69,7 @@ struct VocabBatchLookupData : LookupDataBase<std::vector<char>> {};
 // instead allocated from a monotonic_buffer_resource, giving pointer-stable
 // allocations. Exposed as a `VocabBatchLookupResult` via `asResult()`.
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
-struct PmrVocabBatchLookupData : LookupDataBase<BufferType> {};
+struct PmrVocabBatchLookupData : LookupDataCommonBase<BufferType> {};
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`
