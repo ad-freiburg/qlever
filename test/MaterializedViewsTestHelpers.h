@@ -112,6 +112,11 @@ class MaterializedViewsTest : public ::testing::Test {
   }
 
   // ___________________________________________________________________________
+  std::shared_ptr<QueryExecutionContext> getQec() {
+    return qlv_->createQueryExecutionContext();
+  }
+
+  // ___________________________________________________________________________
   void clearLog() { log_.str(""); }
 
   // Helper that evaluates a query on the test index and returns its result as
@@ -249,10 +254,10 @@ inline void expectNotSuitableForRewrite(
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
-  auto qec = *std::get<1>(plan);
+  auto qec = qlv.createQueryExecutionContext();
   manager.writeViewToDisk(viewName, plan);
-  auto view = manager.getView(viewName, &qec);
-  EXPECT_FALSE(qpc.analyzeView(view, &qec));
+  auto view = manager.getView(viewName, qec);
+  EXPECT_FALSE(qpc.analyzeView(view, qec));
   manager.unloadViewIfLoaded(viewName);
 };
 

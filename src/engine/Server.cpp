@@ -529,7 +529,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_CONTRACT_CHECK(name.has_value());
 
     auto qec = qlever().createQueryExecutionContext();
-    materializedViewsManager()->loadView(name.value(), qec.get());
+    materializedViewsManager()->loadView(name.value(), qec);
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};

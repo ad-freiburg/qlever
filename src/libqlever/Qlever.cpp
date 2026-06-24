@@ -62,7 +62,8 @@ Qlever::Qlever(const EngineConfig& config)
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      materializedViewsManager_->loadView(viewName);
+      materializedViewsManager_->loadView(viewName,
+                                          createQueryExecutionContext());
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -258,23 +259,13 @@ void Qlever::unloadMaterializedView(const std::string& name) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  QueryExecutionContext qec{index_,
-                            &cache_,
-                            allocator_,
-                            sortPerformanceEstimator_,
-                            &namedResultCache_,
-                            materializedViewsManager_,
-                            [](std::string) {},
-                            false,
-                            false,
-                            disableCaching_};
-  materializedViewsManager_->loadView(name, &qec);
+  materializedViewsManager_->loadView(name, createQueryExecutionContext());
 }
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) {
+    bool pinResult) const {
   return std::make_shared<QueryExecutionContext>(
       sharedIndex(), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, materializedViewsManager_, updateCallback,

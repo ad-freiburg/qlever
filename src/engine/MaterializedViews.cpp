@@ -447,8 +447,8 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name,
-                                        QueryExecutionContext* qec) const {
+void MaterializedViewsManager::loadView(
+    const std::string& name, std::shared_ptr<QueryExecutionContext> qec) const {
   auto lock = loadedViews_.wlock();
   if (lock->views_.contains(name)) {
     return;
@@ -478,7 +478,7 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name, QueryExecutionContext* qec) const {
+    const std::string& name, std::shared_ptr<QueryExecutionContext> qec) const {
   loadView(name, qec);
   return loadedViews_.rlock()->views_.at(name);
 }
@@ -731,7 +731,7 @@ MaterializedViewsManager::makeJoinReplacementIndexScans(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    QueryExecutionContext* qec,
+    std::shared_ptr<QueryExecutionContext> qec,
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
   if (!viewQuery.viewName_.has_value()) {
     throw MaterializedViewConfigException(
@@ -739,7 +739,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "query configuration.");
   }
   auto view = getView(viewQuery.viewName_.value(), qec);
-  return view->makeIndexScan(qec, viewQuery);
+  return view->makeIndexScan(qec.get(), viewQuery);
 }
 
 // _____________________________________________________________________________
@@ -764,10 +764,12 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 
 // _____________________________________________________________________________
 MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
-MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+MaterializedView::computeCacheKey(
+    std::shared_ptr<QueryExecutionContext> qecOriginal) const {
   if (qecOriginal == nullptr || !originalQuery_.has_value()) {
     return {std::nullopt, std::nullopt};
   }
+  // Do we need this copy?
   QueryExecutionContext qec{*qecOriginal};
   qec.setDisableMaterializedViewRewriting(true);
   auto encodedIriManager = qec.getIndex().encodedIriManager();

@@ -237,8 +237,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
         });
 
     // Run `makeIndexScan` and check the error message.
-    QueryExecutionContext qec{*std::get<1>(plan)};
-    AD_EXPECT_THROW_WITH_MESSAGE(manager.makeIndexScan(&qec, viewQuery),
+    AD_EXPECT_THROW_WITH_MESSAGE(manager.makeIndexScan(getQec(), viewQuery),
                                  ::testing::HasSubstr(expectedError));
   };
 
@@ -943,8 +942,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  Variable{"?o"}}};
-    QueryExecutionContext qec{*std::get<1>(writePlan)};
-    auto scan = manager.makeIndexScan(&qec, query);
+    auto scan = manager.makeIndexScan(getQec(), query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
     size_t numBlocks = 0;
@@ -1824,12 +1822,12 @@ TEST_F(MaterializedViewsTest,
       "threeVarPermTestView", RCols{{V{"?s"}, TripleComponent{V{"?s"}}},
                                     {V{"?p"}, TripleComponent{V{"?p"}}},
                                     {V{"?o"}, TripleComponent{V{"?o"}}}}};
-  auto* qec = std::get<1>(plan).get();
+  auto qec = getQec();
   auto indexScanPtr = manager.makeIndexScan(qec, viewQuery);
-  auto scanTree = std::make_shared<QueryExecutionTree>(qec, indexScanPtr);
+  auto scanTree = std::make_shared<QueryExecutionTree>(qec.get(), indexScanPtr);
 
   // Use a GroupByImpl as the holder for getPermutationForThreeVariableTriple.
-  GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
+  GroupByImpl groupBy{qec.get(), {V{"?s"}}, {}, scanTree};
 
   // Sort by subject: the materialized view case succeeds.
   EXPECT_TRUE(

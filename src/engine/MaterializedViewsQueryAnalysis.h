@@ -92,7 +92,7 @@ class QueryPatternCache {
   // Given a materialized view, analyze the query it was created from and
   // populate the cache. This is called from
   // `MaterializedViewsManager::loadView`.
-  bool analyzeView(ViewPtr view, QueryExecutionContext* qec);
+  bool analyzeView(ViewPtr view, std::shared_ptr<QueryExecutionContext> qec);
 
   // Remove all pointers to a view from this `QueryPatternCache`. This is
   // required for unloading materialized views. A call to this function with a

@@ -303,7 +303,7 @@ class Qlever {
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
-      bool pinSubtrees = false, bool pinResult = false);
+      bool pinSubtrees = false, bool pinResult = false) const;
 
   // Low-level access to the QLever API, use with care.
   std::shared_ptr<const Index> sharedIndex() const { return index_; }
