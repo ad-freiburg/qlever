@@ -64,7 +64,7 @@ struct VocabBatchLookupData {
   }
 };
 
-// Backing for a batch lookup result when words are produced incrementally with
+// Backing for a batch-lookup result when words are produced incrementally with
 // sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
 // single string buffer as in `VocabBatchLookupData` is unsuitable, as appending
 // would reallocate it and invalidate existing string_view's. Each word is
