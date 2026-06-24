@@ -43,10 +43,9 @@ static FILE* openFile(const TempFile& tmp) {
   return f;
 }
 
-// ---------------------------------------------------------------------------
-// Typed test fixture — runs all tests against both manager types when
-// io_uring is present, or only SyncIoManager when it is not.
-// ---------------------------------------------------------------------------
+// Typed test fixture: runs all tests against both `IoUringManager` and
+// `SyncIoManager` when io_uring is present, or only SyncIoManager when it is
+// not.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
 
