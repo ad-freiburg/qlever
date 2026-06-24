@@ -606,7 +606,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Store the QueryExecutionTree outside the lambda, s.t. we have access in
   // case of errors to create an informative error message that includes the
   // runtime information.
-  std::optional<PlannedQuery> plannedQuery;
+  std::optional<qlever::PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer, &plannedQuery, &indexAndViews, this](
@@ -759,14 +759,14 @@ std::pair<bool, bool> Server::determineResultPinning(
 }
 
 // ____________________________________________________________________________
-Server::PlannedQuery Server::planQuery(
+qlever::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
   QueryPlanner qp(&qec, handle);
   auto executionTree = qp.createExecutionTree(operation);
-  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree),
-                            qec};
+  qlever::PlannedQuery plannedQuery{std::move(operation),
+                                    std::move(executionTree), qec};
   handle->throwIfCancelled();
   // Set some additional attributes on the `PlannedQuery`.
   plannedQuery.queryExecutionTree()
@@ -777,6 +777,7 @@ Server::PlannedQuery Server::planQuery(
       ->recursivelySetTimeConstraint(timeLimit);
   auto& qet = plannedQuery.queryExecutionTree();
   qet.isRoot() = true;  // allow pinning of the final result
+
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -879,7 +880,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, ResponseT& send, MediaType mediaType,
-        const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+        const qlever::PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
         const ad_utility::Timer& requestTimer,
         SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
@@ -1022,7 +1023,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ParsedQuery&& query, const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
+        TimeLimit timeLimit,
+        std::optional<qlever::PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
   auto mediaTypes = determineMediaTypes(params, request);
@@ -1045,7 +1047,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       queryThreadPool_,
       [this, &query, &requestTimer, &timeLimit, &qec,
-       &cancellationHandle]() -> std::optional<PlannedQuery> {
+       &cancellationHandle]() -> std::optional<qlever::PlannedQuery> {
         return this->planQuery(std::move(query), requestTimer, timeLimit, qec,
                                cancellationHandle);
       },
@@ -1096,7 +1098,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
     const Index& index, const LocatedTriplesState& locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const qlever::PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
   AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
@@ -1149,7 +1151,7 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 
 // ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
-    const Index& index, const PlannedQuery& plannedUpdate,
+    const Index& index, const qlever::PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree();
@@ -1181,7 +1183,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
+        TimeLimit timeLimit, std::optional<qlever::PlannedQuery>& plannedUpdate) {
   auto& index = indexAndViews->index_;
   outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
@@ -1284,7 +1286,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
         ad_utility::url_parser::sparqlOperation::Operation operation,
         VisitorT visitor, const ad_utility::Timer& requestTimer,
         const RequestT& request, ResponseT& send,
-        const std::optional<PlannedQuery>& plannedQuery) {
+        const std::optional<qlever::PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1435,7 +1437,7 @@ bool Server::checkAccessToken(
 
 // _____________________________________________________________________________
 void Server::adjustParsedQueryLimitOffset(
-    PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
+    qlever::PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
     const ad_utility::url_parser::ParamValueMap& parameters) {
   // Read the export limit from the `send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
@@ -1477,13 +1479,10 @@ void Server::writeMaterializedView(
                                query.query_, query.datasetClauses_);
   auto qec = qlever().createQueryExecutionContext(indexAndViews);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
-                        std::move(cancellationHandle));
-  auto qet = std::make_shared<QueryExecutionTree>(
-      std::move(plan.queryExecutionTree()));
+                        cancellationHandle);
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  indexAndViews->materializedViewsManager_.writeViewToDisk(
-      name, {qet, qec, std::move(plan.parsedQuery())}, memoryLimit);
+  indexAndViews->materializedViewsManager_.writeViewToDisk(name, plan, memoryLimit);
 }
 
 // _____________________________________________________________________________

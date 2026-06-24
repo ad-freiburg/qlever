@@ -76,40 +76,6 @@ class Server {
   static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
-  // Helper struct bundling a parsed query with a query execution tree.
-  // As the `QueryExecutionTree` stores a raw pointer to the
-  // `QueryExecutionContext`, We additionally store the context as a
-  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
-  // server code.
-  struct PlannedQuery {
-   private:
-    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
-    // is destroyed after it. The `QueryExecutionTree` holds operations with
-    // raw `_executionContext` pointers to the QEC, and their lazy result
-    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
-    // last `shared_ptr` and is destroyed first, the QEC is freed while the
-    // operations still reference it.
-    std::shared_ptr<const QueryExecutionContext> qec_;
-    ParsedQuery parsedQuery_;
-    QueryExecutionTree queryExecutionTree_;
-
-   public:
-    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
-                 const QueryExecutionContext& qec)
-        : qec_{qec.shared_from_this()},
-          parsedQuery_{std::move(pq)},
-          queryExecutionTree_{std::move(qet)} {
-      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
-    }
-
-    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
-    ParsedQuery& parsedQuery() { return parsedQuery_; }
-    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
-    const QueryExecutionTree& queryExecutionTree() const {
-      return queryExecutionTree_;
-    }
-  };
-
  private:
   qlever::Qlever qlever_;
   const size_t numThreads_;
@@ -188,7 +154,7 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
-          const std::optional<PlannedQuery>& plannedQuery);
+          const std::optional<qlever::PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -206,12 +172,13 @@ class Server {
           ParsedQuery&& query, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
+          TimeLimit timeLimit,
+          std::optional<qlever::PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
       const Index& index, const LocatedTriplesState& locatedTriples,
-      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+      const qlever::PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
@@ -223,7 +190,8 @@ class Server {
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
+          TimeLimit timeLimit,
+          std::optional<qlever::PlannedQuery>& plannedUpdate);
 
   // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
@@ -249,7 +217,8 @@ class Server {
                         std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
-      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
+      qlever::PlannedQuery& plannedQuery,
+      const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
@@ -264,10 +233,11 @@ class Server {
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  qlever::PlannedQuery planQuery(ParsedQuery&& operation,
+                                 const ad_utility::Timer& requestTimer,
+                                 TimeLimit timeLimit,
+                                 QueryExecutionContext& qec,
+                                 SharedCancellationHandle handle) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -278,7 +248,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const Index& index, const PlannedQuery& plannedUpdate,
+      const Index& index, const qlever::PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
@@ -361,7 +331,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+          ad_utility::MediaType mediaType,
+          const qlever::PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 

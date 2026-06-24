@@ -6,6 +6,8 @@
 
 #include "libqlever/Qlever.h"
 
+#include <execution>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 
@@ -155,9 +157,8 @@ std::string Qlever::query(std::string queryString,
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(const QueryPlan& queryPlan,
+std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
-  const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   // TODO<joka921> For cancellation we have to call
@@ -166,7 +167,8 @@ std::string Qlever::query(const QueryPlan& queryPlan,
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, *qet, mediaType, timer, std::move(handle));
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      timer, std::move(handle));
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
@@ -184,10 +186,9 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
-  auto queryPlan = parseAndPlanQuery(std::move(query));
-  auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() = std::move(options);
-  [[maybe_unused]] auto result = this->query(queryPlan);
+  auto plannedQuery = parseAndPlanQuery(std::move(query));
+  plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
+  [[maybe_unused]] auto result = this->query(plannedQuery);
 }
 
 // _____________________________________________________________________________
@@ -206,23 +207,48 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
-Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
-  auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(),
-      [](const std::
-             string&) { /* No runtime updates for this interface yet. */ },
-      false, false, disableCaching_);
-  // TODO<joka921> support Dataset clauses.
+Qlever::PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, std::vector<DatasetClause> datasetClauses,
+    ad_utility::SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    std::function<void(std::string)> updateCallback, bool pinSubstrees,
+    bool pinResult) const {
+  ad_utility::Timer planningTimer{ad_utility::Timer::InitialStatus::Started};
+
+  auto qecPtr = createQueryExecutionContext(indexAndViewsSnapshot(), std::move(updateCallback),
+                                            pinSubstrees, pinResult, disableCaching_);
+
   auto parsedQuery = SparqlParser::parseQuery(
-      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), {});
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), datasetClauses);
+
   QueryPlanner qp{qecPtr.get(), handle};
+
   qp.setEnablePatternTrick(enablePatternTrick_);
+
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
 
-  auto qetPtr = std::make_shared<QueryExecutionTree>(std::move(qet));
-  return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
+  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
+
+  handle->throwIfCancelled();
+  // Set some additional attributes on the `PlannedQuery`.
+  plannedQuery.queryExecutionTree()
+      .getRootOperation()
+      ->recursivelySetCancellationHandle(std::move(handle));
+  if (timeLimit.has_value()) {
+    plannedQuery.queryExecutionTree()
+        .getRootOperation()
+        ->recursivelySetTimeConstraint(timeLimit.value());
+  }
+
+  auto timeForQueryPlanning = planningTimer.msecs();
+  auto& runtimeInfoWholeQuery = plannedQuery.queryExecutionTree()
+                                    .getRootOperation()
+                                    ->getRuntimeInfoWholeQuery();
+  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
+              << " ms" << std::endl;
+  return plannedQuery;
 }
 
 // ___________________________________________________________________________

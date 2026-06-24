@@ -46,8 +46,8 @@ class MaterializedViewWriter {
   std::string name_;
 
   // Query plan to retrieve the view's rows.
-  std::shared_ptr<QueryExecutionTree> qet_;
-  std::shared_ptr<QueryExecutionContext> qec_;
+  const QueryExecutionTree& qet_;
+  std::shared_ptr<const QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
 
   // Memory limit and allocator for `CompressedExternalIdTableSorter`, which is
@@ -74,13 +74,13 @@ class MaterializedViewWriter {
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
-  using QueryPlan = qlever::QueryPlan;
+  using PlannedQuery = qlever::PlannedQuery;
 
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
   MaterializedViewWriter(std::string onDiskBase, std::string name,
-                         const QueryPlan& queryPlan,
+                         const PlannedQuery& plannedQuery,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -330,7 +330,7 @@ class MaterializedViewsManager {
   // permutation if the query result is not correctly sorted already. The
   // `queryPlan` is executed with the normal query memory limit.
   void writeViewToDisk(
-      std::string name, const qlever::QueryPlan& queryPlan,
+      std::string name, const qlever::PlannedQuery& queryPlan,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>()) const;

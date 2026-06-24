@@ -242,6 +242,8 @@ class Qlever {
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
+  using TimeLimit = std::chrono::milliseconds;
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -263,8 +265,16 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan = qlever::QueryPlan;
-  QueryPlan parseAndPlanQuery(std::string query) const;
+  using PlannedQuery = qlever::PlannedQuery;
+
+  PlannedQuery parseAndPlanQuery(
+      std::string query, std::vector<DatasetClause> datasetClauses = {},
+      ad_utility::SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* the default is a noop*/ },
+      bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
   // string; see `src/util/http/MediaTypes.h` for the supported formats.
@@ -272,7 +282,7 @@ class Qlever {
   // NOTE: With `ad_utility::MediaType::qleverJson`, the result also contains
   // detailed information on the query execution, including timings of the
   // various parts of the query plan.
-  std::string query(const QueryPlan& queryPlan,
+  std::string query(const PlannedQuery& queryPlan,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
