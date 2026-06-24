@@ -63,19 +63,25 @@ struct VocabBatchLookupData {
   }
 };
 
-// A batch lookup result backed by a PMR monotonic_buffer_resource.
-// Each decompressed word is individually allocated from the resource;
-// all allocations remain valid until this struct is destroyed.
-// Used by CompressedVocabulary::lookupBatch to avoid per-word heap allocations.
+// Backing for a batch lookup result when words are produced incrementally with
+// sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
+// single string buffer as in `VocabBatchLookupData` is unsuitable, as appending
+// would reallocate it and invalidate existing string_view's. Each word is
+// instead allocated from a monotonic_buffer_resource, giving pointer-stable
+// allocations. Exposed as a `VocabBatchLookupResult` via `asResult()`.
 struct PmrVocabBatchLookupData {
-  // The resource must be destroyed AFTER views (declared first = destroyed
-  // last).
-  std::unique_ptr<ql::pmr::monotonic_buffer_resource> resource;
+  // Declared as first so it is destroyed last: the character data that `views`
+  // points to is allocated from this arena, which must therefore outlive
+  // `views`.
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> wordArena;
   std::vector<std::string_view> views;
   ql::span<std::string_view> span;
 
   void finalize() { span = ql::span<std::string_view>{views}; }
 
+  // As `VocabBatchLookupData::asResult`, but keeps the `wordArena`
+  // (and `views`) alive instead of `buffer`. See
+  // `VocabBatchLookupData::asResult` for the aliasing-shared-ptr details.
   static VocabBatchLookupResult asResult(
       std::shared_ptr<PmrVocabBatchLookupData> self) {
     self->finalize();
