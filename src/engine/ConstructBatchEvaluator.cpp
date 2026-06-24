@@ -93,7 +93,6 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // per-ID baseline that resolves the very same misses one at a time; this
   // isolates the batched-disk-read contribution for the evaluation.
   std::vector<std::optional<std::pair<std::string, const char*>>> missResolved;
-  auto lookupStart = std::chrono::steady_clock::now();
   if (getRuntimeParameter<&RuntimeParameters::useBatchVocabLookup_>()) {
     missResolved =
         ql::exportIds::idsToStringAndType(index, missIds, localVocab);
