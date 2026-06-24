@@ -366,7 +366,8 @@ bool QueryPatternCache::analyzeView(
     }
     byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
-         {view, std::move(cacheKeyAndCol.value().columnMapping_)}});
+         std::make_shared<ByCacheKeyInfo>(
+             view, std::move(cacheKeyAndCol.value().columnMapping_))});
   };
   insert(full);
   insert(withoutInvariant);
@@ -459,7 +460,8 @@ void QueryPatternCache::removeView(ViewPtr view) {
   // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
   // works natively with our hash map unlike `ql::erase_if`.
   absl::erase_if(byCacheKey_, [&view](const auto& pair) {
-    return pair.second.view_ == view;
+    AD_CORRECTNESS_CHECK(pair.second != nullptr);
+    return pair.second->view_ == view;
   });
 }
 
@@ -495,9 +497,12 @@ BindExpressionAndTargetCol extractBindExpressions(
 }
 
 // _____________________________________________________________________________
-boost::optional<const ByCacheKeyInfo&> QueryPatternCache::lookupByCacheKey(
+ByCacheKeyInfoPtr QueryPatternCache::lookupByCacheKey(
     const std::string& cacheKey) const {
-  return ad_utility::findOptional(byCacheKey_, cacheKey);
+  if (auto info = ad_utility::findOptional(byCacheKey_, cacheKey)) {
+    return info.value();
+  }
+  return nullptr;
 }
 
 }  // namespace materializedViewsQueryAnalysis

@@ -748,7 +748,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     const VariableToColumnMap& varToCol) const {
   auto info =
       loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
-  if (!info.has_value()) {
+  if (info == nullptr) {
     return nullptr;
   }
   return info->view_->makeIndexScan(qec, varToCol, info->colMapping_);
