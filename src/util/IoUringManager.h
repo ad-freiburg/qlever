@@ -69,13 +69,15 @@ class IoUringManager {
   IoUringManager(const IoUringManager&) = delete;
   IoUringManager& operator=(const IoUringManager&) = delete;
 
-  // Enqueue a batch of reads and submit them to the kernel. Only blocks to
-  // drain completions when the ring is full. The three spans must all have the
-  // same length, which implicitly defines the number of reads: read `i` reads
-  // up to `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
-  // offset `fileOffsets[i]` (from the start of the file), into the buffer
-  // starting at `targetBuffers[i]`. Returns a handle that can be passed to
-  // `wait()` to block until this batch has completed.
+  // Enqueue a batch of read requests and submit them to the kernel. Blocks the
+  // calling thread only when the submission queue is full, in order to drain
+  // completion queue entries and free slots in the submission queue. The three
+  // spans (parameters) must all have the same length, which implicitly defines
+  // the number of reads: read `i` reads up to `numBytesToRead[i]` bytes from
+  // file descriptor `fd`, starting at offset `fileOffsets[i]` (from the start
+  // of the file), into the buffer starting at `targetBuffers[i]`. Returns a
+  // handle that can be passed to `wait()` to block until this batch has
+  // completed.
   BatchHandle addBatch(int fd, ql::span<const size_t> numBytesToRead,
                        ql::span<const uint64_t> fileOffsets,
                        ql::span<char*> targetBuffers);
