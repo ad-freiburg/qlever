@@ -20,14 +20,14 @@ namespace ad_utility {
 
 //______________________________________________________________________________
 SyncIoManager::BatchHandle SyncIoManager::addBatch(
-    int fd, ql::span<const size_t> numBytesToRead,
+    int fd, ql::span<const size_t> numBytesToReadPerRequest,
     ql::span<const uint64_t> fileOffsets, ql::span<char*> targetBuffers) {
-  for (size_t i = 0; i < numBytesToRead.size(); ++i) {
+  for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
     size_t totalBytesRead = 0;
 
-    while (totalBytesRead < numBytesToRead[i]) {
+    while (totalBytesRead < numBytesToReadPerRequest[i]) {
       void* buf = targetBuffers[i] + totalBytesRead;
-      size_t count = numBytesToRead[i] - totalBytesRead;
+      size_t count = numBytesToReadPerRequest[i] - totalBytesRead;
       off_t offset = static_cast<off_t>(fileOffsets[i]) +
                      static_cast<off_t>(totalBytesRead);
       // reads up to `count` bytes from file descriptor `fd` at offset `offset`
