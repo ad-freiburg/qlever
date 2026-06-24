@@ -1444,7 +1444,7 @@ void Server::writeMaterializedView(
       &index->encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = qlever().createQueryExecutionContext(index, manager);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
-                        cancellationHandle);
+                        std::move(cancellationHandle));
   auto qet = std::make_shared<QueryExecutionTree>(
       std::move(plan.queryExecutionTree()));
   auto memoryLimit =

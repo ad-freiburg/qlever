@@ -29,8 +29,9 @@ Qlever::Qlever(const EngineConfig& config)
             cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numMemoryToAllocate);
           }}},
-      indexAndViews_{IndexAndViews{std::make_shared<Index>(allocator_),
-                                   std::make_shared<MaterializedViewsManager>()}},
+      indexAndViews_{
+          IndexAndViews{std::make_shared<Index>(allocator_),
+                        std::make_shared<MaterializedViewsManager>()}},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -44,26 +45,34 @@ Qlever::Qlever(const EngineConfig& config)
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // Grab the freshly constructed `Index` and `MaterializedViewsManager` once.
+  // No other thread can observe them yet, so reading the snapshot here is safe.
+  // `snapshot` keeps the `shared_ptr`s alive for the references below.
+  auto snapshot = indexAndViewsSnapshot();
+  Index& index = *snapshot.index_;
+  MaterializedViewsManager& materializedViewsManager =
+      *snapshot.materializedViewsManager_;
+
   // Load the index from disk.
-  index().usePatterns() = enablePatternTrick_;
-  index().loadAllPermutations() = !config.onlyPsoAndPos_;
-  index().doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index().createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+  index.usePatterns() = enablePatternTrick_;
+  index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+  index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
-    index().addTextFromOnDiskIndex();
+    index.addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager()->setOnDiskBase(config.baseName_);
+  materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index().numTriples().normalAndInternal_() *
+      allocator_, index.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      materializedViewsManager()->loadView(viewName);
+      materializedViewsManager.loadView(viewName);
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -253,17 +262,6 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
   materializedViewsManager()->loadView(name);
-}
-
-// ___________________________________________________________________________
-std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) {
-  auto [index, materializedViewsManager] = indexAndViewsSnapshot();
-  return createQueryExecutionContext(std::move(index),
-                                     std::move(materializedViewsManager),
-                                     std::move(updateCallback), pinSubtrees,
-                                     pinResult);
 }
 
 // ___________________________________________________________________________

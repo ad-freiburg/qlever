@@ -301,18 +301,8 @@ class Qlever {
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
-  // query. The `Index` and the `MaterializedViewsManager` are snapshotted once
-  // under a single read lock so that a concurrent index rebuild cannot make the
-  // resulting context observe a mismatched pair.
-  std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
-      bool pinSubtrees = false, bool pinResult = false);
-
-  // Overload that uses an explicitly snapshotted `Index` and
-  // `MaterializedViewsManager` (see `indexAndViewsSnapshot()`). This is used by
-  // the server which acquires the snapshot exactly once per request and then
-  // passes the `shared_ptr`s along.
+  // query. Use an explicitly snapshotted `Index` and `MaterializedViewsManager`
+  // (see `indexAndViewsSnapshot()`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<const Index> index,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
@@ -324,7 +314,9 @@ class Qlever {
   // under a single read lock, so that all code paths handling a single request
   // observe a matching pair even if a concurrent rebuild swaps the pointers
   // between two reads.
-  IndexAndViews indexAndViewsSnapshot() const { return *indexAndViews_.rlock(); }
+  IndexAndViews indexAndViewsSnapshot() const {
+    return *indexAndViews_.rlock();
+  }
 
   // Atomically swap in a freshly built `Index` and `MaterializedViewsManager`.
   // Old instances stay alive as long as some `shared_ptr` (e.g. obtained via
@@ -338,8 +330,8 @@ class Qlever {
   }
 
   // Low-level access to the QLever API, use with care. NOTE: The `Index&`
-  // overloads return a reference into the currently active index; do not hold on
-  // to it across a potential index rebuild. Use `sharedIndex()` or
+  // overloads return a reference into the currently active index; do not hold
+  // on to it across a potential index rebuild. Use `sharedIndex()` or
   // `indexAndViewsSnapshot()` if you need a stable handle.
   std::shared_ptr<const Index> sharedIndex() const {
     return indexAndViews_.rlock()->index_;
