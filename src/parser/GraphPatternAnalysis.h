@@ -56,7 +56,8 @@ struct BasicGraphPatternsInvariantTo {
   }
 
  private:
-  bool checkVariable(const Variable& var) const;
+  // Check that the given variable is counted at most once by `variableCounts_`.
+  bool variableAppearsAtMostOnce(const Variable& var) const;
 };
 
 }  // namespace graphPatternAnalysis
