@@ -6,12 +6,17 @@
 
 #include "libqlever/Qlever.h"
 
+#include <memory>
+#include <stdexcept>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -19,7 +24,11 @@ namespace qlever {
 Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
+              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
+          [this](ad_utility::MemorySize numMemoryToAllocate) {
+            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                            numMemoryToAllocate);
+          }}},
       index_{std::make_shared<Index>(allocator_)},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
@@ -49,6 +58,16 @@ Qlever::Qlever(const EngineConfig& config)
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_->numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+
+  // Preload materialized views as requested by the user.
+  for (const auto& viewName : config.preloadMaterializedViews_) {
+    try {
+      materializedViewsManager_->loadView(viewName);
+    } catch (const std::exception& ex) {
+      AD_LOG_ERROR << "Preloading materialized view '" << viewName
+                   << "' failed: " << ex.what() << "." << std::endl;
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -252,4 +271,13 @@ void Qlever::loadMaterializedView(std::string name) const {
   materializedViewsManager_->loadView(name, &qec);
 }
 
+// ___________________________________________________________________________
+std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) {
+  return std::make_shared<QueryExecutionContext>(
+      sharedIndex(), &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_, materializedViewsManager_, updateCallback,
+      pinSubtrees, pinResult);
+}
 }  // namespace qlever

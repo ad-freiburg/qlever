@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -40,8 +41,7 @@ struct CommonConfig {
   // An upper bound on the amount of memory that QLever will use during index
   // building and query processing. If more memory is required, an exception
   // is thrown.
-  std::optional<ad_utility::MemorySize> memoryLimit_ =
-      ad_utility::MemorySize::gigabytes(1);
+  std::optional<ad_utility::MemorySize> memoryLimit_ = std::nullopt;
 
   // Option to disable the pre-computation of QLever's so-called "patterns". If
   // enabled, QLever pre-computes the set of distinct predicates for each
@@ -190,6 +190,10 @@ struct EngineConfig : CommonConfig {
   // to for each operation query the corresponding runtime parameter.
   QueryExecutionContext::DisableCaching disableCaching_ =
       QueryExecutionContext::DisableCaching::FromRuntimeParameter;
+
+  // Names of materialized views to load from disk during initialization.
+  // If a view doesn't exist, a warning is logged and startup continues.
+  std::vector<std::string> preloadMaterializedViews_ = {};
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -294,8 +298,39 @@ class Qlever {
     namedResultCache_.readFromSerializer(serializer, allocator_, index());
   }
 
+  // Create a Query Execution Context needed for execution of single SPARQL
+  // query.
+  std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* the default is a noop*/ },
+      bool pinSubtrees = false, bool pinResult = false);
+
   // Low-level access to the QLever API, use with care.
+  std::shared_ptr<const Index> sharedIndex() const { return index_; }
   Index& index() { return *index_; }
+  const Index& index() const { return *index_; }
+
+  QueryResultCache& cache() { return cache_; }
+  const QueryResultCache& cache() const { return cache_; }
+
+  ad_utility::AllocatorWithLimit<Id>& allocator() { return allocator_; }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  }
+
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return sortPerformanceEstimator_;
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return sortPerformanceEstimator_;
+  }
+
+  NamedResultCache& namedResultCache() { return namedResultCache_; }
+  const NamedResultCache& namedResultCache() const { return namedResultCache_; }
+
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
+    return materializedViewsManager_;
+  }
 };
 }  // namespace qlever
 
