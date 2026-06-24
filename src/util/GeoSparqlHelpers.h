@@ -8,9 +8,12 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <string_view>
+#include <type_traits>
+#include <variant>
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
@@ -42,6 +45,11 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
+
+// Simplify a WKT geometry using the Douglas-Peucker algorithm (helper to avoid
+// including `GeometryInfoHelpersImpl.h`). The returned WKT string has neither
+// quotation marks nor a datatype.
+std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
@@ -219,6 +227,51 @@ class WktGeometryN {
 
     auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
 
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
+// Simplify a WKT geometry using the Douglas-Peucker algorithm. The first
+// argument is the geometry (a `geo:wktLiteral`); this is intended primarily for
+// (multi-)polygons, but lines are simplified as well, and points are returned
+// unchanged. The second argument is the simplification tolerance, interpreted
+// in the coordinate units of the geometry (that is, degrees for WGS84
+// geometries). The result is a new `geo:wktLiteral`. If the input is not a
+// valid geometry, or the tolerance is not a positive, finite number, `UNDEF` is
+// returned.
+class WktSimplify {
+ public:
+  template <typename NumericVariant>
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& geom,
+      const NumericVariant& tolerance) const {
+    using namespace triple_component;
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // Extract the tolerance as a `double` from the numeric value variant
+    // (`std::variant<NotNumeric, double, int64_t>`).
+    auto tol = std::visit(
+        [](const auto& value) -> std::optional<double> {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_arithmetic_v<T>) {
+            return static_cast<double>(value);
+          } else {
+            return std::nullopt;
+          }
+        },
+        tolerance);
+    if (!tol.has_value() || !(tol.value() > 0) || !std::isfinite(tol.value())) {
+      return ValueId::makeUndefined();
+    }
+
+    auto resultWkt = detail::simplifyWkt(geom.value(), tol.value());
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }

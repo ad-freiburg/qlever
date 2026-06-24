@@ -78,6 +78,10 @@ NARY_EXPRESSION(
     GeometryNExpression, 2,
     FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
+NARY_EXPRESSION(
+    SimplifyPolygonExpression, 2,
+    FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -176,6 +180,13 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2) {
   return std::make_unique<GeometryNExpression>(std::move(child1),
                                                std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeSimplifyPolygonExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
+  return std::make_unique<SimplifyPolygonExpression>(std::move(child1),
+                                                     std::move(child2));
 }
 
 // _____________________________________________________________________________
