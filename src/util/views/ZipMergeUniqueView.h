@@ -186,8 +186,9 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
                     &proj_};
   }
 
-  ConstIterator begin() const
-      requires ql::ranges::range<const V1> && ql::ranges::range<const V2> {
+  CPP_member auto begin() const
+      -> CPP_ret(ConstIterator)(
+          requires ql::ranges::range<const V1>&& ql::ranges::range<const V2>) {
     return ConstIterator{ql::ranges::begin(v1_),
                          ql::ranges::end(v1_),
                          ql::ranges::begin(v2_),
