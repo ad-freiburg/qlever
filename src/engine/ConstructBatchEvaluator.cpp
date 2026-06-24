@@ -19,51 +19,6 @@
 
 namespace qlever::constructExport {
 
-namespace {
-// Diagnostic instrumentation for the evaluation of the batched vocabulary
-// lookup. When the given environment variable names a file path, one integer is
-// appended to that file per per-batch, per-column vocabulary lookup. Two
-// loggers use this:
-// - `QLEVER_MISSSET_LOG`: the miss-set size (indices passed to `lookupBatch`).
-// - `QLEVER_LOOKUP_TIME_LOG`: the wall-time of the Phase-2 resolution in
-//   microseconds, used to quantify the lookup's share of the total export time.
-// Each is a no-op unless its variable is set, so unset runs are unaffected. The
-// output file is owned by this RAII type: opened once when the single static
-// instance is constructed, closed at program exit.
-class EnvFileLogger {
- public:
-  explicit EnvFileLogger(const char* envVar) {
-    if (const char* path = std::getenv(envVar)) {
-      out_.open(path, std::ios::app);
-    }
-  }
-
-  void log(int64_t value) {
-    if (!out_.is_open()) {
-      return;
-    }
-    std::lock_guard<std::mutex> lock{mutex_};
-    // Flush each record: the server is long-running, so a buffered write would
-    // not reach disk until the stream is closed at program exit.
-    out_ << value << std::endl;
-  }
-
- private:
-  std::ofstream out_;
-  std::mutex mutex_;
-};
-
-void logMissSetSize(size_t size) {
-  static EnvFileLogger logger{"QLEVER_MISSSET_LOG"};
-  logger.log(static_cast<int64_t>(size));
-}
-
-void logLookupTimeMicros(int64_t micros) {
-  static EnvFileLogger logger{"QLEVER_LOOKUP_TIME_LOG"};
-  logger.log(micros);
-}
-}  // namespace
-
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     ql::span<const size_t> variableColumnIndices,

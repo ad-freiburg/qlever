@@ -79,6 +79,8 @@ class ConstructBatchEvaluator {
   // Evaluates the variables identified by `variableColumnIndices` for all rows
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
+  // TODO<ms2144> For a construct SPO export of 500k lines, 1.4 Million memory
+  // allocations are made in this method!
   static BatchEvaluationResult evaluateBatch(
       ql::span<const size_t> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
