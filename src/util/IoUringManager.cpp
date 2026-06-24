@@ -64,7 +64,7 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   // details.
   int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
   if (ret < 0) {
-    throw std::runtime_error("io_uring_queue_init failed in IoUringManager");
+    AD_THROW("io_uring_queue_init failed in IoUringManager");
   }
 }
 
@@ -141,7 +141,7 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   io_uring_cqe* cqe = nullptr;
   int ret = io_uring_wait_cqe(&ring_, &cqe);
   if (ret < 0) {
-    throw std::runtime_error("io_uring_wait_cqe failed in IoUringPolicy");
+    AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
   }
 
   // Recover the read's result (`cqe->res`) and the request id we stored in the

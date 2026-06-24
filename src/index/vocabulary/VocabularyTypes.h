@@ -35,6 +35,7 @@ using VocabLookupOutput =
 
 template <typename BufferType>
 class LookupDataCommonBase {
+  // Buffer for the materialized string data (used by disk-based vocabularies).
   BufferType buffer_;
 
   // One string_view per looked-up index, each pointing into `buffer`.
@@ -44,8 +45,15 @@ class LookupDataCommonBase {
   // `asResult()`.
   ql::span<std::string_view> span_;
 
+  // Set up `span` over `views`. Call after `views` is fully filled. Do not
+  // modify `views` afterward, as `span` would be invalidated.
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
 
+  // Convert a filled `VocabBatchLookupData` into the public result type
+  // `VocabBatchLookupResult`. `self` must be the owning shared_ptr of the
+  // `VocabBatchLookupData` to convert. The returned aliasing shared_ptr exposes
+  // only `self->span` but keeps the whole struct (and thus the `buffer`/`views`
+  // the span points into) alive as long as the result lives.
   static VocabBatchLookupResult asResult(
       std::shared_ptr<LookupDataCommonBase> self) {
     self->finalize();
