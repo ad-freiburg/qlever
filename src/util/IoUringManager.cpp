@@ -53,10 +53,13 @@ SyncIoManager::BatchHandle SyncIoManager::addBatch(
 //______________________________________________________________________________
 IoUringManager::IoUringManager(unsigned ringSize) : ringSize_(ringSize) {
   // Set up the submission and completion queues, shared between this process
-  // and the kernel, with (at least) `ringSize_` submission slots. liburing
-  // rounds the requested size up to a power of two, so the actual ring may be
-  // larger; `ringSize_` is therefore a conservative bound for the "ring full"
+  // and the kernel, with (at least) `ringSize_` submission slots in the
+  // submission queue. liburing rounds the requested size up to a power of two,
+  // so the actual ring may be larger than `ringSize`; `ringSize_` is therefore
+  // a conservative (lower) bound for the "ring full"
   // check below. See io_uring_queue_init(3).
+  // See https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
+  // details.
   int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
   if (ret < 0) {
     throw std::runtime_error("io_uring_queue_init failed in IoUringManager");
