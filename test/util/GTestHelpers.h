@@ -80,8 +80,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
-// `EXPECT` that the `argument` is equal to `std::nullopt`.
-#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+// `EXPECT` that the `argument`'s `has_value` method returns `false`. Checking
+// equality to `std::nullopt` does not work with `boost::optional`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_FALSE(argument.has_value())
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,

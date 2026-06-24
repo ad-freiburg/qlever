@@ -123,6 +123,7 @@ void testValuesInVariables(
     ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),
                          toLiteralId(value.at(2))});
   }
+  ctx.context._inputTable = ctx.table.asStaticView<0>();
   ctx.context._endIndex = inputValues.size();
   auto resultAsVariant =
       makeRegexExpression(variable("?string"), variable("?regex"),
