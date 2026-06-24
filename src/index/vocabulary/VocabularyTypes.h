@@ -38,16 +38,22 @@ using VocabLookupOutput =
 struct VocabBatchLookupData {
   // Buffer for the materialized string data (used by disk-based vocabularies).
   std::string buffer;
-  // The individual string_views, one per looked-up index.
+  // One string_view per looked-up index, each pointing into `buffer`.
   std::vector<std::string_view> views;
-  // The span over `views`, set by `finalize()`.
+
+  // The span over `views`, populated by `finalize()` and exposed by
+  // `asResult()`.
   ql::span<std::string_view> span;
 
-  // Call after filling `views` to set up the span.
+  // Set up `span` over `views`. Call after `views` is fully filled. Do not
+  // modify `views` afterward, as `span` would be invalidated.
   void finalize() { span = ql::span<std::string_view>{views}; }
 
-  // Create a VocabBatchLookupResult using aliasing shared_ptr.
-  // `self` must be a shared_ptr to `this`.
+  // Convert a filled `VocabBatchLookupData` into the public result type
+  // `VocabBatchLookupResult`. `self` must be the owning shared_ptr of the
+  // `VocabBatchLookupData` to convert. The returned aliasing shared_ptr exposes
+  // only `self->span` but keeps the whole struct (and thus the `buffer`/`views`
+  // the span points into) alive as long as the result lives.
   static VocabBatchLookupResult asResult(
       std::shared_ptr<VocabBatchLookupData> self) {
     self->finalize();
