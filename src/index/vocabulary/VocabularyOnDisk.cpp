@@ -339,7 +339,7 @@ void VocabularyOnDisk::open(const std::string& filename) {
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
 
-  // Initialize pool of persistent BatchIoManagers for lookupBatch.
+  // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
   static constexpr size_t kNumManagers = 8;
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchIoManager>>>(kNumManagers);
