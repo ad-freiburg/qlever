@@ -144,12 +144,13 @@ void IoUringManager::drainOneCqe() {
   io_uring_cqe_seen(&ring_, cqe);
   numInFlightReadRequests_--;
 
-  // The batch may already have been erased by `wait()`, so look before
-  // decrementing.
   auto it = numInFlightReadRequestsPerBatch_.find(handle);
-  if (it != numInFlightReadRequestsPerBatch_.end()) {
-    it->second--;
-  }
+  // The entry must still be present: a batch is only erased (in `wait()`) after
+  // its in-flight count reaches zero, which happens only once all of its
+  // completions have been reaped. Reaping a completion for an already-erased
+  // batch would therefore be a logic error.
+  AD_CORRECTNESS_CHECK(it != numInFlightReadRequestsPerBatch_.end());
+  it->second--;
 }
 
 #endif  // QLEVER_HAS_IO_URING
