@@ -389,7 +389,6 @@ float SpatialJoin::getMultiplicity(size_t col) {
     // `VariableToColumnMap`, but `getResultWidth` might include further
     // invisible columns.
     size_t widthLeft = childLeft_->getVariableColumns().size();
-    size_t widthRight = childRight_->getVariableColumns().size();
     size_t column = col;
     if (config_.distanceVariable_.has_value() && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
@@ -407,7 +406,9 @@ float SpatialJoin::getMultiplicity(size_t col) {
       column = filteredColumns.at(column - widthLeft).second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
-    return static_cast<float>(widthLeft * widthRight) / distinctnessChild;
+    return static_cast<float>(childLeft_->getSizeEstimate() *
+                              childRight_->getSizeEstimate()) /
+           distinctnessChild;
   } else {
     return 1;
   }
