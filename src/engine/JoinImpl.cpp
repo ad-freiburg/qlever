@@ -38,10 +38,12 @@ using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
-JoinImpl::JoinImpl(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-           std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool keepJoinColumn,
-           bool allowSwappingChildrenOnlyForTesting)
+JoinImpl::JoinImpl(QueryExecutionContext* qec,
+                   std::shared_ptr<QueryExecutionTree> t1,
+                   std::shared_ptr<QueryExecutionTree> t2,
+                   ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
+                   bool keepJoinColumn,
+                   bool allowSwappingChildrenOnlyForTesting)
     : Operation(qec), keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
@@ -300,7 +302,8 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________________________
 
-void JoinImpl::join(const IdTable& a, const IdTable& b, IdTable* result) const {
+void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
+                    IdTable* result) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
@@ -392,8 +395,8 @@ void JoinImpl::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 
 // ______________________________________________________________________________
 Result JoinImpl::lazyJoin(std::shared_ptr<const Result> a,
-                      std::shared_ptr<const Result> b,
-                      bool requestLaziness) const {
+                          std::shared_ptr<const Result> b,
+                          bool requestLaziness) const {
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
@@ -423,7 +426,8 @@ Result JoinImpl::lazyJoin(std::shared_ptr<const Result> a,
 // ______________________________________________________________________________
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
 void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
-                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes) {
+                            const IdTable& dynB, ColumnIndex jc2,
+                            IdTable* dynRes) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
@@ -517,8 +521,8 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 }
 
 // ______________________________________________________________________________
-void JoinImpl::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
-                    ColumnIndex jc2, IdTable* dynRes) {
+void JoinImpl::hashJoin(const IdTable& dynA, ColumnIndex jc1,
+                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes) {
   ad_utility::callFixedSizeVi(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
       [&](auto l, auto r, auto o) {
@@ -529,8 +533,8 @@ void JoinImpl::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dyn
 // ___________________________________________________________________________
 template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
 void JoinImpl::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                   ColumnIndex jcRowB,
-                                   IdTableStatic<TABLE_WIDTH>* table) {
+                                       ColumnIndex jcRowB,
+                                       IdTableStatic<TABLE_WIDTH>* table) {
   // Add a new, empty row.
   const size_t backIndex = table->size();
   table->emplace_back();
@@ -703,7 +707,7 @@ Result JoinImpl::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
-  join(leftRes->idTable(), rightRes->idTable(), &idTable);
+  join(leftRes->idTableView(), rightRes->idTableView(), &idTable);
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(),
@@ -745,7 +749,8 @@ std::unique_ptr<Operation> JoinImpl::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool JoinImpl::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
+bool JoinImpl::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   // For the join column we don't union the elements, we intersect them so we
   // can have a more efficient implementation.
@@ -757,7 +762,8 @@ bool JoinImpl::columnOriginatesFromGraphOrUndef(const Variable& variable) const 
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-JoinImpl::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+JoinImpl::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
   std::set<Variable> newVariables;
   const auto* vars = &variables;
   if (!ad_utility::contains(variables, joinVar_)) {
@@ -777,8 +783,8 @@ JoinImpl::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>> JoinImpl::makeTreeWithBindColumn(
-    const parsedQuery::Bind& bind) const {
+std::optional<std::shared_ptr<QueryExecutionTree>>
+JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return pushDownBindToAnyChild(
       bind, {left_, right_},
       [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {

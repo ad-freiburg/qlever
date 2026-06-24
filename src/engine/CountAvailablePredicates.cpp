@@ -146,7 +146,7 @@ Result CountAvailablePredicates::computeResult(
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
     ad_utility::callFixedSizeVi(width, [&](auto width) {
-      return computePatternTrick<width>(subresult->idTable(), &idTable,
+      return computePatternTrick<width>(subresult->idTableView(), &idTable,
                                         patterns, subjectColumnIndex_,
                                         patternColumn, runtimeInfo());
     });
@@ -218,7 +218,7 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
 // _____________________________________________________________________________
 template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
-    const IdTable& dynInput, IdTable* dynResult,
+    const IdTableView<0>& dynInput, IdTable* dynResult,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
     const size_t patternColumnIdx, RuntimeInformation& runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();

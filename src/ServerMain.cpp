@@ -15,6 +15,7 @@
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "libqlever/Qlever.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -44,18 +45,11 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  std::string indexBasename;
+  qlever::EngineConfig config;
   std::string accessToken;
   bool noAccessCheck = false;
-  bool text = false;
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
-  bool noPatterns;
-  bool onlyPsoAndPosPermutations;
-  bool persistUpdates;
-  std::vector<std::string> preloadMaterializedViews;
-
-  ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -67,7 +61,7 @@ int main(int argc, char** argv) {
   add("help,h", "Produce this help message.");
   add("version,v", "Print version information.");
   // TODO<joka921> Can we output the "required" automatically?
-  add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
+  add("index-basename,i", po::value<std::string>(&config.baseName_)->required(),
       "The basename of the index files (required).");
   add("port,p", po::value<unsigned short>(&port)->required(),
       "The port on which HTTP requests are served (required).");
@@ -81,8 +75,9 @@ int main(int argc, char** argv) {
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size,m",
-      po::value<ad_utility::MemorySize>(&memoryMaxSize)
-          ->default_value(DEFAULT_MEM_FOR_QUERIES),
+      po::value<ad_utility::MemorySize>()
+          ->default_value(DEFAULT_MEM_FOR_QUERIES)
+          ->notifier([&config](auto v) { config.memoryLimit_ = v; }),
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
@@ -108,14 +103,14 @@ int main(int argc, char** argv) {
       "least-recently used non-pinned entries from the cache. Note that "
       "this condition and the size limit specified via --cache-max-size "
       "both have to hold (logical AND).");
-  add("no-patterns,P", po::bool_switch(&noPatterns),
+  add("no-patterns,P", po::bool_switch(&config.noPatterns_),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
-  add("text,t", po::bool_switch(&text),
+  add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
-      po::bool_switch(&onlyPsoAndPosPermutations),
+      po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
@@ -146,7 +141,7 @@ int main(int argc, char** argv) {
       "endpoint might change at any point in time. If you control the "
       "endpoints, you can override this setting. This will disable the sibling "
       "optimization where VALUES are dynamically pushed into `SERVICE`.");
-  add("persist-updates", po::bool_switch(&persistUpdates),
+  add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   add("syntax-test-mode",
@@ -178,7 +173,7 @@ int main(int argc, char** argv) {
       "Memory limit for sorting rows during the writing of materialized "
       "views.");
   add("preload-materialized-views,l",
-      po::value<std::vector<std::string>>(&preloadMaterializedViews)
+      po::value<std::vector<std::string>>(&config.preloadMaterializedViews_)
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
       "start (this option takes an arbitrary number of arguments).");
@@ -228,10 +223,9 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
-    Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), noAccessCheck, !noPatterns);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
-               persistUpdates, preloadMaterializedViews);
+    Server server(port, numSimultaneousQueries, std::move(accessToken), config,
+                  noAccessCheck);
+    server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

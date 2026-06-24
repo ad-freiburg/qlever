@@ -37,9 +37,9 @@ class JoinImpl : public Operation {
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   JoinImpl(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-       std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool keepJoinColumn = true,
-       bool allowSwappingChildrenOnlyForTesting = true);
+           std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
+           ColumnIndex t2JoinCol, bool keepJoinColumn = true,
+           bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
@@ -89,7 +89,8 @@ class JoinImpl : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTable& a, const IdTable& b, IdTable* result) const;
+  void join(const IdTableView<0>& a, const IdTableView<0>& b,
+            IdTable* result) const;
 
  public:
   // Fallback implementation of a join that is used when at least one of the two
