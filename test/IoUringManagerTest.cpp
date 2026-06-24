@@ -44,8 +44,8 @@ static FILE* openFile(const TempFile& tmp) {
 }
 
 // Typed test fixture: runs all tests against both `IoUringManager` and
-// `SyncIoManager` when io_uring is present, or only SyncIoManager when it is
-// not.
+// `SyncIoManager` when io_uring is present. Runs tests only aginat
+// `SyncIoManager` when io_uring is not present.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
 
@@ -58,22 +58,20 @@ using ManagerTypes = ::testing::Types<ad_utility::SyncIoManager>;
 
 TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
 
-// ---------------------------------------------------------------------------
 // SingleBatch: addBatch + wait for one batch, verify data.
-// ---------------------------------------------------------------------------
 TYPED_TEST(IoUringManagerTest, SingleBatch) {
-  std::string content = "AAAABBBBCCCCDDDD";
-  TempFile tmp(content);
+  std::string fileContent = "AAAABBBBCCCCDDDD";
+  TempFile tmp(fileContent);
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  std::vector<size_t> sizes{4, 4, 4};
+  std::vector<size_t> numBytesToRead{4, 4, 4};
   std::vector<uint64_t> offsets{8, 0, 12};
   std::vector<char> buf0(4), buf1(4), buf2(4);
   std::vector<char*> ptrs{buf0.data(), buf1.data(), buf2.data()};
 
   TypeParam mgr(64);
-  auto handle = mgr.addBatch(fd, sizes, offsets, ptrs);
+  auto handle = mgr.addBatch(fd, numBytesToRead, offsets, ptrs);
   mgr.wait(handle);
   std::fclose(f);
 
@@ -82,9 +80,7 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   EXPECT_EQ(std::string(buf2.data(), 4), "DDDD");
 }
 
-// ---------------------------------------------------------------------------
 // EmptyBatch: addBatch with 0 reads → wait is a no-op.
-// ---------------------------------------------------------------------------
 TYPED_TEST(IoUringManagerTest, EmptyBatch) {
   TypeParam mgr(64);
   auto handle = mgr.addBatch(-1, {}, {}, {});
