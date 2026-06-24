@@ -47,7 +47,10 @@ class SyncIoManager {
   void wait(BatchHandle) {}
 
  private:
-  uint64_t nextHandle_ = 0;
+  // Monotonically increasing counter that mints a unique `BatchHandle` for each
+  // `addBatch` call: the call `addBatch` returns the current value and
+  // increments it, so every batch gets a unique handle.
+  BatchHandle nextHandle_ = 0;
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to
@@ -95,8 +98,10 @@ class IoUringManager {
   // not yet completed. Used to detect whether the ring is full.
   size_t numInFlightReadRequests_ = 0;
 
-  // The handle that will be assigned to the next batch.
-  uint64_t nextHandle_ = 0;
+  // Monotonically increasing counter that mints a unique `BatchHandle` for each
+  // `addBatch` call: the call `addBatch` returns the current value and
+  // increments it, so every batch gets a unique handle.
+  BatchHandle nextHandle_ = 0;
 
   // The same in-flight reads as `numInFlight_`, but broken down per batch:
   // maps a batch handle to the number of its reads that have not yet completed
