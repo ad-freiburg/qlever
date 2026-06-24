@@ -62,8 +62,8 @@ TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
 
 // The basic happy path: a single batch of reads is submitted and waited on.
 // Each read result lands with the correct bytes in its own target buffer.
-// The non-sequential offsets in `readOffsetsFromFileStart` (8, 0, 12) also
-// cover order-independence of reads within a batch.
+// The non-sequential offsets in `fileOffsets` (8, 0, 12) also cover
+// order-independence of reads within a batch.
 TYPED_TEST(IoUringManagerTest, SingleBatch) {
   std::string fileContent = "AAAABBBBCCCCDDDD";
   TempFile tmp(fileContent);
@@ -71,7 +71,7 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   int fd = fileno(file);
 
   std::vector<size_t> numBytesToRead{4, 4, 4};
-  std::vector<uint64_t> readOffsetsFromFileStart{8, 0, 12};
+  std::vector<uint64_t> fileOffsets{8, 0, 12};
   std::vector<char> targetBuffersForBatch0(4);
   std::vector<char> targetBuffersForBatch1(4);
   std::vector<char> targetBuffersForBatch2(4);
@@ -80,8 +80,8 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
                                          targetBuffersForBatch2.data()};
 
   TypeParam IOManager(64);
-  auto batchHandle = IOManager.addBatch(
-      fd, numBytesToRead, readOffsetsFromFileStart, ptrsToTargetBuffers);
+  auto batchHandle =
+      IOManager.addBatch(fd, numBytesToRead, fileOffsets, ptrsToTargetBuffers);
   IOManager.wait(batchHandle);
   std::fclose(file);
 
@@ -108,16 +108,17 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  TypeParam mgr(64);
+  TypeParam IOManager(64);
 
-  auto makeAndWait = [&](uint64_t offset, size_t numBytesToRead,
+  auto makeAndWait = [&](uint64_t fileOffset, size_t numBytesToRead,
                          const std::string& expected) {
     std::vector<char> targetBuffer(numBytesToRead);
     std::vector<size_t> sizes{numBytesToRead};
-    std::vector<uint64_t> offsets{offset};
+    std::vector<uint64_t> fileOffsets{fileOffset};
     std::vector<char*> bufferPointers{targetBuffer.data()};
-    auto batchHandle = mgr.addBatch(fd, sizes, offsets, bufferPointers);
-    mgr.wait(batchHandle);
+    auto batchHandle =
+        IOManager.addBatch(fd, sizes, fileOffsets, bufferPointers);
+    IOManager.wait(batchHandle);
     EXPECT_EQ(std::string(targetBuffer.data(), numBytesToRead), expected);
   };
 
@@ -128,7 +129,11 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   std::fclose(f);
 }
 
-// WaitOutOfOrder: submit batch A then B, wait(B) first, then wait(A).
+// Verify that batch handles can be waited on out of submission order: batches A
+// and B are submitted, then their batch handles are `wait()`ed in reverse
+// (batch B's handle before batch A's handle). Each batch handle must still
+// resolve its own batch's read correctly, so the wait order is independent of
+// the submission order.
 TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   std::string content = "AAAABBBB";
   TempFile tmp(content);
@@ -141,15 +146,15 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   std::vector<char> targetBuffersB(4);
   std::vector<size_t> numBytesToReadA{4};
   std::vector<size_t> numBytesToReadB{4};
-  std::vector<uint64_t> offsetsA{0};
-  std::vector<uint64_t> offsetsB{0};
+  std::vector<uint64_t> fileOffsetsA{0};
+  std::vector<uint64_t> fileOffsetsB{4};
   std::vector<char*> ptrsToTargetBuffersA{targetBuffersA.data()};
   std::vector<char*> ptrsToTargetBuffersB{targetBuffersB.data()};
 
-  auto batchHandleA =
-      IOManager.addBatch(fd, numBytesToReadA, offsetsA, ptrsToTargetBuffersA);
-  auto batchHandleB =
-      IOManager.addBatch(fd, numBytesToReadB, offsetsB, ptrsToTargetBuffersB);
+  auto batchHandleA = IOManager.addBatch(fd, numBytesToReadA, fileOffsetsA,
+                                         ptrsToTargetBuffersA);
+  auto batchHandleB = IOManager.addBatch(fd, numBytesToReadB, fileOffsetsB,
+                                         ptrsToTargetBuffersB);
 
   IOManager.wait(batchHandleB);
   IOManager.wait(batchHandleA);
@@ -231,13 +236,13 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 
   // Submit all M batches (one read each) before waiting on any of them, so they
   // are outstanding concurrently. Batch i reads chunk i (offset i*4) into
-  // bufs[i].
+  // targetBuffersPerBatch[i].
   for (size_t i = 0; i < M; ++i) {
     std::vector<size_t> numBytesToRead{4};
-    std::vector<uint64_t> offsets{static_cast<uint64_t>(i * 4)};
+    std::vector<uint64_t> fileOffsets{static_cast<uint64_t>(i * 4)};
     std::vector<char*> ptrsToTargetBuffers{targetBuffersPerBatch[i].data()};
-    batchHandles[i] =
-        IOManager.addBatch(fd, numBytesToRead, offsets, ptrsToTargetBuffers);
+    batchHandles[i] = IOManager.addBatch(fd, numBytesToRead, fileOffsets,
+                                         ptrsToTargetBuffers);
   }
   // Only now wait on each handle. Each wait must block until that batch's own
   // read has completed, regardless of the order the kernel posted completions.
@@ -246,8 +251,9 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   }
   std::fclose(file);
 
-  // Each batch's read must have landed in its own buffer: bufs[i] holds 'A'+i.
-  // A completion routed to the wrong buffer shows up as a mismatch here.
+  // Each batch's read must have landed in its own buffer:
+  // targetBuffersPerBatch[i] holds 'A'+i. A completion routed to the wrong
+  // buffer shows up as a mismatch here.
   for (size_t i = 0; i < M; ++i) {
     char expected = static_cast<char>('A' + i);
     EXPECT_EQ(targetBuffersPerBatch[i][0], expected)
@@ -263,11 +269,11 @@ TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
   TypeParam IOManager(64);
   std::vector<char> targetBuffers(4);
   std::vector<size_t> numBytesToRead{4};
-  std::vector<uint64_t> offsets{0};
+  std::vector<uint64_t> fileOffsets{0};
   std::vector<char*> ptrsToTargetBuffers{targetBuffers.data()};
   EXPECT_THROW(
       {
-        auto batchHandle = IOManager.addBatch(-1, numBytesToRead, offsets,
+        auto batchHandle = IOManager.addBatch(-1, numBytesToRead, fileOffsets,
                                               ptrsToTargetBuffers);
         IOManager.wait(batchHandle);
       },
