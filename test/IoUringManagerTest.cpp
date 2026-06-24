@@ -80,7 +80,7 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   EXPECT_EQ(std::string(buf2.data(), 4), "DDDD");
 }
 
-// EmptyBatch: addBatch with 0 reads → wait is a no-op.
+// EmptyBatch: addBatch with 0 reads -> wait is a no-op.
 TYPED_TEST(IoUringManagerTest, EmptyBatch) {
   TypeParam mgr(64);
   auto handle = mgr.addBatch(-1, {}, {}, {});
@@ -88,9 +88,7 @@ TYPED_TEST(IoUringManagerTest, EmptyBatch) {
   mgr.wait(handle);
 }
 
-// ---------------------------------------------------------------------------
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
-// ---------------------------------------------------------------------------
 TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   std::string content = "AAAABBBBCCCCDDDDEEEEFFFFGGGG";
   TempFile tmp(content);
@@ -99,15 +97,15 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
 
   TypeParam mgr(64);
 
-  auto makeAndWait = [&](uint64_t offset, size_t sz,
+  auto makeAndWait = [&](uint64_t offset, size_t numBytesToRead,
                          const std::string& expected) {
-    std::vector<char> buf(sz);
-    std::vector<size_t> sizes{sz};
+    std::vector<char> targetBuffer(numBytesToRead);
+    std::vector<size_t> sizes{numBytesToRead};
     std::vector<uint64_t> offsets{offset};
-    std::vector<char*> ptrs{buf.data()};
-    auto h = mgr.addBatch(fd, sizes, offsets, ptrs);
-    mgr.wait(h);
-    EXPECT_EQ(std::string(buf.data(), sz), expected);
+    std::vector<char*> bufferPointers{targetBuffer.data()};
+    auto batchHandle = mgr.addBatch(fd, sizes, offsets, bufferPointers);
+    mgr.wait(batchHandle);
+    EXPECT_EQ(std::string(targetBuffer.data(), numBytesToRead), expected);
   };
 
   makeAndWait(0, 4, "AAAA");
@@ -128,30 +126,40 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
 
   TypeParam mgr(64);
 
-  std::vector<char> bufA(4), bufB(4);
-  std::vector<size_t> sizesA{4}, sizesB{4};
+  std::vector<char> targetBuffersA(4);
+  std::vector<char> targetBuffersB(4);
+  std::vector<size_t> numBytesToReadA{4};
+  std::vector<size_t> numBytesToReadB{4};
   std::vector<uint64_t> offsetsA{0}, offsetsB{4};
-  std::vector<char*> ptrsA{bufA.data()}, ptrsB{bufB.data()};
+  std::vector<char*> ptrsToBuffersA{targetBuffersA.data()};
+  std::vector<char*> ptrsToBuffersB{targetBuffersB.data()};
 
-  auto hA = mgr.addBatch(fd, sizesA, offsetsA, ptrsA);
-  auto hB = mgr.addBatch(fd, sizesB, offsetsB, ptrsB);
+  auto batchHandleA =
+      mgr.addBatch(fd, numBytesToReadA, offsetsA, ptrsToBuffersA);
+  auto batchHandleB =
+      mgr.addBatch(fd, numBytesToReadB, offsetsB, ptrsToBuffersB);
 
-  mgr.wait(hB);
-  mgr.wait(hA);
+  mgr.wait(batchHandleB);
+  mgr.wait(batchHandleA);
   std::fclose(f);
 
-  EXPECT_EQ(std::string(bufA.data(), 4), "AAAA");
-  EXPECT_EQ(std::string(bufB.data(), 4), "BBBB");
+  EXPECT_EQ(std::string(targetBuffersA.data(), 4), "AAAA");
+  EXPECT_EQ(std::string(targetBuffersB.data(), 4), "BBBB");
 }
 
-// ---------------------------------------------------------------------------
-// BatchLargerThanRing: batch with 400 reads, ring size 64 → drip-fed.
-// ---------------------------------------------------------------------------
+// A single `addBatch` call requesting more reads (400) than the submission ring
+// buffer can hold at once (64) forces the manager to submit the SQEs in
+// successive rounds: it fills the ring buffer with as many SQEs as fit, reaps
+// their CQEs, then refills with the next round of until all 400 reads complete.
+// Verify every read still lands in the correct buffer. Each 4-byte chunk holds
+// a distinct repeated character, so a misrouted read is detected as a mismatch.
 TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
   constexpr size_t N = 400;
   constexpr size_t CHUNK = 4;
 
-  // Build a file with N * CHUNK bytes, each chunk is its index repeated.
+  // Builds a file of N 4-byte chunks. Chunk `i` stores the number `i`. Because
+  // every chunk's content equals it's position, a read that lands in the wrong
+  // target buffer yields the wrong number as a result and is detected.
   std::string content(N * CHUNK, '\0');
   for (size_t i = 0; i < N; ++i) {
     char c = static_cast<char>('A' + (i % 26));
@@ -161,78 +169,95 @@ TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  std::vector<size_t> sizes(N, CHUNK);
-  std::vector<uint64_t> offsets(N);
-  std::vector<std::vector<char>> bufs(N, std::vector<char>(CHUNK));
-  std::vector<char*> ptrs(N);
+  std::vector<size_t> numBytesToRead(N, CHUNK);
+  std::vector<uint64_t> fileOffsets(N);
+  std::vector<std::vector<char>> targetBuffers(N, std::vector<char>(CHUNK));
+  std::vector<char*> ptrsToTargetBuffers(N);
   for (size_t i = 0; i < N; ++i) {
-    offsets[i] = static_cast<uint64_t>(i * CHUNK);
-    ptrs[i] = bufs[i].data();
+    fileOffsets[i] = static_cast<uint64_t>(i * CHUNK);
+    ptrsToTargetBuffers[i] = targetBuffers[i].data();
   }
 
-  TypeParam mgr(64);
-  auto h = mgr.addBatch(fd, sizes, offsets, ptrs);
-  mgr.wait(h);
+  TypeParam ioManager(64);
+  auto batchHandle =
+      ioManager.addBatch(fd, numBytesToRead, fileOffsets, ptrsToTargetBuffers);
+  ioManager.wait(batchHandle);
   std::fclose(f);
 
   for (size_t i = 0; i < N; ++i) {
     char expected = static_cast<char>('A' + (i % 26));
     for (size_t j = 0; j < CHUNK; ++j) {
-      ASSERT_EQ(bufs[i][j], expected) << "mismatch at chunk " << i;
+      ASSERT_EQ(targetBuffers[i][j], expected) << "mismatch at chunk " << i;
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// MultipleSmallBatchesPipelined: submit many batches before waiting on any.
-// ---------------------------------------------------------------------------
+// Verify that many independent `addBatch` calls can be outstanding (submitted
+// to the kernel but not yet waited on) at once, and that the manager tracks
+// each batch's completion correctly. M batches of one read each are submitted
+// before any `wait`. Since the kernel posts completions in arbitrary order,
+// the manager must map each one back to its issuing batch.
 TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
+  // A file of M 4-byte chunks; chunk i is filled with the character 'A'+i.
+  // Since M <= 26, the chunks have distinct contents. Thus, a read whose data
+  // lands in the wrong buffer can be detected as a mismatch below.
   constexpr size_t M = 20;
   std::string content(M * 4, '\0');
   for (size_t i = 0; i < M; ++i) {
     std::memset(&content[i * 4], static_cast<char>('A' + i), 4);
   }
   TempFile tmp(content);
-  FILE* f = openFile(tmp);
-  int fd = fileno(f);
+  FILE* file = openFile(tmp);
+  int fd = fileno(file);
 
-  TypeParam mgr(64);
+  TypeParam IOManager(64);
 
-  std::vector<std::vector<char>> bufs(M, std::vector<char>(4));
-  std::vector<typename TypeParam::BatchHandle> handles(M);
+  // One target buffer and one handle per batch, so every batch's result and
+  // completion can be checked independently.
+  std::vector<std::vector<char>> targetBuffersPerBatch(M, std::vector<char>(4));
+  std::vector<typename TypeParam::BatchHandle> batchHandles(M);
 
+  // Submit all M batches (one read each) before waiting on any of them, so they
+  // are outstanding concurrently. Batch i reads chunk i (offset i*4) into
+  // bufs[i].
   for (size_t i = 0; i < M; ++i) {
-    std::vector<size_t> sizes{4};
+    std::vector<size_t> numBytesToRead{4};
     std::vector<uint64_t> offsets{static_cast<uint64_t>(i * 4)};
-    std::vector<char*> ptrs{bufs[i].data()};
-    handles[i] = mgr.addBatch(fd, sizes, offsets, ptrs);
+    std::vector<char*> ptrsToTargetBuffers{targetBuffersPerBatch[i].data()};
+    batchHandles[i] =
+        IOManager.addBatch(fd, numBytesToRead, offsets, ptrsToTargetBuffers);
   }
+  // Only now wait on each handle. Each wait must block until that batch's own
+  // read has completed, regardless of the order the kernel posted completions.
   for (size_t i = 0; i < M; ++i) {
-    mgr.wait(handles[i]);
+    IOManager.wait(batchHandles[i]);
   }
-  std::fclose(f);
+  std::fclose(file);
 
+  // Each batch's read must have landed in its own buffer: bufs[i] holds 'A'+i.
+  // A completion routed to the wrong buffer shows up as a mismatch here.
   for (size_t i = 0; i < M; ++i) {
     char expected = static_cast<char>('A' + i);
-    EXPECT_EQ(bufs[i][0], expected) << "mismatch at batch " << i;
+    EXPECT_EQ(targetBuffersPerBatch[i][0], expected)
+        << "mismatch at batch " << i;
   }
 }
 
-// ---------------------------------------------------------------------------
-// InvalidFdThrows: addBatch with fd=-1, wait() → std::runtime_error.
-// Both addBatch and wait are wrapped so the test passes regardless of
-// whether the throw occurs in addBatch (sync) or wait (async).
-// ---------------------------------------------------------------------------
+// Reading from an invalid fd (-1) must throw std::runtime_error. SyncIoManager
+// throws in addBatch (it reads immediately); IoUringManager throws in wait (the
+// error surfaces as a completion). Both calls sit in one EXPECT_THROW block so
+// the test passes regardless of which one throws.
 TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
-  TypeParam mgr(64);
-  std::vector<char> buf(4);
-  std::vector<size_t> sizes{4};
+  TypeParam IOManager(64);
+  std::vector<char> targetBuffers(4);
+  std::vector<size_t> numBytesToRead{4};
   std::vector<uint64_t> offsets{0};
-  std::vector<char*> ptrs{buf.data()};
+  std::vector<char*> ptrsToTargetBuffers{targetBuffers.data()};
   EXPECT_THROW(
       {
-        auto h = mgr.addBatch(-1, sizes, offsets, ptrs);
-        mgr.wait(h);
+        auto batchHandle = IOManager.addBatch(-1, numBytesToRead, offsets,
+                                              ptrsToTargetBuffers);
+        IOManager.wait(batchHandle);
       },
       std::runtime_error);
 }
