@@ -23,8 +23,8 @@
 // The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
-// Type-erased input range of batches (each batch is represented by a vector of
-// indices into the underlying Vocabulary specifying which terms' string
+// Type-erased input range of batches (each batch consists of a vector of
+// indices into the underlying Vocabulary, specifying which terms' string
 // representations need to be read from the underlying Vocabulary).
 using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
 
