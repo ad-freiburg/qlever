@@ -90,16 +90,16 @@ class IoUringManager {
 
   // Total number of reads that occupy a ring slot but have not yet been reaped
   // via a completion queue entry (CQE), i.e. that are prepared or submitted but
-  // not yet completed. Used to detect when the ring is full.
+  // not yet completed. Used to detect whether the ring is full.
   size_t numInFlightReadRequests_ = 0;
 
   // The handle that will be assigned to the next batch.
   uint64_t nextHandle_ = 0;
 
   // The same in-flight reads as `numInFlight_`, but broken down per batch:
-  // maps a batch handle to the number of its reads that have not yet completed.
-  // An entry for a batch (identified by `BatchHandle`) is removed once `wait()`
-  // has observed all of its reads complete.
+  // maps a batch handle to the number of its reads that have not yet completed
+  // (are "in flight"). An entry for a batch (identified by `BatchHandle`) is
+  // removed once `wait()` has observed all of its reads complete.
   std::unordered_map<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
 
   // Wait for one CQE and update the in-flight bookkeeping.

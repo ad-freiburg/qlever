@@ -19,7 +19,8 @@
 
 namespace {
 
-// Helper: write `content` to a temporary file and return its path.
+// Helper: write `content` to a temporary file and return the path to the
+// temporary file.
 class TempFile {
  public:
   explicit TempFile(const std::string& content)
@@ -36,7 +37,8 @@ class TempFile {
   std::string path_;
 };
 
-// Open a TempFile and return its fd (caller must fclose).
+// Open a `TempFile` and return its `fd` (caller must fclose after he is done
+// reading).
 static FILE* openFile(const TempFile& tmp) {
   FILE* f = std::fopen(tmp.path().c_str(), "rb");
   EXPECT_NE(f, nullptr);
@@ -58,34 +60,45 @@ using ManagerTypes = ::testing::Types<ad_utility::SyncIoManager>;
 
 TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
 
-// SingleBatch: addBatch + wait for one batch, verify data.
+// The basic happy path: a single batch of reads is submitted and waited on.
+// Each read result lands with the correct bytes in its own target buffer.
+// The non-sequential offsets in `readOffsetsFromFileStart` (8, 0, 12) also
+// cover order-independence of reads within a batch.
 TYPED_TEST(IoUringManagerTest, SingleBatch) {
   std::string fileContent = "AAAABBBBCCCCDDDD";
   TempFile tmp(fileContent);
-  FILE* f = openFile(tmp);
-  int fd = fileno(f);
+  FILE* file = openFile(tmp);
+  int fd = fileno(file);
 
   std::vector<size_t> numBytesToRead{4, 4, 4};
-  std::vector<uint64_t> offsets{8, 0, 12};
-  std::vector<char> buf0(4), buf1(4), buf2(4);
-  std::vector<char*> ptrs{buf0.data(), buf1.data(), buf2.data()};
+  std::vector<uint64_t> readOffsetsFromFileStart{8, 0, 12};
+  std::vector<char> targetBuffersForBatch0(4);
+  std::vector<char> targetBuffersForBatch1(4);
+  std::vector<char> targetBuffersForBatch2(4);
+  std::vector<char*> ptrsToTargetBuffers{targetBuffersForBatch0.data(),
+                                         targetBuffersForBatch1.data(),
+                                         targetBuffersForBatch2.data()};
 
-  TypeParam mgr(64);
-  auto handle = mgr.addBatch(fd, numBytesToRead, offsets, ptrs);
-  mgr.wait(handle);
-  std::fclose(f);
+  TypeParam IOManager(64);
+  auto batchHandle = IOManager.addBatch(
+      fd, numBytesToRead, readOffsetsFromFileStart, ptrsToTargetBuffers);
+  IOManager.wait(batchHandle);
+  std::fclose(file);
 
-  EXPECT_EQ(std::string(buf0.data(), 4), "CCCC");
-  EXPECT_EQ(std::string(buf1.data(), 4), "AAAA");
-  EXPECT_EQ(std::string(buf2.data(), 4), "DDDD");
+  EXPECT_EQ(std::string(targetBuffersForBatch0.data(), 4), "CCCC");
+  EXPECT_EQ(std::string(targetBuffersForBatch1.data(), 4), "AAAA");
+  EXPECT_EQ(std::string(targetBuffersForBatch2.data(), 4), "DDDD");
 }
 
-// EmptyBatch: addBatch with 0 reads -> wait is a no-op.
+// Edge case: a batch with no reads is valid and a no-op. `addBatch()` with
+// empty spans returns a handle that `wait()` must accept without blocking or
+// throwing. Note the file descriptor is `-1`: with zero read requests the file
+// descriptor is never touched, so an empty batch
 TYPED_TEST(IoUringManagerTest, EmptyBatch) {
-  TypeParam mgr(64);
-  auto handle = mgr.addBatch(-1, {}, {}, {});
+  TypeParam IoManager(64);
+  auto batchHandle = IoManager.addBatch(-1, {}, {}, {});
   // Should not block or throw.
-  mgr.wait(handle);
+  IoManager.wait(batchHandle);
 }
 
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
