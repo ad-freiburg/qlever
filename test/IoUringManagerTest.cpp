@@ -261,10 +261,10 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   }
 }
 
-// Reading from an invalid fd (-1) must throw std::runtime_error. SyncIoManager
-// throws in addBatch (it reads immediately); IoUringManager throws in wait (the
-// error surfaces as a completion). Both calls sit in one EXPECT_THROW block so
-// the test passes regardless of which one throws.
+// Reading from an invalid fd (-1) must throw std::runtime_error.
+// `SyncIoManager` throws in `addBatch` (it reads immediately); `IoUringManager`
+// throws in wait (the error surfaces as a completion). Both calls sit in one
+// EXPECT_THROW block so the test passes regardless of which one throws.
 TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
   TypeParam IOManager(64);
   std::vector<char> targetBuffers(4);
