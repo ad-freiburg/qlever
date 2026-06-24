@@ -731,15 +731,17 @@ MaterializedViewsManager::makeJoinReplacementIndexScans(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    std::shared_ptr<QueryExecutionContext> qec,
+    QueryExecutionContext* qec,
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
   if (!viewQuery.viewName_.has_value()) {
     throw MaterializedViewConfigException(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
-  auto view = getView(viewQuery.viewName_.value(), qec);
-  return view->makeIndexScan(qec.get(), viewQuery);
+  // TODO
+  auto view = getView(viewQuery.viewName_.value(),
+                      std::make_shared<QueryExecutionContext>(*qec));
+  return view->makeIndexScan(qec, viewQuery);
 }
 
 // _____________________________________________________________________________

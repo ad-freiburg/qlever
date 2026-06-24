@@ -3292,9 +3292,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
   return makeSubtreePlan<IndexScan>(
-      // TODO
-      _qec->materializedViewsManager().makeIndexScan(
-          std::make_shared<QueryExecutionContext>(*_qec), viewQuery));
+      _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
 
 // _______________________________________________________________

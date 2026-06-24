@@ -330,7 +330,7 @@ class MaterializedViewsManager {
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
   std::shared_ptr<IndexScan> makeIndexScan(
-      std::shared_ptr<QueryExecutionContext> qec,
+      QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // Given a set of triples, check if some join operations that would be
