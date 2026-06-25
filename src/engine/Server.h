@@ -218,7 +218,8 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::shared_ptr<Index> index, std::vector<ParsedQuery>&& updates,
+          std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViews,
+          std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -240,8 +241,7 @@ class Server {
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
   auto prepareOperation(
-      std::shared_ptr<Index> index,
-      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViews,
       std::string_view operationName, std::string_view operationSPARQL,
       ad_utility::websocket::MessageSender messageSender,
       const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
@@ -407,7 +407,7 @@ class Server {
   // under a single read lock, so that all code paths handling a single request
   // observe a matching pair even if a concurrent rebuild swaps the pointers
   // between two reads.
-  qlever::Qlever::IndexAndViews indexAndViewsSnapshot() const {
+  std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViewsSnapshot() const {
     return qlever().indexAndViewsSnapshot();
   }
 };

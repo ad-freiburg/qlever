@@ -205,8 +205,8 @@ class Qlever {
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
   struct IndexAndViews {
-    std::shared_ptr<Index> index_;
-    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
+    Index index_;
+    MaterializedViewsManager materializedViewsManager_;
   };
 
  private:
@@ -215,7 +215,7 @@ class Qlever {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
-  ad_utility::Synchronized<IndexAndViews> indexAndViews_;
+  ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
 
@@ -301,11 +301,10 @@ class Qlever {
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
-  // query. Use an explicitly snapshotted `Index` and `MaterializedViewsManager`
-  // (see `indexAndViewsSnapshot()`).
+  // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
+  // consistent state.
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
-      std::shared_ptr<const Index> index,
-      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      std::shared_ptr<IndexAndViews> indexAndViews,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -314,19 +313,15 @@ class Qlever {
   // under a single read lock, so that all code paths handling a single request
   // observe a matching pair even if a concurrent rebuild swaps the pointers
   // between two reads.
-  IndexAndViews indexAndViewsSnapshot() const {
+  std::shared_ptr<IndexAndViews> indexAndViewsSnapshot() const {
     return *indexAndViews_.rlock();
   }
 
-  // Atomically swap in a freshly built `Index` and `MaterializedViewsManager`.
-  // Old instances stay alive as long as some `shared_ptr` (e.g. obtained via
-  // `indexAndViewsSnapshot()`) still references them.
-  void swapIndexAndViews(
-      std::shared_ptr<Index> index,
-      std::shared_ptr<MaterializedViewsManager> materializedViewsManager) {
-    auto lock = indexAndViews_.wlock();
-    lock->index_ = std::move(index);
-    lock->materializedViewsManager_ = std::move(materializedViewsManager);
+  // Atomically swap in a freshly built `IndexAndViews`. The old instance stays
+  // alive as long as some `shared_ptr` (e.g. obtained via
+  // `indexAndViewsSnapshot()`) still references it.
+  void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
   // Low-level access to the QLever API, use with care. NOTE: The `Index&`
@@ -334,10 +329,12 @@ class Qlever {
   // on to it across a potential index rebuild. Use `sharedIndex()` or
   // `indexAndViewsSnapshot()` if you need a stable handle.
   std::shared_ptr<const Index> sharedIndex() const {
-    return indexAndViews_.rlock()->index_;
+    auto snapshot = *indexAndViews_.rlock();
+    const Index* index = &snapshot->index_;
+    return {std::move(snapshot), index};
   }
-  Index& index() { return *indexAndViews_.rlock()->index_; }
-  const Index& index() const { return *indexAndViews_.rlock()->index_; }
+  Index& index() { return (*indexAndViews_.rlock())->index_; }
+  const Index& index() const { return (*indexAndViews_.rlock())->index_; }
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
@@ -358,7 +355,9 @@ class Qlever {
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
 
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return indexAndViews_.rlock()->materializedViewsManager_;
+    auto snapshot = *indexAndViews_.rlock();
+    MaterializedViewsManager* manager = &snapshot->materializedViewsManager_;
+    return {std::move(snapshot), manager};
   }
 };
 }  // namespace qlever
