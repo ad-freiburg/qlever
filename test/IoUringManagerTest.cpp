@@ -15,40 +15,89 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
 
 namespace {
 
-// Helper: write `content` to a temporary file and return the path to the
-// temporary file.
+// Writes `content` to a temporary file (named after the currently running
+// gtest, so different test cases never collide) and keeps it open for reading.
+// `fd()` exposes the file descriptor; the file is removed from disk on
+// destruction. Use `makeTempFile` below to get the file and its fd in one step.
 class TempFile {
  public:
-  explicit TempFile(const std::string& content)
+  explicit TempFile(std::string_view content)
       : path_(absl::StrCat(gtestCurrentTestName(), ".tmp")) {
-    FILE* file = std::fopen(path_.c_str(), "wb");
-    EXPECT_NE(file, nullptr);
-    std::fwrite(content.data(), 1, content.size(), file);
-    std::fclose(file);
+    ad_utility::File{path_, "wb"}.write(content.data(), content.size());
+    readFile_ = ad_utility::File{path_, "rb"};
   }
-  ~TempFile() { std::remove(path_.c_str()); }
-  const std::string& path() const { return path_; }
+  // Movable (so a factory can return it by value). The moved-from object's
+  // `path_` is cleared so that only the live object removes the file.
+  TempFile(TempFile&& other) noexcept
+      : path_(std::exchange(other.path_, {})),
+        readFile_(std::move(other.readFile_)) {}
+  ~TempFile() {
+    if (!path_.empty()) {
+      std::remove(path_.c_str());
+    }
+  }
+  int fd() const { return readFile_.fd(); }
 
  private:
   std::string path_;
+  ad_utility::File readFile_;
 };
 
-// Open a `TempFile` and return its `fd` (caller must fclose after he is done
-// reading).
-static FILE* openFile(const TempFile& tmp) {
-  FILE* file = std::fopen(tmp.path().c_str(), "rb");
-  EXPECT_NE(file, nullptr);
-  return file;
+// Create a temporary file holding `content` and return it together with its
+// file descriptor: `auto [tmp, fd] = makeTempFile(content);`. The returned
+// `tmp` must be kept alive for as long as `fd` is used.
+std::pair<TempFile, int> makeTempFile(std::string_view content) {
+  TempFile tmp{content};
+  int fd = tmp.fd();
+  return {std::move(tmp), fd};
 }
+
+// Test helper that accumulates a batch of read requests and owns their target
+// buffers, so the parallel numBytes / offsets / buffer-pointer spans that
+// `addBatch` expects are built with a single `add(offset, numBytes)` call per
+// read. After the batch has completed, `result(i)` returns the bytes that read
+// `i` produced.
+class ReadBatchForTesting {
+ public:
+  // Add a read of `numBytes` bytes at `offset`; returns the read's index.
+  size_t add(uint64_t offset, size_t numBytes) {
+    offsets_.push_back(offset);
+    numBytes_.push_back(numBytes);
+    targetBuffers_.emplace_back(numBytes);
+    pointers_.push_back(targetBuffers_.back().data());
+    return targetBuffers_.size() - 1;
+  }
+
+  // Submit all accumulated reads to `manager` for file `fd`; returns the
+  // handle.
+  template <typename Manager>
+  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
+    return manager.addBatch(fd, numBytes_, offsets_, pointers_);
+  }
+
+  // The bytes read by read `i` (valid once the batch has completed).
+  std::string_view result(size_t i) const {
+    return {targetBuffers_.at(i).data(), targetBuffers_.at(i).size()};
+  }
+
+ private:
+  std::vector<size_t> numBytes_;
+  std::vector<uint64_t> offsets_;
+  std::vector<std::vector<char>> targetBuffers_;
+  std::vector<char*> pointers_;
+};
 
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
 // concrete I/O policy. When io_uring is present the tests run against both the
@@ -73,72 +122,47 @@ TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
 // The non-sequential offsets in `fileOffsets` (8, 0, 12) also cover
 // order-independence of reads within a batch.
 TYPED_TEST(IoUringManagerTest, SingleBatch) {
-  // TODO<ms2144> I think this might be duplication that can be factored out
-  //  here
-  std::string fileContent = "AAAABBBBCCCCDDDD";
-  TempFile tmp(fileContent);
-  FILE* file = openFile(tmp);
-  int fd = fileno(file);
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
-  std::vector<size_t> numBytesToRead{4, 4, 4};
-  std::vector<uint64_t> fileOffsets{8, 0, 12};
-  std::vector<char> targetBuffersForBatch0(4);
-  std::vector<char> targetBuffersForBatch1(4);
-  std::vector<char> targetBuffersForBatch2(4);
-  std::vector<char*> ptrsToTargetBuffers{targetBuffersForBatch0.data(),
-                                         targetBuffersForBatch1.data(),
-                                         targetBuffersForBatch2.data()};
+  ReadBatchForTesting batch;
+  batch.add(8, 4);
+  batch.add(0, 4);
+  batch.add(12, 4);
 
-  TypeParam IOManager(64);
-  auto batchHandle =
-      IOManager.addBatch(fd, numBytesToRead, fileOffsets, ptrsToTargetBuffers);
-  IOManager.wait(batchHandle);
-  std::fclose(file);
+  TypeParam manager(64);
+  manager.wait(batch.submitTo(manager, fd));
 
-  EXPECT_EQ(std::string(targetBuffersForBatch0.data(), 4), "CCCC");
-  EXPECT_EQ(std::string(targetBuffersForBatch1.data(), 4), "AAAA");
-  EXPECT_EQ(std::string(targetBuffersForBatch2.data(), 4), "DDDD");
+  EXPECT_EQ(batch.result(0), "CCCC");
+  EXPECT_EQ(batch.result(1), "AAAA");
+  EXPECT_EQ(batch.result(2), "DDDD");
 }
 
-// Edge case: a batch with no reads is valid and a no-op. `addBatch()` with
-// empty spans returns a handle that `wait()` must accept without blocking or
-// throwing. Note the file descriptor is `-1`: with zero read requests the file
-// descriptor is never touched, so an empty batch
-// TODO<ms2144>: Throw for an invalid file descriptor, irrespective of the fact
-// that the batch is empty.
+// Throw for an invalid file descriptor, irrespective of the fact that the batch
+// is empty.
 TYPED_TEST(IoUringManagerTest, EmptyBatch) {
-  TypeParam IoManager(64);
-  auto batchHandle = IoManager.addBatch(-1, {}, {}, {});
-  // Should not block or throw.
-  IoManager.wait(batchHandle);
+  TypeParam manager(64);
+  ReadBatchForTesting batch;  // no reads
+  EXPECT_THROW(manager.wait(batch.submitTo(manager, -1)),
+               ad_utility::Exception);
 }
 
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
 TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
-  std::string content = "AAAABBBBCCCCDDDDEEEEFFFFGGGG";
-  TempFile tmp(content);
-  FILE* f = openFile(tmp);
-  int fd = fileno(f);
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDDEEEEFFFFGGGG");
 
-  TypeParam IOManager(64);
+  TypeParam manager(64);
 
-  auto makeAndWait = [&](uint64_t fileOffset, size_t numBytesToRead,
-                         const std::string& expected) {
-    std::vector<char> targetBuffer(numBytesToRead);
-    std::vector<size_t> sizes{numBytesToRead};
-    std::vector<uint64_t> fileOffsets{fileOffset};
-    std::vector<char*> bufferPointers{targetBuffer.data()};
-    auto batchHandle =
-        IOManager.addBatch(fd, sizes, fileOffsets, bufferPointers);
-    IOManager.wait(batchHandle);
-    EXPECT_EQ(std::string(targetBuffer.data(), numBytesToRead), expected);
+  auto makeAndWait = [&](uint64_t offset, size_t numBytes,
+                         std::string_view expected) {
+    ReadBatchForTesting batch;
+    batch.add(offset, numBytes);
+    manager.wait(batch.submitTo(manager, fd));
+    EXPECT_EQ(batch.result(0), expected);
   };
 
   makeAndWait(0, 4, "AAAA");
   makeAndWait(4, 4, "BBBB");
   makeAndWait(8, 4, "CCCC");
-
-  std::fclose(f);
 }
 
 // Verify that batch handles can be waited on out of submission order: batches A
@@ -147,34 +171,23 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
 // resolve its own batch's read correctly, so the wait order is independent of
 // the submission order.
 TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
-  // TODO<ms2144> factor out this file setup
-  std::string content = "AAAABBBB";
-  TempFile tmp(content);
-  FILE* file = openFile(tmp);
-  int fd = fileno(file);
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
 
-  TypeParam IOManager(64);
+  TypeParam manager(64);
 
-  std::vector<char> targetBuffersA(4);
-  std::vector<char> targetBuffersB(4);
-  std::vector<size_t> numBytesToReadA{4};
-  std::vector<size_t> numBytesToReadB{4};
-  std::vector<uint64_t> fileOffsetsA{0};
-  std::vector<uint64_t> fileOffsetsB{4};
-  std::vector<char*> ptrsToTargetBuffersA{targetBuffersA.data()};
-  std::vector<char*> ptrsToTargetBuffersB{targetBuffersB.data()};
+  ReadBatchForTesting batchA;
+  batchA.add(0, 4);
+  ReadBatchForTesting batchB;
+  batchB.add(4, 4);
 
-  auto batchHandleA = IOManager.addBatch(fd, numBytesToReadA, fileOffsetsA,
-                                         ptrsToTargetBuffersA);
-  auto batchHandleB = IOManager.addBatch(fd, numBytesToReadB, fileOffsetsB,
-                                         ptrsToTargetBuffersB);
+  auto handleA = batchA.submitTo(manager, fd);
+  auto handleB = batchB.submitTo(manager, fd);
 
-  IOManager.wait(batchHandleB);
-  IOManager.wait(batchHandleA);
-  std::fclose(file);
+  manager.wait(handleB);
+  manager.wait(handleA);
 
-  EXPECT_EQ(std::string(targetBuffersA.data(), 4), "AAAA");
-  EXPECT_EQ(std::string(targetBuffersB.data(), 4), "BBBB");
+  EXPECT_EQ(batchA.result(0), "AAAA");
+  EXPECT_EQ(batchB.result(0), "BBBB");
 }
 
 // A single `addBatch` call requesting more reads (400) than the submission ring
@@ -195,30 +208,19 @@ TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
     char c = static_cast<char>('A' + (i % 26));
     std::memset(&content[i * CHUNK], c, CHUNK);
   }
-  TempFile tmp(content);
-  FILE* f = openFile(tmp);
-  int fd = fileno(f);
+  auto [tmp, fd] = makeTempFile(content);
 
-  std::vector<size_t> numBytesToRead(N, CHUNK);
-  std::vector<uint64_t> fileOffsets(N);
-  std::vector<std::vector<char>> targetBuffers(N, std::vector<char>(CHUNK));
-  std::vector<char*> ptrsToTargetBuffers(N);
+  ReadBatchForTesting batch;
   for (size_t i = 0; i < N; ++i) {
-    fileOffsets[i] = static_cast<uint64_t>(i * CHUNK);
-    ptrsToTargetBuffers[i] = targetBuffers[i].data();
+    batch.add(static_cast<uint64_t>(i * CHUNK), CHUNK);
   }
 
-  TypeParam ioManager(64);
-  auto batchHandle =
-      ioManager.addBatch(fd, numBytesToRead, fileOffsets, ptrsToTargetBuffers);
-  ioManager.wait(batchHandle);
-  std::fclose(f);
+  TypeParam manager(64);
+  manager.wait(batch.submitTo(manager, fd));
 
   for (size_t i = 0; i < N; ++i) {
-    char expected = static_cast<char>('A' + (i % 26));
-    for (size_t j = 0; j < CHUNK; ++j) {
-      ASSERT_EQ(targetBuffers[i][j], expected) << "mismatch at chunk " << i;
-    }
+    std::string expected(CHUNK, static_cast<char>('A' + (i % 26)));
+    ASSERT_EQ(batch.result(i), expected) << "mismatch at chunk " << i;
   }
 }
 
@@ -236,42 +238,32 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   for (size_t i = 0; i < M; ++i) {
     std::memset(&content[i * 4], static_cast<char>('A' + i), 4);
   }
-  // TODO<ms2144> factor out file setup
-  TempFile tmp(content);
-  FILE* file = openFile(tmp);
-  int fd = fileno(file);
+  auto [tmp, fd] = makeTempFile(content);
 
-  TypeParam IOManager(64);
+  TypeParam manager(64);
 
-  // One target buffer and one handle per batch, so every batch's result and
-  // completion can be checked independently.
-  std::vector<std::vector<char>> targetBuffersPerBatch(M, std::vector<char>(4));
+  // One batch (with one read each) and one handle per batch, so every batch's
+  // result and completion can be checked independently.
+  std::vector<ReadBatchForTesting> batches(M);
   std::vector<typename TypeParam::BatchHandle> batchHandles(M);
 
   // Submit all M batches (one read each) before waiting on any of them, so they
-  // are outstanding concurrently. Batch i reads chunk i (offset i*4) into
-  // targetBuffersPerBatch[i].
+  // are outstanding concurrently. Batch i reads chunk i (offset i*4).
   for (size_t i = 0; i < M; ++i) {
-    std::vector<size_t> numBytesToRead{4};
-    std::vector<uint64_t> fileOffsets{static_cast<uint64_t>(i * 4)};
-    std::vector<char*> ptrsToTargetBuffers{targetBuffersPerBatch[i].data()};
-    batchHandles[i] = IOManager.addBatch(fd, numBytesToRead, fileOffsets,
-                                         ptrsToTargetBuffers);
+    batches[i].add(static_cast<uint64_t>(i * 4), 4);
+    batchHandles[i] = batches[i].submitTo(manager, fd);
   }
   // Only now wait on each handle. Each wait must block until that batch's own
   // read has completed, regardless of the order the kernel posted completions.
   for (size_t i = 0; i < M; ++i) {
-    IOManager.wait(batchHandles[i]);
+    manager.wait(batchHandles[i]);
   }
-  std::fclose(file);
 
-  // Each batch's read must have landed in its own buffer:
-  // targetBuffersPerBatch[i] holds 'A'+i. A completion routed to the wrong
-  // buffer shows up as a mismatch here.
+  // Each batch's read must have landed in its own buffer: batch i holds 'A'+i.
+  // A completion routed to the wrong buffer shows up as a mismatch here.
   for (size_t i = 0; i < M; ++i) {
-    char expected = static_cast<char>('A' + i);
-    EXPECT_EQ(targetBuffersPerBatch[i][0], expected)
-        << "mismatch at batch " << i;
+    std::string expected(4, static_cast<char>('A' + i));
+    EXPECT_EQ(batches[i].result(0), expected) << "mismatch at batch " << i;
   }
 }
 
@@ -280,18 +272,10 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 // throws in `wait` (the error surfaces as a completion). Both calls sit in one
 // EXPECT_THROW block so the test passes regardless of which one throws.
 TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
-  TypeParam IOManager(64);
-  std::vector<char> targetBuffers(4);
-  std::vector<size_t> numBytesToRead{4};
-  std::vector<uint64_t> fileOffsets{0};
-  std::vector<char*> ptrsToTargetBuffers{targetBuffers.data()};
-  EXPECT_THROW(
-      {
-        auto batchHandle = IOManager.addBatch(-1, numBytesToRead, fileOffsets,
-                                              ptrsToTargetBuffers);
-        IOManager.wait(batchHandle);
-      },
-      std::runtime_error);
+  TypeParam manager(64);
+  ReadBatchForTesting batch;
+  batch.add(0, 4);
+  EXPECT_THROW(manager.wait(batch.submitTo(manager, -1)), std::runtime_error);
 }
 
 // Request more bytes than the file contains, i.e. read past EOF. A read that
@@ -299,37 +283,19 @@ TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
 // an error (`std::runtime_error`). `SyncIoPolicy` throws in `addBatch`,
 // `IoUringPolicy` in `wait`, so both calls sit in one `EXPECT_THROW` block.
 TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
-  std::string content = "AAAABBBB";  // 8 bytes
-  TempFile tmp(content);
-  FILE* file = openFile(tmp);
-  int fd = fileno(file);
+  auto [tmp, fd] = makeTempFile("AAAABBBB");  // 8 bytes
 
-  TypeParam ioManager(64);
-  std::vector<char> targetBuffer(16, '\0');
-  std::vector<size_t> numBytesToRead{16};  // request more than the 8 available
-  std::vector<uint64_t> fileOffsets{0};
-  std::vector<char*> ptrsToTargetBuffers{targetBuffer.data()};
+  TypeParam manager(64);
+  ReadBatchForTesting batch;
+  batch.add(0, 16);  // request more than the 8 available
 
-  EXPECT_THROW(
-      {
-        auto batchHandle = ioManager.addBatch(fd, numBytesToRead, fileOffsets,
-                                              ptrsToTargetBuffers);
-        ioManager.wait(batchHandle);
-      },
-      ad_utility::Exception);
-  std::fclose(file);
+  EXPECT_THROW(manager.wait(batch.submitTo(manager, fd)),
+               ad_utility::Exception);
 }
 
-// TODO<ms2144>: add test cases that test "larger than trivial reads". All
-// reads tested currently are 4 bytes. A multi-KB read (bigger than a page)
-// (TODO: what is a page in this context?) would give real confidence (TODO:
-// why?) that offsets/length are handled at scale, and is the realistic
-// vocabulary lookup size (TODO: is that true?)
 TYPED_TEST(IoUringManagerTest, LargeReads) {
   std::string content = "TODO";  // TODO bytes
-  TempFile tmp(content);
-  FILE* file = openFile(tmp);
-  int fd = fileno(file);
+  auto [tmp, fd] = makeTempFile(content);
 
   TypeParam ioManager(64);
   std::vector<char> targetBuffer(16, '\0');
@@ -351,9 +317,6 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 // dropping a manager (or never calling wait) while completions are outstanding.
 // ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
-
-// Tests for `VocabLookupDataCommonBase` (via the concrete
-// `VocabBatchLookupData`).
 
 // `asResult` exposes the span over the filled views, and the returned aliasing
 // shared_ptr keeps the backing buffer/views alive after the original owning
@@ -432,45 +395,30 @@ TEST(LookupDataCommonBase, PmrAsResultEmpty) {
 
 }  // namespace
 
-// Direct unit tests for the `readFullyOrThrow` helper (the single-read building
-// block that `SyncIoPolicy::addBatch` is built on). `readFullyOrThrow` is a
-// private static member of `SyncIoPolicy`, so these white-box tests are granted
-// access via `FRIEND_TEST` declarations in `IoUringManager.h`. For that
-// friendship to match, the generated test classes must live in the real
-// `ad_utility` namespace (not the file's anonymous namespace), so this block is
-// placed here, after the anonymous namespace is closed. The `TempFile` /
-// `openFile` helpers declared there remain visible for the rest of the file.
 namespace ad_utility {
 
 // A read that is fully satisfied returns the requested bytes from the requested
 // offset.
 TEST(ReadFullyOrThrow, FullReadSucceeds) {
-  TempFile tmp("AAAABBBB");
-  FILE* file = openFile(tmp);
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
   std::vector<char> targetBuffer(4);
-  SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(), 4,
-                                 /*fileOffset=*/4);
-  std::fclose(file);
+  SyncIoPolicy::readFullyOrThrow(fd, targetBuffer.data(), 4, 4);
   EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
 }
 
 // Requesting more bytes than the file contains (read past EOF) is a short read
 // and must throw.
 TEST(ReadFullyOrThrow, ShortReadThrows) {
-  TempFile tmp("AAAABBBB");  // 8 bytes
-  FILE* file = openFile(tmp);
+  auto [tmp, fd] = makeTempFile("AAAABBBB");  // 8 bytes
   std::vector<char> targetBuffer(16);
-  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(),
-                                              16, /*fileOffset=*/0),
+  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(fd, targetBuffer.data(), 16, 0),
                ad_utility::Exception);
-  std::fclose(file);
 }
 
 // Reading from an invalid file descriptor must throw.
 TEST(ReadFullyOrThrow, InvalidFdThrows) {
   std::vector<char> targetBuffer(4);
-  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4,
-                                              /*fileOffset=*/0),
+  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4, 0),
                ad_utility::Exception);
 }
 
