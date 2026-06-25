@@ -119,7 +119,8 @@ void checkIteratorCategory() {
 }  // namespace
 
 TEST(ZipMergeUniqueViewTest, IteratorCategory) {
-  // If both inputs have `forward_iterator`s then the resulting `ZipMergeView`
+  // If both inputs have `forward_iterator`s then the resulting
+  // `ZipMergeUniqueView`
   // also has `forward_iterator`s, otherwise it's only `input_iterator`.
   using ForwardContainer = std::vector<int>;
   using InputContainer =

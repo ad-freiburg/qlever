@@ -37,8 +37,8 @@ TEST(TransparentFunctors, SecondOfPair) {
 
 TEST(TransparentFunctors, MemberProj) {
   using Pair = std::pair<int, std::string>;
-  ad_utility::MemberFieldProj<&Pair::first> first;
-  ad_utility::MemberFieldProj<&Pair::second> second;
+  ad_utility::MemberProj<&Pair::first> first;
+  ad_utility::MemberProj<&Pair::second> second;
 
   {
     Pair p{42, "hello"};
@@ -61,7 +61,7 @@ TEST(TransparentFunctors, MemberProj) {
   {
     using Pair = std::pair<int, int>;
     static constexpr Pair cp{10, 11};
-    static constexpr ad_utility::MemberFieldProj<&Pair::second> second;
+    static constexpr ad_utility::MemberProj<&Pair::second> second;
     static_assert(second(cp) == 11);
   }
 }
