@@ -344,21 +344,73 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 }
 */
 
-// TODO<ms2144>: heterogeneous read sizes within a batch. No test issues reads
-// where the numBytesTOread differs between the individual calls.
+// Heterogeneous read sizes within a batch.
+TYPED_TEST(IoUringManagerTest, differingReadSizes) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
-// TODO<ms2144>: zero-length reads interleaved with non-zero reads in one batch.
+  ReadBatchForTesting batch;
+  batch.add({{8, 1}, {0, 2}, {12, 3}});
+
+  TypeParam manager(64);
+  manager.wait(batch.submitTo(manager, fd));
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("C", "AA", "DDD"));
+}
+
+// Zero-length reads interleaved with non-zero reads in one batch.
+TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  ReadBatchForTesting batch;
+  batch.add({{8, 1}, {0, 0}, {12, 3}});
+
+  TypeParam manager(64);
+  manager.wait(batch.submitTo(manager, fd));
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("C", "", "DDD"));
+}
 
 // TODO<ms2144>: wait() edge cases: wait() on an already completed and erased
 // handle (double wait) -> should be a no-op, wait() on a never issued/bogus
 // handle: currently a silent no-op (erase of absent key), Is that intended?
 
-// TODO<ms2144>: destructor with un-waited, in-flight batches. Nothing tests
-// dropping a manager (or never calling wait) while completions are outstanding.
+// Drop a manager (or never calling wait) while completions are outstanding.
 // ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
+TYPED_TEST(IoUringManagerTest, dropRunningManager) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+
+  TypeParam manager(64);
+  auto handle = batch.submitTo(manager, fd);
+
+  // manager.wait(handle);
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+}
+
+// Wait on `BatchHandle` for which the read call has already been reaped from
+// the completion queue.
 TYPED_TEST(IoUringManagerTest, waitOnNonExistingBatch) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+
+  TypeParam manager(64);
+  auto realHandle = batch.submitTo(manager, fd);
+
+  manager.wait(realHandle);
+  // wait again on the same, already waited on handle.
+  manager.wait(realHandle);
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+}
+
+// Wait on `BatchHandle` for which no actual batch of read calls has been
+// issued.
+TYPED_TEST(IoUringManagerTest, fakeHandle) {
   // create a handle for which no request has been queued.
   ad_utility::IoUringPolicy::BatchHandle fakeHandle = 999;
 
