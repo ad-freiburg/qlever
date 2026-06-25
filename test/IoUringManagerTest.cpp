@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 #include "util/IoUringManager.h"
 
 namespace {
@@ -309,7 +310,7 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
                                               ptrsToTargetBuffers);
         ioManager.wait(batchHandle);
       },
-      std::runtime_error);
+      ad_utility::Exception);
   std::fclose(file);
 }
 
@@ -368,7 +369,7 @@ TEST(ReadFullyOrThrow, ShortReadThrows) {
   std::vector<char> targetBuffer(16);
   EXPECT_THROW(ad_utility::readFullyOrThrow(fileno(file), targetBuffer.data(),
                                             16, /*fileOffset=*/0),
-               std::runtime_error);
+               ad_utility::Exception);
   std::fclose(file);
 }
 
@@ -377,7 +378,7 @@ TEST(ReadFullyOrThrow, InvalidFdThrows) {
   std::vector<char> targetBuffer(4);
   EXPECT_THROW(ad_utility::readFullyOrThrow(-1, targetBuffer.data(), 4,
                                             /*fileOffset=*/0),
-               std::runtime_error);
+               ad_utility::Exception);
 }
 
 // Tests for `LookupDataCommonBase` (via the concrete `VocabBatchLookupData`).
