@@ -8,6 +8,7 @@
 #include <boost/beast/http.hpp>
 #include <optional>
 
+#include "./util/FileTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
@@ -658,4 +659,92 @@ TEST(ServerTest, gspPostCreateNewGraph) {
                         {http::field::content_type, "text/turtle"}},
                        "<a> <b> <c>"),
            IsPostNoCreatedGraph(http::status::ok));
+}
+
+// _____________________________________________________________________________
+// Read a query-event-log file and parse each JSONL line.
+namespace {
+std::vector<json> parseEventLog(const std::filesystem::path& path) {
+  std::vector<json> events;
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    events.push_back(json::parse(line));
+  }
+  return events;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// A successful query writes a `start` event carrying the X-Real-IP client IP
+// and an `end` event with status "ok".
+TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    SimulateHttpRequest simulateHttpRequest{base, path};
+
+    auto request = makePostRequest("/", "application/sparql-query",
+                                   "SELECT * WHERE { ?a ?b ?c }");
+    request.set("X-Real-IP", "10.0.0.5");
+    request.set(http::field::accept, "application/sparql-results+json");
+    EXPECT_THAT(simulateHttpRequest.processRaw(request),
+                StatusIs(http::status::ok));
+  }  // server (hence log) destroyed → queue drained, file closed
+
+  // The TUI byte-slices the timestamp, so every line must begin with
+  // `{"ts-ms":`.
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    EXPECT_THAT(line, ::testing::StartsWith("{\"ts-ms\":"));
+  }
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_GT(start.at("ts-ms").get<int64_t>(), 0);
+  EXPECT_FALSE(start.at("qid").get<std::string>().empty());
+  EXPECT_EQ(start.at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?a ?b ?c }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "ok");
+  // One end per start: same qid, end not before start.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
+  EXPECT_GE(end.at("ts-ms").get<int64_t>(), start.at("ts-ms").get<int64_t>());
+}
+
+// _____________________________________________________________________________
+// A query that fails during planning writes an `end` event with status
+// "failed". It parses (so `start` is written), then planning throws.
+TEST(ServerTest, queryEventLogRecordsFailedStatus) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    SimulateHttpRequest simulateHttpRequest{base, path};
+
+    auto request = makePostRequest(
+        "/", "application/sparql-query",
+        "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
+    simulateHttpRequest.processRaw(request);
+  }
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "failed");
+  // One end per start: same qid.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
 }

@@ -382,7 +382,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
         ValueId tableEntry = r->at(0, ind);
@@ -454,7 +454,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
 
@@ -653,7 +653,7 @@ TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
   auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto resultTable = spatialJoin->computeResult(false);
-  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+  ASSERT_EQ(resultTable.idTableView().numRows(), 1);
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {
