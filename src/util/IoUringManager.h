@@ -116,12 +116,11 @@ class IoUringPolicy {
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain
-  // completion queue entries and free slots in the submission queue. The number
-  // of reads is given by the (equal) span lengths: read `i` reads
-  // `numBytesToRead[i]` bytes from file descriptor `fd`, starting at offset
-  // `offsets[i]` (from the start of the file), into the buffer starting at
-  // `buffers[i]`. The reads are tracked under `handle`, which can be passed to
-  // `wait()` to block until this batch has completed.
+  // completion queue entries and free slots in the submission queue. Read `i`
+  // reads `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
+  // offset `offsets[i]` (from the start of the file), into the buffer starting
+  // at `buffers[i]`. The reads are tracked under `handle`, which can be passed
+  // to `wait()` to block until this batch has completed.
   void addBatch(int fd, ql::span<const size_t> numBytesToRead,
                 ql::span<const uint64_t> offsets, ql::span<char*> buffers,
                 BatchHandle handle);

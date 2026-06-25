@@ -28,10 +28,10 @@ class TempFile {
  public:
   explicit TempFile(const std::string& content)
       : path_("IoUringManagerTest.tmp") {
-    FILE* f = std::fopen(path_.c_str(), "wb");
-    EXPECT_NE(f, nullptr);
-    std::fwrite(content.data(), 1, content.size(), f);
-    std::fclose(f);
+    FILE* file = std::fopen(path_.c_str(), "wb");
+    EXPECT_NE(file, nullptr);
+    std::fwrite(content.data(), 1, content.size(), file);
+    std::fclose(file);
   }
   ~TempFile() { std::remove(path_.c_str()); }
   const std::string& path() const { return path_; }
@@ -43,15 +43,15 @@ class TempFile {
 // Open a `TempFile` and return its `fd` (caller must fclose after he is done
 // reading).
 static FILE* openFile(const TempFile& tmp) {
-  FILE* f = std::fopen(tmp.path().c_str(), "rb");
-  EXPECT_NE(f, nullptr);
-  return f;
+  FILE* file = std::fopen(tmp.path().c_str(), "rb");
+  EXPECT_NE(file, nullptr);
+  return file;
 }
 
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
 // concrete I/O policy. When io_uring is present the tests run against both the
 // `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present,
-// they run against `SyncIoPolicy` only.
+// the tests run against `SyncIoPolicy` only.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {};
 
@@ -71,6 +71,8 @@ TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
 // The non-sequential offsets in `fileOffsets` (8, 0, 12) also cover
 // order-independence of reads within a batch.
 TYPED_TEST(IoUringManagerTest, SingleBatch) {
+  // TODO<ms2144> I think this might be duplication that can be factored out
+  //  here
   std::string fileContent = "AAAABBBBCCCCDDDD";
   TempFile tmp(fileContent);
   FILE* file = openFile(tmp);
@@ -143,6 +145,7 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
 // resolve its own batch's read correctly, so the wait order is independent of
 // the submission order.
 TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
+  // TODO<ms2144> factor out this file setup
   std::string content = "AAAABBBB";
   TempFile tmp(content);
   FILE* file = openFile(tmp);
@@ -231,6 +234,7 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   for (size_t i = 0; i < M; ++i) {
     std::memset(&content[i * 4], static_cast<char>('A' + i), 4);
   }
+  // TODO<ms2144> factor out file setup
   TempFile tmp(content);
   FILE* file = openFile(tmp);
   int fd = fileno(file);
@@ -408,6 +412,53 @@ TEST(LookupDataCommonBase, AsResultExposesViewsAndKeepsDataAlive) {
 TEST(LookupDataCommonBase, AsResultEmpty) {
   auto data = std::make_shared<VocabBatchLookupData>();
   VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
+  EXPECT_TRUE(result->empty());
+}
+
+// Tests for `PmrVocabBatchLookupData`: the `monotonic_buffer_resource` backing
+// used when words are produced incrementally with sizes not known up front
+// (e.g. decompressing one word at a time in `CompressedVocabulary`). Each word
+// gets a pointer-stable allocation, so appending a later (differently sized)
+// word never invalidates an earlier `string_view`, unlike the single growing
+// buffer of `VocabBatchLookupData`, which would reallocate and leave the
+// already-recorded views dangling.
+TEST(LookupDataCommonBase, PmrAsResultPointerStableAcrossAppends) {
+  auto data = std::make_shared<PmrVocabBatchLookupData>();
+  data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>();
+  auto* resource = data->buffer().get();
+
+  // Allocate each word separately from the monotonic resource and record a view
+  // into it. Because the allocations are pointer-stable, the first view stays
+  // valid after the second word is appended.
+  auto appendWord = [&](std::string_view word) {
+    char* p = static_cast<char*>(resource->allocate(word.size()));
+    std::memcpy(p, word.data(), word.size());
+    data->views().emplace_back(p, word.size());
+  };
+  appendWord("foo");
+  std::string_view firstView = data->views().front();
+  appendWord("barbaz");
+  // Appending the second word did not invalidate the first view.
+  EXPECT_EQ(firstView, "foo");
+
+  VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
+  ASSERT_EQ(result->size(), 2u);
+  EXPECT_EQ((*result)[0], "foo");
+  EXPECT_EQ((*result)[1], "barbaz");
+
+  // The aliasing shared_ptr keeps the resource (and thus its allocations)
+  // alive.
+  data.reset();
+  EXPECT_EQ((*result)[0], "foo");
+  EXPECT_EQ((*result)[1], "barbaz");
+}
+
+// An empty pmr lookup result is valid: no views, empty span (matches the
+// `VocabBatchLookupData` `AsResultEmpty` case).
+TEST(LookupDataCommonBase, PmrAsResultEmpty) {
+  auto data = std::make_shared<PmrVocabBatchLookupData>();
+  data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>();
+  VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
 }
 
