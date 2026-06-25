@@ -8,6 +8,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -18,6 +19,7 @@
 
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
 
 namespace {
@@ -27,7 +29,7 @@ namespace {
 class TempFile {
  public:
   explicit TempFile(const std::string& content)
-      : path_("IoUringManagerTest.tmp") {
+      : path_(absl::StrCat(gtestCurrentTestName(), ".tmp")) {
     FILE* file = std::fopen(path_.c_str(), "wb");
     EXPECT_NE(file, nullptr);
     std::fwrite(content.data(), 1, content.size(), file);
