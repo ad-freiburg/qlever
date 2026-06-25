@@ -111,7 +111,8 @@ struct SyncIoPolicy {
   // `addBatch` returns).
   void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
                 ql::span<const uint64_t> fileOffsetPerRequest,
-                ql::span<char*> targetBufferPerRequest, BatchHandle handle);
+                ql::span<char*> targetBufferPerRequest,
+                BatchHandle handle) const;
 
   // No-op: `addBatch` already completed all reads synchronously.
   void wait(BatchHandle) {}
@@ -122,7 +123,7 @@ struct SyncIoPolicy {
   // read fails or returns fewer bytes than requested (a partial read or end of
   // file), since every read must be fully satisfied.
   void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                        uint64_t fileOffset);
+                        uint64_t fileOffset) const;
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to

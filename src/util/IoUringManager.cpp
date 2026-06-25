@@ -20,7 +20,7 @@ namespace ad_utility {
 
 //______________________________________________________________________________
 void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                                    uint64_t fileOffset) {
+                                    uint64_t fileOffset) const {
   // `pread` reads up to `numBytes` bytes from file descriptor `fd` at offset
   // `fileOffset` (from the start of the file) into `targetBuffer`. The file
   // offset is not changed. On success, it returns the number of bytes read (0
@@ -44,7 +44,7 @@ void SyncIoPolicy::addBatch(int fd,
                             ql::span<const size_t> numBytesToReadPerRequest,
                             ql::span<const uint64_t> fileOffsetPerRequest,
                             ql::span<char*> targetBufferPerRequest,
-                            BatchHandle /*handle*/) {
+                            BatchHandle /*handle*/) const {
   for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
     SyncIoPolicy::readFullyOrThrow(fd, targetBufferPerRequest[i],
                                    numBytesToReadPerRequest[i],
