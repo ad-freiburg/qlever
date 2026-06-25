@@ -4,6 +4,8 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include <chrono>
 
 namespace sparqlExpression {
 namespace detail {
@@ -39,6 +41,154 @@ NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
 // Addition and subtraction, currently all results are converted to double.
 using Add = MakeNumericExpression<std::plus<>>;
 NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
+
+//oldgetNumericBatch impl
+// std::vector<NumericValue> getNumericBatch(
+//     std::span<const ValueId> ids,
+//     const EvaluationContext* context) {
+//   NumericValueGetter getter;
+
+//   std::vector<NumericValue> result;
+//   result.reserve(ids.size());
+
+//   for (const auto& id : ids) {
+//     result.push_back(getter(id, context));
+//   }
+
+//   return result;
+// }
+
+//new getNumericBatch direct impl
+std::vector<NumericValue> getNumericBatch(
+    std::span<const ValueId> ids,
+    const sparqlExpression::EvaluationContext* context) {
+  (void)context;
+
+  std::vector<NumericValue> result;
+  result.reserve(ids.size());
+
+  for (const auto& id : ids) {
+    switch (id.getDatatype()) {
+      case Datatype::Double:
+        result.push_back(id.getDouble());
+        break;
+      case Datatype::Int:
+        result.push_back(id.getInt());
+        break;
+      case Datatype::Bool:
+        result.push_back(static_cast<int64_t>(id.getBool()));
+        break;
+      default:
+        result.push_back(NotNumeric{});
+        break;
+    }
+  }
+
+  return result;
+}
+
+//batch addition impl
+class BatchedAddExpression : public SparqlExpression {
+ public:
+  using Children = std::array<SparqlExpression::Ptr, 2>;
+
+ private:
+  Children children_;
+
+ public:
+  explicit BatchedAddExpression(Children children)
+      : children_{std::move(children)} {}
+
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    std::cerr << "DEBUG: BatchedAddExpression reached\n";
+
+    using Clock = std::chrono::steady_clock;
+
+    auto ms = [](auto start, auto end) {
+      return std::chrono::duration_cast<std::chrono::microseconds>(
+                end - start)
+          .count();
+    };
+
+    auto t0 = Clock::now();
+
+    auto left = children_[0]->evaluate(context);
+    auto right = children_[1]->evaluate(context);
+
+    auto t1 = Clock::now();
+
+    auto* leftVar = std::get_if<Variable>(&left);
+    auto* rightVar = std::get_if<Variable>(&right);
+
+    if (leftVar != nullptr && rightVar != nullptr) {
+      auto leftIds =
+          sparqlExpression::detail::getIdsFromVariable(*leftVar, context);
+      auto rightIds =
+          sparqlExpression::detail::getIdsFromVariable(*rightVar, context);
+
+      auto t2 = Clock::now();
+
+      std::cerr << "DEBUG: leftIds size = " << leftIds.size() << "\n";
+      std::cerr << "DEBUG: rightIds size = " << rightIds.size() << "\n";
+      AD_CONTRACT_CHECK(leftIds.size() == rightIds.size());
+
+      VectorWithMemoryLimit<ValueId> result{context->_allocator};
+      result.reserve(leftIds.size());
+
+      std::cerr << "DEBUG: Processing " << leftIds.size() << " rows\n";
+
+      auto leftNumericBatch = getNumericBatch(leftIds, context);
+      auto rightNumericBatch = getNumericBatch(rightIds, context);
+
+      auto t3 = Clock::now();
+
+      for (size_t i = 0; i < leftNumericBatch.size(); ++i) {
+        auto leftNumeric = leftNumericBatch[i];
+        auto rightNumeric = rightNumericBatch[i];
+
+        auto added = std::visit(
+            [](const auto& l, const auto& r) -> NumericValue {
+              using L = std::decay_t<decltype(l)>;
+              using R = std::decay_t<decltype(r)>;
+
+              if constexpr (std::is_same_v<L, NotNumeric> ||
+                            std::is_same_v<R, NotNumeric>) {
+                return NotNumeric{};
+              } else {
+                return static_cast<double>(l) + static_cast<double>(r);
+              }
+            },
+            leftNumeric, rightNumeric);
+
+        result.push_back(makeNumericId(added));
+      }
+
+      auto t4 = Clock::now();
+
+      std::cerr << "TIMING child evaluate us = " << ms(t0, t1) << "\n";
+      std::cerr << "TIMING getIds us = " << ms(t1, t2) << "\n";
+      std::cerr << "TIMING getNumericBatch us = " << ms(t2, t3) << "\n";
+      std::cerr << "TIMING addition loop us = " << ms(t3, t4) << "\n";
+
+      return result;
+    }
+
+    std::cerr << "DEBUG: BatchedAddExpression unsupported input types\n";
+    return Id::makeUndefined();
+  }
+
+  [[nodiscard]] std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const override {
+    return absl::StrCat("BatchedAddExpression",
+                        children_[0]->getCacheKey(varColMap),
+                        children_[1]->getCacheKey(varColMap));
+  }
+
+ private:
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
+  }
+};
 
 // _____________________________________________________________________________
 // Subtract.
@@ -442,7 +592,10 @@ using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
 using namespace detail;
 SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2) {
-  return std::make_unique<AddExpression>(std::move(child1), std::move(child2));
+  return std::make_unique<BatchedAddExpression>(
+    BatchedAddExpression::Children{std::move(child1), std::move(child2)});
+  // return std::make_unique<AddExpression>(std::move(child1),
+  //                                        std::move(child2));
 }
 
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
