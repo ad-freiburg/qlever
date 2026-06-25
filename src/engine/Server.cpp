@@ -567,6 +567,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};
     response = createJsonResponse(json, request);
+    parsedHttpRequest.operation_ = None{};
   }
 
   // Ping with or without message.

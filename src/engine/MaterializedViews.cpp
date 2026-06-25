@@ -762,10 +762,19 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
   // file is a temporary file that should normally not exist anymore, but we
   // remove it defensively in case a previous write was interrupted.
   for (const auto* suffix :
-       {".index.spo", ".index.spo.meta", ".viewinfo.json", ".spo-sorter.dat"}) {
-    std::error_code ignoredError;
-    std::filesystem::remove(absl::StrCat(filenameBase, suffix), ignoredError);
+       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+    std::error_code ec;
+    std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    if (ec) {
+      throw std::runtime_error(absl::StrCat(
+          "Failed to delete file '", filenameBase, suffix,
+          "' while deleting materialized view '", name, "': ", ec.message()));
+    }
   }
+  // Best-effort removal of the sorter temp file; it normally doesn't exist.
+  std::error_code ignoredError;
+  std::filesystem::remove(absl::StrCat(filenameBase, ".spo-sorter.dat"),
+                          ignoredError);
 
   // Remove the view from the central views list, freeing its ID for reuse.
   {
