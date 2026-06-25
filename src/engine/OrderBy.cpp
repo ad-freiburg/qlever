@@ -76,7 +76,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       "Sort for COUNT(DISTINCT *)");
 
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->idTableView().clone();
+  IdTable idTable = subRes->cloneIdTable();
 
   size_t width = idTable.numColumns();
 

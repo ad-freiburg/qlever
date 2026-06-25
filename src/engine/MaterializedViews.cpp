@@ -171,7 +171,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, we need to copy it for the
     // necessary modifications (permuting columns).
-    IdTable idTableCopyForPermutation = result->idTableView().clone();
+    IdTable idTableCopyForPermutation = result->cloneIdTable();
     permuteIdTableAndCheckNoLocalVocabEntries(idTableCopyForPermutation);
     std::vector<IdTableStatic<0>> singleIdTable;
     singleIdTable.push_back(std::move(idTableCopyForPermutation));
@@ -215,7 +215,7 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     // TODO<ullingerc> This could be avoided if
     // `CompressedExternalIdTableSorter::pushBlock` would also accept
     // `IdTableView`.
-    IdTable idTableCopyForPermutation = result->idTableView().clone();
+    IdTable idTableCopyForPermutation = result->cloneIdTable();
     processBlock(idTableCopyForPermutation);
   } else {
     // Process lazy result blockwise

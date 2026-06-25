@@ -29,7 +29,7 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 
-  IdTable idTable = childRes->idTableView().clone();
+  IdTable idTable = childRes->cloneIdTable();
 
   // TODO<joka921> Let the SORT class handle this. This requires descending
   // sorting for positive integers though.

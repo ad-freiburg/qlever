@@ -70,10 +70,7 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    // We deliberately use `idTable()` (not `idTableView()`) here: `clone()`
-    // on `IdTableView<0>` produces a different `IdTable` instantiation that
-    // doesn't satisfy `filterIdTable`'s `SimilarTo<Table, IdTable>` constraint.
-    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTableView());
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -117,7 +114,7 @@ Result Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+CPP_template_def(typename Table)(requires IdTableLike<Table>)
     IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
                                   Table&& idTable) const {
   size_t width = idTable.numColumns();
@@ -132,8 +129,8 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH, typename Table)(
-    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+CPP_template_def(int WIDTH,
+                 typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};

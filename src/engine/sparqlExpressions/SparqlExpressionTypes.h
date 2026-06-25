@@ -173,9 +173,9 @@ struct EvaluationContext {
   /// The input of the expression.
   IdTableView<0> _inputTable;
 
-  /// The indices of the actual range of rows in the `_inputTable` on which the
+  /// The indices of the actual range of rows in the _inputTable on which the
   /// expression is evaluated. For BIND expressions this is always [0,
-  /// `_inputTable.size()`) but for GROUP BY evaluation we also need only parts
+  /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
   /// of the input.
   size_t _beginIndex = 0;
   size_t _endIndex = _inputTable.size();
@@ -222,7 +222,7 @@ struct EvaluationContext {
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
-                    const IdTableView<0>& inputTable,
+                    IdTableView<0> inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,

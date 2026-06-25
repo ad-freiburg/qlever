@@ -314,7 +314,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->idTableView().clone();
+  IdTable result = leftRes->cloneIdTable();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
@@ -419,9 +419,9 @@ struct LazyExistsJoinImpl
   static Result::LazyResult toOwnedRange(
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
-      return ad_utility::InputRangeTypeErased{std::array{
-          Result::IdTableVocabPair{IdTable{result->idTableView().clone()},
-                                   result->getCopyOfLocalVocab()}}};
+      return ad_utility::InputRangeTypeErased{
+          std::array{Result::IdTableVocabPair{result->cloneIdTable(),
+                                              result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();
   }

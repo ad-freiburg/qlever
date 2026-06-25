@@ -128,7 +128,7 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
               resultSortedOn(),
               {}};
     }
-    return {childResult->idTableView().clone(), childResult->sortedBy(),
+    return {childResult->cloneIdTable(), childResult->sortedBy(),
             childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {

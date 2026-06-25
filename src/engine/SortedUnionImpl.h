@@ -17,7 +17,7 @@ namespace sortedUnion {
 // Helper struct that has the same layout as `Result::IdTableVocabPair` but
 // doesn't own the data.
 struct Wrapper {
-  IdTableView<0> idTable_;
+  const IdTableView<0>& idTable_;
   const LocalVocab& localVocab_;
 };
 

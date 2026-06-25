@@ -191,8 +191,6 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
-  using MaterializedTable = IdTable;
-
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
   // generator and passed this new `IdTableVocabPair` along with microsecond
@@ -229,6 +227,9 @@ class Result {
   // Const access to the underlying `IdTable`. Throw if this result is not fully
   // materialized.
   const IdTable& idTable() const;
+
+  // Returns a clone of `idTable()` as an owning `IdTable`.
+  IdTable cloneIdTable() const;
 
   // Returns a non-owning view of the materialized `idTable()`. Throw if not
   // fully materialized. The reference is stable for the lifetime of this
@@ -317,7 +318,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const MaterializedTable&)>
+      std::function<void(std::chrono::microseconds, const IdTable&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

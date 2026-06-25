@@ -187,7 +187,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->idTableView().clone();
+  IdTable resultTable = result->cloneIdTable();
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});

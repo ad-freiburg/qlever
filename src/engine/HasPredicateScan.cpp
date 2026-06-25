@@ -268,12 +268,10 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // The `callback` is invoked with a single-value span of the `idTable` if the
   // result is fully materialized, because it expects a range of `IdTable`s.
   // Because of caching we can potentially get a fully materialized result here.
-  auto runOnResult = [&result](auto callback) {
+  auto runOnResult = [&result](auto callback) -> decltype(auto) {
     if (result->isFullyMaterialized()) {
-      // We deliberately use `idTable()` (not `idTableView()`) here:
-      // `ql::span{&table, 1}` requires an owning `IdTable`.
-      const IdTable& table = result->idTable();
-      return std::invoke(callback, ql::span{&table, 1});
+      // TODO<joka921> review this later as a non-trivial change.
+      return std::invoke(callback, ql::span{&result->idTable(), 1});
     }
     auto idTables = result->idTables();
     return std::invoke(

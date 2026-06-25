@@ -224,6 +224,7 @@ class OptionalJoinRange
 template <size_t JOIN_COLUMNS, typename IdTableT>
 IdTableView<JOIN_COLUMNS> toStaticView(
     const IdTableT& idTable, const std::vector<ColumnIndex>& joinColumns) {
+  static_assert(IdTableLike<IdTableT>);
   return idTable.asColumnSubsetView(joinColumns)
       .template asStaticView<JOIN_COLUMNS>();
 }

@@ -26,13 +26,12 @@ void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
 // _____________________________________________________________________________
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
-    const VariableToColumnMap& variableToColumnMap,
-    const IdTableView<0>& inputTable,
+    const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
-      _inputTable{inputTable},
+      _inputTable{std::move(inputTable)},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},

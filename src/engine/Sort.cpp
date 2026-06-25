@@ -94,7 +94,7 @@ Result Sort::computeResult(bool requestLaziness) {
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
     if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(input->idTableView().clone(),
+      return computeResultInMemory(input->cloneIdTable(),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();

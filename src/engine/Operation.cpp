@@ -247,8 +247,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(
-        limitOffset_, [this](std::chrono::microseconds limitTime,
-                             const Result::MaterializedTable& idTable) {
+        limitOffset_,
+        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
           updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
                              limitTime);
         });
@@ -477,7 +477,7 @@ void Operation::storeToNamedResultCache(const Result& result) {
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(result.idTableView().clone()),
+      std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
       result.sortedBy(),
       result.localVocab().clone(),
