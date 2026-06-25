@@ -33,7 +33,7 @@ using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
 using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
-// Common backing for one batch-lookup result, shared by the different
+// Base class for a vocabulary batch-lookup result, shared by the different
 // vocabulary implementations. Owns the materialized string data (`buffer()`,
 // whose concrete type `BufferType` depends on the implementation) and one
 // `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
@@ -86,7 +86,7 @@ class VocabLookupDataCommonBase {
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
-// Backing for a batch-lookup result whose total size is known up front, so all
+// A vocabulary batch-lookup result whose total size is known up front, so all
 // strings can be materialized into a single contiguous `buffer()` in one go
 // (e.g. reading a contiguous byte range from a disk-based vocabulary). Because
 // the `views()` point into that one `std::vector<char>`, the buffer must not be
@@ -95,7 +95,7 @@ class VocabLookupDataCommonBase {
 // instead when words are produced incrementally with unknown sizes.
 struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 
-// Backing for a batch-lookup result when words are produced incrementally with
+// A vocaulbyar batch-lookup result when words are produced incrementally with
 // sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
 // single string buffer as in `VocabBatchLookupData` is unsuitable, as appending
 // would reallocate it and invalidate existing string_view's. Each word is
