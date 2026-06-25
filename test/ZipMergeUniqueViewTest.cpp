@@ -16,13 +16,25 @@
 #include "util/GTestHelpers.h"
 #include "util/views/ZipMergeUniqueView.h"
 
-// Needed for range-v3's range `operator<<` which prints elements with `<<`.
-// Without this, printing `ZipMergeUniqueView<..., std::pair<int,int>>` fails
-// to compile on compilers building in C++17 mode.
-template <typename T, typename U>
-std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
-  return os << '(' << p.first << ", " << p.second << ')';
+// `PrintTo` in the `ad_utility` namespace is found by GTest via ADL and takes
+// priority over range-v3's `view_interface::operator<<` (which requires
+// `operator<<` on the element type). `::testing::PrintToString` already falls
+// back to a hex byte representation for non-streamable types, so no SFINAE
+// machinery is needed here.
+namespace ad_utility {
+template <typename V1, typename V2, typename Compare, typename Projection>
+void PrintTo(const ZipMergeUniqueView<V1, V2, Compare, Projection>& view,
+             std::ostream* os) {
+  *os << '[';
+  bool first = true;
+  for (const auto& elem : view) {
+    if (!first) *os << ',';
+    *os << ::testing::PrintToString(elem);
+    first = false;
+  }
+  *os << ']';
 }
+}  // namespace ad_utility
 
 // Pair of the two container types passed to `ZipMergeUniqueView` for testing
 // different input types. The difference to a normal `std::pair` is that this
