@@ -241,6 +241,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     co_return SessionControl::Continue;
   }
 
+ public:
   // Reads bytes from `requestParser` into `outputBuffer` until the buffer is
   // full or the body is exhausted. Returns the number of bytes written.
   // `need_buffer` (buffer segment full, more data remains) is treated as a
@@ -301,6 +302,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     }(stream, buffer, requestParser, bodyLimit);
   }
 
+ private:
   // Callable passed to the lazy-mode `httpHandler_` as `bodyGetter`. Holds
   // references to the stream state; `operator()` reads the next body chunk
   // (up to `chunkSize_` bytes) into `chunkBuffer_` and returns a `string_view`

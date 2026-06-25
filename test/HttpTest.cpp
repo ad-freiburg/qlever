@@ -587,3 +587,141 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
   }
   server.shutDown();
 }
+
+namespace {
+
+// Minimal stubs to instantiate `HttpServer` solely for accessing its public
+// static helpers `readIntoBuffer` and `materializeBody`. No actual server is
+// constructed.
+struct DummyWsHandler {
+  net::awaitable<void> operator()(const http::request<http::string_body>&,
+                                  tcp::socket) const {
+    co_return;
+  }
+};
+struct DummyHttpHandler {
+  template <typename Send>
+  net::awaitable<void> operator()(http::request<http::string_body>,
+                                  Send&&) const {
+    co_return;
+  }
+};
+using TestServer =
+    HttpServer<BodyReadMode::Eager, DummyHttpHandler, DummyWsHandler>;
+
+// Sets up a local TCP loopback pair. The writer side sends `body` as the body
+// of a POST request; the reader side reads only the request headers and then
+// co_awaits `fn(stream, buffer, parser)`. Everything runs on the calling
+// executor so a single `io_context::run()` drives both sides to completion.
+template <typename Fn>
+net::awaitable<void> withParsedRequest(std::string body, Fn fn) {
+  auto ex = co_await net::this_coro::executor;
+  tcp::acceptor acceptor(ex, {tcp::v4(), 0});
+  const auto port = acceptor.local_endpoint().port();
+
+  // Use a capture-free IIFE to avoid a GCC 11 ICE with capturing coroutine
+  // lambdas defined inside a coroutine.
+  net::co_spawn(
+      ex,
+      [](std::string body, unsigned short port) -> net::awaitable<void> {
+        tcp::socket sock(co_await net::this_coro::executor);
+        co_await sock.async_connect(tcp::endpoint(tcp::v4(), port),
+                                    net::use_awaitable);
+        std::string request = absl::StrCat(
+            "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: ",
+            body.size(), "\r\n\r\n", body);
+        co_await net::async_write(sock, net::buffer(request),
+                                  net::use_awaitable);
+        sock.shutdown(tcp::socket::shutdown_send);
+      }(std::move(body), port),
+      net::detached);
+
+  tcp::socket sock = co_await acceptor.async_accept(net::use_awaitable);
+  beast::tcp_stream stream(std::move(sock));
+  beast::flat_buffer buffer;
+  http::request_parser<http::buffer_body> parser;
+  parser.body_limit(boost::none);
+  co_await http::async_read_header(stream, buffer, parser, net::use_awaitable);
+  co_await fn(stream, buffer, parser);
+}
+
+// Runs `coro` on a fresh `io_context` to exhaustion on the calling thread.
+// Rethrows any exception raised by the coroutine.
+void runCoroutine(net::awaitable<void> coro) {
+  net::io_context ioc;
+  std::exception_ptr eptr;
+  net::co_spawn(ioc.get_executor(), std::move(coro),
+                [&eptr](std::exception_ptr p) { eptr = p; });
+  ioc.run();
+  if (eptr) std::rethrow_exception(eptr);
+}
+
+}  // namespace
+
+// Test `HttpServer::readIntoBuffer` in isolation, covering three cases:
+// body fits in the output buffer (all bytes read); output buffer smaller than
+// the body (exactly `bufferSize` bytes read); body and buffer the same size.
+TYPED_TEST(HttpServerBodyTest, ReadIntoBuffer) {
+  struct Case {
+    std::string body;
+    size_t bufferSize;
+    size_t expectedRead;
+    std::string name;
+  };
+  const std::vector<Case> cases = {
+      {"hello", 100, 5, "bodyFitsInBuffer"},
+      {std::string(200, 'b'), 50, 50, "bufferSmallerThanBody"},
+      {std::string(100, 'c'), 100, 100, "exactFit"},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(c.name);
+    runCoroutine(withParsedRequest(
+        c.body,
+        [expectedBody = c.body.substr(0, c.expectedRead),
+         bufferSize = c.bufferSize, expectedRead = c.expectedRead](
+            beast::tcp_stream& stream, beast::flat_buffer& buffer,
+            http::request_parser<http::buffer_body>& parser)
+            -> net::awaitable<void> {
+          std::vector<char> out(bufferSize, '\0');
+          const size_t n = co_await TestServer::readIntoBuffer(
+              stream, buffer, parser, ql::span<char>{out.data(), bufferSize});
+          EXPECT_EQ(n, expectedRead);
+          EXPECT_EQ((std::string{out.data(), n}), expectedBody);
+        }));
+  }
+}
+
+// Test `HttpServer::materializeBody` in isolation. The internal read chunk is
+// `min(bodyLimit, 4096)` bytes, so a body larger than 4096 bytes forces the
+// loop to iterate more than once. Cases covered: small body (single chunk,
+// body exhausted early); body exactly one chunk; body spanning two chunks
+// (loop iterates twice); body truncated by `bodyLimit`; two full chunks.
+TYPED_TEST(HttpServerBodyTest, MaterializeBody) {
+  struct Case {
+    std::string body;
+    size_t limit;
+    std::string expected;
+    std::string name;
+  };
+  const std::vector<Case> cases = {
+      {"hello", 100, "hello", "smallBody"},
+      {std::string(4096, 'a'), 4096, std::string(4096, 'a'), "exactOneChunk"},
+      {std::string(5000, 'b'), 5000, std::string(5000, 'b'), "loopRequired"},
+      {std::string(5000, 'c'), 3000, std::string(3000, 'c'),
+       "truncatedByLimit"},
+      {std::string(8192, 'd'), 8192, std::string(8192, 'd'), "twoFullChunks"},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(c.name);
+    runCoroutine(withParsedRequest(
+        c.body,
+        [expected = c.expected, limit = c.limit](
+            beast::tcp_stream& stream, beast::flat_buffer& buffer,
+            http::request_parser<http::buffer_body>& parser)
+            -> net::awaitable<void> {
+          auto result = co_await TestServer::materializeBody(stream, buffer,
+                                                             parser, limit);
+          EXPECT_EQ(result, expected);
+        }));
+  }
+}
