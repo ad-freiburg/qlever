@@ -382,10 +382,10 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable& r = resultTable.idTable();
-        ASSERT_LT(0, r.numRows());
-        ASSERT_LT(ind, r.numColumns());
-        ValueId tableEntry = r.at(0, ind);
+        const IdTableView<0>* r = &resultTable.idTableView();
+        ASSERT_LT(0, r->numRows());
+        ASSERT_LT(ind, r->numColumns());
+        ValueId tableEntry = r->at(0, ind);
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
           std::string value =
@@ -454,13 +454,13 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable& r = resultTable.idTable();
-        ASSERT_LT(0, r.numRows());
-        ASSERT_LT(ind, r.numColumns());
+        const IdTableView<0>* r = &resultTable.idTableView();
+        ASSERT_LT(0, r->numRows());
+        ASSERT_LT(ind, r->numColumns());
 
-        auto col = r.getColumn(ind);
+        auto col = r->getColumn(ind);
         std::vector<std::string> columnEntries;
-        columnEntries.reserve(r.numRows());
+        columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
               ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
@@ -653,7 +653,7 @@ TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
   auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto resultTable = spatialJoin->computeResult(false);
-  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+  ASSERT_EQ(resultTable.idTableView().numRows(), 1);
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {

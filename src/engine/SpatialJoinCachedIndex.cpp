@@ -46,7 +46,7 @@ class SpatialJoinCachedIndexImpl {
 // ____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
                                                ColumnIndex col,
-                                               IdTableView<0> restable,
+                                               const IdTableView<0>& restable,
                                                const Index& index)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {

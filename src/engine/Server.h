@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -64,6 +65,10 @@ class Server {
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run();
+
+  // Open `path` and register start/end callbacks on the query registry that
+  // write one JSONL line per query event to it. Call once, after construction.
+  void configureQueryEventLog(const std::filesystem::path& path);
 
   // Get server statistics.
   json composeStatsJson() const;
@@ -237,7 +242,8 @@ class Server {
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk);
+                        TimeLimit timeLimit, bool accessTokenOk,
+                        std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -264,7 +270,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation);
+          const RequestT& request, std::string_view operation,
+          std::string_view clientIp = {});
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
@@ -303,7 +310,8 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
-      getQueryId(const RequestT& request, std::string_view query);
+      getQueryId(const RequestT& request, std::string_view query,
+                 std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing

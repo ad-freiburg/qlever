@@ -370,7 +370,7 @@ class TransitivePathImpl : public TransitivePathBase {
           [toView = std::move(toView),
            columnsToRange = std::move(columnsToRange),
            startSideResult = std::move(startSideResult)]() {
-            const IdTable& idTable = startSideResult->idTable();
+            const IdTableView<0>& idTable = startSideResult->idTableView();
             return TableColumnWithVocab{toView(idTable),
                                         columnsToRange(idTable),
                                         startSideResult->getCopyOfLocalVocab()};

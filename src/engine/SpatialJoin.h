@@ -26,9 +26,9 @@ using SpatialJoinBoundingBoxColumns =
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
-  IdTableView<0> idTableLeft_;
+  const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
-  IdTableView<0> idTableRight_;
+  const IdTableView<0>* const idTableRight_;
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;

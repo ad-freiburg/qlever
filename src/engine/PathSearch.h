@@ -58,7 +58,7 @@ using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
  *
  */
 class BinSearchWrapper {
-  IdTableView<0> table_;
+  const IdTableView<0>& table_;
   size_t startCol_;
   size_t endCol_;
   std::vector<size_t> edgeCols_;

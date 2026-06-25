@@ -1594,7 +1594,7 @@ TEST(SpatialJoin, areaFormat) {
   // product. (Lines which can't be parsed will be ignored (and a warning gets
   // printed) and therefore the cross product of all parsed lines would be
   // smaller then 36)
-  ASSERT_EQ(res->idTable().numRows(), 36);
+  ASSERT_EQ(res->idTableView().numRows(), 36);
 }
 
 // _____________________________________________________________________________
@@ -1688,7 +1688,7 @@ TEST(SpatialJoin, mixedDataSet) {
     // Here we only test, that the distance between GeoPoints and areas gets
     // computed correctly. For this purpose it is sufficient to check the number
     // of rows in the result table
-    ASSERT_EQ(res.idTable().numRows(), nrResultRows);
+    ASSERT_EQ(res.idTableView().numRows(), nrResultRows);
   };
   auto qec = buildMixedAreaPointQEC();
   testDist(qec, 1, 5);
