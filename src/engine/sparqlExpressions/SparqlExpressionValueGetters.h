@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "rdfTypes/EmbeddingVector.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
@@ -421,6 +422,21 @@ struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
       ValueId id, const EvaluationContext*) const;
   std::optional<ad_utility::GeoPointOrWkt> operator()(
       const LiteralOrIri&, const EvaluationContext*) const;
+};
+
+// Value getter for embedding vectors, used by the `embf:distance` expression.
+// It resolves an operand to its decoded `std::vector<float>`, or `std::nullopt`
+// if the operand is not an embedding-vector literal (the caller turns that into
+// a strict query error). The vector literal lives in the regular vocabulary as
+// an ordinary typed literal; for a stored `VocabIndex`/`LocalVocabIndex` the
+// getter fetches the literal string and parses it on demand (mirroring
+// `GeometryInfoValueGetter`'s parse fallback). An inline query vector
+// (`"[…]"^^emb:fp32Vector` written in the query) is parsed directly.
+struct EmbeddingValueGetter : Mixin<EmbeddingValueGetter> {
+  using Value = std::optional<std::vector<float>>;
+  using Mixin<EmbeddingValueGetter>::operator();
+  Value operator()(ValueId id, const EvaluationContext*) const;
+  Value operator()(const LiteralOrIri&, const EvaluationContext*) const;
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object

@@ -22,6 +22,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/EmbeddingExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -256,6 +257,19 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(geoUnaryFuncs.at(functionName));
     } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {
       return createBinary(geoBinaryFuncs.at(functionName));
+    }
+  }
+
+  // Embedding functions.
+  if (checkPrefix(EMBF_PREFIX)) {
+    if (functionName == "distance") {
+      if (argList.size() != 3) {
+        AD_THROW(
+            "embf:distance requires exactly three arguments: the two vectors "
+            "and the embedding-type IRI");
+      }
+      return makeEmbeddingDistanceExpression(
+          std::move(argList[0]), std::move(argList[1]), std::move(argList[2]));
     }
   }
 

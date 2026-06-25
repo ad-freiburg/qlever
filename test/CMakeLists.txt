@@ -180,6 +180,10 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(EmbeddingTypeRegistryTest index)
+
+addLinkAndDiscoverTest(EmbeddingExpressionTest index engine parser)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)

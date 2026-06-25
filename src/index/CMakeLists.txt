@@ -9,5 +9,6 @@ add_library(index
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
+        EmbeddingTypeRegistry.cpp
         CompressedExternalIdTableSorterInstantiations.cpp)
 qlever_target_link_libraries(index util parser vocabulary global)

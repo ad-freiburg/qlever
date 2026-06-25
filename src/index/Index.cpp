@@ -32,6 +32,11 @@ void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
 auto Index::getVocab() const -> const Vocab& { return pimpl_->getVocab(); }
 
 // ____________________________________________________________________________
+const EmbeddingTypeRegistry& Index::getEmbeddingTypeRegistry() const {
+  return pimpl_->getEmbeddingTypeRegistry();
+}
+
+// ____________________________________________________________________________
 auto Index::encodedIriManager() const -> const EncodedIriManager& {
   return pimpl_->encodedIriManager();
 }

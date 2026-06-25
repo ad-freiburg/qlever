@@ -131,6 +131,10 @@ constexpr inline std::string_view CACHED_RESULT_WITH_NAME_PREFIX =
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
+// The embedding expression functions (e.g. `embf:distance`), dispatched by
+// prefix match just like `geof:`.
+constexpr inline std::pair<std::string_view, std::string_view> EMBF_PREFIX = {
+    "embf:", "http://qlever.cs.uni-freiburg.de/embeddings/functions/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
     "math:", "http://www.w3.org/2005/xpath-functions/math#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
@@ -222,6 +226,82 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
                                 string_constants::detail::closeAngle>();
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
+
+// QLever-owned namespace for embedding-related RDF terms (the vector datatype
+// and the embedding-type metadata vocabulary, all flat under prefix `emb:`).
+// Deliberately **not** under `builtin-functions/`: IRIs in that namespace are
+// treated as QLever-internal, and any triple touching one is dropped during
+// index building (see `isQleverInternalTriple` in `IndexImpl.cpp`). That would
+// make the embedding-type declarations invisible to the load-time
+// `EmbeddingTypeRegistry` scan. Terms here are ordinary RDF instead: they
+// survive index building and are visible to queries, like any other input
+// triple.
+//
+// This mirrors GeoSPARQL, which keeps its datatype (`geo:wktLiteral`) and
+// properties (`geo:asWKT`) flat in one namespace and separates only its
+// *functions* (`geof:`). Likewise the query-time embedding expression function
+// lives in a sibling `functions/` namespace (`embf:distance`, see
+// `EMBF_PREFIX`).
+constexpr inline std::string_view QLEVER_EMBEDDINGS_PREFIX_URL =
+    "http://qlever.cs.uni-freiburg.de/embeddings/";
+// Make a full `<...>` IRI in the embeddings namespace from the given suffixes
+// (mirrors `makeQleverInternalIriConst`).
+template <const std::string_view&... suffixes>
+constexpr std::string_view makeEmbeddingIriConst() {
+  using namespace string_constants::detail;
+  return ad_utility::constexprStrCat<openAngle, QLEVER_EMBEDDINGS_PREFIX_URL,
+                                     suffixes..., closeAngle>();
+}
+
+// The datatype IRI for native embedding vectors (`emb:fp32Vector`, IEEE-754
+// binary32). lowerCamelCase per the XSD/GeoSPARQL datatype convention (cf.
+// `geo:wktLiteral`). The MVP supports only `fp32Vector`; further precisions
+// (`emb:fp16Vector`, ...) are future additions.
+namespace string_constants::detail {
+constexpr inline std::string_view embeddings_fp32_vector = "fp32Vector";
+}  // namespace string_constants::detail
+// The bare datatype IRI (no angle brackets), as returned by
+// `Literal::getDatatype()`; used to recognize a vector literal by datatype.
+constexpr inline std::string_view EMBEDDING_FP32_DATATYPE =
+    ad_utility::constexprStrCat<
+        QLEVER_EMBEDDINGS_PREFIX_URL,
+        string_constants::detail::embeddings_fp32_vector>();
+// The serialized suffix of an `fp32Vector` literal, i.e. `"^^<...fp32Vector>`
+// (mirrors `GEO_LITERAL_SUFFIX`).
+static constexpr std::string_view EMBEDDING_FP32_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<string_constants::detail::geo_literal_prefix,
+                                EMBEDDING_FP32_DATATYPE,
+                                string_constants::detail::closeAngle>();
+
+// The embedding-type metadata vocabulary. An embedding node links to its type
+// via `emb:type`; the type IRI carries the metadata properties `emb:hasMetric`,
+// `emb:hasDimension` and `emb:hasPrecision`. The `EmbeddingTypeRegistry` scans
+// these at index load.
+namespace string_constants::detail {
+constexpr inline std::string_view embeddings_type = "type";
+constexpr inline std::string_view embeddings_has_metric = "hasMetric";
+constexpr inline std::string_view embeddings_has_dimension = "hasDimension";
+constexpr inline std::string_view embeddings_has_precision = "hasPrecision";
+}  // namespace string_constants::detail
+// The predicate that links an embedding node to its embedding-type IRI.
+constexpr inline std::string_view EMBEDDING_TYPE_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_type>();
+// The mandatory per-type metadata predicates.
+constexpr inline std::string_view EMBEDDING_HAS_METRIC_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_has_metric>();
+constexpr inline std::string_view EMBEDDING_HAS_DIMENSION_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_has_dimension>();
+constexpr inline std::string_view EMBEDDING_HAS_PRECISION_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_has_precision>();
+// The only supported precision for the MVP (strict); must match the
+// `emb:fp32Vector` datatype of the type's vectors.
+constexpr inline std::string_view EMBEDDING_PRECISION_FP32 = "fp32";
+// The supported `emb:hasMetric` values for the MVP (strict). All four are
+// computed as an exact *distance* (smaller = closer).
+constexpr inline std::string_view EMBEDDING_METRIC_COSINE = "cosine";
+constexpr inline std::string_view EMBEDDING_METRIC_L2 = "l2";
+constexpr inline std::string_view EMBEDDING_METRIC_SQUARED_L2 = "squared-l2";
+constexpr inline std::string_view EMBEDDING_METRIC_DOT_PRODUCT = "dot-product";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";

@@ -13,6 +13,7 @@
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/EmbeddingVector.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
@@ -457,6 +458,46 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
     return litOrIri.toStringRepresentation();
+  }
+  return std::nullopt;
+};
+
+//______________________________________________________________________________
+EmbeddingValueGetter::Value EmbeddingValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case VocabIndex:
+    case LocalVocabIndex: {
+      // The vector literal is an ordinary typed literal in the regular
+      // vocabulary: fetch it and parse it on demand (this minimal build has no
+      // precomputed sidecar; cf. `GeometryInfoValueGetter`).
+      auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return (*this)(lit, context);
+    }
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case GeoPoint:
+    case Undefined:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case EncodedVal:
+      return std::nullopt;
+  }
+  AD_FAIL();
+}
+
+//______________________________________________________________________________
+EmbeddingValueGetter::Value EmbeddingValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == EMBEDDING_FP32_DATATYPE) {
+    return ad_utility::parseFloatVectorArrayBody(
+        asStringViewUnsafe(litOrIri.getContent()));
   }
   return std::nullopt;
 };

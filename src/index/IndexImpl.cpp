@@ -17,6 +17,7 @@
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
@@ -1073,6 +1074,132 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
         onDiskBase + ".update-triples");
     graphNameManager_.setFilenameForPersistingAndReadFromDisk(
         onDiskBase + ".allocated-graphs-state");
+  }
+
+  buildEmbeddingTypeRegistry();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::buildEmbeddingTypeRegistry() {
+  using ad_utility::triple_component::Iri;
+
+  // Nothing to scan if the permutations were not loaded.
+  if (pso_ == nullptr || pos_ == nullptr) {
+    return;
+  }
+
+  auto locatedTriplesState =
+      deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  const LocatedTriplesState& lts = *locatedTriplesState;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  Permutation::ColumnIndicesRef noAdditionalColumns{};
+
+  auto iri = [](std::string_view i) {
+    return TripleComponent{Iri::fromIriref(std::string{i})};
+  };
+
+  // Run a scan with the given (key-order) triple specification and return the
+  // resulting `IdTable` (only the unbound columns, in key order).
+  auto runScan = [&, this](const Permutation& permutation,
+                           ScanSpecificationAsTripleComponent tc) {
+    auto scanSpecification = tc.toScanSpecification(*this);
+    return permutation.scan(
+        permutation.getScanSpecAndBlocks(scanSpecification, lts),
+        noAdditionalColumns, cancellationHandle, lts);
+  };
+
+  // 1. Collect the embedding-type IRIs: the distinct *objects* of `emb:type`.
+  //    In PSO key order (P, S, O) we fix P = emb:type, leaving S (the embedding
+  //    node) and O (the type IRI); the type IRIs are therefore column 1.
+  IdTable typeTriples =
+      runScan(PSO(), ScanSpecificationAsTripleComponent{
+                         iri(EMBEDDING_TYPE_IRI), std::nullopt, std::nullopt});
+  if (typeTriples.empty()) {
+    return;
+  }
+  ad_utility::HashSet<Id> typeIds;
+  for (const auto& row : typeTriples) {
+    typeIds.insert(row[1]);
+  }
+
+  // 2. For each mandatory metadata predicate, scan PSO (key order P, S, O; we
+  //    fix P, leaving S and O) into a `type-IRI -> object` map.
+  auto scanPredicate = [&](std::string_view predicateIri) {
+    ad_utility::HashMap<Id, Id> result;
+    IdTable table =
+        runScan(PSO(), ScanSpecificationAsTripleComponent{
+                           iri(predicateIri), std::nullopt, std::nullopt});
+    for (const auto& row : table) {
+      result.insert_or_assign(row[0], row[1]);
+    }
+    return result;
+  };
+  auto metricMap = scanPredicate(EMBEDDING_HAS_METRIC_IRI);
+  auto dimensionMap = scanPredicate(EMBEDDING_HAS_DIMENSION_IRI);
+  auto precisionMap = scanPredicate(EMBEDDING_HAS_PRECISION_IRI);
+
+  LocalVocab localVocab;
+  auto readStringObject = [&, this](Id id) -> std::string {
+    auto literal = ql::exportIds::idToLiteral(*this, id, localVocab, false);
+    AD_CONTRACT_CHECK(literal.has_value(),
+                      "An embedding-type metadata value was expected to be a "
+                      "string literal");
+    return std::string{asStringViewUnsafe(literal->getContent())};
+  };
+
+  // 3. Assemble and strictly validate each type's metadata.
+  for (Id typeId : typeIds) {
+    std::string typeName{indexToString(typeId.getVocabIndex())};
+    auto require = [&typeName](const ad_utility::HashMap<Id, Id>& map, Id key,
+                               std::string_view field) -> Id {
+      auto it = map.find(key);
+      if (it == map.end()) {
+        throw std::runtime_error{
+            absl::StrCat("The embedding type ", typeName,
+                         " is missing the mandatory field ", field,
+                         ". Every embedding type must declare emb:hasMetric, "
+                         "emb:hasDimension and emb:hasPrecision.")};
+      }
+      return it->second;
+    };
+
+    Id dimensionId = require(dimensionMap, typeId, "emb:hasDimension");
+    if (dimensionId.getDatatype() != Datatype::Int ||
+        dimensionId.getInt() <= 0) {
+      throw std::runtime_error{absl::StrCat(
+          "The embedding type ", typeName,
+          " has an invalid emb:hasDimension; expected a positive integer.")};
+    }
+    auto dimension = static_cast<uint64_t>(dimensionId.getInt());
+
+    std::string metricStr =
+        readStringObject(require(metricMap, typeId, "emb:hasMetric"));
+    auto metric = embeddingMetricFromString(metricStr);
+    if (!metric.has_value()) {
+      throw std::runtime_error{absl::StrCat(
+          "The embedding type ", typeName,
+          " uses the unsupported emb:hasMetric "
+          "\"",
+          metricStr, "\"; the MVP supports \"", EMBEDDING_METRIC_COSINE,
+          "\", \"", EMBEDDING_METRIC_L2, "\", \"", EMBEDDING_METRIC_SQUARED_L2,
+          "\" and \"", EMBEDDING_METRIC_DOT_PRODUCT, "\".")};
+    }
+
+    std::string precision =
+        readStringObject(require(precisionMap, typeId, "emb:hasPrecision"));
+    if (precision != EMBEDDING_PRECISION_FP32) {
+      throw std::runtime_error{absl::StrCat("The embedding type ", typeName,
+                                            " uses the unsupported "
+                                            "emb:hasPrecision \"",
+                                            precision,
+                                            "\"; the MVP only supports \"",
+                                            EMBEDDING_PRECISION_FP32, "\".")};
+    }
+
+    embeddingTypeRegistry_.addType(
+        typeId,
+        EmbeddingTypeConfig{dimension, std::move(precision), metric.value()});
   }
 }
 

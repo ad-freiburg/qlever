@@ -3,6 +3,7 @@
 //  Authors: @DuDaAG,
 //           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "../test/printers/UnitOfMeasurementPrinters.h"
@@ -258,6 +259,56 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfoOrWkt);
+}
+
+// The serialized datatype suffix of an `fp32Vector` literal, used to build test
+// literals.
+constexpr std::string_view kFp32Suffix =
+    "^^<http://qlever.cs.uni-freiburg.de/embeddings/fp32Vector>";
+
+// _____________________________________________________________________________
+TEST(EmbeddingValueGetterTest, OperatorWithVocabIdLocalVocabAndLiteral) {
+  EmbeddingTester t;
+  // A valid `fp32Vector` literal decodes to its float vector — across the
+  // normal vocabulary (parsed on demand), the local vocab, and a literal passed
+  // directly to the getter.
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      absl::StrCat("\"[1, 2, 3]\"", kFp32Suffix),
+      ::testing::Optional(::testing::ElementsAre(1.0f, 2.0f, 3.0f)));
+
+  // Non-embedding values are rejected (the caller turns `nullopt` into a strict
+  // query error).
+  auto noVec = ::testing::Eq(std::nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", noVec);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noVec);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noVec);
+  // A WKT literal is not an embedding either.
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      "\"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      noVec);
+}
+
+// _____________________________________________________________________________
+TEST(EmbeddingValueGetterTest, OperatorWithUnrelatedId) {
+  EmbeddingTester t;
+  auto noVec = ::testing::Eq(std::nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noVec);
+  t.checkFromValueId(ValueId::makeFromBool(true), noVec);
+  t.checkFromValueId(ValueId::makeFromInt(42), noVec);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noVec);
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 2}), noVec);
+}
+
+// _____________________________________________________________________________
+TEST(EmbeddingValueGetterTest, MalformedVectorLiteralIsRejected) {
+  EmbeddingTester t;
+  auto noVec = ::testing::Eq(std::nullopt);
+  // Correct datatype, but the body is not a well-formed, non-empty float array.
+  for (std::string_view body :
+       {"\"[]\"", "\"[1, ]\"", "\"[1, x]\"", "\"abc\""}) {
+    t.checkFromLiteral(absl::StrCat(body, kFp32Suffix), noVec);
+  }
 }
 
 // _____________________________________________________________________________

@@ -23,6 +23,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
+#include "index/EmbeddingTypeRegistry.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/GraphNameManager.h"
@@ -120,6 +121,10 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  // Metadata of the declared embedding types, assembled at index load time by
+  // scanning the `emb:type` declarations (not persisted). See
+  // `buildEmbeddingTypeRegistry`.
+  EmbeddingTypeRegistry embeddingTypeRegistry_;
   EncodedIriManager encodedIriManager_;
   ScoreData scoreData_;
 
@@ -249,6 +254,13 @@ class IndexImpl {
 
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // The embedding-type metadata assembled at load time (see
+  // `buildEmbeddingTypeRegistry`). Empty if the index declares no embedding
+  // types.
+  const EmbeddingTypeRegistry& getEmbeddingTypeRegistry() const {
+    return embeddingTypeRegistry_;
+  }
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
@@ -726,6 +738,14 @@ class IndexImpl {
 
   void writeConfiguration() const;
   void readConfiguration();
+
+  // Scan the loaded permutations for embedding-type declarations and populate
+  // `embeddingTypeRegistry_`, running the strict validation (every type
+  // declares `emb:hasMetric` and a positive `emb:hasDimension`, with a
+  // supported metric). Called at the end of `createFromOnDiskIndex`. Fails
+  // loudly (throws) on an invalid declaration. A no-op if no permutations are
+  // loaded.
+  void buildEmbeddingTypeRegistry();
 
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();

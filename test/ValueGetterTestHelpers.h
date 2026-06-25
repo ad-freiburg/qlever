@@ -217,6 +217,8 @@ class ValueGetterTester {
       " \"someType\"^^<someType>,"
       " <https://example.com/test>,"
       " \"noType\" ,"
+      " \"[1, 2, 3]\""
+      "^^<http://qlever.cs.uni-freiburg.de/embeddings/fp32Vector>,\n"
       " \"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
@@ -307,6 +309,9 @@ using IntValueGetterTester =
 using NumericOrDateValueGetterTester =
     ValueGetterTester<sparqlExpression::detail::NumericOrDateValueGetter,
                       sparqlExpression::detail::NumericOrDateValue>;
+using EmbeddingTester =
+    ValueGetterTester<sparqlExpression::detail::EmbeddingValueGetter,
+                      std::vector<float>>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {

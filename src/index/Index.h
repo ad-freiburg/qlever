@@ -12,6 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/EmbeddingTypeRegistry.h"
 #include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
@@ -108,6 +109,10 @@ class Index {
   using Vocab = RdfsVocabulary;
   const Vocab& getVocab() const;
   const EncodedIriManager& encodedIriManager() const;
+
+  // The embedding-type metadata assembled at index load time (empty if the
+  // index declares no embedding types). Used by the `embf:distance` expression.
+  const EmbeddingTypeRegistry& getEmbeddingTypeRegistry() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
