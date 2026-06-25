@@ -78,8 +78,27 @@ MaterializedViewsManager::ViewsList MaterializedViewsManager::readViewsList()
   if (std::filesystem::exists(filename)) {
     nlohmann::json viewsJson;
     ad_utility::makeIfstream(filename) >> viewsJson;
-    for (const auto& [name, id] : viewsJson.items()) {
-      views.insert({name, id.get<MaterializedViewId>()});
+    if (!viewsJson.is_object()) {
+      throw std::runtime_error{absl::StrCat(
+          "The views list file '", filename,
+          "' is corrupted: expected a JSON object.")};
+    }
+    for (const auto& [name, idJson] : viewsJson.items()) {
+      if (!idJson.is_number_unsigned()) {
+        throw std::runtime_error{absl::StrCat(
+            "The views list file '", filename,
+            "' is corrupted: ID for view '", name,
+            "' is not an unsigned integer.")};
+      }
+      auto id = idJson.get<MaterializedViewId>();
+      if (id > MATERIALIZED_VIEW_MAX_ID) {
+        throw std::runtime_error{absl::StrCat(
+            "The views list file '", filename,
+            "' is corrupted: ID ", id, " for view '", name,
+            "' exceeds the maximum allowed ID ", MATERIALIZED_VIEW_MAX_ID,
+            ".")};
+      }
+      views.insert({name, id});
     }
   }
   return views;
@@ -448,7 +467,14 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   // Restore the fixed view ID if present (views written before view IDs were
   // introduced do not have one).
   if (viewInfoJson.contains("id")) {
-    viewId_ = viewInfoJson.at("id").get<MaterializedViewId>();
+    auto id = viewInfoJson.at("id").get<MaterializedViewId>();
+    if (id > MATERIALIZED_VIEW_MAX_ID) {
+      throw std::runtime_error{absl::StrCat(
+          "The viewinfo.json for materialized view '", name_,
+          "' is corrupted: ID ", id, " exceeds the maximum allowed ID ",
+          MATERIALIZED_VIEW_MAX_ID, ".")};
+    }
+    viewId_ = id;
   }
 
   // Make variable to column map.
