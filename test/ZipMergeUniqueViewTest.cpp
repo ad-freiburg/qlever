@@ -11,9 +11,7 @@
 
 #include <forward_list>
 #include <ostream>
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "util/GTestHelpers.h"
 #include "util/StringUtils.h"
@@ -29,12 +27,13 @@ namespace ad_utility {
 template <typename V1, typename V2, typename Compare, typename Projection>
 void PrintTo(const ZipMergeUniqueView<V1, V2, Compare, Projection>& view,
              std::ostream* os) {
-  std::vector<std::string> strs;
-  for (const auto& elem : view) {
-    strs.push_back(::testing::PrintToString(elem));
-  }
   *os << '[';
-  lazyStrJoin(os, strs, ",");
+  lazyStrJoin(os,
+              ql::views::transform(ql::ranges::ref_view{view},
+                                   [](const auto& elem) {
+                                     return ::testing::PrintToString(elem);
+                                   }),
+              ",");
   *os << ']';
 }
 }  // namespace ad_utility
