@@ -920,10 +920,6 @@ class IdTable : public IdTableStatic<0> {
   using Base::Base;
 
   IdTable(Base&& b) : Base(std::move(b)) {}
-  IdTable& operator=(Base&& b) {
-    static_cast<Base&>(*this) = std::move(b);
-    return *this;
-  }
 };
 
 /// A constant view into an IdTable that does not own its data
@@ -931,6 +927,21 @@ template <int COLS>
 using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
+
+// Concept that matches any type that is or inherits from any instantiation of
+// `columnBasedIdTable::IdTable` — including `IdTable`, `IdTableStatic<COLS>`,
+// and `IdTableView<COLS>`.
+namespace detail {
+template <typename ValType, int NumCols, typename Storage,
+          columnBasedIdTable::IsView isView>
+std::true_type isIdTableLike(
+    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
+std::false_type isIdTableLike(...);
+}  // namespace detail
+
+template <typename T>
+CPP_concept IdTableLike =
+    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
 
 // Free-function `operator==` to allow comparing `IdTableView` with `IdTable`
 // and vice versa. The member `operator==` is only defined for non-view types.
@@ -953,17 +964,5 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
-
-namespace detail {
-template <typename ValType, int NumCols, typename Storage,
-          columnBasedIdTable::IsView isView>
-std::true_type isIdTableLike(
-    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
-std::false_type isIdTableLike(...);
-}  // namespace detail
-
-template <typename T>
-CPP_concept IdTableLike =
-    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

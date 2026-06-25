@@ -32,7 +32,7 @@ void expectIdsAreConcatenatedTo(
   EvaluationContext context{
       *qec,
       map,
-      idTable.asStaticView<0>(),
+      idTable,
       idTable.getAllocator(),
       localVocab,
       std::move(cancellationHandle),

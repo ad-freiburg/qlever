@@ -230,10 +230,6 @@ void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
 }
 
 // _____________________________________________________________________________
-// _____________________________________________________________________________
-IdTable Result::cloneIdTable() const { return IdTable{idTable().clone()}; }
-
-// _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
     std::function<void(std::chrono::microseconds, const IdTable&)>
@@ -385,6 +381,9 @@ const IdTableView<0>& Result::idTableView() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::get<IdTableSharedLocalVocabPair>(data_).idTableView();
 }
+
+// _____________________________________________________________________________
+IdTable Result::cloneIdTable() const { return IdTable{idTable().clone()}; }
 
 // _____________________________________________________________________________
 Result::LazyResult Result::idTables() const {

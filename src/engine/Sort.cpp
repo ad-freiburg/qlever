@@ -93,14 +93,12 @@ Result Sort::computeResult(bool requestLaziness) {
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(input->cloneIdTable(),
+    const IdTable& inputTable = input->idTable();
+    if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
+      return computeResultInMemory(inputTable.clone(),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      // We deliberately use `idTable()` (not `idTableView()`) here:
-      // `computeResultExternal` requires a `ql::span<const IdTable>`.
-      const IdTable& inputTable = input->idTable();
       ql::span<const IdTable> inputTableSpan{&inputTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),

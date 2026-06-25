@@ -17,7 +17,7 @@ enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 struct ConstructQueryExportContext {
   // idx of row of result table for WHERE-clause
   const size_t resultTableRowIndex_;
-  const IdTableView<0> idTable_;
+  const IdTable& idTable_;
   const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;

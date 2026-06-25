@@ -175,7 +175,7 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   // Owning view wrapper to please gcc 11.
   return {produceTablesLazily(std::move(staticMergedVocab),
                               ad_utility::OwningView{std::move(subResults)} |
-                                  ql::views::transform(&Result::idTableView),
+                                  ql::views::transform(&Result::idTable),
                               getLimitOffset()._offset,
                               getLimitOffset().limitOrDefault()),
           resultSortedOn()};
@@ -299,7 +299,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
       continue;
     }
 
-    const auto& table = result->idTableView();
+    const auto& table = result->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
     if (table.empty()) {
       // Push so the total size will be zero.
@@ -318,8 +318,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
     // divisions are rounded down by default.
     if (limitIfPresent.has_value()) {
       limitIfPresent.value()._limit =
-          limitIfPresent.value()._limit.value() / result->idTableView().size() +
-          1;
+          limitIfPresent.value()._limit.value() / result->idTable().size() + 1;
     }
     subResults.push_back(std::move(result));
   }

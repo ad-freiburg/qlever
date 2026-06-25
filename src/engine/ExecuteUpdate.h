@@ -41,7 +41,7 @@ class ExecuteUpdate {
   // result row. The `Id`s will never be undefined. If (and only if) the input
   // `Id` or the `Id` looked up in the `IdTable` is undefined then
   // `std::nullopt` is returned.
-  static std::optional<Id> resolveVariable(const IdTableView<0>& idTable,
+  static std::optional<Id> resolveVariable(const IdTable& idTable,
                                            const uint64_t& rowIdx,
                                            IdOrVariableIndex idOrVar);
   FRIEND_TEST(ExecuteUpdate, resolveVariable);
@@ -51,8 +51,7 @@ class ExecuteUpdate {
   // consist of only `Id`s.
   static void computeAndAddQuadsForResultRow(
       const std::vector<TransformedTriple>& templates,
-      std::vector<IdTriple<>>& result, const IdTableView<0>& idTable,
-      uint64_t rowIdx);
+      std::vector<IdTriple<>>& result, const IdTable& idTable, uint64_t rowIdx);
   FRIEND_TEST(ExecuteUpdate, computeAndAddQuadsForResultRow);
 
   struct IdTriplesAndLocalVocab {
