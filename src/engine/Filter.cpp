@@ -70,8 +70,10 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result =
-        filterIdTable(subRes->sortedBy(), subRes->idTableView().clone());
+    // We deliberately use `idTable()` (not `idTableView()`) here: `clone()`
+    // on `IdTableView<0>` produces a different `IdTable` instantiation that
+    // doesn't satisfy `filterIdTable`'s `SimilarTo<Table, IdTable>` constraint.
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};

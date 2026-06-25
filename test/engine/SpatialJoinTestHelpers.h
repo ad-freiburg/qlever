@@ -523,11 +523,9 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  static IdTable emptyLeft{0, ad_utility::makeUnlimitedAllocator<Id>()};
-  static IdTable emptyRight{0, ad_utility::makeUnlimitedAllocator<Id>()};
-  PreparedSpatialJoinParams params{emptyLeft.asStaticView<0>(),
+  PreparedSpatialJoinParams params{nullptr,
                                    nullptr,
-                                   emptyRight.asStaticView<0>(),
+                                   nullptr,
                                    nullptr,
                                    0,
                                    0,
