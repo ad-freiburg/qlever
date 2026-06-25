@@ -13,6 +13,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -35,25 +36,17 @@ using namespace ::testing;
 // destruction. Use `makeTempFile` below to get the file and its fd in one step.
 class TempFile {
  public:
-  explicit TempFile(std::string_view content)
-      : path_(absl::StrCat(gtestCurrentTestName(), ".tmp")) {
-    ad_utility::File{path_, "wb"}.write(content.data(), content.size());
-    readFile_ = ad_utility::File{path_, "rb"};
+  explicit TempFile(std::string_view content) {
+    auto path = absl::StrCat(gtestCurrentTestName(), ".tmp");
+    ad_utility::File{path, "wb"}.write(content.data(), content.size());
   }
   // Movable (so a factory can return it by value). The moved-from object's
   // `path_` is cleared so that only the live object removes the file.
-  TempFile(TempFile&& other) noexcept
-      : path_(std::exchange(other.path_, {})),
-        readFile_(std::move(other.readFile_)) {}
-  ~TempFile() {
-    if (!path_.empty()) {
-      std::remove(path_.c_str());
-    }
-  }
+  TempFile(TempFile&& other) noexcept : readFile_(std::move(other.readFile_)) {}
+  ~TempFile() {}
   int fd() const { return readFile_.fd(); }
 
  private:
-  std::string path_;
   ad_utility::File readFile_;
 };
 
@@ -67,38 +60,90 @@ std::pair<TempFile, int> makeTempFile(std::string_view content) {
 }
 
 // Test helper that accumulates a batch of read requests and owns their target
-// buffers, so the parallel numBytes / offsets / buffer-pointer spans that
-// `addBatch` expects are built with a single `add(offset, numBytes)` call per
-// read. After the batch has completed, `result(i)` returns the bytes that read
-// `i` produced.
+// buffers. After the batch has completed, `result()` returns the bytes that
+// each read produced, in request order.
 class ReadBatchForTesting {
  public:
   // Add a read of `numBytes` bytes at `offset`; returns the read's index.
   size_t add(uint64_t offset, size_t numBytes) {
     offsets_.push_back(offset);
     numBytes_.push_back(numBytes);
-    targetBuffers_.emplace_back(numBytes);
-    pointers_.push_back(targetBuffers_.back().data());
+    targetBuffers_.emplace_back(numBytes, '\0');
     return targetBuffers_.size() - 1;
+  }
+
+  // Add several reads at once from a range of `(offset, numBytes)` pairs.
+  void add(ql::span<const std::pair<uint64_t, size_t>> reads) {
+    for (const auto& [offset, numBytes] : reads) {
+      add(offset, numBytes);
+    }
+  }
+
+  // Same, but from a brace list, e.g. `batch.add({{8, 4}, {0, 4}, {12, 4}})`.
+  void add(std::initializer_list<std::pair<uint64_t, size_t>> reads) {
+    for (const auto& [offset, numBytes] : reads) {
+      add(offset, numBytes);
+    }
   }
 
   // Submit all accumulated reads to `manager` for file `fd`; returns the
   // handle.
   template <typename Manager>
   typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    return manager.addBatch(fd, numBytes_, offsets_, pointers_);
+    // Build the buffer pointers here, after all buffers have been added, so the
+    // addresses are stable (no further `add` will reallocate `targetBuffers_`).
+    // `addBatch` copies each address into its read request, so this temporary
+    // vector need not outlive the call.
+    std::vector<char*> pointers;
+    pointers.reserve(targetBuffers_.size());
+    for (auto& buffer : targetBuffers_) {
+      pointers.push_back(buffer.data());
+    }
+    return manager.addBatch(fd, numBytes_, offsets_, pointers);
   }
 
-  // The bytes read by read `i` (valid once the batch has completed).
-  std::string_view result(size_t i) const {
-    return {targetBuffers_.at(i).data(), targetBuffers_.at(i).size()};
-  }
+  // The bytes read by each read, in request order (valid once the batch has
+  // completed).
+  const std::vector<std::string>& result() const { return targetBuffers_; }
 
  private:
   std::vector<size_t> numBytes_;
   std::vector<uint64_t> offsets_;
-  std::vector<std::vector<char>> targetBuffers_;
-  std::vector<char*> pointers_;
+  std::vector<std::string> targetBuffers_;
+};
+
+// Test helper that builds the file content and the matching batch of reads
+// together. `addRead(bytes)` appends `bytes` as the next region of the file,
+// registers a read of that region, and remembers `bytes` as the expected
+// result.
+class SequentialReadScenarioForTesting {
+ public:
+  // Append `bytes` as the next region of the file and register a read for it.
+  void addRead(std::string_view bytes) {
+    batch_.add(content_.size(), bytes.size());  // offset = current end of file
+    expected_.emplace_back(bytes);
+    content_.append(bytes);
+  }
+
+  // The full file content to pass to `makeTempFile`.
+  const std::string& content() const { return content_; }
+
+  // Submit all reads to `manager` for file `fd`; returns the handle.
+  template <typename Manager>
+  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
+    return batch_.submitTo(manager, fd);
+  }
+
+  // The bytes actually read (valid once the batch has completed).
+  const std::vector<std::string>& results() const { return batch_.result(); }
+
+  // The bytes that were written for each read, in request order.
+  const std::vector<std::string>& expected() const { return expected_; }
+
+ private:
+  std::string content_;
+  std::vector<std::string> expected_;
+  ReadBatchForTesting batch_;
 };
 
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
@@ -127,16 +172,12 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
   ReadBatchForTesting batch;
-  batch.add(8, 4);
-  batch.add(0, 4);
-  batch.add(12, 4);
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
 
   TypeParam manager(64);
   manager.wait(batch.submitTo(manager, fd));
 
-  EXPECT_EQ(batch.result(0), "CCCC");
-  EXPECT_EQ(batch.result(1), "AAAA");
-  EXPECT_EQ(batch.result(2), "DDDD");
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
 }
 
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
@@ -150,7 +191,7 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
     ReadBatchForTesting batch;
     batch.add(offset, numBytes);
     manager.wait(batch.submitTo(manager, fd));
-    EXPECT_EQ(batch.result(0), expected);
+    EXPECT_THAT(batch.result(), ::testing::ElementsAre(expected));
   };
 
   makeAndWait(0, 4, "AAAA");
@@ -179,42 +220,35 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   manager.wait(handleB);
   manager.wait(handleA);
 
-  EXPECT_EQ(batchA.result(0), "AAAA");
-  EXPECT_EQ(batchB.result(0), "BBBB");
+  EXPECT_THAT(batchA.result(), ::testing::ElementsAre("AAAA"));
+  EXPECT_THAT(batchB.result(), ::testing::ElementsAre("BBBB"));
 }
 
 // A single `addBatch` call requesting more reads (400) than the submission ring
 // buffer can hold at once (64) forces the manager to submit the SQEs in
 // successive rounds: it fills the ring buffer with as many SQEs as fit, reaps
-// their CQEs, then refills with the next round of until all 400 reads complete.
-// Verify every read still lands in the correct buffer. Each 4-byte chunk holds
-// a distinct repeated character, so a misrouted read is detected as a mismatch.
+// their CQEs, then refills with the next round of SQEs until all 400 reads
+// complete. Verify every read still lands in the correct buffer. Each 4-byte
+// chunk holds a distinct repeated character, so a misrouted read is detected as
+// a mismatch.
 TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
   constexpr size_t N = 400;
-  constexpr size_t CHUNK = 4;
+  constexpr size_t CHUNKSIZE = 4;
 
-  // Builds a file of N 4-byte chunks. Chunk `i` stores the number `i`. Because
-  // every chunk's content equals it's position, a read that lands in the wrong
-  // target buffer yields the wrong number as a result and is detected.
-  std::string content(N * CHUNK, '\0');
+  // Each chunk holds a distinct repeated character, so a read landing in the
+  // wrong buffer is detected as a mismatch. The chunk bytes are written to the
+  // file and reused as the expected result, so the pattern isn't duplicated.
+  SequentialReadScenarioForTesting scenario;
   for (size_t i = 0; i < N; ++i) {
-    char c = static_cast<char>('A' + (i % 26));
-    std::memset(&content[i * CHUNK], c, CHUNK);
-  }
-  auto [tmp, fd] = makeTempFile(content);
-
-  ReadBatchForTesting batch;
-  for (size_t i = 0; i < N; ++i) {
-    batch.add(static_cast<uint64_t>(i * CHUNK), CHUNK);
+    scenario.addRead(std::string(CHUNKSIZE, static_cast<char>('A' + (i % 26))));
   }
 
+  auto [tmp, fd] = makeTempFile(scenario.content());
   TypeParam manager(64);
-  manager.wait(batch.submitTo(manager, fd));
+  manager.wait(scenario.submitTo(manager, fd));
 
-  for (size_t i = 0; i < N; ++i) {
-    std::string expected(CHUNK, static_cast<char>('A' + (i % 26)));
-    ASSERT_EQ(batch.result(i), expected) << "mismatch at chunk " << i;
-  }
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
 }
 
 // Verify that many independent `addBatch` calls can be outstanding (submitted
@@ -223,27 +257,27 @@ TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
 // before any `wait`. Since the kernel posts completions in arbitrary order,
 // the manager must map each one back to its issuing batch.
 TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
-  // A file of M 4-byte chunks; chunk i is filled with the character 'A'+i.
-  // Since M <= 26, the chunks have distinct contents. Thus, a read whose data
-  // lands in the wrong buffer can be detected as a mismatch below.
+  // M 4-byte chunks; chunk i is filled with the character 'A'+i. Since M <= 26
+  // the chunks have distinct contents, so a read whose data lands in the wrong
+  // buffer is detected as a mismatch below.
   constexpr size_t M = 20;
-  std::string content(M * 4, '\0');
+  std::string fileContent;
+  std::vector<std::string> expected;
+  std::vector<ReadBatchForTesting> batches(M);
   for (size_t i = 0; i < M; ++i) {
-    std::memset(&content[i * 4], static_cast<char>('A' + i), 4);
+    std::string chunk(4, static_cast<char>('A' + i));
+    batches[i].add(fileContent.size(), chunk.size());
+    fileContent.append(chunk);
+    expected.push_back(std::move(chunk));
   }
-  auto [tmp, fd] = makeTempFile(content);
+  auto [tmp, fd] = makeTempFile(fileContent);
 
   TypeParam manager(64);
 
-  // One batch (with one read each) and one handle per batch, so every batch's
-  // result and completion can be checked independently.
-  std::vector<ReadBatchForTesting> batches(M);
-  std::vector<typename TypeParam::BatchHandle> batchHandles(M);
-
   // Submit all M batches (one read each) before waiting on any of them, so they
-  // are outstanding concurrently. Batch i reads chunk i (offset i*4).
+  // are outstanding concurrently.
+  std::vector<typename TypeParam::BatchHandle> batchHandles(M);
   for (size_t i = 0; i < M; ++i) {
-    batches[i].add(static_cast<uint64_t>(i * 4), 4);
     batchHandles[i] = batches[i].submitTo(manager, fd);
   }
   // Only now wait on each handle. Each wait must block until that batch's own
@@ -252,18 +286,18 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
     manager.wait(batchHandles[i]);
   }
 
-  // Each batch's read must have landed in its own buffer: batch i holds 'A'+i.
-  // A completion routed to the wrong buffer shows up as a mismatch here.
+  // Each batch's read must have landed in its own buffer; a completion routed
+  // to the wrong buffer shows up as a mismatch here.
   for (size_t i = 0; i < M; ++i) {
-    std::string expected(4, static_cast<char>('A' + i));
-    EXPECT_EQ(batches[i].result(0), expected) << "mismatch at batch " << i;
+    EXPECT_THAT(batches[i].result(), ::testing::ElementsAre(expected[i]))
+        << "mismatch at batch " << i;
   }
 }
 
 // Request more bytes than the file contains, i.e. read past EOF. A read that
 // cannot be fully satisfied is a short read, which both policies must report as
 // an error (`std::runtime_error`). `SyncIoPolicy` throws in `addBatch`,
-// `IoUringPolicy` in `wait`, so both calls sit in one `EXPECT_THROW` block.
+// `IoUringPolicy` in `wait`.
 TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   auto [tmp, fd] = makeTempFile("AAAABBBB");  // 8 bytes
 
