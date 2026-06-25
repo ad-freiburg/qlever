@@ -328,8 +328,6 @@ TEST(ReadFullyOrThrow, ShortReadThrows) {
                                HasSubstr("read fewer bytes than requested"));
 }
 
-}  // namespace
-
 // TODO: fix
 /*
 TYPED_TEST(IoUringManagerTest, LargeReads) {
@@ -359,3 +357,22 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 // dropping a manager (or never calling wait) while completions are outstanding.
 // ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
+
+TYPED_TEST(IoUringManagerTest, waitOnNonExistingBatch) {
+  // create a handle for which no request has been queued.
+  ad_utility::IoUringPolicy::BatchHandle fakeHandle = 999;
+
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+
+  TypeParam manager(64);
+  auto realHandle = batch.submitTo(manager, fd);
+
+  // waiting on fake handle should never block.
+  manager.wait(fakeHandle);
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+}
+}  // namespace

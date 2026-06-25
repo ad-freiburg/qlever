@@ -70,7 +70,16 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
 }
 
 //______________________________________________________________________________
-IoUringPolicy::~IoUringPolicy() { io_uring_queue_exit(&ring_); }
+IoUringPolicy::~IoUringPolicy() {
+  if (numInFlightReadRequests_ > 0) {
+    AD_LOG_WARN << "There are read requests outstanding. Wait for completion"
+                   " of those read requests before destroying IoUringPolicy\n";
+  }
+  while (numInFlightReadRequests_ > 0) {
+    drainOneCqe();
+  }
+  io_uring_queue_exit(&ring_);
+}
 
 //______________________________________________________________________________
 void IoUringPolicy::addBatch(int fd,
