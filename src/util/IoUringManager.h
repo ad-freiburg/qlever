@@ -67,9 +67,9 @@ class BatchManager {
 };
 
 // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset` (from
-// the start of the file) into `targetBuffer`. Throws `std::runtime_error` if
-// the read fails or returns fewer bytes than requested (a partial read or end
-// of file), since every read must be fully satisfied.
+// the start of the file) into `targetBuffer`. Throws exception if the read
+// fails or returns fewer bytes than requested (a partial read or end of file),
+// since every read must be fully satisfied.
 void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
                       uint64_t fileOffset);
 
