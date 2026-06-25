@@ -767,6 +767,50 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewIdsAndCentralList) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+
+  // Helper to read the `id` field of a view's metadata JSON file.
+  auto readViewId = [&](const std::string& name) {
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(
+        absl::StrCat(testIndexBase_, ".view.", name, ".viewinfo.json")) >>
+        viewInfo;
+    return viewInfo.at("id").get<MaterializedViewId>();
+  };
+
+  // Helper to read the central views list file.
+  const std::string viewsListFilename =
+      absl::StrCat(testIndexBase_, ".views.json");
+  auto readViewsList = [&]() {
+    nlohmann::json viewsList;
+    ad_utility::makeIfstream(viewsListFilename) >> viewsList;
+    return viewsList;
+  };
+
+  // Writing views assigns ascending IDs, starting from zero, stored both in the
+  // central views list and in the views' own metadata files.
+  manager.writeViewToDisk("testView1", plan);
+  manager.writeViewToDisk("testView2", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+  EXPECT_EQ(readViewId("testView2"), 1u);
+  EXPECT_TRUE(std::filesystem::exists(viewsListFilename));
+  {
+    auto viewsList = readViewsList();
+    EXPECT_EQ(viewsList.at("testView1").get<MaterializedViewId>(), 0u);
+    EXPECT_EQ(viewsList.at("testView2").get<MaterializedViewId>(), 1u);
+  }
+
+  // A loaded view exposes its own ID (read from its metadata).
+  EXPECT_THAT(manager.getView("testView1")->id(), ::testing::Optional(0u));
+
+  // Overwriting a view keeps its existing ID.
+  manager.writeViewToDisk("testView1", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
