@@ -38,16 +38,7 @@ std::string toString(cppcoro::generator<ql::span<std::byte>> generator) {
 namespace {
 
 // Returns a string representation of an HTTP verb for use in echo responses.
-std::string_view verbName(verb v) {
-  switch (v) {
-    case verb::get:
-      return "GET";
-    case verb::post:
-      return "POST";
-    default:
-      return "OTHER";
-  }
-}
+std::string_view verbName(verb v) { return toStd(to_string(v)); }
 
 // Assembles the full request body from an eager-mode request (reads from
 // `req.body()`) or a lazy-mode `bodyGetter` (accumulates chunks). Both
@@ -57,8 +48,8 @@ boost::asio::awaitable<std::string> consumeBody(
     http::request<http::string_body> req) {
   co_return req.body();
 }
-boost::asio::awaitable<std::string> consumeBody(const auto& /*req*/,
-                                                auto bodyGetter) {
+boost::asio::awaitable<std::string> consumeBody(
+    [[maybe_unused]] const auto& request, auto bodyGetter) {
   std::string body;
   while (auto chunk = co_await bodyGetter()) {
     body += chunk.value();
@@ -73,8 +64,8 @@ auto makeEchoHandler() {
       [](auto req, auto&& send, auto... args) -> boost::asio::awaitable<void> {
         std::string body = co_await consumeBody(req, args...);
         co_await send(
-            createOkResponse(std::string(verbName(req.method())) + "\n" +
-                                 std::string(toStd(req.target())) + "\n" + body,
+            createOkResponse(absl::StrCat(verbName(req.method()), "\n",
+                                          toStd(req.target()), "\n", body),
                              req, ad_utility::MediaType::textPlain));
       };
 }
@@ -103,9 +94,8 @@ auto makeIgnoreBodyServer(size_t chunkSize) {
 boost::asio::awaitable<void> throwingEchoBody(const auto& req, auto& send,
                                               std::string_view body,
                                               std::exception_ptr exception) {
-  co_await send(createOkResponse(std::string(verbName(req.method())) + "\n" +
-                                     std::string(toStd(req.target())) + "\n" +
-                                     std::string(body),
+  co_await send(createOkResponse(absl::StrCat(verbName(req.method()), "\n",
+                                              toStd(req.target()), "\n", body),
                                  req, ad_utility::MediaType::textPlain));
   std::rethrow_exception(exception);
 }
@@ -219,8 +209,12 @@ TYPED_TEST(HttpServerBodyTest, EchoPostMultipleChunks) {
 
   ad_utility::SlowRandomIntGenerator<int> gen('a', 'z');
   std::string largeBody(3 * this->lazyChunkSize, '\0');
-  std::generate(largeBody.begin(), largeBody.end(),
-                [&gen]() { return static_cast<char>(gen()); });
+  // Note: we need the explicit casting to `char`, because
+  // `SlowRandomIntGenerator<char>` doesn't compile on AppleClang, because the
+  // libc++ variation there requires actual integer types for the random
+  // distributions.
+  ql::ranges::generate(largeBody,
+                       [&gen]() { return static_cast<char>(gen()); });
   auto httpClient = std::make_unique<HttpClient>(
       "localhost", std::to_string(server.getPort()));
   auto response =

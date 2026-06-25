@@ -11,6 +11,7 @@
 
 using ad_utility::httpUtils::Url;
 
+// ___________________________________________________________________________
 TEST(HttpUtils, Url) {
   const auto& HTTP = Url::Protocol::HTTP;
   const auto& HTTPS = Url::Protocol::HTTPS;
@@ -43,6 +44,7 @@ TEST(HttpUtils, Url) {
   ASSERT_ANY_THROW(Url("http://host.name:8x"));
 }
 
+// ___________________________________________________________________________
 TEST(HttpUtils, GetHeaderOnlyRequest) {
   namespace http = boost::beast::http;
   http::request<http::string_body> original;
@@ -64,6 +66,7 @@ TEST(HttpUtils, GetHeaderOnlyRequest) {
   EXPECT_EQ(headerOnly.at(http::field::authorization), "Bearer token123");
 }
 
+// ___________________________________________________________________________
 TEST(HttpUtils, GetStringBodyRequest) {
   namespace http = boost::beast::http;
   http::request<http::string_body> original;
