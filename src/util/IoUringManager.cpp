@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -72,11 +73,23 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
 //______________________________________________________________________________
 IoUringPolicy::~IoUringPolicy() {
   if (numInFlightReadRequests_ > 0) {
-    AD_LOG_WARN << "There are read requests outstanding. Wait for completion"
-                   " of those read requests before destroying IoUringPolicy\n";
+    AD_LOG_WARN << "IoUringPolicy destroyed with " << numInFlightReadRequests_
+                << " read request(s) still in flight; all batches should be "
+                   "`wait()`ed before destroying the policy. Draining them now "
+                   "so the kernel stops writing into the target buffers.\n";
   }
+  // Reap the outstanding completions before tearing down the ring, so the
+  // kernel is no longer writing into any target buffer once we return. We
+  // deliberately do not call `drainOneCqe` here: it throws on I/O errors, and a
+  // destructor must not throw. We also stop if `io_uring_wait_cqe` fails, to
+  // avoid spinning forever (it would not decrement the in-flight count).
   while (numInFlightReadRequests_ > 0) {
-    drainOneCqe();
+    io_uring_cqe* cqe = nullptr;
+    if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
+      break;
+    }
+    io_uring_cqe_seen(&ring_, cqe);
+    --numInFlightReadRequests_;
   }
   io_uring_queue_exit(&ring_);
 }

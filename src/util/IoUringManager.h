@@ -61,7 +61,7 @@ class BatchManager {
                 "BatchManager's Policy must satisfy the ReadPolicy concept.");
 
  public:
-  using BatchHandle = ReadPolicy::BatchHandle;
+  using BatchHandle = typename ReadPolicy::BatchHandle;
 
   explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
 

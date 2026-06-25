@@ -224,6 +224,29 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   EXPECT_THAT(batchB.result(), ::testing::ElementsAre("BBBB"));
 }
 
+// `wait()` tolerates handles that are not (or no longer) in flight: waiting a
+// second time on an already-completed batch, or on a handle that was never
+// issued, is a no-op that neither blocks nor throws. A completed batch is
+// erased from the manager's bookkeeping, so it is indistinguishable from a
+// never-issued handle -- both are simply absent.
+TYPED_TEST(IoUringManagerTest, WaitOnCompletedOrUnknownHandleIsNoop) {
+  auto [tmp, fd] = makeTempFile("AAAA");
+
+  TypeParam manager(64);
+  ReadBatchForTesting batch;
+  batch.add(0, 4);
+  auto handle = batch.submitTo(manager, fd);
+  manager.wait(handle);
+
+  // Waiting again on the already-completed handle is a no-op.
+  manager.wait(handle);
+  // Waiting on a handle that was never issued is a no-op.
+  manager.wait(handle + 99999);
+
+  // The original read still produced the correct bytes.
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("AAAA"));
+}
+
 // A single `addBatch` call requesting more reads (400) than the submission ring
 // buffer can hold at once (64) forces the manager to submit the SQEs in
 // successive rounds: it fills the ring buffer with as many SQEs as fit, reaps
