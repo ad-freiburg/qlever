@@ -27,7 +27,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
-#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
@@ -385,12 +384,6 @@ class Server {
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
 
-  Index& index() { return qlever().index(); }
-  const Index& index() const { return qlever().index(); }
-  std::shared_ptr<const Index> sharedIndex() const {
-    return qlever().sharedIndex();
-  }
-
   QueryResultCache& cache() { return qlever().cache(); }
   const QueryResultCache& cache() const { return qlever().cache(); }
   ad_utility::AllocatorWithLimit<Id>& allocator() {
@@ -408,9 +401,6 @@ class Server {
   NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
   const NamedResultCache& namedResultCache() const {
     return qlever().namedResultCache();
-  }
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return qlever().materializedViewsManager();
   }
 
   // Atomically snapshot both the `Index` and the `MaterializedViewsManager`

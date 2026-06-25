@@ -1486,13 +1486,14 @@ void Server::writeMaterializedView(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
+  const auto& [index, _] = indexAndViewsSnapshot();
   if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because there are already files with the same base name "
         "in the same directory")};
   }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, index().getOnDiskBase())) {
+  if (!qlever::util::isSubdirectoryOf(indexBaseName, index->getOnDiskBase())) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because it is not located in the same directory as the "
@@ -1504,13 +1505,12 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // Conan setup.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &handle, &indexBaseName] {
+      [&index, &handle, &indexBaseName] {
         auto logFileName = indexBaseName + ".rebuild-index-log.txt";
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
-            index()
-                .deltaTriplesManager()
+            index->deltaTriplesManager()
                 .getCurrentLocatedTriplesSharedStateWithVocab();
-        qlever::materializeToIndex(index().getImpl(), indexBaseName,
+        qlever::materializeToIndex(index->getImpl(), indexBaseName,
                                    currentSnapshot, localVocabCopy, ownedBlocks,
                                    handle, logFileName);
       },
