@@ -350,43 +350,6 @@ TYPED_TEST(IoUringManagerTest, LargeReads) {
 // ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
 // pending CQEs is unverified.
 
-// Direct unit tests for the `readFullyOrThrow` helper (the single-read building
-// block that `SyncIoPolicy::addBatch` is built on).
-
-// A read that is fully satisfied returns the requested bytes from the requested
-// offset.
-TEST(ReadFullyOrThrow, FullReadSucceeds) {
-  TempFile tmp("AAAABBBB");
-  FILE* file = openFile(tmp);
-  std::vector<char> targetBuffer(4);
-  ad_utility::SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(),
-                                             4,
-                                             /*fileOffset=*/4);
-  std::fclose(file);
-  EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
-}
-
-// Requesting more bytes than the file contains (read past EOF) is a short read
-// and must throw.
-TEST(ReadFullyOrThrow, ShortReadThrows) {
-  TempFile tmp("AAAABBBB");  // 8 bytes
-  FILE* file = openFile(tmp);
-  std::vector<char> targetBuffer(16);
-  EXPECT_THROW(ad_utility::SyncIoPolicy::readFullyOrThrow(
-                   fileno(file), targetBuffer.data(), 16, /*fileOffset=*/0),
-               ad_utility::Exception);
-  std::fclose(file);
-}
-
-// Reading from an invalid file descriptor must throw.
-TEST(ReadFullyOrThrow, InvalidFdThrows) {
-  std::vector<char> targetBuffer(4);
-  EXPECT_THROW(
-      ad_utility::SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4,
-                                                 /*fileOffset=*/0),
-      ad_utility::Exception);
-}
-
 // Tests for `VocabLookupDataCommonBase` (via the concrete
 // `VocabBatchLookupData`).
 
@@ -466,3 +429,47 @@ TEST(LookupDataCommonBase, PmrAsResultEmpty) {
 }
 
 }  // namespace
+
+// Direct unit tests for the `readFullyOrThrow` helper (the single-read building
+// block that `SyncIoPolicy::addBatch` is built on). `readFullyOrThrow` is a
+// private static member of `SyncIoPolicy`, so these white-box tests are granted
+// access via `FRIEND_TEST` declarations in `IoUringManager.h`. For that
+// friendship to match, the generated test classes must live in the real
+// `ad_utility` namespace (not the file's anonymous namespace), so this block is
+// placed here, after the anonymous namespace is closed. The `TempFile` /
+// `openFile` helpers declared there remain visible for the rest of the file.
+namespace ad_utility {
+
+// A read that is fully satisfied returns the requested bytes from the requested
+// offset.
+TEST(ReadFullyOrThrow, FullReadSucceeds) {
+  TempFile tmp("AAAABBBB");
+  FILE* file = openFile(tmp);
+  std::vector<char> targetBuffer(4);
+  SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(), 4,
+                                 /*fileOffset=*/4);
+  std::fclose(file);
+  EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
+}
+
+// Requesting more bytes than the file contains (read past EOF) is a short read
+// and must throw.
+TEST(ReadFullyOrThrow, ShortReadThrows) {
+  TempFile tmp("AAAABBBB");  // 8 bytes
+  FILE* file = openFile(tmp);
+  std::vector<char> targetBuffer(16);
+  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(),
+                                              16, /*fileOffset=*/0),
+               ad_utility::Exception);
+  std::fclose(file);
+}
+
+// Reading from an invalid file descriptor must throw.
+TEST(ReadFullyOrThrow, InvalidFdThrows) {
+  std::vector<char> targetBuffer(4);
+  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4,
+                                              /*fileOffset=*/0),
+               ad_utility::Exception);
+}
+
+}  // namespace ad_utility

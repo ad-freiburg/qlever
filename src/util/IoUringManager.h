@@ -11,6 +11,8 @@
 #ifndef QLEVER_SRC_UTIL_IOURINGMANAGER_H
 #define QLEVER_SRC_UTIL_IOURINGMANAGER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <cstdint>
 #include <unordered_map>
 
@@ -120,16 +122,19 @@ struct SyncIoPolicy {
   };
 
  private:
+  // White-box tests for the private `readFullyOrThrow` helper. These tests are
+  // defined in `namespace ad_utility` (see `IoUringManagerTest.cpp`) so the
+  // generated test classes match these friend declarations.
+  FRIEND_TEST(ReadFullyOrThrow, FullReadSucceeds);
+  FRIEND_TEST(ReadFullyOrThrow, ShortReadThrows);
+  FRIEND_TEST(ReadFullyOrThrow, InvalidFdThrows);
+
   // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
   // (from the start of the file) into `targetBuffer`. Throws exception if the
   // read fails or returns fewer bytes than requested (a partial read or end of
   // file), since every read must be fully satisfied.
   static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
                                uint64_t fileOffset);
-
-  FRIEND_TEST(ReadFullyOrThrow, FullReadSucceeds);
-  FRIEND_TEST(ReadFullyOrThrow, ShortReadThrows);
-  FRIEND_TEST(ReadFullyOrThrow, InvalidFdThrows);
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to
