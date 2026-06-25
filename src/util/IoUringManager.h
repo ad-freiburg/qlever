@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 
@@ -25,12 +26,36 @@
 
 namespace ad_utility {
 
-using BatchHandle = uint64_t;
+template <typename T>
+CPP_requires(ReadPolicy_,
+             requires(T& policy, int fd, ql::span<const size_t> numBytes,
+                      ql::span<const uint64_t> offsets, ql::span<char*> buffers,
+                      typename T::BatchHandle handle)(
+                 // Must expose a `BatchHandle` type (used as a parameter
+                 // above). Must be constructible from a ring size.
+                 concepts::constructible_from<T, unsigned>,
+                 // Must provide `addBatch` with the following parameters.
+                 policy.addBatch(fd, numBytes, offsets, buffers, handle),
+                 // Must provide a `wait` method with the following interface.
+                 policy.wait(handle)));
 
-template <typename Policy>
+// The pluggable I/O backend of `BatchManager`: it specifies how the reads in a
+// batch are carried out. See `IoUringPolicy` (asynchronous, via io_uring) and
+// `SyncIoPolicy` (blocking `pread` fallback) below.
+template <typename T>
+CPP_concept ReadPolicyConcept = CPP_requires_ref(ReadPolicy_, T);
+
+// `BatchManager` owns the batch bookkeeping (minting a `BatchHandle` per batch,
+// validating the input spans) and delegates the reads from the underlying
+// Vocabulary to the `Policy`, which must satisfy the `ReadPolicy` concept
+// above.
+template <typename ReadPolicy>
 class BatchManager {
+  static_assert(ReadPolicyConcept<ReadPolicy>,
+                "BatchManager's Policy must satisfy the ReadPolicy concept.");
+
  public:
-  using BatchHandle = ad_utility::BatchHandle;
+  using BatchHandle = ReadPolicy::BatchHandle;
 
   explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
 
@@ -56,7 +81,7 @@ class BatchManager {
   void wait(BatchHandle handle) { policy_.wait(handle); }
 
  private:
-  Policy policy_;
+  ReadPolicy policy_;
   BatchHandle nextBatchHandle_ = 0;
 
   template <typename Span0, typename... Spans>
@@ -76,6 +101,7 @@ void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
 // Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
 // in a synchronous (blocking) manner. Single-threaded use only.
 struct SyncIoPolicy {
+  using BatchHandle = uint64_t;
   // `ringSize` is ignored; it exists only so the policy is constructible the
   // same way as `IoUringPolicy`.
   explicit SyncIoPolicy(unsigned /*ringSize*/ = 256) {}
@@ -106,6 +132,8 @@ struct SyncIoPolicy {
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringPolicy {
+  using BatchHandle = uint64_t;
+
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;

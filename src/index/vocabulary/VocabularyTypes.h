@@ -33,8 +33,19 @@ using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
 using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
+// Common backing for one batch-lookup result, shared by the different
+// vocabulary implementations. Owns the materialized string data (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation) and one
+// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
+// The vocabulary implementation that performs the lookup fills `buffer()` and
+// `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
+// that keeps this object (and thus the storage the views point into) alive for
+// as long as the `VocabBatchLookupResult` is used.
+//
+// NOTE: Use `finalize()` after filling `views` to set up the span, then use
+// `asResult()` to get a `VocabBatchLookupResult` via aliasing shared_ptr.
 template <typename BufferType>
-class LookupDataCommonBase {
+class VocabLookupDataCommonBase {
  public:
   // Mutable access to the buffer that holds the materialized string data, for
   // the producer to fill before calling `asResult`.
@@ -52,7 +63,7 @@ class LookupDataCommonBase {
   // `buffer()`/`views()` that the span points into) alive as long as the result
   // lives.
   static VocabBatchLookupResult asResult(
-      std::shared_ptr<LookupDataCommonBase> self) {
+      std::shared_ptr<VocabLookupDataCommonBase> self) {
     self->finalize();
     auto* spanPtr = &self->span_;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
@@ -75,12 +86,14 @@ class LookupDataCommonBase {
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
-// Helper struct for batch-lookup results. Holds the materialized string data
-// and the views into that materialized string data.
-//
-// NOTE: Use `finalize()` after filling `views` to set up the span, then use
-// `asResult()` to get a `VocabBatchLookupResult` via aliasing shared_ptr.
-struct VocabBatchLookupData : LookupDataCommonBase<std::vector<char>> {};
+// Backing for a batch-lookup result whose total size is known up front, so all
+// strings can be materialized into a single contiguous `buffer()` in one go
+// (e.g. reading a contiguous byte range from a disk-based vocabulary). Because
+// the `views()` point into that one `std::vector<char>`, the buffer must not be
+// grown after the views are created: a reallocation would move the bytes and
+// invalidate every existing `string_view`. Use `PmrVocabBatchLookupData`
+// instead when words are produced incrementally with unknown sizes.
+struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 
 // Backing for a batch-lookup result when words are produced incrementally with
 // sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
@@ -89,7 +102,7 @@ struct VocabBatchLookupData : LookupDataCommonBase<std::vector<char>> {};
 // instead allocated from a monotonic_buffer_resource, giving pointer-stable
 // allocations. Exposed as a `VocabBatchLookupResult` via `asResult()`.
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
-struct PmrVocabBatchLookupData : LookupDataCommonBase<BufferType> {};
+struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`

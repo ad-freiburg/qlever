@@ -385,7 +385,8 @@ TEST(ReadFullyOrThrow, InvalidFdThrows) {
                ad_utility::Exception);
 }
 
-// Tests for `LookupDataCommonBase` (via the concrete `VocabBatchLookupData`).
+// Tests for `VocabLookupDataCommonBase` (via the concrete
+// `VocabBatchLookupData`).
 
 // `asResult` exposes the span over the filled views, and the returned aliasing
 // shared_ptr keeps the backing buffer/views alive after the original owning
