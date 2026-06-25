@@ -259,22 +259,22 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
+inline ItemVec vocabMapsToVector(const std::vector<ItemMapAndBuffer>& maps) {
   ItemVec els;
-  std::array<size_t, std::tuple_size_v<ItemMapArray>> offsets;
+  std::vector<size_t> offsets(maps.size());
   // This is essentially `std::transform_exclusive_scan`, but GCC 8 doesn't
   // support this yet.
-  size_t totalEls = std::accumulate(
-      map.begin(), map.end(), 0,
-      [&offsets, idx = 0](const auto& x, const auto& y) mutable {
-        offsets.at(idx) = x;
-        idx++;
-        return x + y.map_.size();
-      });
+  size_t totalEls =
+      std::accumulate(maps.begin(), maps.end(), 0ULL,
+                      [&offsets, idx = 0](size_t x, const auto& y) mutable {
+                        offsets.at(idx) = x;
+                        idx++;
+                        return x + y.map_.size();
+                      });
   els.resize(totalEls);
-  std::array<std::future<void>, std::tuple_size_v<ItemMapArray>> futures;
-  size_t i = 0;
-  for (const auto& singleMap : map) {
+  std::vector<std::future<void>> futures(maps.size());
+  for (size_t i = 0; i < maps.size(); ++i) {
+    const auto& singleMap = maps[i];
     futures.at(i) =
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
@@ -282,7 +282,6 @@ inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
               singleMap.map_, els.begin() + offsets[i],
               [](auto& el) -> T { return {el.first, el.second}; });
         });
-    ++i;
   }
   for (auto& fut : futures) {
     fut.get();

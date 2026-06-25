@@ -192,6 +192,10 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // `boost::program_options` cannot directly parse into `std::optional<size_t>`
+  // (the `validate` overload is not found via ADL for `size_t`), so we parse
+  // into `std::optional<NonNegative>` and copy the result into `config` below.
+  std::optional<ad_utility::NonNegative> numIndexBuilderThreads;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -285,6 +289,10 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("num-index-builder-threads,j", po::value(&numIndexBuilderThreads),
+      "The number of threads used for the first phase of index building "
+      "(parsing the input and creating the partial vocabularies). Default: "
+      "the number of available hardware threads.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -317,6 +325,11 @@ int main(int argc, char** argv) {
               << qlever::version::ProjectVersion << ", compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+
+  if (numIndexBuilderThreads.has_value()) {
+    config.numIndexBuilderThreads_ =
+        static_cast<size_t>(numIndexBuilderThreads.value());
+  }
 
   try {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,

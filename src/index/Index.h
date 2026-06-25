@@ -195,6 +195,11 @@ class Index {
   ad_utility::MemorySize& parserBufferSize();
   const ad_utility::MemorySize& parserBufferSize() const;
 
+  // The number of threads used for the first phase of index building. If
+  // `std::nullopt`, the value is deduced from the hardware concurrency.
+  std::optional<size_t>& numIndexBuilderThreads();
+  const std::optional<size_t>& numIndexBuilderThreads() const;
+
   ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
   void setOnDiskBase(const std::string& onDiskBase);

@@ -81,6 +81,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.numIndexBuilderThreads_.has_value()) {
+    index.numIndexBuilderThreads() = config.numIndexBuilderThreads_.value();
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

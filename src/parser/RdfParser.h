@@ -23,8 +23,7 @@
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/EncodedIriManager.h"
-#include "index/InputFileSpecification.h"
-#include "parser/ParallelBuffer.h"
+#include "parser/AsyncBlockSource.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
 #include "parser/data/BlankNode.h"
@@ -33,8 +32,6 @@
 #include "util/Log.h"
 #include "util/ParseException.h"
 #include "util/ParsedUri.h"
-#include "util/TaskQueue.h"
-#include "util/ThreadSafeQueue.h"
 
 enum class TurtleParserIntegerOverflowBehavior {
   Error,
@@ -56,6 +53,11 @@ struct TurtleTriple {
 };
 
 // A base class for all the different turtle and N-Quad parsers.
+//
+// The class only carries the configuration that the inner parsers need
+// (overflow behavior, literal handling, encoded-IRI manager). The
+// asynchronous, batched interface that the index builder uses lives in
+// `parser/AsyncSingleFileParser.h` and `parser/AsyncMultifileParser.h`.
 class RdfParserBase {
  private:
   // How to handle integer overflow and invalid literals (see below).
@@ -70,39 +72,23 @@ class RdfParserBase {
 
   explicit RdfParserBase(const EncodedIriManager* encodedIriManager)
       : encodedIriManager_{encodedIriManager} {}
-  // Wrapper to getLine that is expected by the rest of QLever
-  bool getLine(TurtleTriple& triple) { return getLineImpl(&triple); }
 
-  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
+  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
     return integerOverflowBehavior_;
   }
 
   // If true then triples with invalid literals (for example
   // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
   // such literals are encountered.
-  virtual bool& invalidLiteralsAreSkipped() final {
+  virtual bool& invalidLiteralsAreSkipped() {
     return invalidLiteralsAreSkipped_;
   }
 
-  virtual void printAndResetQueueStatistics() {
-    // This function only does something for the parallel parser (where it is
-    // overridden).
-  }
-
-  // Main access method to the parser
-  // If a triple can be parsed (or has previously been parsed and stored
-  // Writes the triple to the argument (format subject, object predicate)
-  // returns true iff a triple can be successfully written, else the triple
-  // value is invalid and the parser is at the end of the input.
-  virtual bool getLineImpl(TurtleTriple* triple) = 0;
-
   // Get the offset (relative to the beginning of the file) of the first byte
-  // that has not yet been dealt with by the parser.
-  [[nodiscard]] virtual size_t getParsePosition() const = 0;
-
-  // Return a batch of the next 100'000 triples at once. If the parser is
-  // exhausted, return `nullopt`.
-  virtual std::optional<std::vector<TurtleTriple>> getBatch();
+  // that has not yet been dealt with by the parser. Default 0; only the
+  // string parser overrides this so that error messages can include a
+  // position offset.
+  [[nodiscard]] virtual size_t getParsePosition() const { return 0; }
 
  protected:
   const auto& encodedIriManager() const { return *encodedIriManager_; }
@@ -426,19 +412,12 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     : public Parser {
  public:
   using Parser::baseIri_;
-  using Parser::getLine;
   using Parser::prefixMap_;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
       : Parser{encodedIriManager} {}
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
                            TripleComponent defaultGraph)
       : Parser{encodedIriManager, std::move(defaultGraph)} {}
-  bool getLineImpl(TurtleTriple* triple) override {
-    (void)triple;
-    throw std::runtime_error(
-        "RdfStringParser doesn't support calls to getLine. Only use "
-        "parseUtf8String() for unit tests\n");
-  }
 
   size_t getParsePosition() const override {
     return positionOffset_ + tmpToParse_.size() - this->tok_.data().size();
@@ -491,7 +470,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
  private:
   // The complete input to this parser.
-  ParallelBuffer::BufferType tmpToParse_;
+  qlever::parser::ByteBlock tmpToParse_;
   // Used to add a certain offset to the parsing position when using this
   // in a parallel setting.
   size_t positionOffset_ = 0;
@@ -512,7 +491,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   const auto& getBaseIri() const { return baseIri_; }
 
   // __________________________________________________________
-  void setInputStream(ParallelBuffer::BufferType&& toParse) {
+  void setInputStream(qlever::parser::ByteBlock&& toParse) {
     tmpToParse_ = std::move(toParse);
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
@@ -538,230 +517,6 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   FRIEND_TEST(RdfParserTest, blankNodePropertyList);
   FRIEND_TEST(RdfParserTest, DateLiterals);
   FRIEND_TEST(RdfParserTest, DayTimeDurationLiterals);
-};
-
-/**
- * This class is a TurtleParser that always assumes that
- * its input file is an uncompressed .ttl file that will be read in
- * chunks. Input file can also be a stream like stdin.
- */
-template <typename Parser>
-class RdfStreamParser : public Parser {
-  // struct that can store the state of a parser
-  // the previously extracted triples are not stored
-  // but only the number of triples that were already present
-  // before the backup
-  struct TurtleParserBackupState {
-    size_t numBlankNodes_ = 0;
-    size_t numTriples_;
-    const char* tokenizerPosition_;
-    size_t tokenizerSize_;
-  };
-
- public:
-  // Default construction needed for tests
-  explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
-
-  // Construct a parser that reads from an already-opened `ParallelBuffer`.
-  explicit RdfStreamParser(std::unique_ptr<ParallelBuffer> rawBuffer,
-                           const EncodedIriManager* ev,
-                           TripleComponent defaultGraphIri =
-                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
-      : Parser{ev, std::move(defaultGraphIri)} {
-    initialize(std::move(rawBuffer));
-  }
-
-  bool getLineImpl(TurtleTriple* triple) override;
-
-  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
-
-  size_t getParsePosition() const override {
-    return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
-  }
-
- private:
-  using Parser::isParserExhausted_;
-  using Parser::tok_;
-  using Parser::triples_;
-  // Backup the current state of the turtle parser to a
-  // TurtleparserBackupState object
-  // This can be used e.g. when parsing from a compressed input
-  // and the currently uncompressed buffer is not sufficient to parse the
-  // next expression
-  TurtleParserBackupState backupState() const;
-
-  // Reset the parser to the state indicated by the argument
-  // Must be called on the same parser object that was used to create the backup
-  // state (the actual triples are not backed up)
-  bool resetStateAndRead(TurtleParserBackupState* state);
-
-  // stores the current batch of bytes we have to parse.
-  // Might end in the middle of a statement or even a multibyte utf8 character,
-  // that's why we need the backupState() and resetStateAndRead() methods
-  ParallelBuffer::BufferType byteVec_;
-
-  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
-
-  // that many bytes were already parsed before dealing with the current batch
-  // in member byteVec_
-  size_t numBytesBeforeCurrentBatch_ = 0;
-};
-
-/**
- * This class is a TurtleParser that always assumes that
- * its input file is an uncompressed .ttl file that will be read in
- * chunks. Input file can also be a stream like stdin.
- */
-template <typename Parser>
-class RdfParallelParser : public Parser {
- public:
-  using Triple = std::array<std::string, 3>;
-  // Default construction needed for tests
-  explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
-
-  // Construct a parser that reads from an already-opened `ParallelBuffer`.
-  RdfParallelParser(std::unique_ptr<ParallelBuffer> rawBuffer,
-                    const EncodedIriManager* ev,
-                    const TripleComponent& defaultGraphIri =
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
-                    std::chrono::milliseconds sleepTimeForTesting =
-                        std::chrono::milliseconds{0})
-      : Parser{ev, defaultGraphIri},
-        defaultGraphIri_{defaultGraphIri},
-        sleepTimeForTesting_(sleepTimeForTesting) {
-    initialize(std::move(rawBuffer));
-  }
-
-  // inherit the wrapper overload
-  using Parser::getLine;
-
-  bool getLineImpl(TurtleTriple* triple) override;
-
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
-
-  void printAndResetQueueStatistics() override {
-    AD_LOG_TIMING << parallelParser_.getTimeStatistics() << '\n';
-    parallelParser_.resetTimers();
-  }
-
-  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
-
-  size_t getParsePosition() const override {
-    // TODO: can we really define this position here?
-    return 0;
-  }
-
-  // The destructor has to clean up all the parallel structures that might be
-  // still running in the background, especially when it is called before the
-  // parsing has finished (e.g. in case of an exception in the code that uses
-  // the parser).
-  ~RdfParallelParser() override;
-
- private:
-  // The documentation for this is in the `.cpp` file, because it closely
-  // interacts with the functions next to it.
-  void finishTripleCollectorIfLastBatch();
-  // Parse the single `batch` and push the result to the `triplesCollector_`.
-  template <typename Batch>
-  void parseBatch(size_t parsePosition, Batch batch);
-
-  // Read all the batches from the file and feed them to the parallel parser
-  // threads. The argument is the first batch which might have been leftover
-  // from the initialization phase where the prefixes are parsed.
-  template <typename Batch>
-  void feedBatchesToParser(Batch remainingBatchFromInitialization);
-
-  // Helper function used by `getBatch()` and `getLimeImpl()` to abstract away
-  // common code. Return true if some triples could be collected and false if
-  // the input has been fully consumed.
-  bool processTriples();
-
-  using Parser::isParserExhausted_;
-  using Parser::tok_;
-  using Parser::triples_;
-
-  // Initialized in the call to `initialize`.
-  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
-
-  // Collect error messages in case of multiple failures. The `size_t` is the
-  // start position of the corresponding batch, used to order the errors in case
-  // the batches are finished out of order.
-  ad_utility::Synchronized<std::vector<std::pair<size_t, std::string>>>
-      errorMessages_;
-  // The parallel parsers need to know when the last batch has been parsed, s.t.
-  // the parser threads can be destroyed. The following two members are needed
-  // for keeping track of this condition.
-  std::atomic<size_t> batchIdx_ = 0;
-  std::atomic<size_t> numBatchesTotal_ = 0;
-
-  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
-
-  std::chrono::milliseconds sleepTimeForTesting_{0};
-
-  // These datastructures are ordered last, such that in the destructor all
-  // threads are joined before the other data members (which might be accessed
-  // by those threads) are destroyed.
-  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
-      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
-  ad_utility::TaskQueue<true> parallelParser_{
-      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
-      "parallel parser"};
-  std::future<void> parseFuture_;
-};
-
-// This class is an RDF parser that parses multiple files in parallel. Each
-// file is specified by an  `InputFileSpecification`.
-class RdfMultifileParser : public RdfParserBase {
- public:
-  // Default construction needed for tests
-  explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
-      : RdfParserBase{encodedIriManager} {};
-
-  // Construct the parser from a vector of file specifications and eagerly start
-  // parsing them on background threads.
-  RdfMultifileParser(
-      const std::vector<qlever::InputFileSpecification>& files,
-      const EncodedIriManager* encodedIriManager,
-      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
-
-  // This function is needed for the interface, but always throws an exception.
-  // `getBatch` (below) has to be used instead.
-  bool getLineImpl(TurtleTriple* triple) override;
-
-  // Retrieve the next batch of triples, or `nullopt` if there are no more
-  // batches. There is no guarantee about the order in which batches from
-  // different input files are returned, but each batch belongs to a distinct
-  // input file.
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
-
-  size_t getParsePosition() const override {
-    // TODO: This function is used for better error messages, but we currently
-    // have no good way to implement it for this parser. Further analyze this.
-    return 0;
-  }
-
-  // The destructor has to clean up all the parallel structures that might be
-  // still running in the background, especially when it is called before the
-  // parsing has finished (e.g. in case of an exception in the code that uses
-  // the parser).
-  ~RdfMultifileParser() override;
-
- private:
-  // The buffer for the finished batches.
-  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
-      finishedBatchQueue_{10};
-
-  // This queue manages its own worker threads. Each task consists of a single
-  // file that is to be parsed. The parsed results are then pushed to the
-  // `finishedBatchQueue_` above. Note: It is important, that the
-  // `parsingQueue_` is declared *after* the `finishedBatchQueue_`, s.t. when
-  // destroying the parser, the threads from the `parsingQueue_` are all joined
-  // before the `finishedBatchQueue_` (which they are using!) is destroyed.
-  ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                                             NUM_PARALLEL_PARSER_THREADS};
-
-  // A thread that feeds the file specifications to the actual parser threads.
-  ad_utility::JThread feederThread_;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

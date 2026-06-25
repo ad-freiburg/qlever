@@ -35,6 +35,7 @@
 #include "index/TextScoring.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
+#include "parser/AsyncMultifileParser.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
@@ -142,6 +143,11 @@ class IndexImpl {
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+
+  // The number of threads used for the first phase of index building (parsing
+  // the input and creating the partial vocabularies). `std::nullopt` means
+  // that the value is deduced from `std::thread::hardware_concurrency()`.
+  std::optional<size_t> numIndexBuilderThreads_ = std::nullopt;
 
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
@@ -439,6 +445,13 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
+  std::optional<size_t>& numIndexBuilderThreads() {
+    return numIndexBuilderThreads_;
+  }
+  const std::optional<size_t>& numIndexBuilderThreads() const {
+    return numIndexBuilderThreads_;
+  }
+
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
     return blocksizePermutationPerColumn_;
   }
@@ -495,44 +508,23 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<RdfParserBase> parser);
+      std::shared_ptr<qlever::parser::AsyncMultifileParser> parser);
 
   // Parse all triples from `parser` in batches of `linesPerPartial`, write one
   // partial vocabulary file per batch, and return the accumulated ID triples
   // together with per-batch size information. The memory used by the item
   // allocator is freed when this function returns.
   BuildPartialVocabulariesResult buildPartialVocabularies(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
+      size_t linesPerPartial);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      std::shared_ptr<qlever::parser::AsyncMultifileParser> parser,
+      size_t linesPerPartial);
 
-  /**
-   * @brief Everything that has to be done when we have seen all the triples
-   * that belong to one partial vocabulary, including Log output used inside
-   * passFileForVocabulary
-   *
-   * @param numLines How many Lines from the KB have we already parsed (only for
-   * Logging)
-   * @param numFiles How many partial vocabularies have we seen before/which is
-   * the index of the voc we are going to write
-   * @param actualCurrentPartialSize How many triples belong to this partition
-   * (including extra langfilter triples)
-   * @param items Contains our unsorted vocabulary. Maps words to their local
-   * ids within this vocabulary.
-   */
-  std::future<void> writeNextPartialVocabulary(
-      size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items,
-      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
-
-  // Return a Turtle parser that parses the given file. The parser will be
-  // configured to either parse in parallel or not, and to either use the
-  // CTRE-based relaxed parser or not, depending on the settings of the
-  // corresponding member variables.
-  std::unique_ptr<RdfParserBase> makeRdfParser(
+  // Return an async multi-file RDF parser configured for the given files.
+  std::unique_ptr<qlever::parser::AsyncMultifileParser> makeRdfParser(
       const std::vector<Index::InputFileSpecification>& files) const;
 
   template <typename Func>
