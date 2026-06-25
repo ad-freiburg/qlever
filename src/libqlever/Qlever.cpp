@@ -207,7 +207,7 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
-Qlever::PlannedQuery Qlever::parseAndPlanQuery(
+PlannedQuery Qlever::parseAndPlanQuery(
     std::string query, std::vector<DatasetClause> datasetClauses,
     ad_utility::SharedCancellationHandle handle,
     std::optional<TimeLimit> timeLimit,
@@ -241,13 +241,6 @@ Qlever::PlannedQuery Qlever::parseAndPlanQuery(
         ->recursivelySetTimeConstraint(timeLimit.value());
   }
 
-  auto timeForQueryPlanning = planningTimer.msecs();
-  auto& runtimeInfoWholeQuery = plannedQuery.queryExecutionTree()
-                                    .getRootOperation()
-                                    ->getRuntimeInfoWholeQuery();
-  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-  AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
-              << " ms" << std::endl;
   return plannedQuery;
 }
 

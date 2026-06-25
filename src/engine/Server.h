@@ -24,6 +24,7 @@
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -108,6 +109,7 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
+  using PlannedQuery = qlever::PlannedQuery;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -154,7 +156,7 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
-          const std::optional<qlever::PlannedQuery>& plannedQuery);
+          const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -172,13 +174,12 @@ class Server {
           ParsedQuery&& query, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit,
-          std::optional<qlever::PlannedQuery>& plannedQuery);
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
       const Index& index, const LocatedTriplesState& locatedTriples,
-      const qlever::PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
@@ -190,8 +191,7 @@ class Server {
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit,
-          std::optional<qlever::PlannedQuery>& plannedUpdate);
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
@@ -217,8 +217,7 @@ class Server {
                         std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
-      qlever::PlannedQuery& plannedQuery,
-      const ad_utility::MediaType& mediaType,
+      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
@@ -233,11 +232,10 @@ class Server {
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  qlever::PlannedQuery planQuery(ParsedQuery&& operation,
-                                 const ad_utility::Timer& requestTimer,
-                                 TimeLimit timeLimit,
-                                 QueryExecutionContext& qec,
-                                 SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation,
+                         const ad_utility::Timer& requestTimer,
+                         TimeLimit timeLimit, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -331,8 +329,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType,
-          const qlever::PlannedQuery& plannedQuery,
+          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
