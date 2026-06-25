@@ -8,8 +8,8 @@
 
 #include <cstdlib>
 #include <future>
-#include <span>
 
+#include "backports/span.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -30,36 +30,35 @@ ad_utility::MemorySize getRequestBodyLimit();
 // while sending the response (Lazy).
 enum class BodyReadMode { Eager, Lazy };
 
-/*
- * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
- * the mandatory HttpHandler parameter.
- *
- * \tparam HttpHandler A callable returning `net::awaitable<void>`. Its
- * signature depends on `bodyReadMode`:
- *
- * - `BodyReadMode::Eager`: `handler(http::request<http::string_body>, send)`.
- *   The full request body is read into memory before the handler is called.
- *
- * - `BodyReadMode::Lazy`: `handler(http::request<http::empty_body>, send,
- *   bodyGetter)`. Only headers are read before the handler is called.
- *   `bodyGetter` is a callable with signature `() ->
- * net::awaitable<std::optional<std::string_view>>`. Each `co_await
- * bodyGetter()` reads the next body chunk; the returned view is valid until the
- * next call. `co_await bodyGetter()` returns `std::nullopt` when the body is
- * fully consumed and throws on network errors.
- *
- * In both modes `send` is a callable that takes a `http::message` and returns
- * `net::awaitable<void>`; the handler is responsible for sending the response
- * via `co_await send(response)`.
- *
- * A very basic HttpHandler, which simply serves files from a directory, can be
- * obtained via `ad_utility::httpUtils::makeFileServer()`.
- *
- * \tparam WebSocketHandler A callable type that receives a `http::request<...>`
- * and the underlying socket that was used to receive the request and returns
- * a `net::awaitable<void>`. It is only called if the request is a valid
- * websocket upgrade request and the URL represents a valid path.
- */
+// A simple `HttpServer`, based on Boost::Beast. It can be configured via
+// the mandatory `HttpHandler` parameter.
+//
+// `HttpHandler` is a callable returning `net::awaitable<void>`. Its signature
+// depends on `bodyReadMode`:
+//
+// - `BodyReadMode::Eager`: `handler(http::request<http::string_body>, send)`.
+//   The full request body is read into memory before the handler is called.
+//
+// - `BodyReadMode::Lazy`: `handler(http::request<http::empty_body>, send,
+//   bodyGetter)`. Only headers are read before the handler is called.
+//   `bodyGetter` is a callable with signature `() ->
+//   net::awaitable<std::optional<std::string_view>>`. Each `co_await
+//   bodyGetter()` reads the next body chunk; the returned view is valid until
+//   the next call. `co_await bodyGetter()` returns `std::nullopt` when the
+//   body is fully consumed and throws on network errors.
+//
+// In both modes `send` is a callable that takes a `http::message` and returns
+// `net::awaitable<void>`; the handler is responsible for sending the response
+// via `co_await send(response)`.
+//
+// A very basic `HttpHandler`, which simply serves files from a directory, can
+// be obtained via `ad_utility::httpUtils::makeFileServer()`.
+//
+// `WebSocketHandler` is a callable type that receives a
+// `http::request<...>` and the underlying socket that was used to receive the
+// request and returns a `net::awaitable<void>`. It is only called if the
+// request is a valid websocket upgrade request and the URL represents a valid
+// path.
 CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
              typename WebSocketHandler)(
     requires ad_utility::InvocableWithExactReturnType<
@@ -254,7 +253,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   static net::awaitable<size_t> readIntoBuffer(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       http::request_parser<http::buffer_body>& requestParser,
-      std::span<char> outputBuffer) {
+      ql::span<char> outputBuffer) {
     return [](auto& stream, auto& buffer, auto& requestParser,
               auto outputBuffer) -> net::awaitable<size_t> {
       size_t totalRead = 0;
@@ -294,7 +293,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         const size_t toRead = std::min(bodyLimit - result.size(), chunk.size());
         const size_t bytesRead = co_await HttpServer::readIntoBuffer(
             stream, buffer, requestParser,
-            std::span<char>{chunk.data(), toRead});
+            ql::span<char>{chunk.data(), toRead});
         result.append(chunk.data(), bytesRead);
         if (bytesRead == 0) break;
       }
@@ -334,7 +333,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
                  -> net::awaitable<std::optional<std::string_view>> {
         const size_t bytesRead = co_await HttpServer::readIntoBuffer(
             stream, buffer, requestParser,
-            std::span<char>{chunkBuffer.data(), chunkSize});
+            ql::span<char>{chunkBuffer.data(), chunkSize});
         if (bytesRead == 0) co_return std::nullopt;
         co_return std::string_view{chunkBuffer.data(), bytesRead};
       }(stream_, buffer_, requestParser_, chunkBuffer_, chunkSize_);

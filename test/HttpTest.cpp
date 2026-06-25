@@ -313,7 +313,8 @@ TYPED_TEST(HttpServerBodyTest, HttpTest) {
       ASSERT_EQ(response.base().result(), http::status::not_found);
     }
 
-    // Also test the convenience function `sendHttpOrHttpsRequest`.
+    // Also test the convenience function `sendHttpOrHttpsRequest`, which
+    // creates an own client for each request.
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
@@ -349,6 +350,7 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
     std::stringstream logStream;
     ad_utility::setGlobalLoggingStream(&logStream);
 
+    // Convert the `exceptionObject` to an `exception_ptr`.
     std::exception_ptr exception;
     try {
       throw exceptionObject;
