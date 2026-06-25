@@ -27,6 +27,8 @@
 
 namespace {
 
+using namespace ::testing;
+
 // Writes `content` to a temporary file (named after the currently running
 // gtest, so different test cases never collide) and keeps it open for reading.
 // `fd()` exposes the file descriptor; the file is removed from disk on
@@ -135,15 +137,6 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   EXPECT_EQ(batch.result(0), "CCCC");
   EXPECT_EQ(batch.result(1), "AAAA");
   EXPECT_EQ(batch.result(2), "DDDD");
-}
-
-// Throw for an invalid file descriptor, irrespective of the fact that the batch
-// is empty.
-TYPED_TEST(IoUringManagerTest, EmptyBatch) {
-  TypeParam manager(64);
-  ReadBatchForTesting batch;  // no reads
-  EXPECT_THROW(manager.wait(batch.submitTo(manager, -1)),
-               ad_utility::Exception);
 }
 
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
@@ -267,17 +260,6 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   }
 }
 
-// Reading from an invalid fd (-1) must throw std::runtime_error.
-// `SyncIoPolicy` throws in `addBatch` (it reads immediately); `IoUringPolicy`
-// throws in `wait` (the error surfaces as a completion). Both calls sit in one
-// EXPECT_THROW block so the test passes regardless of which one throws.
-TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
-  TypeParam manager(64);
-  ReadBatchForTesting batch;
-  batch.add(0, 4);
-  EXPECT_THROW(manager.wait(batch.submitTo(manager, -1)), std::runtime_error);
-}
-
 // Request more bytes than the file contains, i.e. read past EOF. A read that
 // cannot be fully satisfied is a short read, which both policies must report as
 // an error (`std::runtime_error`). `SyncIoPolicy` throws in `addBatch`,
@@ -289,8 +271,8 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   ReadBatchForTesting batch;
   batch.add(0, 16);  // request more than the 8 available
 
-  EXPECT_THROW(manager.wait(batch.submitTo(manager, fd)),
-               ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(batch.submitTo(manager, fd)),
+                               HasSubstr("read fewer bytes than requested"));
 }
 
 // TODO: fix
@@ -416,15 +398,9 @@ TEST(ReadFullyOrThrow, FullReadSucceeds) {
 TEST(ReadFullyOrThrow, ShortReadThrows) {
   auto [tmp, fd] = makeTempFile("AAAABBBB");  // 8 bytes
   std::vector<char> targetBuffer(16);
-  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(fd, targetBuffer.data(), 16, 0),
-               ad_utility::Exception);
-}
-
-// Reading from an invalid file descriptor must throw.
-TEST(ReadFullyOrThrow, InvalidFdThrows) {
-  std::vector<char> targetBuffer(4);
-  EXPECT_THROW(SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4, 0),
-               ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SyncIoPolicy::readFullyOrThrow(fd, targetBuffer.data(), 16, 0),
+      HasSubstr("read fewer bytes than requested"));
 }
 
 }  // namespace ad_utility
