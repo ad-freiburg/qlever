@@ -224,29 +224,6 @@ TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   EXPECT_THAT(batchB.result(), ::testing::ElementsAre("BBBB"));
 }
 
-// `wait()` tolerates handles that are not (or no longer) in flight: waiting a
-// second time on an already-completed batch, or on a handle that was never
-// issued, is a no-op that neither blocks nor throws. A completed batch is
-// erased from the manager's bookkeeping, so it is indistinguishable from a
-// never-issued handle -- both are simply absent.
-TYPED_TEST(IoUringManagerTest, WaitOnCompletedOrUnknownHandleIsNoop) {
-  auto [tmp, fd] = makeTempFile("AAAA");
-
-  TypeParam manager(64);
-  ReadBatchForTesting batch;
-  batch.add(0, 4);
-  auto handle = batch.submitTo(manager, fd);
-  manager.wait(handle);
-
-  // Waiting again on the already-completed handle is a no-op.
-  manager.wait(handle);
-  // Waiting on a handle that was never issued is a no-op.
-  manager.wait(handle + 99999);
-
-  // The original read still produced the correct bytes.
-  EXPECT_THAT(batch.result(), ::testing::ElementsAre("AAAA"));
-}
-
 // A single `addBatch` call requesting more reads (400) than the submission ring
 // buffer can hold at once (64) forces the manager to submit the SQEs in
 // successive rounds: it fills the ring buffer with as many SQEs as fit, reaps
@@ -351,21 +328,32 @@ TEST(ReadFullyOrThrow, ShortReadThrows) {
                                HasSubstr("read fewer bytes than requested"));
 }
 
-// TODO: fix
-/*
+// Two reads, each larger than a memory page (4 KiB on Linux), exercise
+// multi-page `pread`/SQEs -- including one at a large non-zero offset, which is
+// the realistic size for reading a compressed vocabulary block. Each half holds
+// a distinct non-repeating pattern (stepped by a prime so it does not align to
+// a power-of-two boundary), so a truncated or misaligned read is detected, not
+// just a wrong length.
 TYPED_TEST(IoUringManagerTest, LargeReads) {
-  std::string content = "TODO";  // TODO bytes
-  auto [tmp, fd] = makeTempFile(content);
+  constexpr size_t kHalf = 32 * 1024;  // 32 KiB, well past a 4 KiB page
+  std::string first(kHalf, '\0');
+  std::string second(kHalf, '\0');
+  for (size_t i = 0; i < kHalf; ++i) {
+    first[i] = static_cast<char>(i % 251);
+    second[i] = static_cast<char>((i + 100) % 251);
+  }
 
-  TypeParam ioManager(64);
-  ReadBatchForTesting batch;
-  batch.add(0, 9999)
-  std::vector<char> targetBuffer(16, '\0');
-  std::vector<size_t> numBytesToRead{9999};  // TODO
-  std::vector<uint64_t> fileOffsets{0};
-  std::vector<char*> ptrsToTargetBuffers{targetBuffer.data()};
+  SequentialReadScenarioForTesting scenario;
+  scenario.addRead(first);   // read at offset 0
+  scenario.addRead(second);  // read at offset 32 KiB
+  auto [tmp, fd] = makeTempFile(scenario.content());
+
+  TypeParam manager(64);
+  manager.wait(scenario.submitTo(manager, fd));
+
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
 }
-*/
 
 // Heterogeneous read sizes within a batch.
 TYPED_TEST(IoUringManagerTest, differingReadSizes) {
@@ -393,23 +381,24 @@ TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("C", "", "DDD"));
 }
 
-// TODO<ms2144>: wait() edge cases: wait() on an already completed and erased
-// handle (double wait) -> should be a no-op, wait() on a never issued/bogus
-// handle: currently a silent no-op (erase of absent key), Is that intended?
-
-// Drop a manager (or never calling wait) while completions are outstanding.
-// ~IoUringPolicy only calls io_uring_queue_exit. Whether that's clean with
-// pending CQEs is unverified.
+// Drop the manager while reads are still in flight (submitted but never
+// waited). `IoUringPolicy`'s destructor drains the outstanding completions
+// (and logs a warning) before tearing down the ring, so the kernel is done
+// writing into the target buffers. `batch` is declared before `manager`, so its
+// buffers outlive the destructor's drain. After the manager is destroyed every
+// read has completed, so the results are correct. Most valuable under
+// AddressSanitizer, which would catch a write into a freed buffer.
 TYPED_TEST(IoUringManagerTest, dropRunningManager) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
+  {
+    TypeParam manager(64);
+    batch.submitTo(manager, fd);  // submit, but never wait
+    // `manager` is destroyed here; its destructor drains the in-flight reads.
+  }
 
-  TypeParam manager(64);
-  auto handle = batch.submitTo(manager, fd);
-
-  // manager.wait(handle);
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
 }
 
@@ -447,6 +436,9 @@ TYPED_TEST(IoUringManagerTest, fakeHandle) {
 
   // waiting on fake handle should never block.
   manager.wait(fakeHandle);
+  // Wait on the real handle so the reads actually complete before we check
+  // them.
+  manager.wait(realHandle);
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
 }
