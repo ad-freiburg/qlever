@@ -24,6 +24,7 @@
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Synchronized.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -199,15 +200,22 @@ struct EngineConfig : CommonConfig {
 // Class to use QLever as an embedded database, without the HTTP server. See
 // `src/engine/LibQleverExample.cpp` for an example use.
 class Qlever {
+ public:
+  // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
+  // so that an index rebuild can atomically swap both in, while other threads
+  // continue to read the previous instances via the `shared_ptr`s they hold.
+  struct IndexAndViews {
+    std::shared_ptr<Index> index_;
+    std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
+  };
+
  private:
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  std::shared_ptr<Index> index_;
   mutable NamedResultCache namedResultCache_;
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
-      std::make_shared<MaterializedViewsManager>();
+  ad_utility::Synchronized<IndexAndViews> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
 
@@ -293,16 +301,43 @@ class Qlever {
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
-  // query.
+  // query. Use an explicitly snapshotted `Index` and `MaterializedViewsManager`
+  // (see `indexAndViewsSnapshot()`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
+      std::shared_ptr<const Index> index,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false);
 
-  // Low-level access to the QLever API, use with care.
-  std::shared_ptr<const Index> sharedIndex() const { return index_; }
-  Index& index() { return *index_; }
-  const Index& index() const { return *index_; }
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  IndexAndViews indexAndViewsSnapshot() const {
+    return *indexAndViews_.rlock();
+  }
+
+  // Atomically swap in a freshly built `Index` and `MaterializedViewsManager`.
+  // Old instances stay alive as long as some `shared_ptr` (e.g. obtained via
+  // `indexAndViewsSnapshot()`) still references them.
+  void swapIndexAndViews(
+      std::shared_ptr<Index> index,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager) {
+    auto lock = indexAndViews_.wlock();
+    lock->index_ = std::move(index);
+    lock->materializedViewsManager_ = std::move(materializedViewsManager);
+  }
+
+  // Low-level access to the QLever API, use with care. NOTE: The `Index&`
+  // overloads return a reference into the currently active index; do not hold
+  // on to it across a potential index rebuild. Use `sharedIndex()` or
+  // `indexAndViewsSnapshot()` if you need a stable handle.
+  std::shared_ptr<const Index> sharedIndex() const {
+    return indexAndViews_.rlock()->index_;
+  }
+  Index& index() { return *indexAndViews_.rlock()->index_; }
+  const Index& index() const { return *indexAndViews_.rlock()->index_; }
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
@@ -323,7 +358,7 @@ class Qlever {
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
 
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return materializedViewsManager_;
+    return indexAndViews_.rlock()->materializedViewsManager_;
   }
 };
 }  // namespace qlever

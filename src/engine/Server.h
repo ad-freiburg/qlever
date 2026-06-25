@@ -27,6 +27,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
+#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
@@ -49,6 +50,7 @@ struct SimulateHttpRequest;
 class Server {
   using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
@@ -71,7 +73,7 @@ class Server {
   void configureQueryEventLog(const std::filesystem::path& path);
 
   // Get server statistics.
-  json composeStatsJson() const;
+  static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
@@ -217,7 +219,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          std::shared_ptr<Index> index, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -237,13 +239,14 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Prepare the execution of an operation
-  auto prepareOperation(std::string_view operationName,
-                        std::string_view operationSPARQL,
-                        ad_utility::websocket::MessageSender messageSender,
-                        const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk,
-                        std::string_view clientIp);
+  //  Prepare the execution of an operation.
+  auto prepareOperation(
+      std::shared_ptr<Index> index,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      std::string_view operationName, std::string_view operationSPARQL,
+      ad_utility::websocket::MessageSender messageSender,
+      const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
+      bool accessTokenOk, std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -275,7 +278,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
+      const Index& index, const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
@@ -408,6 +411,14 @@ class Server {
   }
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
     return qlever().materializedViewsManager();
+  }
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  qlever::Qlever::IndexAndViews indexAndViewsSnapshot() const {
+    return qlever().indexAndViewsSnapshot();
   }
 };
 
