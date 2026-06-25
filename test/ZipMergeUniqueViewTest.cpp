@@ -11,28 +11,30 @@
 
 #include <forward_list>
 #include <ostream>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "util/GTestHelpers.h"
+#include "util/StringUtils.h"
 #include "util/views/ZipMergeUniqueView.h"
 
 // We need to explicitly tell GTest how to print a `ZipMergeUniqueView`,
 // because the latter inherits an implicit `operator<<` from `range-v3`s
 // `view_interface`. That operator leads to a hard compile error if the value
-// type of the view not printable. Note: `::testing::PrintToString`
+// type of the view is not printable. Note: `::testing::PrintToString`
 // already falls back to a hex byte representation for non-streamable types, so
 // no SFINAE machinery is needed here.
 namespace ad_utility {
 template <typename V1, typename V2, typename Compare, typename Projection>
 void PrintTo(const ZipMergeUniqueView<V1, V2, Compare, Projection>& view,
              std::ostream* os) {
-  *os << '[';
-  bool first = true;
+  std::vector<std::string> strs;
   for (const auto& elem : view) {
-    if (!first) *os << ',';
-    *os << ::testing::PrintToString(elem);
-    first = false;
+    strs.push_back(::testing::PrintToString(elem));
   }
+  *os << '[';
+  lazyStrJoin(os, strs, ",");
   *os << ']';
 }
 }  // namespace ad_utility
