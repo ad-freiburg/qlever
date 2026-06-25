@@ -154,7 +154,7 @@ TransitivePathBinSearch::TransitivePathBinSearch(
 
 // _____________________________________________________________________________
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
-    const IdTable& dynSub, const TransitivePathSide& startSide,
+    const IdTableView<0>& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   return BinSearchMap{
       dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),

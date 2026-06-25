@@ -38,6 +38,36 @@ TEST(IriTest, IriCreation) {
 }
 
 // _____________________________________________________________________________
+TEST(IriTest, fromIrirefValidated) {
+  // Valid IRI references are accepted and behave like `fromIriref`.
+  EXPECT_EQ(Iri::fromIrirefValidated("<http://www.wikidata.org/entity/Q3138>"),
+            Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>"));
+  // The empty body `<>` is a valid `IRIREF`.
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<>"));
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<urn:foo>"));
+
+  // Invalid inputs throw with a descriptive message.
+  auto expectInvalid = [](std::string_view input) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Iri::fromIrirefValidated(input),
+        ::testing::HasSubstr("not a valid IRI reference"));
+  };
+  // Missing brackets.
+  expectInvalid("http://example.org");
+  expectInvalid("<http://example.org");
+  expectInvalid("http://example.org>");
+  // Forbidden characters inside the brackets.
+  expectInvalid("<http://example.org/a b>");   // space
+  expectInvalid("<http://example.org/a\"b>");  // double quote
+  expectInvalid("<http://example.org/a{b}>");  // braces
+  expectInvalid("<http://example.org/a\\b>");  // backslash
+  expectInvalid("<http://example.org/a^b>");   // caret
+  expectInvalid("<http://example.org/a`b>");   // backtick
+  // The internal `@lang@`-prefixed format is deliberately rejected.
+  expectInvalid("@en@<http://example.org>");
+}
+
+// _____________________________________________________________________________
 TEST(IriTest, emptyIri) {
   EXPECT_TRUE(Iri{}.empty());
   EXPECT_FALSE(Iri::fromIriref("<http://www.wikidata.org>").empty());

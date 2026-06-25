@@ -30,12 +30,14 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
+#include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
+#include "util/QueryEventLog.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -50,68 +52,15 @@ using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken,
-               bool noAccessCheck, bool usePatternTrick)
-    : numThreads_(numThreads),
+Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
+               const qlever::EngineConfig& config, bool noAccessCheck)
+    : qlever_(config),
+      numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
-                 [this](ad_utility::MemorySize numMemoryToAllocate) {
-                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                                   numMemoryToAllocate);
-                 }},
-      index_{std::make_shared<Index>(allocator_)},
-      enablePatternTrick_(usePatternTrick),
-      // The number of server threads currently also is the number of queries
-      // that can be processed simultaneously.
       queryThreadPool_{numThreads} {
-  // This also directly triggers the update functions and propagates the
-  // values of the parameters to the cache.
-  globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
-      [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
-  globalRuntimeParameters.wlock()->cacheMaxSizeSingleEntry_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) {
-        cache_.setMaxSizeSingleEntry(newValue);
-      });
-}
-
-// __________________________________________________________________________
-void Server::initialize(const std::string& indexBaseName, bool useText,
-                        bool usePatterns, bool loadAllPermutations,
-                        bool persistUpdates,
-                        std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
-
-  index().usePatterns() = usePatterns;
-  index().loadAllPermutations() = loadAllPermutations;
-
-  // Init the index.
-  index().createFromOnDiskIndex(indexBaseName, persistUpdates);
-  if (useText) {
-    index().addTextFromOnDiskIndex();
-  }
-
-  materializedViewsManager_->setOnDiskBase(indexBaseName);
-
-  // Preload materialized views as requested by the user. This is done in a
-  // try-catch block to prevent an exception during loading of a view from
-  // blocking the server start.
-  for (const auto& viewName : preloadMaterializedViews) {
-    try {
-      materializedViewsManager_->loadView(viewName);
-    } catch (const std::exception& ex) {
-      AD_LOG_ERROR << "Preloading materialized view '" << viewName
-                   << "' failed: " << ex.what() << "." << std::endl;
-    }
-  }
-
-  sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index().numTriples().normalAndInternal_() *
-                      PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
@@ -123,10 +72,23 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const std::string& indexBaseName, bool useText,
-                 bool usePatterns, bool loadAllPermutations,
-                 bool persistUpdates,
-                 std::vector<std::string> preloadMaterializedViews) {
+void Server::configureQueryEventLog(const std::filesystem::path& path) {
+  // One log, owned by a `shared_ptr` copied into both callbacks, so its
+  // lifetime follows the callbacks (and thus the registry).
+  auto log = std::make_shared<ad_utility::QueryEventLog>();
+  log->setOutputFile(path);
+  // One generic lambda for both events: serialize the info struct (via its
+  // `to_json`) and push it; the log appends the trailing newline.
+  auto logEvent = [log](const auto& info) {
+    nlohmann::ordered_json line = info;
+    log->push(line.dump());
+  };
+  queryRegistry_.addOnStart(logEvent);
+  queryRegistry_.addOnEnd(std::move(logEvent));
+}
+
+// _____________________________________________________________________________
+void Server::run() {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -205,10 +167,6 @@ void Server::run(const std::string& indexBaseName, bool useText,
   auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
                                std::move(httpSessionHandler),
                                std::move(webSocketSessionSupplier)};
-
-  // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-             persistUpdates, std::move(preloadMaterializedViews));
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -302,7 +260,7 @@ auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
-    bool accessTokenOk) {
+    bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
@@ -316,8 +274,9 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
                                              {});
   AD_LOG_INFO
-      << "Processing the following " << operationName << ":"
-      << (pinResult ? " [pin result]" : "")
+      << "Processing the following " << operationName
+      << (clientIp.empty() ? std::string{} : absl::StrCat(" from ", clientIp))
+      << ":" << (pinResult ? " [pin result]" : "")
       << (pinSubtrees ? " [pin subresults]" : "")
       << (pinResultWithName
               ? absl::StrCat(
@@ -332,14 +291,11 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = std::make_shared<QueryExecutionContext>(
-      index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, materializedViewsManager_,
+  auto qec = qlever().createQueryExecutionContext(
       [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
         (*sharedMessageSender)(std::move(json));
       },
       pinSubtrees, pinResult);
-
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, *qec);
   return std::make_tuple(std::move(qec), std::move(cancellationHandle),
@@ -435,17 +391,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
-    cache_.clearUnpinnedOnly();
+    cache().clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
-    cache_.clearAll();
+    cache().clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
-    namedResultCache_.clear();
+    namedResultCache().clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -595,7 +551,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
-    materializedViewsManager_->loadView(name.value());
+    materializedViewsManager()->loadView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
@@ -663,30 +619,45 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       // sent to the client already. We can stop here.
       co_return;
     }
+    // Empty when the header is absent.
+    std::string_view clientIp = request.base()["X-Real-IP"];
     ad_utility::websocket::MessageSender messageSender =
-        createMessageSender(queryHub_, request, operationString);
-
+        createMessageSender(queryHub_, request, operationString, clientIp);
+    // Grab the shared handle before `messageSender` is moved below.
+    using enum ad_utility::websocket::QueryStatus;
+    auto queryStatus = messageSender.sharedStatus();
+    // Outside the `try`: `qecPtr` owns the id whose destructor writes the
+    // `end` event, so the status must be set before it unwinds.
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString,
                          std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk);
+                         timeLimit.value(), accessTokenOk, clientIp);
     auto& qec = *qecPtr;
-    if (!ql::ranges::all_of(operations, expectedOperation)) {
-      throw std::runtime_error(absl::StrCat(
-          msg, ad_utility::truncateOperationString(operationString)));
-    }
-    if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      co_return co_await processUpdate(
-          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
-    } else {
-      AD_CORRECTNESS_CHECK(operations.size() == 1);
-      ParsedQuery query = std::move(operations[0]);
-      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
-                           query.hasConstructClause());
-      co_return co_await processQuery(
-          parameters, std::move(query), requestTimer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
+    try {
+      if (!ql::ranges::all_of(operations, expectedOperation)) {
+        throw std::runtime_error(absl::StrCat(
+            msg, ad_utility::truncateOperationString(operationString)));
+      }
+      if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+        co_await processUpdate(std::move(operations), requestTimer, tracer,
+                               cancellationHandle, qec, std::move(request),
+                               send, timeLimit.value(), plannedQuery);
+      } else {
+        AD_CORRECTNESS_CHECK(operations.size() == 1);
+        ParsedQuery query = std::move(operations[0]);
+        AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
+                             query.hasConstructClause());
+        co_await processQuery(parameters, std::move(query), requestTimer,
+                              cancellationHandle, qec, std::move(request), send,
+                              timeLimit.value(), plannedQuery);
+      }
+      queryStatus->store(OK);
+      co_return;
+    } catch (const ad_utility::CancellationException& e) {
+      queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
+                             ? TIMEOUT
+                             : CANCELLED);
+      throw;
     }
   };
   auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
@@ -870,14 +841,14 @@ nlohmann::json Server::composeStatsJson() const {
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-results-unpinned"] = cache_.numNonPinnedEntries();
-  result["num-results-pinned-unnamed"] = cache_.numPinnedEntries();
-  result["num-results-pinned-named"] = namedResultCache_.numEntries();
+  result["num-results-unpinned"] = cache().numNonPinnedEntries();
+  result["num-results-pinned-unnamed"] = cache().numPinnedEntries();
+  result["num-results-pinned-named"] = namedResultCache().numEntries();
 
   // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
   // converter.
-  result["cache-size-unpinned"] = cache_.nonPinnedSize().getBytes();
-  result["cache-size-pinned"] = cache_.pinnedSize().getBytes();
+  result["cache-size-unpinned"] = cache().nonPinnedSize().getBytes();
+  result["cache-size-pinned"] = cache().pinnedSize().getBytes();
   return result;
 }
 
@@ -885,14 +856,15 @@ nlohmann::json Server::composeCacheStatsJson() const {
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::OwningQueryId Server::getQueryId(
-        const RequestT& request, std::string_view query) {
+        const RequestT& request, std::string_view query,
+        std::string_view clientIp) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return queryRegistry_.uniqueId(query);
+    return queryRegistry_.uniqueId(query, clientIp);
   }
-  auto queryId =
-      queryRegistry_.uniqueIdFromString(std::string(queryIdHeader), query);
+  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader),
+                                                   query, clientIp);
   if (!queryId) {
     throw QueryAlreadyInUseError{queryIdHeader};
   }
@@ -995,11 +967,12 @@ CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operation) {
+        const RequestT& request, std::string_view operation,
+        std::string_view clientIp) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, operation), *queryHubLock};
+      getQueryId(request, operation, clientIp), *queryHubLock};
   return messageSender;
 }
 
@@ -1190,8 +1163,8 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
-  cache_.clearAll();
-  namedResultCache_.clear();
+  cache().clearAll();
+  namedResultCache().clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
@@ -1260,11 +1233,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
-                results.push_back(json{createResponseMetadataForUpdate(
+                results.push_back(createResponseMetadataForUpdate(
                     index(),
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree(),
-                    updateMetadata, tracer)});
+                    updateMetadata, tracer));
                 metadatas.push_back(std::move(updateMetadata));
 
                 AD_LOG_INFO << "Done processing update, total time was "
@@ -1345,6 +1318,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
   } catch (const QueryAlreadyInUseError& e) {
+    // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
@@ -1481,7 +1455,8 @@ void Server::adjustParsedQueryLimitOffset(
 template ad_utility::websocket::MessageSender
 Server::createMessageSender<http::request<http::string_body>>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
-    const http::request<http::string_body>&, std::string_view);
+    const http::request<http::string_body>&, std::string_view,
+    std::string_view);
 
 // _____________________________________________________________________________
 void Server::writeMaterializedView(
@@ -1491,16 +1466,14 @@ void Server::writeMaterializedView(
     TimeLimit timeLimit) {
   auto parsedQuery = SparqlParser::parseQuery(
       &index().encodedIriManager(), query.query_, query.datasetClauses_);
-  auto qec = std::make_shared<QueryExecutionContext>(
-      index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, materializedViewsManager_);
+  auto qec = qlever().createQueryExecutionContext();
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet = std::make_shared<QueryExecutionTree>(
       std::move(plan.queryExecutionTree()));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  materializedViewsManager_->writeViewToDisk(
+  materializedViewsManager()->writeViewToDisk(
       name, {qet, qec, std::move(plan.parsedQuery())}, memoryLimit);
 }
 
