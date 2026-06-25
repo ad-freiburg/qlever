@@ -435,7 +435,7 @@ TYPED_TEST(IoUringManagerTest, waitOnNonExistingBatch) {
 // issued.
 TYPED_TEST(IoUringManagerTest, fakeHandle) {
   // create a handle for which no request has been queued.
-  ad_utility::IoUringPolicy::BatchHandle fakeHandle = 999;
+  auto fakeHandle = 999;
 
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
