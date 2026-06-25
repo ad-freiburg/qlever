@@ -653,7 +653,9 @@ void runCoroutine(net::awaitable<void> coro) {
   net::co_spawn(ioc.get_executor(), std::move(coro),
                 [&eptr](std::exception_ptr p) { eptr = p; });
   ioc.run();
-  if (eptr) std::rethrow_exception(eptr);
+  if (eptr) {
+    std::rethrow_exception(eptr);
+  }
 }
 
 }  // namespace
