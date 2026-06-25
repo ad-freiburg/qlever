@@ -127,14 +127,13 @@ void IoUringPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 void IoUringPolicy::wait(BatchHandle handle) {
-  auto it = numInFlightReadRequestsPerBatch_.find(handle);
-  while (it != numInFlightReadRequestsPerBatch_.end() && it->second > 0) {
+  // Drain completions until this batch is gone. `drainOneCqe` erases a batch as
+  // soon as its last read completes, so a present entry always still has
+  // outstanding reads.
+  while (numInFlightReadRequestsPerBatch_.find(handle) !=
+         numInFlightReadRequestsPerBatch_.end()) {
     drainOneCqe();
-    // `drainOneCqe` may have erased the batch (when it completed) or rehashed
-    // the map, so re-look up the entry on every iteration.
-    it = numInFlightReadRequestsPerBatch_.find(handle);
   }
-  numInFlightReadRequestsPerBatch_.erase(handle);
 }
 
 //______________________________________________________________________________
@@ -171,12 +170,15 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   }
 
   // Attribute the completion to its batch and decrement that batch's in-flight
-  // count. The batch entry must still be present: a batch is only erased (in
-  // `wait()`) after its count reaches zero, which happens only once all of its
-  // reads have completed.
+  // count, erasing the batch once its last read completes. The entry must still
+  // be present here: the read we are processing belongs to this batch and was
+  // outstanding, so the batch's count was at least one and it had not yet been
+  // erased.
   auto it = numInFlightReadRequestsPerBatch_.find(inFlightRead.batchHandle);
   AD_CORRECTNESS_CHECK(it != numInFlightReadRequestsPerBatch_.end());
-  it->second--;
+  if (--it->second == 0) {
+    numInFlightReadRequestsPerBatch_.erase(it);
+  }
 }
 
 #endif  // QLEVER_HAS_IO_URING
