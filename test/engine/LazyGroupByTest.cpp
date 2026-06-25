@@ -59,7 +59,7 @@ class LazyGroupByTest : public ::testing::Test {
     sparqlExpression::EvaluationContext evaluationContext{
         *qec_,
         subtree_->getVariableColumns(),
-        idTable,
+        idTable.asStaticView<0>(),
         ua,
         localVocab_,
         std::make_shared<ad_utility::CancellationHandle<>>(),
