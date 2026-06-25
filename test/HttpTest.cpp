@@ -295,6 +295,7 @@ TYPED_TEST(HttpServerBodyTest, HttpTest) {
                               std::to_string(httpServer.getPort()));
         auto response = httpClient.sendWebSocketHandshake(
             verb::get, "localhost", "/watch/some-id");
+        // verify request is upgraded
         ASSERT_EQ(response.base().result(), http::status::switching_protocols);
       }
     }
@@ -304,6 +305,7 @@ TYPED_TEST(HttpServerBodyTest, HttpTest) {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
       auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
                                                         "/other-path");
+      // Check for not found error
       ASSERT_EQ(response.base().result(), http::status::not_found);
     }
 
@@ -365,6 +367,8 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
     EXPECT_EQ(response.contentType_, "text/plain");
     EXPECT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
 
+    // We need to shut down the server first to not have a race condition on the
+    // logging stream.
     httpServer.shutDown();
     return logStream.str();
   };
@@ -424,9 +428,12 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
                                  const auto& responseMatcher) {
     ad_utility::SharedCancellationHandle handle =
         std::make_shared<ad_utility::CancellationHandle<>>();
+
     auto httpClient = std::make_unique<HttpClient>(
         "localhost", std::to_string(httpServer.getPort()));
+
     const std::string body(requestBodySize.getBytes(), 'f');
+
     auto response = HttpClient::sendRequest(
         std::move(httpClient), verb::post, "localhost", "target", handle, body);
     EXPECT_THAT(response, responseMatcher);
