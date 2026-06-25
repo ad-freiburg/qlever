@@ -78,24 +78,22 @@ MaterializedViewsManager::ViewsList MaterializedViewsManager::readViewsList()
     nlohmann::json viewsJson;
     ad_utility::makeIfstream(filename) >> viewsJson;
     if (!viewsJson.is_object()) {
-      throw std::runtime_error{absl::StrCat(
-          "The views list file '", filename,
-          "' is corrupted: expected a JSON object.")};
+      throw std::runtime_error{
+          absl::StrCat("The views list file '", filename,
+                       "' is corrupted: expected a JSON object.")};
     }
     for (const auto& [name, idJson] : viewsJson.items()) {
       if (!idJson.is_number_unsigned()) {
         throw std::runtime_error{absl::StrCat(
-            "The views list file '", filename,
-            "' is corrupted: ID for view '", name,
-            "' is not an unsigned integer.")};
+            "The views list file '", filename, "' is corrupted: ID for view '",
+            name, "' is not an unsigned integer.")};
       }
       auto id = idJson.get<MaterializedViewId>();
       if (id > MATERIALIZED_VIEW_MAX_ID) {
         throw std::runtime_error{absl::StrCat(
-            "The views list file '", filename,
-            "' is corrupted: ID ", id, " for view '", name,
-            "' exceeds the maximum allowed ID ", MATERIALIZED_VIEW_MAX_ID,
-            ".")};
+            "The views list file '", filename, "' is corrupted: ID ", id,
+            " for view '", name, "' exceeds the maximum allowed ID ",
+            MATERIALIZED_VIEW_MAX_ID, ".")};
       }
       views.insert({name, id});
     }
