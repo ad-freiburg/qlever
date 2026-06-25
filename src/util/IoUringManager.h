@@ -63,9 +63,9 @@ class BatchManager {
   BatchManager(const BatchManager&) = delete;
   BatchManager& operator=(const BatchManager&) = delete;
 
-  BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
-                       ql::span<const uint64_t> offsets,
-                       ql::span<char*> buffers) {
+  [[nodiscard]] BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
+                                     ql::span<const uint64_t> offsets,
+                                     ql::span<char*> buffers) {
     if (!validateSameLength(numBytes, offsets, buffers)) {
       AD_THROW("spans should have same length");
     }
