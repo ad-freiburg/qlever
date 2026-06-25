@@ -7,6 +7,7 @@
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -50,6 +51,7 @@ int main(int argc, char** argv) {
   bool noAccessCheck = false;
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
+  bool noMetricsLog = false;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -106,6 +108,10 @@ int main(int argc, char** argv) {
   add("no-patterns,P", po::bool_switch(&config.noPatterns_),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
+  add("no-metrics-log", po::bool_switch(&noMetricsLog),
+      "Disable the per-query metrics log. By default a JSONL log of query "
+      "start/end events is written next to the index files "
+      "(`<index-basename>.metrics-log.jsonl`).");
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
@@ -225,10 +231,15 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck);
+    // Per-query jsonl metrics log, written next to the index files. On by
+    // default; `--no-metrics-log` opts out.
+    if (!noMetricsLog) {
+      server.configureQueryEventLog(config.baseName_ + ".metrics-log.jsonl");
+    }
     server.run();
   } catch (const std::exception& e) {
-    // This code should never be reached as all exceptions should be handled
-    // within server.run()
+    // Reached if opening the metrics log fails; server.run() otherwise handles
+    // its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }

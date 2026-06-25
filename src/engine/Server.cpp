@@ -37,6 +37,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
+#include "util/QueryEventLog.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -68,6 +69,22 @@ Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
     AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
                 << "\"" << std::endl;
   }
+}
+
+// _____________________________________________________________________________
+void Server::configureQueryEventLog(const std::filesystem::path& path) {
+  // One log, owned by a `shared_ptr` copied into both callbacks, so its
+  // lifetime follows the callbacks (and thus the registry).
+  auto log = std::make_shared<ad_utility::QueryEventLog>();
+  log->setOutputFile(path);
+  // One generic lambda for both events: serialize the info struct (via its
+  // `to_json`) and push it; the log appends the trailing newline.
+  auto logEvent = [log](const auto& info) {
+    nlohmann::ordered_json line = info;
+    log->push(line.dump());
+  };
+  queryRegistry_.addOnStart(logEvent);
+  queryRegistry_.addOnEnd(std::move(logEvent));
 }
 
 // _____________________________________________________________________________
@@ -238,7 +255,7 @@ auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
-    bool accessTokenOk) {
+    bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
@@ -252,8 +269,9 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
                                              {});
   AD_LOG_INFO
-      << "Processing the following " << operationName << ":"
-      << (pinResult ? " [pin result]" : "")
+      << "Processing the following " << operationName
+      << (clientIp.empty() ? std::string{} : absl::StrCat(" from ", clientIp))
+      << ":" << (pinResult ? " [pin result]" : "")
       << (pinSubtrees ? " [pin subresults]" : "")
       << (pinResultWithName
               ? absl::StrCat(
@@ -596,30 +614,45 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       // sent to the client already. We can stop here.
       co_return;
     }
+    // Empty when the header is absent.
+    std::string_view clientIp = request.base()["X-Real-IP"];
     ad_utility::websocket::MessageSender messageSender =
-        createMessageSender(queryHub_, request, operationString);
-
+        createMessageSender(queryHub_, request, operationString, clientIp);
+    // Grab the shared handle before `messageSender` is moved below.
+    using enum ad_utility::websocket::QueryStatus;
+    auto queryStatus = messageSender.sharedStatus();
+    // Outside the `try`: `qecPtr` owns the id whose destructor writes the
+    // `end` event, so the status must be set before it unwinds.
     auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString,
                          std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk);
+                         timeLimit.value(), accessTokenOk, clientIp);
     auto& qec = *qecPtr;
-    if (!ql::ranges::all_of(operations, expectedOperation)) {
-      throw std::runtime_error(absl::StrCat(
-          msg, ad_utility::truncateOperationString(operationString)));
-    }
-    if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-      co_return co_await processUpdate(
-          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
-    } else {
-      AD_CORRECTNESS_CHECK(operations.size() == 1);
-      ParsedQuery query = std::move(operations[0]);
-      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
-                           query.hasConstructClause());
-      co_return co_await processQuery(
-          parameters, std::move(query), requestTimer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value(), plannedQuery);
+    try {
+      if (!ql::ranges::all_of(operations, expectedOperation)) {
+        throw std::runtime_error(absl::StrCat(
+            msg, ad_utility::truncateOperationString(operationString)));
+      }
+      if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+        co_await processUpdate(std::move(operations), requestTimer, tracer,
+                               cancellationHandle, qec, std::move(request),
+                               send, timeLimit.value(), plannedQuery);
+      } else {
+        AD_CORRECTNESS_CHECK(operations.size() == 1);
+        ParsedQuery query = std::move(operations[0]);
+        AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
+                             query.hasConstructClause());
+        co_await processQuery(parameters, std::move(query), requestTimer,
+                              cancellationHandle, qec, std::move(request), send,
+                              timeLimit.value(), plannedQuery);
+      }
+      queryStatus->store(OK);
+      co_return;
+    } catch (const ad_utility::CancellationException& e) {
+      queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
+                             ? TIMEOUT
+                             : CANCELLED);
+      throw;
     }
   };
   auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
@@ -818,14 +851,15 @@ nlohmann::json Server::composeCacheStatsJson() const {
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::OwningQueryId Server::getQueryId(
-        const RequestT& request, std::string_view query) {
+        const RequestT& request, std::string_view query,
+        std::string_view clientIp) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return queryRegistry_.uniqueId(query);
+    return queryRegistry_.uniqueId(query, clientIp);
   }
-  auto queryId =
-      queryRegistry_.uniqueIdFromString(std::string(queryIdHeader), query);
+  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader),
+                                                   query, clientIp);
   if (!queryId) {
     throw QueryAlreadyInUseError{queryIdHeader};
   }
@@ -928,11 +962,12 @@ CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operation) {
+        const RequestT& request, std::string_view operation,
+        std::string_view clientIp) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, operation), *queryHubLock};
+      getQueryId(request, operation, clientIp), *queryHubLock};
   return messageSender;
 }
 
@@ -1278,6 +1313,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
   } catch (const QueryAlreadyInUseError& e) {
+    // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
@@ -1414,7 +1450,8 @@ void Server::adjustParsedQueryLimitOffset(
 template ad_utility::websocket::MessageSender
 Server::createMessageSender<http::request<http::string_body>>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
-    const http::request<http::string_body>&, std::string_view);
+    const http::request<http::string_body>&, std::string_view,
+    std::string_view);
 
 // _____________________________________________________________________________
 void Server::writeMaterializedView(
