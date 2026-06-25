@@ -44,7 +44,7 @@ void SyncIoPolicy::addBatch(int fd,
                             ql::span<const size_t> numBytesToReadPerRequest,
                             ql::span<const uint64_t> fileOffsetPerRequest,
                             ql::span<char*> targetBufferPerRequest,
-                            BatchHandle /*handle*/) const {
+                            [[maybe_unused]] BatchHandle handle) const {
   for (const auto& [numBytesToRead, fileOffset, targetBuf] :
        ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
                             targetBufferPerRequest)) {
