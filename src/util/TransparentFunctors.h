@@ -172,7 +172,7 @@ struct Noop {
 
 // A default-constructible projection functor for a data field member.
 template <auto MemberPtr>
-struct MemberFieldProj {
+struct MemberProjection {
   template <typename T>
   constexpr decltype(auto) operator()(T&& obj) const noexcept {
     return AD_FWD(obj).*MemberPtr;

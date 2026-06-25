@@ -188,6 +188,8 @@ addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTest(ZipMergeUniqueViewTest)
 
+addLinkAndDiscoverTest(ZipMergeUniqueViewTest)
+
 addLinkAndDiscoverTest(SortedVectorTest)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
@@ -535,3 +537,5 @@ addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
 
 addLinkAndDiscoverTest(LogTest)
+
+addLinkAndDiscoverTest(QueryEventLogTest util)

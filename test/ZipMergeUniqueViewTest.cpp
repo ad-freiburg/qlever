@@ -16,6 +16,9 @@
 #include "util/GTestHelpers.h"
 #include "util/views/ZipMergeUniqueView.h"
 
+// Needed for range-v3's range `operator<<` which prints elements with `<<`.
+// Without this, printing `ZipMergeUniqueView<..., std::pair<int,int>>` fails
+// to compile on compilers building in C++17 mode.
 template <typename T, typename U>
 std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
   return os << '(' << p.first << ", " << p.second << ')';
@@ -116,8 +119,9 @@ void checkIteratorCategory() {
 }  // namespace
 
 TEST(ZipMergeUniqueViewTest, IteratorCategory) {
-  // If both inputs have `forward_iterator`s then the resulting `ZipMergeView`
-  // also has `forward_iterator`s, otherwise it's only `input_iterator`.
+  // If both inputs have `forward_iterator`s then the resulting
+  // `ZipMergeUniqueView` also has `forward_iterator`s, otherwise it's only
+  // `input_iterator`.
   using ForwardContainer = std::vector<int>;
   using InputContainer =
       decltype(ad_utility::ForceInputView{std::declval<ForwardContainer&>()});

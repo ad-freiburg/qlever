@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUE_H
-#define QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUE_H
+#ifndef QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUEVIEW_H
+#define QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUEVIEW_H
 
 #include <functional>
 
@@ -23,6 +23,11 @@ namespace ad_utility {
 
 // Lazily merges and deduplicates two sorted ranges into a single sorted
 // sequence.
+//
+// Precondition: each of the two input ranges must itself be sorted according to
+// `Compare` (applied to the projected values) and free of duplicates under the
+// projection. The deduplication performed here is only *across* the two ranges,
+// not within a single range.
 //
 // Elements are yielded one at a time. The `Compare` function is applied to the
 // projected values (`Projection` applied to each element) to determine order.
@@ -215,4 +220,4 @@ ZipMergeUniqueView(R1&&, R2&&, Compare, Projection)
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUE_H
+#endif  // QLEVER_SRC_UTIL_VIEWS_ZIPMERGEUNIQUEVIEW_H
