@@ -16,11 +16,12 @@
 #include "util/GTestHelpers.h"
 #include "util/views/ZipMergeUniqueView.h"
 
-// `PrintTo` in the `ad_utility` namespace is found by GTest via ADL and takes
-// priority over range-v3's `view_interface::operator<<` (which requires
-// `operator<<` on the element type). `::testing::PrintToString` already falls
-// back to a hex byte representation for non-streamable types, so no SFINAE
-// machinery is needed here.
+// We need to explicitly tell GTest how to print a `ZipMergeUniqueView`,
+// because the latter inherits an implicit `operator<<` from `range-v3`s
+// `view_interface`. That operator leads to a hard compile error if the value
+// type of the view not printable. Note: `::testing::PrintToString`
+// already falls back to a hex byte representation for non-streamable types, so
+// no SFINAE machinery is needed here.
 namespace ad_utility {
 template <typename V1, typename V2, typename Compare, typename Projection>
 void PrintTo(const ZipMergeUniqueView<V1, V2, Compare, Projection>& view,
