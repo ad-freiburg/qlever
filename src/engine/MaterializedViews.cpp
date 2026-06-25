@@ -44,7 +44,7 @@ MaterializedViewWriter::MaterializedViewWriter(
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      qet_{plannedQuery.queryExecutionTree()},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
       qec_{plannedQuery.sharedQueryExecutionContext()},
       parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
@@ -90,7 +90,7 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
       "'CONSTRUCT', 'ASK' and update queries are not allowed.");
 
   auto targetVarsAndCols =
-      qet_.selectedVariablesToColumnIndices(parsedQuery_.selectClause());
+      qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
   const size_t numCols = targetVarsAndCols.size();
 
   // Column information for the columns selected by the user's query.
@@ -286,7 +286,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file.
-  const auto& varToCol = qet_.getVariableColumns();
+  const auto& varToCol = qet_->getVariableColumns();
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
       {"columns",
@@ -309,7 +309,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   AD_LOG_INFO << "Computing query result for materialized view \"" << name_
               << "\": " << parsedQuery_._originalString.substr(0, 80) << " ..."
               << std::endl;
-  auto result = qet_.getResult(true);
+  auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
                    memoryLimit_, allocator_};

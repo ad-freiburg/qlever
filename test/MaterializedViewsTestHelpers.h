@@ -103,7 +103,7 @@ class MaterializedViewsTest : public ::testing::Test {
   // statement.
   IdTable getQueryResultAsIdTable(std::string query) {
     auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
-    auto& qet = plannedQuery.queryExecutionTree();
+    auto qet = plannedQuery.sharedQueryExecutionTree();
     auto& parsed = plannedQuery.parsedQuery();
 
     // Get the visible variables' column indices in the correct order.
@@ -112,7 +112,7 @@ class MaterializedViewsTest : public ::testing::Test {
           "Only IdTables for SELECT can be exported so far.");
     }
     auto selectColOrdering =
-        qet.selectedVariablesToColumnIndices(parsed.selectClause());
+        qet->selectedVariablesToColumnIndices(parsed.selectClause());
     auto columns = ::ranges::to<std::vector<ColumnIndex>>(
         ql::views::transform(selectColOrdering, [](const auto& colIdxAndType) {
           if (!colIdxAndType.has_value()) {
@@ -122,7 +122,7 @@ class MaterializedViewsTest : public ::testing::Test {
         }));
 
     // Compute the result and permute the `IdTable` as expected.
-    auto res = qet.getResult(false);
+    auto res = qet->getResult(false);
     auto idTable = res->cloneIdTable();
     idTable.setColumnSubset(columns);
     return idTable;
@@ -191,7 +191,7 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
+  EXPECT_THAT(*plannedQuery.queryExecutionTree(), matcher);
 };
 
 // _____________________________________________________________________________

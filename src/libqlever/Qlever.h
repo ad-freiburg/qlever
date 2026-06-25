@@ -268,7 +268,7 @@ class Qlever {
   using PlannedQuery = qlever::PlannedQuery;
 
   PlannedQuery parseAndPlanQuery(
-      std::string query, std::vector<DatasetClause> datasetClauses = {},
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       ad_utility::SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,

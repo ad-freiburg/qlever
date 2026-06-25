@@ -23,15 +23,11 @@ class QueryExecutionContext;
 class ParsedQuery;
 
 namespace qlever {
-using QueryPlan =
-    std::tuple<std::shared_ptr<QueryExecutionTree>,
-               std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
 
 // Helper struct bundling a parsed query with a query execution tree.
-// As the `QueryExecutionTree` stores a raw pointer to the
-// `QueryExecutionContext`, We additionally store the context as a
-// `shared_ptr`, to avoid lifetime issues especially in the asynchronous
-// server code.
+// We store both `QueryExecutionTree` and `QueryExecutionContext` as
+// `shared_ptr` to avoid lifetime issues especially in the asynchronous server
+// code.
 struct PlannedQuery {
  private:
   // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
@@ -42,29 +38,34 @@ struct PlannedQuery {
   // operations still reference it.
   std::shared_ptr<QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
-  QueryExecutionTree queryExecutionTree_;
+  std::shared_ptr<QueryExecutionTree> queryExecutionTree_;
 
  public:
-  PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+  PlannedQuery(ParsedQuery pq, QueryExecutionTree& qet,
                QueryExecutionContext& qec)
       : qec_{qec.shared_from_this()},
         parsedQuery_{std::move(pq)},
-        queryExecutionTree_{std::move(qet)} {
-    AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
+        queryExecutionTree_{std::make_shared<QueryExecutionTree>(qet)} {
+    AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
   ParsedQuery& parsedQuery() { return parsedQuery_; }
-  QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
-  const QueryExecutionTree& queryExecutionTree() const {
+
+  const std::shared_ptr<QueryExecutionTree>& queryExecutionTree() const {
+    return queryExecutionTree_;
+  }
+  const std::shared_ptr<QueryExecutionContext>& queryExecutionContext() const {
+    return qec_;
+  }
+
+  std::shared_ptr<const QueryExecutionTree> sharedQueryExecutionTree() const {
     return queryExecutionTree_;
   }
   std::shared_ptr<const QueryExecutionContext> sharedQueryExecutionContext()
       const {
     return qec_;
   }
-  QueryExecutionContext& queryExecutionContext() { return *qec_; }
-  const QueryExecutionContext& queryExecutionContext() const { return *qec_; }
 };
 }  // namespace qlever
 

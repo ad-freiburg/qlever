@@ -167,7 +167,7 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      plannedQuery.parsedQuery(), *plannedQuery.queryExecutionTree(), mediaType,
       timer, std::move(handle));
   for (const auto& batch : responseGenerator) {
     result += batch;
@@ -187,7 +187,8 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
   auto plannedQuery = parseAndPlanQuery(std::move(query));
-  plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
+  plannedQuery.queryExecutionContext()->pinResultWithName() =
+      std::move(options);
   [[maybe_unused]] auto result = this->query(plannedQuery);
 }
 
@@ -208,7 +209,7 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::parseAndPlanQuery(
-    std::string query, std::vector<DatasetClause> datasetClauses,
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
     ad_utility::SharedCancellationHandle handle,
     std::optional<TimeLimit> timeLimit,
     std::function<void(std::string)> updateCallback, bool pinSubstrees,
@@ -228,16 +229,16 @@ PlannedQuery Qlever::parseAndPlanQuery(
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
 
-  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
+  PlannedQuery plannedQuery{std::move(parsedQuery), qet, *qecPtr};
 
   handle->throwIfCancelled();
   // Set some additional attributes on the `PlannedQuery`.
   plannedQuery.queryExecutionTree()
-      .getRootOperation()
+      ->getRootOperation()
       ->recursivelySetCancellationHandle(std::move(handle));
   if (timeLimit.has_value()) {
     plannedQuery.queryExecutionTree()
-        .getRootOperation()
+        ->getRootOperation()
         ->recursivelySetTimeConstraint(timeLimit.value());
   }
 

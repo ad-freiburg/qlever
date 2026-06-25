@@ -46,7 +46,7 @@ class MaterializedViewWriter {
   std::string name_;
 
   // Query plan to retrieve the view's rows.
-  const QueryExecutionTree& qet_;
+  std::shared_ptr<const QueryExecutionTree> qet_;
   std::shared_ptr<const QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
 

@@ -765,26 +765,25 @@ Server::PlannedQuery Server::planQuery(
     ad_utility::SharedCancellationHandle handle) const {
   QueryPlanner qp(&qec, handle);
   auto executionTree = qp.createExecutionTree(operation);
-  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree),
-                            qec};
+  PlannedQuery plannedQuery{std::move(operation), executionTree, qec};
   handle->throwIfCancelled();
   // Set some additional attributes on the `PlannedQuery`.
   plannedQuery.queryExecutionTree()
-      .getRootOperation()
+      ->getRootOperation()
       ->recursivelySetCancellationHandle(std::move(handle));
   plannedQuery.queryExecutionTree()
-      .getRootOperation()
+      ->getRootOperation()
       ->recursivelySetTimeConstraint(timeLimit);
   auto& qet = plannedQuery.queryExecutionTree();
-  qet.isRoot() = true;  // allow pinning of the final result
+  qet->isRoot() = true;  // allow pinning of the final result
 
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+      qet->getRootOperation()->getRuntimeInfoWholeQuery();
   runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
   AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
-  AD_LOG_TRACE << qet.getCacheKey() << std::endl;
+  AD_LOG_TRACE << qet->getCacheKey() << std::endl;
   return plannedQuery;
 }
 
@@ -1073,7 +1072,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // requested format.
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
                                   plannedQuery.value(),
-                                  plannedQuery.value().queryExecutionTree(),
+                                  *plannedQuery.value().queryExecutionTree(),
                                   requestTimer, cancellationHandle);
   // Print the runtime info. This needs to be done after the query
   // was computed.
@@ -1087,7 +1086,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_DEBUG << "Runtime Info:\n"
                << plannedQuery.value()
                       .queryExecutionTree()
-                      .getRootOperation()
+                      ->getRootOperation()
                       ->runtimeInfo()
                       .toString()
                << std::endl;
@@ -1158,7 +1157,7 @@ UpdateMetadata Server::processUpdateImpl(
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata =
-      ExecuteUpdate::executeUpdate(index, plannedUpdate.parsedQuery(), qet,
+      ExecuteUpdate::executeUpdate(index, plannedUpdate.parsedQuery(), *qet,
                                    deltaTriples, cancellationHandle, tracer);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
@@ -1182,12 +1181,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-<<<<<<< HEAD
         TimeLimit timeLimit, std::optional<qlever::PlannedQuery>& plannedUpdate) {
   auto& index = indexAndViews->index_;
-=======
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
->>>>>>> d13cbeef (Adding alias for PlannedQuery to reduce diff and removed logging from Qlever parseAndPlanQuery() function.)
   outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -1246,7 +1241,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 results.push_back(createResponseMetadataForUpdate(
                     index,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
-                    *plannedUpdate, plannedUpdate->queryExecutionTree(),
+                    *plannedUpdate, *plannedUpdate->queryExecutionTree(),
                     updateMetadata, tracer));
                 metadatas.push_back(std::move(updateMetadata));
 
@@ -1255,7 +1250,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                             << std::endl;
                 AD_LOG_DEBUG << "Runtime Info:\n"
                              << plannedUpdate->queryExecutionTree()
-                                    .getRootOperation()
+                                    ->getRootOperation()
                                     ->runtimeInfo()
                                     .toString()
                              << std::endl;
@@ -1374,7 +1369,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()
                                      .queryExecutionTree()
-                                     .getRootOperation()
+                                     ->getRootOperation()
                                      ->runtimeInfo());
     }
     auto errResponse =
