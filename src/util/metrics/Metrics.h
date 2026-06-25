@@ -18,7 +18,7 @@
 namespace ad_utility::metrics {
 
 // Abstract interface for pulling a Prometheus text exposition from the
-// registered metrics. Implemented by PullMetricReader in Metrics.cpp.
+// registered metrics. Implemented by `PullMetricReader` in `Metrics.cpp`.
 class MetricsReader {
  public:
   virtual ~MetricsReader() = default;

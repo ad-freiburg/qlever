@@ -9,19 +9,19 @@
 
 #include "util/metrics/Metrics.h"
 
+#include <opentelemetry/exporters/prometheus/collector.h>
+#include <opentelemetry/metrics/provider.h>
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h>
+#include <opentelemetry/sdk/metrics/meter_provider.h>
+#include <opentelemetry/sdk/metrics/meter_provider_factory.h>
+#include <opentelemetry/sdk/metrics/view/instrument_selector_factory.h>
+#include <opentelemetry/sdk/metrics/view/meter_selector_factory.h>
+#include <opentelemetry/sdk/metrics/view/view_factory.h>
+#include <prometheus/text_serializer.h>
+
 #include <chrono>
 #include <memory>
 #include <string>
-
-#include "opentelemetry/exporters/prometheus/collector.h"
-#include "opentelemetry/metrics/provider.h"
-#include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
-#include "opentelemetry/sdk/metrics/meter_provider.h"
-#include "opentelemetry/sdk/metrics/meter_provider_factory.h"
-#include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
-#include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
-#include "opentelemetry/sdk/metrics/view/view_factory.h"
-#include "prometheus/text_serializer.h"
 
 namespace metrics_api = opentelemetry::metrics;
 namespace metrics_sdk = opentelemetry::sdk::metrics;
@@ -61,6 +61,7 @@ class PullMetricReader : public metrics_sdk::MetricReader,
 
 }  // namespace
 
+// _____________________________________________________________________________
 std::shared_ptr<MetricsReader> initialize(bool enabled) {
   if (!enabled) {
     return nullptr;
@@ -93,12 +94,14 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   return pullReader;
 }
 
+// _____________________________________________________________________________
 ActiveCounterGuard::ActiveCounterGuard(
     metrics_api::UpDownCounter<int64_t>& counter, std::string operation)
     : counter_(counter), operation_(std::move(operation)) {
   counter_.Add(1, {{"operation", operation_}});
 }
 
+// _____________________________________________________________________________
 ActiveCounterGuard::~ActiveCounterGuard() {
   counter_.Add(-1, {{"operation", operation_}});
 }

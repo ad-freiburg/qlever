@@ -477,7 +477,7 @@ set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         opentelemetry-cpp
         GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
-        GIT_TAG v1.26.0
+        GIT_TAG 2d80af1b1d26e300d9c0f7f51fa360f22c773523 # v1.26.0
         GIT_SHALLOW TRUE
         EXCLUDE_FROM_ALL
         SYSTEM

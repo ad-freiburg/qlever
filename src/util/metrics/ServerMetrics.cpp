@@ -9,9 +9,10 @@
 
 #include "util/metrics/ServerMetrics.h"
 
+#include <opentelemetry/metrics/provider.h>
+
 #include <utility>
 
-#include "opentelemetry/metrics/provider.h"
 #include "util/metrics/Metrics.h"
 
 // _____________________________________________________________________________
