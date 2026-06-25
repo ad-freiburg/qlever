@@ -79,24 +79,22 @@ MaterializedViewsManager::ViewsList MaterializedViewsManager::readViewsList()
     nlohmann::json viewsJson;
     ad_utility::makeIfstream(filename) >> viewsJson;
     if (!viewsJson.is_object()) {
-      throw std::runtime_error{absl::StrCat(
-          "The views list file '", filename,
-          "' is corrupted: expected a JSON object.")};
+      throw std::runtime_error{
+          absl::StrCat("The views list file '", filename,
+                       "' is corrupted: expected a JSON object.")};
     }
     for (const auto& [name, idJson] : viewsJson.items()) {
       if (!idJson.is_number_unsigned()) {
         throw std::runtime_error{absl::StrCat(
-            "The views list file '", filename,
-            "' is corrupted: ID for view '", name,
-            "' is not an unsigned integer.")};
+            "The views list file '", filename, "' is corrupted: ID for view '",
+            name, "' is not an unsigned integer.")};
       }
       auto id = idJson.get<MaterializedViewId>();
       if (id > MATERIALIZED_VIEW_MAX_ID) {
         throw std::runtime_error{absl::StrCat(
-            "The views list file '", filename,
-            "' is corrupted: ID ", id, " for view '", name,
-            "' exceeds the maximum allowed ID ", MATERIALIZED_VIEW_MAX_ID,
-            ".")};
+            "The views list file '", filename, "' is corrupted: ID ", id,
+            " for view '", name, "' exceeds the maximum allowed ID ",
+            MATERIALIZED_VIEW_MAX_ID, ".")};
       }
       views.insert({name, id});
     }
@@ -758,6 +756,14 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
   // file handles or its permutation's memory mapping.
   unloadViewIfLoaded(name);
 
+  // Remove the view from the central views list, freeing its ID for reuse.
+  {
+    std::lock_guard lock{viewsListMutex_};
+    auto views = readViewsList();
+    views.erase(name);
+    writeViewsList(views);
+  }
+
   // Delete all files belonging to the view from disk. The `.spo-sorter.dat`
   // file is a temporary file that should normally not exist anymore, but we
   // remove it defensively in case a previous write was interrupted.
@@ -771,18 +777,11 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
           "' while deleting materialized view '", name, "': ", ec.message()));
     }
   }
+
   // Best-effort removal of the sorter temp file; it normally doesn't exist.
   std::error_code ignoredError;
   std::filesystem::remove(absl::StrCat(filenameBase, ".spo-sorter.dat"),
                           ignoredError);
-
-  // Remove the view from the central views list, freeing its ID for reuse.
-  {
-    std::lock_guard lock{viewsListMutex_};
-    auto views = readViewsList();
-    views.erase(name);
-    writeViewsList(views);
-  }
 
   AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
 }
