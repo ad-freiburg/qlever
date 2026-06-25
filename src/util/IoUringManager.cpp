@@ -20,7 +20,7 @@ namespace ad_utility {
 
 //______________________________________________________________________________
 void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                                    uint64_t fileOffset) const {
+                                    uint64_t fileOffset) {
   // `pread` reads up to `numBytes` bytes from file descriptor `fd` at offset
   // `fileOffset` (from the start of the file) into `targetBuffer`. The file
   // offset is not changed. On success, it returns the number of bytes read (0

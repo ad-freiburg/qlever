@@ -124,8 +124,12 @@ struct SyncIoPolicy {
   // (from the start of the file) into `targetBuffer`. Throws exception if the
   // read fails or returns fewer bytes than requested (a partial read or end of
   // file), since every read must be fully satisfied.
-  void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                        uint64_t fileOffset) const;
+  static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
+                               uint64_t fileOffset);
+
+  FRIEND_TEST(ReadFullyOrThrow, FullReadSucceeds);
+  FRIEND_TEST(ReadFullyOrThrow, ShortReadThrows);
+  FRIEND_TEST(ReadFullyOrThrow, InvalidFdThrows);
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to

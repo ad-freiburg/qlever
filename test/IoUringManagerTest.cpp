@@ -359,8 +359,9 @@ TEST(ReadFullyOrThrow, FullReadSucceeds) {
   TempFile tmp("AAAABBBB");
   FILE* file = openFile(tmp);
   std::vector<char> targetBuffer(4);
-  ad_utility::readFullyOrThrow(fileno(file), targetBuffer.data(), 4,
-                               /*fileOffset=*/4);
+  ad_utility::SyncIoPolicy::readFullyOrThrow(fileno(file), targetBuffer.data(),
+                                             4,
+                                             /*fileOffset=*/4);
   std::fclose(file);
   EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
 }
@@ -371,8 +372,8 @@ TEST(ReadFullyOrThrow, ShortReadThrows) {
   TempFile tmp("AAAABBBB");  // 8 bytes
   FILE* file = openFile(tmp);
   std::vector<char> targetBuffer(16);
-  EXPECT_THROW(ad_utility::readFullyOrThrow(fileno(file), targetBuffer.data(),
-                                            16, /*fileOffset=*/0),
+  EXPECT_THROW(ad_utility::SyncIoPolicy::readFullyOrThrow(
+                   fileno(file), targetBuffer.data(), 16, /*fileOffset=*/0),
                ad_utility::Exception);
   std::fclose(file);
 }
@@ -380,9 +381,10 @@ TEST(ReadFullyOrThrow, ShortReadThrows) {
 // Reading from an invalid file descriptor must throw.
 TEST(ReadFullyOrThrow, InvalidFdThrows) {
   std::vector<char> targetBuffer(4);
-  EXPECT_THROW(ad_utility::readFullyOrThrow(-1, targetBuffer.data(), 4,
-                                            /*fileOffset=*/0),
-               ad_utility::Exception);
+  EXPECT_THROW(
+      ad_utility::SyncIoPolicy::readFullyOrThrow(-1, targetBuffer.data(), 4,
+                                                 /*fileOffset=*/0),
+      ad_utility::Exception);
 }
 
 // Tests for `VocabLookupDataCommonBase` (via the concrete
