@@ -210,16 +210,12 @@ void Qlever::eraseResultWithName(std::string name) {
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto indexAndViews = indexAndViewsSnapshot();
-  std::shared_ptr<Index> index{indexAndViews, &indexAndViews->index_};
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager{
-      indexAndViews, &indexAndViews->materializedViewsManager_};
-  auto qecPtr = std::make_shared<QueryExecutionContext>(
-      index, &cache_, allocator_, sortPerformanceEstimator_, &namedResultCache_,
-      materializedViewsManager, [](std::string) {}, false, false,
+  auto qecPtr = createQueryExecutionContext(
+      std::move(indexAndViews), [](std::string) {}, false, false,
       disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
-      &index->getImpl().encodedIriManager(), std::move(query), {});
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), {});
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qecPtr.get(), handle};
   qp.setEnablePatternTrick(enablePatternTrick_);
@@ -270,7 +266,8 @@ void Qlever::loadMaterializedView(std::string name) const {
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::shared_ptr<IndexAndViews> indexAndViews,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) {
+    bool pinResult,
+    QueryExecutionContext::DisableCaching disableCaching) const {
   std::shared_ptr<Index> index{indexAndViews, &indexAndViews->index_};
   auto& viewsManagerRef = indexAndViews->materializedViewsManager_;
   std::shared_ptr<MaterializedViewsManager> viewsManager{
@@ -278,6 +275,6 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
-      pinSubtrees, pinResult);
+      pinSubtrees, pinResult, disableCaching);
 }
 }  // namespace qlever

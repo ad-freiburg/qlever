@@ -307,7 +307,9 @@ class Qlever {
       std::shared_ptr<IndexAndViews> indexAndViews,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
-      bool pinSubtrees = false, bool pinResult = false);
+      bool pinSubtrees = false, bool pinResult = false,
+      QueryExecutionContext::DisableCaching disableCaching =
+          QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
 
   // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
   // under a single read lock, so that all code paths handling a single request
