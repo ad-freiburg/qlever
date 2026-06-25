@@ -529,11 +529,12 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       &namedCache,
       materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
-  CustomGeneratorOperation operation{
-      &context, []() -> Result::Generator {
-        throw CancellationException{"Operation was cancelled"};
-        co_return;
-      }()};
+  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
+                                       throw CancellationException{
+                                           CancellationState::MANUAL,
+                                           "Operation was cancelled"};
+                                       co_return;
+                                     }()};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
