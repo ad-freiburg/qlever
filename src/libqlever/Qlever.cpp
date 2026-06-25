@@ -29,9 +29,8 @@ Qlever::Qlever(const EngineConfig& config)
             cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numMemoryToAllocate);
           }}},
-      indexAndViews_{
-          IndexAndViews{std::make_shared<Index>(allocator_),
-                        std::make_shared<MaterializedViewsManager>()}},
+      indexAndViews_{std::make_shared<IndexAndViews>(
+          Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -49,9 +48,7 @@ Qlever::Qlever(const EngineConfig& config)
   // No other thread can observe them yet, so reading the snapshot here is safe.
   // `snapshot` keeps the `shared_ptr`s alive for the references below.
   auto snapshot = indexAndViewsSnapshot();
-  Index& index = *snapshot.index_;
-  MaterializedViewsManager& materializedViewsManager =
-      *snapshot.materializedViewsManager_;
+  auto& [index, materializedViewsManager] = *snapshot;
 
   // Load the index from disk.
   index.usePatterns() = enablePatternTrick_;
@@ -210,14 +207,14 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
-  auto [index, materializedViewsManager] = indexAndViewsSnapshot();
-  auto qecPtr = std::make_shared<QueryExecutionContext>(
-      index, &cache_, allocator_, sortPerformanceEstimator_, &namedResultCache_,
-      materializedViewsManager, [](std::string) {}, false, false,
-      disableCaching_);
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(),
+      [](const std::
+             string&) { /* No runtime updates for this interface yet. */ },
+      false, false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
-      &index->getImpl().encodedIriManager(), std::move(query), {});
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), {});
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qecPtr.get(), handle};
   qp.setEnablePatternTrick(enablePatternTrick_);
@@ -266,13 +263,14 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::shared_ptr<const Index> index,
-    std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+    std::shared_ptr<IndexAndViews> indexAndViews,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) {
+    bool pinResult,
+    QueryExecutionContext::DisableCaching disableCaching) const {
+  auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(materializedViewsManager),
-      std::move(updateCallback), pinSubtrees, pinResult);
+      &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching);
 }
 }  // namespace qlever

@@ -27,7 +27,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
-#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
@@ -49,6 +48,7 @@ struct SimulateHttpRequest;
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
+  using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
@@ -221,7 +221,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::shared_ptr<Index> index, std::vector<ParsedQuery>&& updates,
+          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -242,13 +242,13 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
-  auto prepareOperation(
-      std::shared_ptr<Index> index,
-      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
-      std::string_view operationName, std::string_view operationSPARQL,
-      ad_utility::websocket::MessageSender messageSender,
-      const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
-      bool accessTokenOk, std::string_view clientIp);
+  auto prepareOperation(SharedIndexAndView indexAndViews,
+                        std::string_view operationName,
+                        std::string_view operationSPARQL,
+                        ad_utility::websocket::MessageSender messageSender,
+                        const ad_utility::url_parser::ParamValueMap& params,
+                        TimeLimit timeLimit, bool accessTokenOk,
+                        std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -387,12 +387,6 @@ class Server {
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
 
-  Index& index() { return qlever().index(); }
-  const Index& index() const { return qlever().index(); }
-  std::shared_ptr<const Index> sharedIndex() const {
-    return qlever().sharedIndex();
-  }
-
   QueryResultCache& cache() { return qlever().cache(); }
   const QueryResultCache& cache() const { return qlever().cache(); }
   ad_utility::AllocatorWithLimit<Id>& allocator() {
@@ -411,15 +405,12 @@ class Server {
   const NamedResultCache& namedResultCache() const {
     return qlever().namedResultCache();
   }
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return qlever().materializedViewsManager();
-  }
 
   // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
   // under a single read lock, so that all code paths handling a single request
   // observe a matching pair even if a concurrent rebuild swaps the pointers
   // between two reads.
-  qlever::Qlever::IndexAndViews indexAndViewsSnapshot() const {
+  SharedIndexAndView indexAndViewsSnapshot() const {
     return qlever().indexAndViewsSnapshot();
   }
 };
