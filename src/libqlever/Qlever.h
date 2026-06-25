@@ -297,7 +297,9 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_, index());
+    auto indexAndViews = indexAndViewsSnapshot();
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         indexAndViews->index_);
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
@@ -325,18 +327,6 @@ class Qlever {
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
-
-  // Low-level access to the QLever API, use with care. NOTE: The `Index&`
-  // overloads return a reference into the currently active index; do not hold
-  // on to it across a potential index rebuild. Use `sharedIndex()` or
-  // `indexAndViewsSnapshot()` if you need a stable handle.
-  std::shared_ptr<const Index> sharedIndex() const {
-    auto snapshot = *indexAndViews_.rlock();
-    const Index* index = &snapshot->index_;
-    return {std::move(snapshot), index};
-  }
-  Index& index() { return (*indexAndViews_.rlock())->index_; }
-  const Index& index() const { return (*indexAndViews_.rlock())->index_; }
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
