@@ -91,20 +91,13 @@ class BatchManager {
   }
 };
 
-// Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset` (from
-// the start of the file) into `targetBuffer`. Throws exception if the read
-// fails or returns fewer bytes than requested (a partial read or end of file),
-// since every read must be fully satisfied.
-void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                      uint64_t fileOffset);
-
 // Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
 // in a synchronous (blocking) manner. Single-threaded use only.
 struct SyncIoPolicy {
   using BatchHandle = uint64_t;
   // `ringSize` is ignored; it exists only so the policy is constructible the
   // same way as `IoUringPolicy`.
-  explicit SyncIoPolicy(unsigned /*ringSize*/ = 256) {}
+  explicit SyncIoPolicy([[maybe_unused]] unsigned ringSize = 256) {}
 
   ~SyncIoPolicy() = default;
   SyncIoPolicy(const SyncIoPolicy&) = delete;
@@ -122,6 +115,14 @@ struct SyncIoPolicy {
 
   // No-op: `addBatch` already completed all reads synchronously.
   void wait(BatchHandle) {}
+
+ private:
+  // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
+  // (from the start of the file) into `targetBuffer`. Throws exception if the
+  // read fails or returns fewer bytes than requested (a partial read or end of
+  // file), since every read must be fully satisfied.
+  void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
+                        uint64_t fileOffset);
 };
 
 // Persistent io_uring manager that accepts multiple named batches of indices to
