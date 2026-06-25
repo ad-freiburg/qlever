@@ -30,7 +30,7 @@ Qlever::Qlever(const EngineConfig& config)
                                             numMemoryToAllocate);
           }}},
       indexAndViews_{std::make_shared<IndexAndViews>(
-          IndexAndViews{Index{allocator_}, MaterializedViewsManager{}})},
+          Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -48,9 +48,7 @@ Qlever::Qlever(const EngineConfig& config)
   // No other thread can observe them yet, so reading the snapshot here is safe.
   // `snapshot` keeps the `shared_ptr`s alive for the references below.
   auto snapshot = indexAndViewsSnapshot();
-  Index& index = snapshot->index_;
-  MaterializedViewsManager& materializedViewsManager =
-      snapshot->materializedViewsManager_;
+  auto& [index, materializedViewsManager] = *snapshot;
 
   // Load the index from disk.
   index.usePatterns() = enablePatternTrick_;
@@ -209,10 +207,11 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
-  auto indexAndViews = indexAndViewsSnapshot();
   auto qecPtr = createQueryExecutionContext(
-      std::move(indexAndViews), [](std::string) {}, false, false,
-      disableCaching_);
+      indexAndViewsSnapshot(),
+      [](const std::
+             string&) { /* No runtime updates for this interface yet. */ },
+      false, false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), {});
@@ -268,10 +267,7 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult,
     QueryExecutionContext::DisableCaching disableCaching) const {
-  std::shared_ptr<Index> index{indexAndViews, &indexAndViews->index_};
-  auto& viewsManagerRef = indexAndViews->materializedViewsManager_;
-  std::shared_ptr<MaterializedViewsManager> viewsManager{
-      std::move(indexAndViews), &viewsManagerRef};
+  auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),

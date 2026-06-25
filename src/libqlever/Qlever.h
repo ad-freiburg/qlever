@@ -207,6 +207,30 @@ class Qlever {
   struct IndexAndViews {
     Index index_;
     MaterializedViewsManager materializedViewsManager_;
+
+    // Create an instance.
+    IndexAndViews(Index index,
+                  MaterializedViewsManager materializedViewsManager)
+        : index_{std::move(index)},
+          materializedViewsManager_{std::move(materializedViewsManager)} {}
+
+    // Make sue this is only passed around as a shared pointer or reference.
+    IndexAndViews(IndexAndViews&&) noexcept = delete;
+    IndexAndViews& operator=(IndexAndViews&&) noexcept = delete;
+    IndexAndViews(const IndexAndViews&) noexcept = delete;
+    IndexAndViews& operator=(const IndexAndViews&) noexcept = delete;
+
+    // Helper function to decompose `self` into a pair of two shared pointers
+    // pointing to the individual members via aliasing semantics.
+    friend std::pair<std::shared_ptr<Index>,
+                     std::shared_ptr<MaterializedViewsManager>>
+    getPointerPair(std::shared_ptr<IndexAndViews> self) {
+      std::shared_ptr<Index> index{self, &self->index_};
+      auto& viewsManagerRef = self->materializedViewsManager_;
+      return std::pair{std::move(index),
+                       std::shared_ptr<MaterializedViewsManager>{
+                           std::move(self), &viewsManagerRef}};
+    }
   };
 
  private:

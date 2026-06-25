@@ -252,8 +252,8 @@ auto Server::setupCancellationHandle(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViews,
-    std::string_view operationName, std::string_view operationSPARQL,
+    SharedIndexAndView indexAndViews, std::string_view operationName,
+    std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
@@ -1177,8 +1177,7 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViews,
-        std::vector<ParsedQuery>&& updates,
+        SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
