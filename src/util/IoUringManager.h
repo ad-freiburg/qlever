@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -86,8 +87,8 @@ class BatchManager {
 
   template <typename Span0, typename... Spans>
   static bool validateSameLength(const Span0& first, const Spans&... rest) {
-    const auto n = first.size();
-    return ((rest.size() == n) && ...);
+    const auto n = ql::ranges::size(first);
+    return ((ql::ranges::size(rest) == n) && ...);
   }
 };
 
@@ -115,7 +116,7 @@ struct SyncIoPolicy {
                 BatchHandle handle) const;
 
   // No-op: `addBatch` already completed all reads synchronously.
-  void wait(BatchHandle) {}
+  void wait(BatchHandle) const {};
 
  private:
   // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
@@ -134,31 +135,8 @@ struct SyncIoPolicy {
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringPolicy {
-  using BatchHandle = uint64_t;
-
  public:
-  IoUringPolicy(const IoUringPolicy&) = delete;
-  IoUringPolicy& operator=(const IoUringPolicy&) = delete;
-
-  // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
-  explicit IoUringPolicy(unsigned ringSize);
-  ~IoUringPolicy();
-
-  // Enqueue a batch of read requests and submit them to the kernel. Blocks the
-  // calling thread only when the submission queue is full, in order to drain
-  // completion queue entries and free slots in the submission queue. Read `i`
-  // reads `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
-  // offset `offsets[i]` (from the start of the file), into the buffer starting
-  // at `buffers[i]`. The reads are tracked under `handle`, which can be passed
-  // to `wait()` to block until this batch has completed.
-  void addBatch(int fd, ql::span<const size_t> numBytesToRead,
-                ql::span<const uint64_t> offsets, ql::span<char*> buffers,
-                BatchHandle handle);
-
-  // Block until every read in the batch that is represented by the `handle` has
-  // completed. (The `handle` was submitted along the read requests using
-  // `addBatch`.) Throws on any I/O error.
-  void wait(BatchHandle handle);
+  using BatchHandle = uint64_t;
 
  private:
   io_uring ring_{};
@@ -196,6 +174,30 @@ class IoUringPolicy {
 
   // Wait for one CQE and update the in-flight bookkeeping.
   void drainOneCqe();
+
+ public:
+  IoUringPolicy(const IoUringPolicy&) = delete;
+  IoUringPolicy& operator=(const IoUringPolicy&) = delete;
+
+  // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
+  explicit IoUringPolicy(unsigned ringSize);
+  ~IoUringPolicy();
+
+  // Enqueue a batch of read requests and submit them to the kernel. Blocks the
+  // calling thread only when the submission queue is full, in order to drain
+  // completion queue entries and free slots in the submission queue. Read `i`
+  // reads `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
+  // offset `offsets[i]` (from the start of the file), into the buffer starting
+  // at `buffers[i]`. The reads are tracked under `handle`, which can be passed
+  // to `wait()` to block until this batch has completed.
+  void addBatch(int fd, ql::span<const size_t> numBytesToRead,
+                ql::span<const uint64_t> offsets, ql::span<char*> buffers,
+                BatchHandle handle);
+
+  // Block until every read in the batch that is represented by the `handle` has
+  // completed. (The `handle` was submitted along the read requests using
+  // `addBatch`.) Throws on any I/O error.
+  void wait(BatchHandle handle);
 };
 
 using BatchIoManager = BatchManager<IoUringPolicy>;
