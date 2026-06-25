@@ -115,8 +115,9 @@ struct SyncIoPolicy {
                 ql::span<char*> targetBufferPerRequest,
                 BatchHandle handle) const;
 
-  // No-op: `addBatch` already completed all reads synchronously.
-  void wait(BatchHandle) const {};
+  void wait(BatchHandle) const {
+      // No-op: `addBatch` already completed all reads synchronously.
+  };
 
  private:
   // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
