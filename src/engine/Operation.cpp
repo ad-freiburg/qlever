@@ -470,7 +470,7 @@ void Operation::storeToNamedResultCache(const Result& result) {
                         .at(geoIndexVar.value())
                         .columnIndex_;
     return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                  result.idTable(),
+                                  result.idTableView(),
                                   _executionContext->getIndex()};
   };
 
