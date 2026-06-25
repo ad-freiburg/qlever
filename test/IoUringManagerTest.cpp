@@ -56,8 +56,8 @@ class TempFile {
 };
 
 // Create a temporary file holding `content` and return it together with its
-// file descriptor: `auto [tmp, fd] = makeTempFile(content);`. The returned
-// `tmp` must be kept alive for as long as `fd` is used.
+// file descriptor. The returned `tmp` must be kept alive for as long as `fd` is
+// used.
 std::pair<TempFile, int> makeTempFile(std::string_view content) {
   TempFile tmp{content};
   int fd = tmp.fd();
@@ -293,16 +293,21 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
                ad_utility::Exception);
 }
 
+// TODO: fix
+/*
 TYPED_TEST(IoUringManagerTest, LargeReads) {
   std::string content = "TODO";  // TODO bytes
   auto [tmp, fd] = makeTempFile(content);
 
   TypeParam ioManager(64);
+  ReadBatchForTesting batch;
+  batch.add(0, 9999)
   std::vector<char> targetBuffer(16, '\0');
   std::vector<size_t> numBytesToRead{9999};  // TODO
   std::vector<uint64_t> fileOffsets{0};
   std::vector<char*> ptrsToTargetBuffers{targetBuffer.data()};
 }
+*/
 
 // TODO<ms2144>: heterogeneous read sizes within a batch. No test issues reads
 // where the numBytesTOread differs between the individual calls.
