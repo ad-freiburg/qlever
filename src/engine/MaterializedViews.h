@@ -300,6 +300,10 @@ class MaterializedViewsManager {
   // otherwise. It is `const` for the same reason described above.
   void unloadViewIfLoaded(const std::string& name) const;
 
+  // Delete a materialized view: unload it if loaded and delete all of its files
+  // from disk. Throws if the view does not exist.
+  void deleteView(const std::string& name) const;
+
   // Load the given view if it is not already loaded and return it. This pointer
   // is never `nullptr`. If the view does not exist, the function throws.
   std::shared_ptr<const MaterializedView> getView(

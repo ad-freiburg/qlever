@@ -551,6 +551,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
+    requireValidAccessToken("delete-materialized-view");
+    logCommand(cmd, "delete materialized view");
+
+    // Extract materialized view name parameter.
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Deleting a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
+
+    materializedViewsManager()->deleteView(name.value());
+
+    // Construct simple response JSON.
+    nlohmann::json json{{"materialized-view-deleted", name.value()}};
+    response = createJsonResponse(json, request);
   }
 
   // Ping with or without message.
