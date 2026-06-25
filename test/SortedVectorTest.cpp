@@ -14,10 +14,13 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
 
+// TODO<qup42> implement explicit ::testing::PrintTo
+namespace std {
 template <typename T, typename U>
 std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
   return os << '(' << p.first << ", " << p.second << ')';
 }
+}  // namespace std
 
 namespace ad_utility {
 namespace {
@@ -301,32 +304,32 @@ TEST(SortedVectorTest, erase) {
   {
     SV s = SV::fromSorted({p10, p20, p30, p40});
     s.erase(p20);
-    EXPECT_THAT(s, ElementsAre(p10, p30, p40));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p40));
     s.erase(p40);
-    EXPECT_THAT(s, ElementsAre(p10, p30));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30));
     s.erase(p10);
-    EXPECT_THAT(s, ElementsAre(p30));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p30));
     s.insert(p20);
     AD_EXPECT_THROW_WITH_MESSAGE(s.erase(p30), NotClean);
     s.consolidate();
     s.erase(p30);
-    EXPECT_THAT(s, ElementsAre(p20));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p20));
   }
   {
     SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
     s.eraseUnsorted(std::vector<std::pair<int, int>>{});
-    EXPECT_THAT(s, ElementsAre(p10, p20, p30, p40, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20, p30, p40, p50, p60));
     s.eraseUnsorted(std::vector{p20, p40});
-    EXPECT_THAT(s, ElementsAre(p10, p30, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p50, p60));
     s.eraseUnsorted(std::vector{p10, p20});  // `p2` is no longer contained.
-    EXPECT_THAT(s, ElementsAre(p30, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p30, p50, p60));
     s.insert(p10);
     // this `erase` overload sorts the elements
     AD_EXPECT_THROW_WITH_MESSAGE(s.eraseUnsorted({p60, p30, p50, p10}),
                                  NotClean);
     s.consolidate();
     s.eraseUnsorted(std::vector{p60, p30, p50, p10});
-    EXPECT_THAT(s, ElementsAre());
+    EXPECT_THAT(s.getSortedView(), ElementsAre());
   }
   {
     SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
@@ -334,21 +337,21 @@ TEST(SortedVectorTest, erase) {
       s.eraseSorted(pairs);
     };
     erase({});
-    EXPECT_THAT(s, ElementsAre(p10, p20, p30, p40, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20, p30, p40, p50, p60));
     erase({p20, p40});
-    EXPECT_THAT(s, ElementsAre(p10, p30, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p50, p60));
     s.insert(p40);
     AD_EXPECT_THROW_WITH_MESSAGE(erase({p10, p20, p40}), NotClean);
     s.consolidate();
     erase({p10, p20, p40});  // `p2` is no longer contained.
-    EXPECT_THAT(s, ElementsAre(p30, p50, p60));
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p30, p50, p60));
     if (areExpensiveChecksEnabled) {
       AD_EXPECT_THROW_WITH_MESSAGE(
           erase({p60, p30, p50}),
           AssertionFailed("ql::ranges::is_sorted(sortedElems, comp_, proj_)"));
     }
     erase({p30, p50, p60});
-    EXPECT_THAT(s, ElementsAre());
+    EXPECT_THAT(s.getSortedView(), ElementsAre());
   }
 }
 

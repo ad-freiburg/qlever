@@ -107,7 +107,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
     return testing::ResultOf(
         absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
         [blockIndex](const LocatedTriplesPerBlock& ltpb) {
-          return ltpb.map_.at(blockIndex);
+          return ltpb.map_.at(blockIndex).getSortedView();
         },
         testing::ElementsAreArray(expectedLTs));
   };

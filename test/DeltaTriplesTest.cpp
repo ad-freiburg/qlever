@@ -1210,7 +1210,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
        counter++) {
     auto updates = locatedTriples.getUpdatesIfPresent(counter);
     if (updates.has_value()) {
-      for (const auto& locatedTriple : updates.value()) {
+      for (const auto& locatedTriple : updates.value().getSortedView()) {
         insertedTriples.push_back(locatedTriple.triple_);
       }
     }
