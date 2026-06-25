@@ -180,7 +180,7 @@ ExecuteUpdate::transformTriplesTemplate(
 }
 
 // _____________________________________________________________________________
-std::optional<Id> ExecuteUpdate::resolveVariable(IdTableView<0> idTable,
+std::optional<Id> ExecuteUpdate::resolveVariable(const IdTableView<0>& idTable,
                                                  const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
   auto visitId = [](const Id& id) {
@@ -198,7 +198,7 @@ std::optional<Id> ExecuteUpdate::resolveVariable(IdTableView<0> idTable,
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
     const std::vector<TransformedTriple>& templates,
-    std::vector<IdTriple<>>& result, IdTableView<0> idTable,
+    std::vector<IdTriple<>>& result, const IdTableView<0>& idTable,
     const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
     auto subject = resolveVariable(idTable, rowIdx, s);
@@ -238,7 +238,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with
         // variables for which a result row does not have a value.
-        updateTriples.reserve(result.idTable().size() *
+        updateTriples.reserve(result.idTableView().size() *
                               transformedTripleTemplates.size());
 
         return std::make_tuple(std::move(transformedTripleTemplates),

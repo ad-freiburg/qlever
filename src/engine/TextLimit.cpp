@@ -24,12 +24,12 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> childRes = child_->getResult();
 
   if (limit_ == 0) {
-    return {IdTable(childRes->idTable().numColumns(),
+    return {IdTable(childRes->idTableView().numColumns(),
                     getExecutionContext()->getAllocator()),
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 
-  IdTable idTable = childRes->idTable().clone();
+  IdTable idTable = childRes->idTableView().clone();
 
   // TODO<joka921> Let the SORT class handle this. This requires descending
   // sorting for positive integers though.

@@ -133,9 +133,9 @@ Result Bind::computeResult(bool requestLaziness) {
   };
 
   if (subRes->isFullyMaterialized()) {
-    if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
+    if (requestLaziness && subRes->idTableView().size() > CHUNK_SIZE) {
       auto chunks = ad_utility::allView(::ranges::views::chunk(
-          ::ranges::views::iota(size_t{0}, subRes->idTable().size()),
+          ::ranges::views::iota(size_t{0}, subRes->idTableView().size()),
           CHUNK_SIZE));
       auto f = [applyBind = std::move(applyBind),
                 subRes = std::move(subRes)](const auto& chunk) {
@@ -159,7 +159,8 @@ Result Bind::computeResult(bool requestLaziness) {
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
-    IdTable result = applyBind(IdTable{subRes->idTable().clone()}, &localVocab);
+    IdTable result =
+        applyBind(IdTable{subRes->idTableView().clone()}, &localVocab);
     AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }

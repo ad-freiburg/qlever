@@ -270,6 +270,8 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // Because of caching we can potentially get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
+      // We deliberately use `idTable()` (not `idTableView()`) here:
+      // `ql::span{&table, 1}` requires an owning `IdTable`.
       const IdTable& table = result->idTable();
       return std::invoke(callback, ql::span{&table, 1});
     }
@@ -351,7 +353,7 @@ void HasPredicateScan::computeFreeO(
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
                               Variable{"?_o"});
   auto result = scan->getResult(false);
-  const auto& hasPattern = result->idTable();
+  const auto& hasPattern = result->idTableView();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -387,7 +389,7 @@ Result HasPredicateScan::computeSubqueryS(
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();
   auto result = std::move(*dynResult).toStatic<WIDTH>();
-  for (const auto& row : subresult->idTable().asStaticView<WIDTH>()) {
+  for (const auto& row : subresult->idTableView().asStaticView<WIDTH>()) {
     const auto& pattern = patterns[row[patternCol].getInt()];
     for (auto predicate : pattern) {
       result.push_back(row);

@@ -70,13 +70,13 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  const auto& subTable = subRes->idTable();
+  const auto& subTable = subRes->idTableView();
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       subTable.numRows(), subTable.numColumns(), deadline_,
       "Sort for COUNT(DISTINCT *)");
 
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->idTable().clone();
+  IdTable idTable = subRes->idTableView().clone();
 
   size_t width = idTable.numColumns();
 

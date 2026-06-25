@@ -45,7 +45,7 @@ using Literal = ad_utility::triple_component::Literal;
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
-    return !result->idTable().empty();
+    return !result->idTableView().empty();
   } else {
     return ql::ranges::any_of(result->idTables(), [](const auto& pair) {
       return !pair.idTable_.empty();

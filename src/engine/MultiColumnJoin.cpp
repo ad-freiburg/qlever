@@ -75,8 +75,8 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
 
   AD_LOG_DEBUG << "Computing a multi column join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
   computeMultiColumnJoin(leftResult->idTableView(), rightResult->idTableView(),
                          _joinColumns, &idTable);

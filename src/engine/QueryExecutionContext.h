@@ -60,7 +60,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }

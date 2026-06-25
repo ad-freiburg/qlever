@@ -98,6 +98,8 @@ Result Distinct::computeResult(bool requestLaziness) {
   if (subRes->isFullyMaterialized()) {
     IdTable idTable =
         ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+          // We deliberately use `idTable()` (not `idTableView()`) here:
+          // `outOfPlaceDistinct` requires `const IdTable&`.
           return self->outOfPlaceDistinct<width>(subRes->idTable());
         });
     AD_LOG_DEBUG << "Distinct result computation done." << endl;

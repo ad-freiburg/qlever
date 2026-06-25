@@ -128,7 +128,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // no column.
     return {Result::LazyResult{
                 ad_utility::OwningView{leftRes->idTables()} |
-                ql::views::transform([exists = !rightRes->idTable().empty(),
+                ql::views::transform([exists = !rightRes->idTableView().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -145,8 +145,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
                           requestLaziness);
   }
-  const auto& right = rightRes->idTable();
-  const auto& left = leftRes->idTable();
+  const auto& right = rightRes->idTableView();
+  const auto& left = leftRes->idTableView();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
   // callbacks: one for each matching pair of rows from `left` and `right`, and
@@ -314,7 +314,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->idTable().clone();
+  IdTable result = leftRes->idTableView().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
@@ -420,7 +420,7 @@ struct LazyExistsJoinImpl
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{std::array{
-          Result::IdTableVocabPair{IdTable{result->idTable().clone()},
+          Result::IdTableVocabPair{IdTable{result->idTableView().clone()},
                                    result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();

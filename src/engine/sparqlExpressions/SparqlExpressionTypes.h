@@ -222,7 +222,7 @@ struct EvaluationContext {
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
-                    IdTableView<0> inputTable,
+                    const IdTableView<0>& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
