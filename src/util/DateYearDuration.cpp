@@ -394,8 +394,14 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
       durationType = DayTimeDuration::Type::Negative;
       diff_count = -diff_count;
     }
-    return DateYearOrDuration{
-        DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
+    // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
+    // days) return UNDEF.
+    try {
+      return DateYearOrDuration{
+          DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
+    } catch (...) {
+      return std::nullopt;
+    }
   }
 
   // The following will not be implemented (not viable):

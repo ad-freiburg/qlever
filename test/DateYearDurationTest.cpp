@@ -963,6 +963,14 @@ TEST(DateYearOrDuration, Subtraction) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 10, 0, 0, 0));
     EXPECT_THAT(date - duration,
                 Optional(Eq(DateYearOrDuration(Date(2004, 5, 6, 0, 0, 0)))));
+
+    // Result stored as `LargeYear`.
+    date = DateYearOrDuration(Date(-9'999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 50, 0, 0, 0));
+    EXPECT_THAT(date - duration,
+                Optional(Eq(DateYearOrDuration(
+                    -10'000, DateYearOrDuration::Type::Year))));
   }
   {
     // Test for `LargeYear` - `LargeYear`.
@@ -999,6 +1007,26 @@ TEST(DateYearOrDuration, Subtraction) {
     duration = DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     EXPECT_EQ(date - duration, std::nullopt);
+  }
+  {
+    // Test too large `DayTimeDuration` results (>1'048'575 days).
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1, 30, 10, 33));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 1'048'575, 0, 0, 0));
+    EXPECT_EQ(duration2 - duration, std::nullopt);
+
+    DateYearOrDuration date1 =
+        DateYearOrDuration(Date(5800, 12, 22, 12, 6, 12));
+    DateYearOrDuration date2 =
+        DateYearOrDuration(Date(-1200, 12, 20, 15, 15, 59));
+    EXPECT_EQ(date1 - date2, std::nullopt);
+
+    DateYearOrDuration year1 =
+        DateYearOrDuration(25800, DateYearOrDuration::Type::Year);
+    DateYearOrDuration year2 =
+        DateYearOrDuration(11200, DateYearOrDuration::Type::Year);
+    EXPECT_EQ(year1 - year2, std::nullopt);
   }
 }
 
@@ -1097,6 +1125,14 @@ TEST(DateYearOrDuration, Addition) {
     DateYearOrDuration year2 =
         DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
     EXPECT_EQ(year1 + year2, std::nullopt);
+  }
+  {
+    // Test too large `DayTimeDuration` results (>1'048'575 days).
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1, 30, 10, 33));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1'048'575, 0, 0, 0));
+    EXPECT_EQ(duration2 + duration, std::nullopt);
   }
 }
 }
