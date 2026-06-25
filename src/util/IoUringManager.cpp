@@ -45,10 +45,10 @@ void SyncIoPolicy::addBatch(int fd,
                             ql::span<const uint64_t> fileOffsetPerRequest,
                             ql::span<char*> targetBufferPerRequest,
                             BatchHandle /*handle*/) const {
-  for (size_t i = 0; i < numBytesToReadPerRequest.size(); ++i) {
-    SyncIoPolicy::readFullyOrThrow(fd, targetBufferPerRequest[i],
-                                   numBytesToReadPerRequest[i],
-                                   fileOffsetPerRequest[i]);
+  for (const auto& [numBytesToRead, fileOffset, targetBuf] :
+       ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
+                            targetBufferPerRequest)) {
+    SyncIoPolicy::readFullyOrThrow(fd, targetBuf, numBytesToRead, fileOffset);
   }
 }
 
@@ -85,7 +85,9 @@ void IoUringPolicy::addBatch(int fd,
   }
   numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
-  for (size_t i = 0; i < numReadRequestsToPerform; ++i) {
+  for (const auto& [numBytesToRead, fileOffset, targetBuf] :
+       ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
+                            targetBufferPerRequest)) {
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
     if (numInFlightReadRequests_ >= ringSize_) {
@@ -104,17 +106,16 @@ void IoUringPolicy::addBatch(int fd,
 
     // Record the read's parameters in the SQE (this only sets the SQE's fields;
     // the request is not handed to the kernel until a later `io_uring_submit`).
-    io_uring_prep_read(sqe, fd, targetBufferPerRequest[i],
-                       static_cast<unsigned>(numBytesToReadPerRequest[i]),
-                       static_cast<__u64>(fileOffsetPerRequest[i]));
+    io_uring_prep_read(sqe, fd, targetBuf,
+                       static_cast<unsigned>(numBytesToRead),
+                       static_cast<__u64>(fileOffset));
 
     // Tag the SQE with a unique request id and record its metadata (the batch
     // it belongs to and how many bytes it should read). io_uring copies the
     // request id (the SQE's `user_data`) verbatim into the matching completion,
     // so `drainOneCqe` can recover it.
     const uint64_t requestId = nextRequestIdToAssign_++;
-    inFlightReadsByRequestId_[requestId] =
-        InFlightRead{handle, numBytesToReadPerRequest[i]};
+    inFlightReadsByRequestId_[requestId] = InFlightRead{handle, numBytesToRead};
     io_uring_sqe_set_data64(sqe, requestId);
     numInFlightReadRequests_++;
   }
