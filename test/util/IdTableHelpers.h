@@ -134,8 +134,29 @@ struct MatchesIdTable {
     // gets rid of all possibly lifetime and mutability issues.
     return operator()(table.clone());
   }
+
+  // Overload for `IdTableView<0>`, which uses a `Truly` matcher to compare
+  // via the free `operator==(IdTableView, IdTable)`. Uses `shared_ptr`
+  // to keep `IdTable` alive since `IdTable` is non-copyable.
+  template <int N>
+  auto operator()(const IdTableView<N>& view) const {
+    auto expected = std::make_shared<IdTable>(IdTable{view.clone()});
+    return ::testing::Truly(
+        [expected = std::move(expected)](const auto& actual) {
+          return actual == *expected;
+        });
+  }
 };
 static constexpr MatchesIdTable matchesIdTable;
+
+// Allow comparing `IdTableView<N>` with `CopyShield<IdTable>` in gtest
+// matchers. The actual comparison clones the view into an `IdTable`.
+template <int N>
+inline bool operator==(const IdTableView<N>& view,
+                       const CopyShield<IdTable>& shield) {
+  IdTable viewAsTable{view.clone()};
+  return shield == viewAsTable;
+}
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample

@@ -34,6 +34,7 @@ class SparqlQleverVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
   using VarOrIri = ad_utility::sparql_types::VarOrIri;
+  using Iri = ad_utility::triple_component::Iri;
   using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
       ad_utility::sparql_types::PathObjectPairsAndTriples;

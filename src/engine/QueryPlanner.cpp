@@ -476,7 +476,10 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
-      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+      // An explicit `INTERNAL SORT BY` requests the complete sorted result, so
+      // we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its subtree.
+      tree =
+          QueryExecutionTree::createSortedTree(parent._qet, sortColumns, true);
     } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
