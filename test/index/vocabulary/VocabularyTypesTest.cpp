@@ -134,5 +134,3 @@ TEST(LookupDataCommonBase, PmrAsResultEmpty) {
   VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
 }
-
-}  // namespace
