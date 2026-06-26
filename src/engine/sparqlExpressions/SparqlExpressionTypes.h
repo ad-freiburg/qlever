@@ -171,7 +171,7 @@ struct EvaluationContext {
   const VariableToColumnMap& _variableToColumnMap;
 
   /// The input of the expression.
-  const IdTable& _inputTable;
+  IdTableView<0> _inputTable;
 
   /// The indices of the actual range of rows in the _inputTable on which the
   /// expression is evaluated. For BIND expressions this is always [0,
@@ -222,11 +222,23 @@ struct EvaluationContext {
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
-                    const IdTable& inputTable,
+                    IdTableView<0> inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
+
+  /// Overload that accepts a materialized `IdTable` and converts it to a view.
+  EvaluationContext(const QueryExecutionContext& qec,
+                    const VariableToColumnMap& variableToColumnMap,
+                    const IdTable& inputTable,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    LocalVocab& localVocab,
+                    ad_utility::SharedCancellationHandle cancellationHandle,
+                    TimePoint deadline)
+      : EvaluationContext(qec, variableToColumnMap,
+                          inputTable.asStaticView<0>(), allocator, localVocab,
+                          std::move(cancellationHandle), deadline) {}
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
@@ -427,13 +439,9 @@ CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
 
 // Helper to check if an `ExpressionResult` variant holds a constant.
 // Used by the type erased expression.
-inline bool isConstantExpressionResult(const ExpressionResult& res) {
-  return std::visit(
-      [](const auto& el) {
-        return isConstantResult<std::decay_t<decltype(el)>>;
-      },
-      res);
-}
+// Implementation lives in SparqlExpressionTypes.cpp to avoid instantiating
+// the std::visit vtable (6 alternatives × N TUs) in every including TU.
+bool isConstantExpressionResult(const ExpressionResult& res);
 
 // Helper type to convert the type from `IdOrLiteralOrIri` to
 // `IdOrLocalVocabEntry`. For other types, the type is unchanged.
