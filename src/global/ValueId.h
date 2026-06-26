@@ -404,7 +404,7 @@ class ValueId {
 
   // An `Id` is considered bitwise comparable if the mapping at
   // `isTypeBitwiseComparable_` says so. This is currently the case for all
-  // datatypes except fot the local vocab index.
+  // datatypes except for the local vocab index.
   constexpr bool canBeComparedBitwise() const {
     static_assert(isOnlyLocalVocabNotBitwiseComparable);
     return isTypeBitwiseComparable_.at(static_cast<size_t>(getDatatype()));
