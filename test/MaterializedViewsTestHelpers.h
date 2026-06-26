@@ -191,7 +191,7 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(*plannedQuery.queryExecutionTree(), matcher);
+  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
 };
 
 // _____________________________________________________________________________

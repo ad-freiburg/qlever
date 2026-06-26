@@ -41,27 +41,28 @@ struct PlannedQuery {
   std::shared_ptr<QueryExecutionTree> queryExecutionTree_;
 
  public:
-  PlannedQuery(ParsedQuery pq, QueryExecutionTree& qet,
+  PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
                QueryExecutionContext& qec)
       : qec_{qec.shared_from_this()},
         parsedQuery_{std::move(pq)},
-        queryExecutionTree_{std::make_shared<QueryExecutionTree>(qet)} {
+        queryExecutionTree_{
+            std::make_shared<QueryExecutionTree>(std::move(qet))} {
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
   ParsedQuery& parsedQuery() { return parsedQuery_; }
 
-  const std::shared_ptr<QueryExecutionTree>& queryExecutionTree() const {
-    return queryExecutionTree_;
+  const QueryExecutionTree& queryExecutionTree() const {
+    return *queryExecutionTree_;
   }
-  const std::shared_ptr<QueryExecutionContext>& queryExecutionContext() const {
-    return qec_;
-  }
-
+  QueryExecutionTree& queryExecutionTree() { return *queryExecutionTree_; }
   std::shared_ptr<const QueryExecutionTree> sharedQueryExecutionTree() const {
     return queryExecutionTree_;
   }
+
+  const QueryExecutionContext& queryExecutionContext() const { return *qec_; }
+  QueryExecutionContext& queryExecutionContext() { return *qec_; }
   std::shared_ptr<const QueryExecutionContext> sharedQueryExecutionContext()
       const {
     return qec_;

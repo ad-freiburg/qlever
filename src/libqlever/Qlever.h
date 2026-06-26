@@ -265,6 +265,16 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time `parseAndPlanQuery` is called until the execution of the
+  // query has finished. This might be very unintuitive when the `PlannedQuery`
+  // is stored for later execution.
+  // This is not an issue for now (only the `Server` actually imposes time
+  // limits and then executes the queries right away), but should be addressed
+  // in the future once the timeout management also is moved into the `QLever`
+  // class.
   using PlannedQuery = qlever::PlannedQuery;
 
   PlannedQuery parseAndPlanQuery(

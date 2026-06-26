@@ -254,7 +254,7 @@ TEST(ServerTest, createResponseMetadata) {
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      index, plannedQuery.parsedQuery(), *plannedQuery.queryExecutionTree(),
+      index, plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
       deltaTriples, handle);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
@@ -266,13 +266,12 @@ TEST(ServerTest, createResponseMetadata) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
           index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, *plannedQuery.queryExecutionTree(), UpdateMetadata{},
+          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
           tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
       index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, *plannedQuery.queryExecutionTree(), updateMetadata,
-      tracer2);
+      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
