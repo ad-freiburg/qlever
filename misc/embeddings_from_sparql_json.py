@@ -10,7 +10,7 @@ selected columns, the first an IRI and the second a string literal, e.g.
 The file is streamed with `ijson`, so arbitrarily large result sets work without
 loading everything into memory. For each binding we embed the literal with a
 `sentence_transformers` model and write triples following QLever's embedding data
-model (see `docs/embedding-redesign.md`):
+model:
 
     <entity>     emb:hasEmbedding  _:embN .
     _:embN       emb:asFp32Vector  "[...]"^^emb:fp32Vector ;
@@ -18,9 +18,9 @@ model (see `docs/embedding-redesign.md`):
 
 plus, once, the embedding-type metadata:
 
-    emb:<model>-fp32-<dim>  emb:hasMetric     "cosine" ;
+    emb:<model>-fp32-<dim>  emb:hasMetric     emb:cosine ;
                             emb:hasDimension  "<dim>"^^xsd:integer ;
-                            emb:hasPrecision  "fp32" .
+                            emb:hasPrecision  emb:fp32 .
 
 Example:
 

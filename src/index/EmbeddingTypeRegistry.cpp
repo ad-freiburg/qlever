@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Sebastian Walter <sebastian.walter98@gmail.com>, UFR
+// 2026 Sebastian Walter <swalter@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -25,6 +25,15 @@ std::optional<EmbeddingMetric> embeddingMetricFromIri(std::string_view iri) {
   }
   if (iri == EMBEDDING_METRIC_DOT_PRODUCT_IRI) {
     return EmbeddingMetric::DotProduct;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<EmbeddingPrecision> embeddingPrecisionFromIri(
+    std::string_view iri) {
+  if (iri == EMBEDDING_PRECISION_FP32_IRI) {
+    return EmbeddingPrecision::Fp32;
   }
   return std::nullopt;
 }

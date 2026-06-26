@@ -1190,7 +1190,8 @@ void IndexImpl::buildEmbeddingTypeRegistry() {
 
     std::string precisionIri =
         readIriObject(require(precisionMap, typeId, "emb:hasPrecision"));
-    if (precisionIri != EMBEDDING_PRECISION_FP32_IRI) {
+    auto precision = embeddingPrecisionFromIri(precisionIri);
+    if (!precision.has_value()) {
       throw std::runtime_error{absl::StrCat(
           "The embedding type ", typeName,
           " uses the unsupported emb:hasPrecision ", precisionIri,
@@ -1199,8 +1200,7 @@ void IndexImpl::buildEmbeddingTypeRegistry() {
 
     embeddingTypeRegistry_.addType(
         typeId,
-        EmbeddingTypeConfig{dimension, std::string{EMBEDDING_PRECISION_FP32},
-                            metric.value()});
+        EmbeddingTypeConfig{dimension, precision.value(), metric.value()});
   }
 }
 

@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Sebastian Walter <sebastian.walter98@gmail.com>, UFR
+// 2026 Sebastian Walter <swalter@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //

@@ -1,2 +1,3 @@
 addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes)
 addLinkAndDiscoverTestNoLibs(RdfEscapingTest rdfTypes)
+addLinkAndDiscoverTestNoLibs(EmbeddingVectorTest rdfTypes)

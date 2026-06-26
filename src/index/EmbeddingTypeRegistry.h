@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Sebastian Walter <sebastian.walter98@gmail.com>, UFR
+// 2026 Sebastian Walter <swalter@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -27,11 +27,25 @@ enum class EmbeddingMetric {
   DotProduct,  // `−dot` (negated so `ORDER BY ASC` still yields nearest)
 };
 
+// The element precision of an embedding type's vectors. The MVP supports only
+// `Fp32` (matching the `emb:fp32Vector` datatype); further precisions
+// (`Fp16`, a binary type, ...) are future additions.
+enum class EmbeddingPrecision {
+  Fp32,
+};
+
 // Map an `emb:hasMetric` IRI (its `<...>` string representation, e.g.
 // `<...embeddings/cosine>`) to its `EmbeddingMetric`, or `std::nullopt` if it
 // is not one of the (MVP-)supported metrics. The single place that knows the
 // metric vocabulary (used by the load-time validation).
 std::optional<EmbeddingMetric> embeddingMetricFromIri(std::string_view iri);
+
+// Map an `emb:hasPrecision` IRI (its `<...>` string representation, e.g.
+// `<...embeddings/fp32>`) to its `EmbeddingPrecision`, or `std::nullopt` if it
+// is not one of the (MVP-)supported precisions. The single place that knows the
+// precision vocabulary (used by the load-time validation).
+std::optional<EmbeddingPrecision> embeddingPrecisionFromIri(
+    std::string_view iri);
 
 // The validated metadata of a single embedding type. All fields are mandatory;
 // the `EmbeddingTypeRegistry` only ever holds configs that passed strict
@@ -40,8 +54,9 @@ std::optional<EmbeddingMetric> embeddingMetricFromIri(std::string_view iri);
 struct EmbeddingTypeConfig {
   // The vector dimension every operand of `embf:distance` must have.
   uint64_t dimension_;
-  // The element precision (MVP: always `"fp32"`).
-  std::string precision_;
+  // The element precision (already validated/parsed from `emb:hasPrecision`;
+  // MVP: always `Fp32`).
+  EmbeddingPrecision precision_;
   // The similarity metric (already validated/parsed from `emb:hasMetric`).
   EmbeddingMetric metric_;
 

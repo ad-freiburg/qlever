@@ -26,8 +26,7 @@ namespace detail {
 // `defaultValue` if it is unset, empty, non-numeric, or zero. Used to tune the
 // depth of the compressed-vocabulary writer's compression pipeline at index-build
 // time. This bounds the writer's peak memory, which matters for vocabularies with
-// very large literals such as embedding vectors (see
-// `docs/embedding-vocab-merge-oom.md`).
+// very large literals such as embedding vectors.
 inline size_t vocabWriterSizeFromEnv(const char* name, size_t defaultValue) {
   const char* value = std::getenv(name);
   if (value == nullptr || *value == '\0') {
@@ -58,7 +57,7 @@ CPP_concept IterableVocabulary =
 // uncompressed blocks resident while compressing, so the block size bounds peak
 // memory at index-build time. With ordinary words a block is tens of MB, but with
 // very large literals (e.g. embedding vectors of 8-22 KB each) a 1Mi-word block is
-// 8-22 GB, which OOMs the merge. See `docs/embedding-vocab-merge-oom.md`.
+// 8-22 GB, which OOMs the merge.
 CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
                  ad_utility::vocabulary::FsstSquaredCompressionWrapper,

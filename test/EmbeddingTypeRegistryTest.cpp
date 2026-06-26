@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Sebastian Walter <sebastian.walter98@gmail.com>, UFR
+// 2026 Sebastian Walter <swalter@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -49,7 +49,7 @@ TEST(EmbeddingTypeRegistry, ParsesValidDeclaration) {
   const EmbeddingTypeConfig* config = registry.getConfig(typeId);
   ASSERT_NE(config, nullptr);
   EXPECT_EQ(config->dimension_, 3u);
-  EXPECT_EQ(config->precision_, "fp32");
+  EXPECT_EQ(config->precision_, EmbeddingPrecision::Fp32);
   EXPECT_EQ(config->metric_, EmbeddingMetric::Cosine);
 
   // A non-type IRI is not a known embedding type.

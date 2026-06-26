@@ -296,12 +296,10 @@ constexpr inline std::string_view EMBEDDING_HAS_PRECISION_IRI =
 // The element precision of an embedding type, as a predefined IRI in the
 // embeddings namespace (the object of `emb:hasPrecision`, e.g. `emb:fp32`).
 // The MVP supports only `emb:fp32`, which must match the `emb:fp32Vector`
-// datatype of the type's vectors. `EMBEDDING_PRECISION_FP32` is the bare token
-// stored in the validated config.
+// datatype of the type's vectors.
 namespace string_constants::detail {
 constexpr inline std::string_view embeddings_fp32 = "fp32";
 }  // namespace string_constants::detail
-constexpr inline std::string_view EMBEDDING_PRECISION_FP32 = "fp32";
 constexpr inline std::string_view EMBEDDING_PRECISION_FP32_IRI =
     makeEmbeddingIriConst<string_constants::detail::embeddings_fp32>();
 
