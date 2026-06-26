@@ -30,7 +30,7 @@ struct ComparatorForConstCol0 {
 inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
   std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
   AD_CORRECTNESS_CHECK(
-      ql::ranges::all_of(result, &Id::isNonLocal, &Id::fromBits));
+      ql::ranges::all_of(result, &Id::canBeComparedBitwise, &Id::fromBits));
   return result;
 };
 
