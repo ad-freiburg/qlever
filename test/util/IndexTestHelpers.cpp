@@ -319,7 +319,8 @@ Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(TestIndexConfig c) {
+QueryExecutionContext* getQec(const std::string& indexBasename,
+                              TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -365,7 +366,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
     // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        absl::StrCat("_staticGlobalTestIndex", gtestCurrentTestName(false), "_",
+        absl::StrCat(indexBasename, gtestCurrentTestName(false), "_",
                      contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
@@ -383,6 +384,11 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_shared<MaterializedViewsManager>()});
   }
   return contextMap.at(c).qec_.get();
+}
+
+// ________________________________________________________________________________
+QueryExecutionContext* getQec(TestIndexConfig c) {
+  return getQec("_staticGlobalTestIndex", std::move(c));
 }
 
 // _____________________________________________________________________________
