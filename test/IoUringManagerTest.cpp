@@ -351,6 +351,16 @@ TEST(ReadFullyOrThrow, FullReadSucceeds) {
   EXPECT_EQ(std::string(targetBuffer.data(), 4), "BBBB");
 }
 
+// An invalid file descriptor makes the underlying `pread` call fail (return
+// -1), which must cause a throw.
+TEST(ReadFullyOrThrow, PreadFailureThrows) {
+  std::vector<char> targetBuffer(4);
+  constexpr int invalidFd = -1;
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::SyncIoPolicy::readFullyOrThrow(
+                                   invalidFd, targetBuffer.data(), 4, 0),
+                               HasSubstr("pread failed"));
+}
+
 // Requesting more bytes than the file contains (read past EOF) is a short read
 // and must throw.
 TEST(ReadFullyOrThrow, ShortReadThrows) {
