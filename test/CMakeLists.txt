@@ -159,6 +159,8 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
+addLinkAndDiscoverTest(VariableCounterTest parser engine)
+
 addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
@@ -183,6 +185,8 @@ addLinkAndDiscoverTest(IndexTest index)
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
+
+addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
@@ -240,6 +244,10 @@ addLinkAndDiscoverTest(PathSearchTest engine)
 addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
+
+addLinkAndDiscoverTest(UriParserUriTest)
+
+addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
@@ -527,3 +535,5 @@ addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
 
 addLinkAndDiscoverTest(LogTest)
+
+addLinkAndDiscoverTest(QueryEventLogTest util)
