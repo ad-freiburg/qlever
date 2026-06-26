@@ -191,7 +191,8 @@ TEST(ServerTest, composeStatsJson) {
                     {"num-triples-internal", 1},
                     {"num-triples-normal", 1},
                     {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
+  EXPECT_THAT(server.composeStatsJson(server.indexAndViewsSnapshot()->index_),
+              testing::Eq(expectedJson));
 }
 
 // _____________________________________________________________________________
