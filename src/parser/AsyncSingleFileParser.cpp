@@ -16,6 +16,7 @@
 #include <boost/asio/strand.hpp>
 #include <cstring>
 #include <future>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -351,8 +352,8 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
                           const TripleComponent& defaultGraphIri,
                           net::any_io_executor exec)
       : AsyncParserBase<InnerParser>{ev, defaultGraphIri},
-        defaultGraphIri_{defaultGraphIri},
-        exec_{exec} {
+        exec_{exec},
+        defaultGraphIri_{defaultGraphIri} {
     this->parser_.clear();
     fileBuffer_ = std::make_unique<AsyncEndRegexBlockSource>(
         exec, std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
@@ -414,9 +415,10 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
     std::optional<TripleBatch> batch;
     std::exception_ptr error;
   };
-  // Thread-safe channel (real per-channel mutex): `dispatchParse` sends to
-  // `outputCh_` concurrently from multiple parse tasks on the pool, so a plain
-  // `channel` (which uses a `null_mutex`) would race and corrupt its queues.
+  // Sends to `outputCh_` are serialized through `feederStrand_` (via
+  // `trySendInOrder`), so a plain `channel` suffices here. We keep
+  // `concurrent_channel` for safety in case any future path bypasses the
+  // strand.
   using OutputCh =
       net::experimental::concurrent_channel<void(ec_t, BatchOrEof)>;
   // A token is a `bool` placeholder; we use `bool` so the channel signature
@@ -446,40 +448,47 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
   // statement) become the first batch of the feeder loop.
   //
   // `asyncGetNextBlock` fires its callback on the file buffer's strand, which
-  // is a different strand from `feederStrand_`. All state accesses below
-  // (`inflight_`, `pendingError_`, etc.) must run on `feederStrand_`, so we
-  // dispatch the entire callback body there.
+  // is a different strand from `feederStrand_`. The error path calls
+  // `closeWithError`, which accesses `inflight_` and `pendingError_` —
+  // state that must only be modified on `feederStrand_`. Only that path is
+  // dispatched; the normal paths already post to `feederStrand_` explicitly
+  // (`net::post(*feederStrand_, ...)`) and are therefore safe as-is.
   void readPrefixHeaderStep() {
     fileBuffer_->asyncGetNextBlock(
         [this](std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
-          net::dispatch(
-              *feederStrand_, [this, ep, opt = std::move(opt)]() mutable {
-                if (ep) {
-                  closeWithError(ep);
-                  return;
-                }
-                if (!opt) {
-                  // Empty input: no prefix block to read.
-                  AD_LOG_WARN << "Empty input to the TURTLE parser, is "
-                                 "this what you intended?"
-                              << std::endl;
-                  finishFeeder();
-                  return;
-                }
-                declarationParser_.setInputStream(std::move(*opt));
-                while (declarationParser_.parseDirectiveManually()) {
-                }
-                auto remainder = declarationParser_.getUnparsedRemainder();
-                if (remainder.empty()) {
-                  readPrefixHeaderStep();
-                  return;
-                }
-                InnerParser::copyHeaderFrom(declarationParser_, this->parser_);
-                ByteBlock first;
-                first.reserve(remainder.size());
-                ql::ranges::copy(remainder, std::back_inserter(first));
-                feederStep(std::move(first));
-              });
+          if (ep) {
+            net::dispatch(*feederStrand_, [this, ep] { closeWithError(ep); });
+            return;
+          }
+          if (!opt) {
+            // Empty input: no prefix block to read. `finishFeeder` only
+            // closes the channels (thread-safe) and fulfils the promise.
+            AD_LOG_WARN << "Empty input to the TURTLE parser, is this what "
+                           "you intended?"
+                        << std::endl;
+            finishFeeder();
+            return;
+          }
+          // Use a transient string parser to consume prefix declarations.
+          declarationParser_.setInputStream(std::move(*opt));
+          while (declarationParser_.parseDirectiveManually()) {
+          }
+          auto remainder = declarationParser_.getUnparsedRemainder();
+          if (remainder.empty()) {
+            // Need more bytes to find the first non-directive content.
+            net::post(*feederStrand_, [this] { readPrefixHeaderStep(); });
+            return;
+          }
+          // Copy parsed prefixes / base IRI into the master parser so its
+          // diagnostics see the same headers.
+          InnerParser::copyHeaderFrom(declarationParser_, this->parser_);
+          ByteBlock first;
+          first.reserve(remainder.size());
+          ql::ranges::copy(remainder, std::back_inserter(first));
+          // Feeder strand now drives the main loop.
+          net::post(*feederStrand_, [this, first = std::move(first)]() mutable {
+            feederStep(std::move(first));
+          });
         });
   }
 
@@ -496,31 +505,36 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
       acquireTokenAndDispatch(std::move(firstBatch));
       return;
     }
-    // The callback fires on the file buffer's strand; dispatch to
-    // `feederStrand_` so all accesses to shared feeder state are serialized.
+    // The callback fires on the file buffer's strand.  The error and EOF
+    // paths touch `pendingError_`, `inflight_`, and `eofSeen_`, which must
+    // only be accessed on `feederStrand_`; dispatch those paths there.
+    // The normal path calls `acquireTokenAndDispatch`, which internally uses
+    // `bind_executor(*feederStrand_, …)` to run its work on the feeder strand
+    // and is therefore safe to call from any thread.
     fileBuffer_->asyncGetNextBlock(
         [this](std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
-          net::dispatch(*feederStrand_,
-                        [this, ep, opt = std::move(opt)]() mutable {
-                          if (ep) {
-                            closeWithError(ep);
-                            return;
-                          }
-                          if (!opt) {
-                            // EOF: wait for inflight parses, then close.
-                            eofSeen_ = true;
-                            maybeFinishFeeder();
-                            return;
-                          }
-                          acquireTokenAndDispatch(std::move(*opt));
-                        });
+          if (ep) {
+            net::dispatch(*feederStrand_, [this, ep] { closeWithError(ep); });
+            return;
+          }
+          if (!opt) {
+            // EOF: no more blocks. Wait for inflight parses to complete and
+            // then close the output channel.
+            net::dispatch(*feederStrand_, [this] {
+              eofSeen_ = true;
+              maybeFinishFeeder();
+            });
+            return;
+          }
+          acquireTokenAndDispatch(std::move(*opt));
         });
   }
 
   // Acquire a token from the inflight semaphore, then post a parse task to
-  // `exec_`. The parse task pushes its result to the output channel, releases
-  // the token, and on the feeder strand triggers the next feeder step or
-  // finalization.
+  // `exec_`. Each block is tagged with a monotonically increasing sequence
+  // number. Results are buffered in `pendingResults_` and forwarded to
+  // `outputCh_` strictly in sequence order by `trySendInOrder`, so the caller
+  // always sees errors in the order they appear in the input.
   void acquireTokenAndDispatch(ByteBlock block) {
     tokenCh_->async_receive(net::bind_executor(
         *feederStrand_,
@@ -534,15 +548,17 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
           ++inflight_;
           size_t parsePosition = parsePositionCursor_;
           parsePositionCursor_ += block.size();
-          dispatchParse(parsePosition, std::move(block));
+          size_t seqNum = nextDispatchSeq_++;
+          dispatchParse(parsePosition, seqNum, std::move(block));
           // Immediately schedule the next feeder step so the inflight cap is
           // re-checked.
           net::post(*feederStrand_, [this] { feederStep(ByteBlock{}); });
         }));
   }
 
-  void dispatchParse(size_t parsePosition, ByteBlock block) {
-    net::post(exec_, [this, parsePosition, block = std::move(block)]() mutable {
+  void dispatchParse(size_t parsePosition, size_t seqNum, ByteBlock block) {
+    net::post(exec_, [this, parsePosition, seqNum,
+                      block = std::move(block)]() mutable {
       std::exception_ptr error;
       std::optional<TripleBatch> result;
       try {
@@ -557,28 +573,49 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
       } catch (...) {
         error = std::current_exception();
       }
-      // Always push *something* (batch or error or EOF marker) so consumers
-      // see the failure even if more blocks were queued before the throw.
-      outputCh_->async_send(ec_t{}, BatchOrEof{std::move(result), error},
-                            [this](ec_t /*ec*/) {
-                              // After a successful send (or after the channel
-                              // closed, which means we're tearing down),
-                              // release the token and tick the feeder strand.
-                              net::dispatch(*feederStrand_, [this] {
-                                --inflight_;
-                                if (pendingError_) {
-                                  // A file-read error was deferred until all
-                                  // in-flight tasks completed; now check.
-                                  maybeCloseWithError();
-                                } else if (cancelled_ && inflight_ == 0) {
-                                  // Cancellation: all tasks drained.
-                                  finishFeeder();
-                                } else if (!cancelled_) {
-                                  tokenCh_->try_send(ec_t{}, true);
-                                  maybeFinishFeeder();
-                                }
-                              });
-                            });
+      // Dispatch result to `feederStrand_` for ordered delivery.
+      // `trySendInOrder` flushes consecutive results to `outputCh_`.
+      net::dispatch(
+          *feederStrand_,
+          [this, seqNum, r = BatchOrEof{std::move(result), error}]() mutable {
+            pendingResults_.emplace(seqNum, std::move(r));
+            trySendInOrder();
+          });
+    });
+  }
+
+  // Forward the next in-sequence result (if available) from `pendingResults_`
+  // to `outputCh_`. Must be called on `feederStrand_`. After each successful
+  // send the callback decrements `inflight_`, releases a token, and calls
+  // `trySendInOrder` again to continue flushing.
+  void trySendInOrder() {
+    auto it = pendingResults_.find(nextSendSeq_);
+    if (it == pendingResults_.end()) {
+      // Next result is not yet ready; we will be called again when it arrives.
+      if (inflight_ == 0) {
+        if (pendingError_) {
+          maybeCloseWithError();
+        } else {
+          maybeFinishFeeder();
+        }
+      }
+      return;
+    }
+    auto result = std::move(it->second);
+    pendingResults_.erase(it);
+    ++nextSendSeq_;
+    outputCh_->async_send(ec_t{}, std::move(result), [this](ec_t /*ec*/) {
+      net::dispatch(*feederStrand_, [this] {
+        --inflight_;
+        if (cancelled_ && inflight_ == 0) {
+          finishFeeder();
+          return;
+        }
+        if (!cancelled_ && !pendingError_) {
+          tokenCh_->try_send(ec_t{}, true);
+        }
+        trySendInOrder();
+      });
     });
   }
 
@@ -627,6 +664,13 @@ class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
   bool eofSeen_ = false;
   bool cancelled_ = false;
   size_t parsePositionCursor_ = 0;
+  // Sequence counter for ordered delivery: each block dispatched in
+  // `acquireTokenAndDispatch` gets the next value of `nextDispatchSeq_`.
+  // `nextSendSeq_` tracks the next result to forward to `outputCh_`.
+  // `pendingResults_` buffers completed results that arrived out of order.
+  size_t nextDispatchSeq_ = 0;
+  size_t nextSendSeq_ = 0;
+  std::map<size_t, BatchOrEof> pendingResults_;
   // Set when the file reader signals an error; the error is forwarded to the
   // output channel only after all in-flight parse tasks finish (so their
   // results — which may include valid triples — are emitted first).
