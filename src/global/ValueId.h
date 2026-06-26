@@ -227,8 +227,6 @@ class ValueId {
   // vectorization). In particular, this method should for example be used
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
-    AD_EXPENSIVE_CHECK(isNonLocal());
-    AD_EXPENSIVE_CHECK(other.isNonLocal());
     return ql::compareThreeWay(_bits, other._bits);
   }
 
