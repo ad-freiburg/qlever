@@ -46,9 +46,8 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
-// Simplify a WKT geometry using the Douglas-Peucker algorithm (helper to avoid
-// including `GeometryInfoHelpersImpl.h`). The returned WKT string has neither
-// quotation marks nor a datatype.
+// Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
+// quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
 
 const auto wktLiteralIri =
@@ -236,14 +235,8 @@ class WktGeometryN {
   }
 };
 
-// Simplify a WKT geometry using the Douglas-Peucker algorithm. The first
-// argument is the geometry (a `geo:wktLiteral`); this is intended primarily for
-// (multi-)polygons, but lines are simplified as well, and points are returned
-// unchanged. The second argument is the simplification tolerance, interpreted
-// in the coordinate units of the geometry (that is, degrees for WGS84
-// geometries). The result is a new `geo:wktLiteral`. If the input is not a
-// valid geometry, or the tolerance is not a positive, finite number, `UNDEF` is
-// returned.
+// Simplify a WKT geometry using `pb_util`. Tolerance, interpreted in the
+// coordinate units of the geometry.
 class WktSimplify {
  public:
   template <typename NumericVariant>
@@ -255,8 +248,7 @@ class WktSimplify {
       return ValueId::makeUndefined();
     }
 
-    // Extract the tolerance as a `double` from the numeric value variant
-    // (`std::variant<NotNumeric, double, int64_t>`).
+    // Extract the tolerance as a `double`.
     auto tol = std::visit(
         [](const auto& value) -> std::optional<double> {
           using T = std::decay_t<decltype(value)>;

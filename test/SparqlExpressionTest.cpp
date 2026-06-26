@@ -1762,15 +1762,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("LINESTRING(2 8,4 6)"),
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
-}
 
-// ________________________________________________________________________________________
-TEST(SparqlExpression, geoSimplifyGeometry) {
-  // `ql:simplifyGeometry(?geometry, ?tolerance)` simplifies a WKT geometry
-  // using the Douglas-Peucker algorithm. The tolerance is given in the
-  // coordinate units of the geometry (degrees for WGS84). It is intended
-  // primarily for (multi-)polygons, but lines are simplified as well and points
-  // are returned unchanged.
+  // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
       std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
 
