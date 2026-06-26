@@ -17,7 +17,7 @@ struct TableConstRefWithVocab {
   IdTableView<0> idTable_;
   std::reference_wrapper<const LocalVocab> localVocab_;
 
-  IdTableView<0> idTable() const { return idTable_; }
+  const IdTableView<0>& idTable() const { return idTable_; }
 
   const LocalVocab& localVocab() const { return localVocab_.get(); }
 };

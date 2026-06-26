@@ -490,6 +490,9 @@ class IdTable {
   static constexpr bool isCloneable =
       std::is_copy_constructible_v<Storage> &&
       std::is_copy_constructible_v<ColumnStorage>;
+  // The type returned by `clone()` and `moveOrClone()`: always the non-view
+  // (owning) variant of this table type.
+  using OwnedTable = IdTable<T, NumColumns, ColumnStorage, IsView::False>;
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
   // this behaves exactly like the copy constructor with the following
   // exception: If `this` is a view (because the `isView` template parameter is
@@ -506,18 +509,24 @@ class IdTable {
         std::move(storage), numColumns_, numRows_, allocator_};
   }
 
-  // Move or clone returns a copied or moved IdTable depending on the value
-  // category of `*this`. The typical usage is
+  // Move or clone returns a copied or moved non-view `IdTable` depending on
+  // the value category of `*this`. The typical usage is
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
   // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
-  // (which `IdTable` is not.).
-  CPP_member auto moveOrClone() const& -> CPP_ret(IdTable)(
+  // (which `IdTable` is not.). For views, both overloads always clone the data,
+  // since views do not own their data and cannot be moved.
+  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
                                            requires isCloneable) {
     return clone();
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(IdTable&&)(requires isCloneable) {
-    return std::move(*this);
+  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
+                                       requires isCloneable) {
+    if constexpr (isView) {
+      return clone();
+    } else {
+      return std::move(*this);
+    }
   }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
@@ -928,6 +937,21 @@ using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
 
+// Concept that matches any type that is or inherits from any instantiation of
+// `columnBasedIdTable::IdTable` — including `IdTable`, `IdTableStatic<COLS>`,
+// and `IdTableView<COLS>`.
+namespace detail {
+template <typename ValType, int NumCols, typename Storage,
+          columnBasedIdTable::IsView isView>
+std::true_type isIdTableLike(
+    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
+std::false_type isIdTableLike(...);
+}  // namespace detail
+
+template <typename T>
+CPP_concept IdTableLike =
+    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
+
 // Free-function `operator==` to allow comparing `IdTableView` with `IdTable`
 // and vice versa. The member `operator==` is only defined for non-view types.
 template <int COLS>
@@ -949,17 +973,5 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
-
-namespace detail {
-template <typename ValType, int NumCols, typename Storage,
-          columnBasedIdTable::IsView isView>
-std::true_type isIdTableLike(
-    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
-std::false_type isIdTableLike(...);
-}  // namespace detail
-
-template <typename T>
-CPP_concept IdTableLike =
-    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

@@ -1231,6 +1231,24 @@ TEST(IdTable, moveOrClone) {
   EXPECT_TRUE(table.empty());
 }
 
+TEST(IdTable, moveOrCloneOnView) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  IdTableView<0> view = table.asStaticView<0>();
+  // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
+  IdTable cloned = view.moveOrClone();
+  EXPECT_EQ(cloned, table);
+  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+
+  // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
+  // views cannot transfer ownership.
+  IdTable cloned2 = std::move(view).moveOrClone();
+  EXPECT_EQ(cloned2, table);
+  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 

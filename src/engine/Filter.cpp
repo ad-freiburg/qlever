@@ -178,14 +178,8 @@ CPP_template_def(int WIDTH,
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
-        // table. `moveOrClone()` only works for owned tables (returns a view
-        // for view inputs), so use `clone()` for all other `IdTableLike`
-        // types.
-        if constexpr (std::is_same_v<std::decay_t<Table>, IdTable>) {
-          dynamicResultTable = AD_FWD(inputTable).moveOrClone();
-        } else {
-          dynamicResultTable = inputTable.clone();
-        }
+        // table.
+        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
         return;
       }
       checkCancellation();
