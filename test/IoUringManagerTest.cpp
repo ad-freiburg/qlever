@@ -320,8 +320,7 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   batch.add(0, 16);  // request more than the 8 available
 
   AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(batch.submitTo(manager, fd)),
-                               HasSubstr("read fewer bytes than requested in "
-                                         "IOUringPolicy"));
+                               HasSubstr("read fewer bytes than requested"));
 }
 
 // A read that is fully satisfied returns the requested bytes from the requested
