@@ -43,7 +43,7 @@ namespace {
 
 using namespace ::testing;
 using Pair = std::pair<int, int>;
-using SV = SortedVector<Pair, std::less<>, MemberProj<&Pair::first>>;
+using SV = SortedVector<Pair, std::less<>, MemberProjection<&Pair::first>>;
 
 auto p10 = Pair{1, 0};
 auto p11 = Pair{1, 1};

@@ -21,6 +21,7 @@
 #include "util/HashMap.h"
 #include "util/SortedVector.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 class Permutation;
@@ -105,9 +106,9 @@ struct LocatedTriple {
   }
 };
 
-using SortedLocatedTriplesVector =
-    ad_utility::SortedVector<LocatedTriple, std::less<>,
-                             ad_utility::MemberProj<&LocatedTriple::triple_>>;
+using SortedLocatedTriplesVector = ad_utility::SortedVector<
+    LocatedTriple, std::less<>,
+    ad_utility::MemberProjection<&LocatedTriple::triple_>>;
 
 using LocatedTriples = SortedLocatedTriplesVector;
 
