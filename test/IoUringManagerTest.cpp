@@ -30,24 +30,38 @@ namespace {
 
 using namespace ::testing;
 
-// Writes `content` to a temporary file (named after the currently running
-// gtest, so different test cases never collide) and keeps it open for reading.
+// Writes `content` to a temporary file and keeps it open for reading.
 // `fd()` exposes the file descriptor; the file is removed from disk on
 // destruction. Use `makeTempFile` below to get the file and its fd in one step.
 class TempFile {
  public:
-  explicit TempFile(std::string_view content) {
-    auto path = absl::StrCat(gtestCurrentTestName(), ".tmp");
-    readFile_ = ad_utility::File{path, "wb"};
+  explicit TempFile(std::string_view content)
+      : path_{absl::StrCat(gtestCurrentTestName(), ".tmp")} {
+    // Open for reading and writing (`"w+b"`): the tests read from this file's
+    // `fd()` via `pread`/io_uring.
+    readFile_ = ad_utility::File{path_, "w+b"};
     readFile_.write(content.data(), content.size());
+    // Flush the libc stream buffer so the written bytes reach the kernel and
+    // are visible to the reads the tests issue on `fd()`.
+    readFile_.flush();
   }
   // Movable (so a factory can return it by value). The moved-from object's
   // `path_` is cleared so that only the live object removes the file.
-  TempFile(TempFile&& other) noexcept : readFile_(std::move(other.readFile_)) {}
-  ~TempFile() {}
+  TempFile(TempFile&& other) noexcept
+      : path_{std::move(other.path_)}, readFile_{std::move(other.readFile_)} {
+    other.path_.clear();
+  }
+  // Close the descriptor and remove the file from disk.
+  ~TempFile() {
+    if (!path_.empty()) {
+      readFile_.close();
+      std::remove(path_.c_str());
+    }
+  }
   int fd() const { return readFile_.fd(); }
 
  private:
+  std::string path_;
   ad_utility::File readFile_;
 };
 
@@ -306,7 +320,8 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   batch.add(0, 16);  // request more than the 8 available
 
   AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(batch.submitTo(manager, fd)),
-                               HasSubstr("read fewer bytes than requested"));
+                               HasSubstr("I/O error in IoUringPolicy read "
+                                         "operation"));
 }
 
 // A read that is fully satisfied returns the requested bytes from the requested
@@ -386,8 +401,7 @@ TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
 // (and logs a warning) before tearing down the ring, so the kernel is done
 // writing into the target buffers. `batch` is declared before `manager`, so its
 // buffers outlive the destructor's drain. After the manager is destroyed every
-// read has completed, so the results are correct. Most valuable under
-// AddressSanitizer, which would catch a write into a freed buffer.
+// read has completed, so the results are correct.
 TYPED_TEST(IoUringManagerTest, dropRunningManager) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 

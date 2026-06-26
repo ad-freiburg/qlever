@@ -63,7 +63,7 @@ TEST(VocabularyTypes, verifyWordWriterBaseDestructorBehavesAsExpected) {
 // `asResult` exposes the span over the filled views, and the returned aliasing
 // shared_ptr keeps the backing buffer/views alive after the original owning
 // shared_ptr is dropped (the whole point of the aliasing shared_ptr).
-TEST(LookupDataCommonBase, AsResultExposesViewsAndKeepsDataAlive) {
+TEST(VocabBatchLookupData, AsResultExposesViewsAndKeepsDataAlive) {
   auto data = std::make_shared<VocabBatchLookupData>();
   data->buffer() = {'f', 'o', 'o', 'b', 'a', 'r'};
   data->views().emplace_back(data->buffer().data(), 3);      // "foo"
@@ -82,7 +82,7 @@ TEST(LookupDataCommonBase, AsResultExposesViewsAndKeepsDataAlive) {
 }
 
 // An empty lookup result is valid: no views, empty span.
-TEST(LookupDataCommonBase, AsResultEmpty) {
+TEST(VocabBatchLookupData, AsResultEmpty) {
   auto data = std::make_shared<VocabBatchLookupData>();
   VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
@@ -95,7 +95,7 @@ TEST(LookupDataCommonBase, AsResultEmpty) {
 // word never invalidates an earlier `string_view`, unlike the single growing
 // buffer of `VocabBatchLookupData`, which would reallocate and leave the
 // already-recorded views dangling.
-TEST(LookupDataCommonBase, PmrAsResultPointerStableAcrossAppends) {
+TEST(PmrVocabBatchLookupData, PmrAsResultPointerStableAcrossAppends) {
   auto data = std::make_shared<PmrVocabBatchLookupData>();
   data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>();
   auto* resource = data->buffer().get();
@@ -128,7 +128,7 @@ TEST(LookupDataCommonBase, PmrAsResultPointerStableAcrossAppends) {
 
 // An empty pmr lookup result is valid: no views, empty span (matches the
 // `VocabBatchLookupData` `AsResultEmpty` case).
-TEST(LookupDataCommonBase, PmrAsResultEmpty) {
+TEST(PmrVocabBatchLookupData, PmrAsResultEmpty) {
   auto data = std::make_shared<PmrVocabBatchLookupData>();
   data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>();
   VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
