@@ -951,14 +951,41 @@ RdfStreamParser<T>::backupState() const {
 
 // _______________________________________________________________
 template <class T>
+void RdfStreamParser<T>::armNextBlock() {
+  auto promise = std::make_shared<std::promise<std::pair<
+      std::exception_ptr, std::optional<qlever::parser::ByteBlock>>>>();
+  pendingBlock_ = promise->get_future();
+  fileBuffer_->asyncGetNextBlock(
+      [p = std::move(promise)](
+          std::exception_ptr ep,
+          std::optional<qlever::parser::ByteBlock> opt) mutable {
+        p->set_value({std::move(ep), std::move(opt)});
+      });
+}
+
+// ____________________________________________________________________________
+template <class T>
+std::optional<qlever::parser::ByteBlock>
+RdfStreamParser<T>::getNextBlockSync() {
+  auto [ep, opt] = pendingBlock_.get();
+  if (ep) std::rethrow_exception(ep);
+  if (opt.has_value()) armNextBlock();
+  return opt;
+}
+
+// ____________________________________________________________________________
+template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
   AD_CORRECTNESS_CHECK(fileBuffer_);
-  auto nextBytesOpt = fileBuffer_->getNextBlock();
+  // If no read is in flight (EOF was already signalled), there are no more
+  // bytes to fetch.
+  if (!pendingBlock_.valid()) return false;
+  auto nextBytesOpt = getNextBlockSync();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
-    // there are no more decompressed bytes, just continue with what we've got
-    // do not alter any internal state.
+    // There are no more decompressed bytes, just continue with what we've got.
+    // Do not alter any internal state.
     return false;
   }
 
@@ -970,7 +997,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
   this->triples_.resize(b.numTriples_);
   this->tok_.reset(b.tokenizerPosition_, b.tokenizerSize_);
 
-  ParallelBuffer::BufferType buf;
+  qlever::parser::ByteBlock buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
@@ -991,7 +1018,8 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
+void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
+                                    size_t blocksize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
@@ -1004,10 +1032,13 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // The reason is that with a `.` at the end, we cannot decide whether we are
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "([\\r\\n]+)");
-  // Read the first block and initialize the tokenizer.
-  if (auto res = fileBuffer_->getNextBlock(); res) {
+  fileBuffer_ = std::make_unique<qlever::parser::AsyncEndRegexBlockSource>(
+      ioPool_.get_executor(),
+      spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
+      "([\\r\\n]+)");
+  // Arm the first async read, then wait for it to initialize the tokenizer.
+  armNextBlock();
+  if (auto res = getNextBlockSync(); res) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
   } else {
@@ -1170,7 +1201,10 @@ void RdfParallelParser<T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        auto nextOptional = fileBuffer_->getNextBlock();
+        // Guard against calling `getNextBlockSync()` when EOF was signalled
+        // during initialization (e.g. empty input file).
+        if (!pendingBlock_.valid()) return;
+        auto nextOptional = getNextBlockSync();
         if (!nextOptional) {
           return;
         }
@@ -1199,15 +1233,43 @@ void RdfParallelParser<T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename T>
+void RdfParallelParser<T>::armNextBlock() {
+  auto promise = std::make_shared<std::promise<std::pair<
+      std::exception_ptr, std::optional<qlever::parser::ByteBlock>>>>();
+  pendingBlock_ = promise->get_future();
+  fileBuffer_->asyncGetNextBlock(
+      [p = std::move(promise)](
+          std::exception_ptr ep,
+          std::optional<qlever::parser::ByteBlock> opt) mutable {
+        p->set_value({std::move(ep), std::move(opt)});
+      });
+}
+
+// _______________________________________________________________________
+template <typename T>
+std::optional<qlever::parser::ByteBlock>
+RdfParallelParser<T>::getNextBlockSync() {
+  auto [ep, opt] = pendingBlock_.get();
+  if (ep) std::rethrow_exception(ep);
+  if (opt.has_value()) armNextBlock();
+  return opt;
+}
+
+// _______________________________________________________________________
+template <typename T>
 void RdfParallelParser<T>::initialize(
-    std::unique_ptr<ParallelBuffer> rawBuffer) {
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
-  ParallelBuffer::BufferType remainingBatchFromInitialization;
+    const qlever::InputFileSpecification& spec, size_t blocksize) {
+  fileBuffer_ = std::make_unique<qlever::parser::AsyncEndRegexBlockSource>(
+      ioPool_.get_executor(),
+      spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
+      "\\.[\\t ]*([\\r\\n]+)");
+  qlever::parser::ByteBlock remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
+  // Arm the first block and prime the initialization loop.
+  armNextBlock();
   while (remainder.empty()) {
-    if (auto batch = fileBuffer_->getNextBlock()) {
+    if (auto batch = getNextBlockSync()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
@@ -1297,6 +1359,11 @@ RdfParallelParser<T>::~RdfParallelParser() {
         parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
+  // Drain any in-flight async read so that `ioPool_` threads don't access
+  // `fileBuffer_` after it is destroyed.
+  if (pendingBlock_.valid()) {
+    pendingBlock_.wait();
+  }
 }
 
 // Create a parser for a single file of an `InputFileSpecification`. The type
@@ -1324,8 +1391,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(
-            input.getParallelBuffer(bufferSize.getBytes()), ev, graph());
+        return std::make_unique<Parser>(input, bufferSize, ev, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time

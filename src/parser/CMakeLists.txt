@@ -9,7 +9,7 @@ add_library(parser
         RdfParser.cpp
         Tokenizer.cpp
         WordsAndDocsFileParser.cpp
-        ParallelBuffer.cpp
+        AsyncBlockSource.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
         GraphPatternOperation.cpp
