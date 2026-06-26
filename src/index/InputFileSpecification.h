@@ -16,7 +16,7 @@
 #include <string>
 #include <variant>
 
-#include "parser/ParallelBuffer.h"
+#include "parser/AsyncBlockSource.h"
 
 namespace qlever {
 
@@ -24,17 +24,17 @@ namespace qlever {
 enum class Filetype { Turtle, NQuad };
 
 // Specify a single input file or stream for the index builder. The source of
-// bytes is either a filename or a factory that produces a `ParallelBuffer`.
+// bytes is either a filename or a factory that produces an `AsyncBlockSource`.
 struct InputFileSpecification {
-  // A factory that, when called, creates a ready-to-use `ParallelBuffer`.
-  // The `size_t` is the preferred blocksize for the `ParallelBuffer`, and the
-  // `string_view` is a descriptor of the resource, which can be used for
-  // logging and debugging.
-  using ParallelBufferFactory =
-      std::function<std::unique_ptr<ParallelBuffer>(size_t, std::string_view)>;
+  // A factory that, when called, creates a ready-to-use `AsyncBlockSource`.
+  // The `size_t` is the preferred blocksize, and the `string_view` is a
+  // descriptor of the resource, used for logging and debugging.
+  using AsyncBlockSourceFactory =
+      std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
+          size_t, std::string_view)>;
 
   struct BufferFactoryAndDescription {
-    ParallelBufferFactory bufferFactory_;
+    AsyncBlockSourceFactory bufferFactory_;
     std::string description_;
   };
   // The byte source: either a filename or a factory.
@@ -70,12 +70,13 @@ struct InputFileSpecification {
         source_);
   }
 
-  // Create and return a `ParallelBuffer` for this spec. For filename-based
-  // specs, a `ParallelFileBuffer` with the given `blocksize` is returned. For
-  // factory-based specs, the factory is called.
-  std::unique_ptr<ParallelBuffer> getParallelBuffer(size_t blocksize) const {
+  // Create and return an `AsyncBlockSource` for this spec. For filename-based
+  // specs, an `AsyncFileBlockSource` with the given `blocksize` is returned.
+  // For factory-based specs, the factory is called.
+  std::unique_ptr<qlever::parser::AsyncBlockSource> getAsyncBlockSource(
+      size_t blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<ParallelFileBuffer>(
+      return std::make_unique<qlever::parser::AsyncFileBlockSource>(
           blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =
