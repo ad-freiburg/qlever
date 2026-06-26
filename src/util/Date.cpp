@@ -93,11 +93,7 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   // the input to days, hours, minutes and seconds.
   // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
   // days) return UNDEF.
-  try {
-    return DayTimeDuration{durationType, 0, 0, 0, second};
-  } catch (...) {
-    return std::nullopt;
-  }
+  return DayTimeDuration::makeWithBoundsCheck(durationType, 0, 0, 0, second);
 }
 
 // _____________________________________________________________________________

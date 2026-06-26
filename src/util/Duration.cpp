@@ -89,12 +89,8 @@ std::optional<DayTimeDuration> DayTimeDuration::operator-(
   // internally.
   // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
   // days) return UNDEF.
-  try {
-    return DayTimeDuration{durationType, 0, 0, 0,
-                           static_cast<double>(difference) / 1000.0};
-  } catch (...) {
-    return std::nullopt;
-  }
+  return DayTimeDuration::makeWithBoundsCheck(
+      durationType, 0, 0, 0, static_cast<double>(difference) / 1000.0);
 }
 
 //______________________________________________________________________________
@@ -113,12 +109,8 @@ std::optional<DayTimeDuration> DayTimeDuration::operator+(
   // internally.
   // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
   // days) return UNDEF.
-  try {
-    return DayTimeDuration{durationType, 0, 0, 0,
-                           static_cast<double>(sum) / 1000.0};
-  } catch (...) {
-    return std::nullopt;
-  }
+  return DayTimeDuration::makeWithBoundsCheck(
+      durationType, 0, 0, 0, static_cast<double>(sum) / 1000.0);
 }
 
 //______________________________________________________________________________

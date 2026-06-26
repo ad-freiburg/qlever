@@ -396,11 +396,13 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     }
     // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
     // days) return UNDEF.
-    try {
-      return DateYearOrDuration{
-          DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
-    } catch (...) {
+    std::optional<DayTimeDuration> result =
+        DayTimeDuration::makeWithBoundsCheck(
+            durationType, static_cast<int>(diff_count), 0, 0, 0);
+    if (!result.has_value()) {
       return std::nullopt;
+    } else {
+      return DateYearOrDuration{result.value()};
     }
   }
 
