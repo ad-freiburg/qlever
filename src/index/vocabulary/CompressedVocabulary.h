@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <cstdlib>
+
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
@@ -20,6 +22,25 @@
 
 namespace detail {
 
+// Read a positive `size_t` from the environment variable `name`, falling back to
+// `defaultValue` if it is unset, empty, non-numeric, or zero. Used to tune the
+// depth of the compressed-vocabulary writer's compression pipeline at index-build
+// time. This bounds the writer's peak memory, which matters for vocabularies with
+// very large literals such as embedding vectors (see
+// `docs/embedding-vocab-merge-oom.md`).
+inline size_t vocabWriterSizeFromEnv(const char* name, size_t defaultValue) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return defaultValue;
+  }
+  char* end = nullptr;
+  unsigned long long parsed = std::strtoull(value, &end, 10);
+  if (*end != '\0' || parsed == 0) {
+    return defaultValue;
+  }
+  return static_cast<size_t>(parsed);
+}
+
 template <typename Vocabulary, typename Iterator>
 CPP_requires(IterableVocabulary_,
              requires(const Vocabulary& vocabulary,
@@ -33,11 +54,15 @@ CPP_concept IterableVocabulary =
 
 // A vocabulary in which compression is performed using a customizable
 // compression algorithm, with one dictionary per `NumWordsPerBlock` many words
-// (default 1 million).
+// (default 64Ki). NOTE: this used to be 1Mi, but the writer keeps several whole
+// uncompressed blocks resident while compressing, so the block size bounds peak
+// memory at index-build time. With ordinary words a block is tens of MB, but with
+// very large literals (e.g. embedding vectors of 8-22 KB each) a 1Mi-word block is
+// 8-22 GB, which OOMs the merge. See `docs/embedding-vocab-merge-oom.md`.
 CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
                  ad_utility::vocabulary::FsstSquaredCompressionWrapper,
-             size_t NumWordsPerBlock = 1UL << 20)(
+             size_t NumWordsPerBlock = 1UL << 16)(
     requires ad_utility::vocabulary::CompressionWrapper<
         CompressionWrapper>) class CompressedVocabulary {
  private:
@@ -133,14 +158,16 @@ CPP_template(typename UnderlyingVocabulary,
     size_t numBlocks_ = 0u;
     size_t numBlocksLargerWhenCompressed_ = 0u;
     ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
-        writeQueue_{5};
+        writeQueue_{detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_WRITE_QUEUE", 5)};
     ad_utility::JThread writeThread_{[this] {
       while (auto opt = writeQueue_.pop()) {
         opt.value()();
       }
     }};
     std::atomic<size_t> queueIndex_ = 0;
-    ad_utility::TaskQueue<false> compressQueue_{10, 10};
+    ad_utility::TaskQueue<false> compressQueue_{
+        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE", 10),
+        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE", 10)};
     uint64_t counter_ = 0;
 
    public:
@@ -148,7 +175,15 @@ CPP_template(typename UnderlyingVocabulary,
     explicit DiskWriterFromUncompressedWords(
         const std::string& filenameWords, const std::string& filenameDecoders)
         : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+          filenameDecoders_{filenameDecoders} {
+      AD_LOG_INFO << "Compressed vocabulary writer: " << NumWordsPerBlock
+                  << " words/block, compress-queue "
+                  << detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE",
+                                                    10)
+                  << ", write-queue "
+                  << detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_WRITE_QUEUE", 5)
+                  << std::endl;
+    }
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
