@@ -51,12 +51,9 @@ class ServerMetrics {
   void registerCallbacks();
 
  private:
-  static void observeDeltaTriples(opentelemetry::metrics::ObserverResult result,
-                                  void* state);
-  static void observeMemoryQueryFree(
-      opentelemetry::metrics::ObserverResult result, void* state);
-  static void observeMemoryCacheUsed(
-      opentelemetry::metrics::ObserverResult result, void* state);
+  template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
+  static void observeCallback(opentelemetry::metrics::ObserverResult result,
+                              void* state);
   static void observe(opentelemetry::metrics::ObserverResult result,
                       int64_t value);
 

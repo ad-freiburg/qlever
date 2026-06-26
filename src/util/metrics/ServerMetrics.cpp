@@ -88,16 +88,22 @@ ServerMetrics::ServerMetrics(
 
 // _____________________________________________________________________________
 ServerMetrics::~ServerMetrics() {
-  deltaTriplesMetric_->RemoveCallback(&observeDeltaTriples, this);
-  memoryQueryFree_->RemoveCallback(&observeMemoryQueryFree, this);
-  memoryCacheUsed_->RemoveCallback(&observeMemoryCacheUsed, this);
+  deltaTriplesMetric_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  memoryQueryFree_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
+  memoryCacheUsed_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getCacheUsed_>, this);
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::registerCallbacks() {
-  deltaTriplesMetric_->AddCallback(&observeDeltaTriples, this);
-  memoryQueryFree_->AddCallback(&observeMemoryQueryFree, this);
-  memoryCacheUsed_->AddCallback(&observeMemoryCacheUsed, this);
+  deltaTriplesMetric_->AddCallback(
+      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  memoryQueryFree_->AddCallback(
+      &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
+  memoryCacheUsed_->AddCallback(&observeCallback<&ServerMetrics::getCacheUsed_>,
+                                this);
 }
 
 // _____________________________________________________________________________
@@ -109,22 +115,9 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 }
 
 // _____________________________________________________________________________
-void ServerMetrics::observeDeltaTriples(
+template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
+void ServerMetrics::observeCallback(
     opentelemetry::metrics::ObserverResult result, void* state) {
-  const auto& self = *static_cast<ServerMetrics*>(state);
-  observe(std::move(result), self.getDeltaTriples_());
-}
-
-// _____________________________________________________________________________
-void ServerMetrics::observeMemoryQueryFree(
-    opentelemetry::metrics::ObserverResult result, void* state) {
-  const auto& self = *static_cast<ServerMetrics*>(state);
-  observe(std::move(result), self.getMemoryLeft_());
-}
-
-// _____________________________________________________________________________
-void ServerMetrics::observeMemoryCacheUsed(
-    opentelemetry::metrics::ObserverResult result, void* state) {
-  const auto& self = *static_cast<ServerMetrics*>(state);
-  observe(std::move(result), self.getCacheUsed_());
+  const auto& self = *static_cast<const ServerMetrics*>(state);
+  observe(std::move(result), (self.*Getter)());
 }
