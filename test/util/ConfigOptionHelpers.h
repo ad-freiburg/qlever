@@ -17,7 +17,7 @@
 arguments. Should be passed per deduction.
 */
 template <typename Function>
-static void doForTypeInConfigOptionValueType(Function function) {
+void doForTypeInConfigOptionValueType(Function function) {
   ad_utility::forEachTypeInTemplateType<
       ad_utility::ConfigOption::AvailableTypes>(function);
 }

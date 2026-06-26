@@ -115,13 +115,16 @@ set(CMAKE_CXX_FLAGS_ASAN
         CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
         FORCE)
 
-# Add colored output for Ninja
+# Add colored output for Ninja. Use per-language compiler-ID generator expressions so that
+# flags are only passed to the compiler that actually supports them (e.g. uriparser can be
+# compiled by /usr/bin/cc even when the main build uses Clang).
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        add_compile_options(-fcolor-diagnostics)
-    endif ()
+    add_compile_options(
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+    )
 endif ()
 
 # Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
@@ -199,12 +202,12 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        GIT_TAG 2d2a6d74ddf28447afabb75943913a6445a27d4f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
-add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=1 SPATIALJOIN_NO_ZLIB=1)
 
 ################################
 # Threading

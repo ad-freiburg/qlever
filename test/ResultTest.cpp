@@ -88,6 +88,24 @@ TEST(Result, idTableViewThrowsWhenActuallyLazy) {
 }
 
 // _____________________________________________________________________________
+TEST(Result, cloneIdTableReturnsCopy) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  ASSERT_TRUE(result.isFullyMaterialized());
+  IdTable cloned = result.cloneIdTable();
+  EXPECT_EQ(cloned, idTable);
+  // Verify it is a deep copy, not a reference to the same data.
+  EXPECT_NE(&cloned(0, 0), &result.idTable()(0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, cloneIdTableThrowsWhenActuallyLazy) {
+  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  EXPECT_FALSE(result.isFullyMaterialized());
+  EXPECT_THROW(result.cloneIdTable(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
 TEST(Result, verifyIdTableThrowsOnSecondAccess) {
   const Result result{[]() -> Result::Generator { co_return; }(), {}};
   // First access should work
@@ -272,6 +290,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
 TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
   Result result{[]() -> Result::Generator {
                   throw ad_utility::CancellationException{
+                      ad_utility::CancellationState::MANUAL,
                       "verifyRunOnNewChunkCallsFinishOnCancellation"};
                   co_return;
                 }(),

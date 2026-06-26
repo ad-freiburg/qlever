@@ -31,6 +31,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
+#include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/SparqlTriple.h"
@@ -770,13 +771,14 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
+  qlever::EngineConfig config;
+  config.baseName_ = testIndexBase_;
 
   // Write a new materialized view using the `writeMaterializedView` method of
   // the `Server` class.
   {
     // Initialize but do not start a `Server` instance on our test index.
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false);
+    Server server{4321, 1, "accessToken", config};
 
     ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
@@ -790,11 +792,11 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 
   // Test the preloading of materialized views on server start.
   {
+    config.persistUpdates_ = false;
+    config.preloadMaterializedViews_ = {"testViewForServerPreload"};
     qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false, true, true, false,
-                      {"testViewForServerPreload"});
-    EXPECT_TRUE(server.materializedViewsManager_->isViewLoaded(
+    Server server{4321, 1, "accessToken", config};
+    EXPECT_TRUE(server.qlever_.materializedViewsManager()->isViewLoaded(
         "testViewForServerPreload"));
   }
 
