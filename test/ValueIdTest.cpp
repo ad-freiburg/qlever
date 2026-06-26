@@ -465,3 +465,21 @@ TEST(ValueId, isTrivial) {
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
 }
+
+// _____________________________________________________________________________
+TEST(ValueId, isNonLocal) {
+  EXPECT_TRUE(Id::makeUndefined().isNonLocal());
+  EXPECT_TRUE(Id::makeFromBool(true).isNonLocal());
+  EXPECT_TRUE(Id::makeFromInt(1337).isNonLocal());
+  EXPECT_TRUE(Id::makeFromDouble(3.14).isNonLocal());
+  EXPECT_TRUE(Id::makeFromVocabIndex(VocabIndex::make(0)).isNonLocal());
+  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).isNonLocal());
+  EXPECT_TRUE(
+      Id::makeFromTextRecordIndex(TextRecordIndex::make(0)).isNonLocal());
+  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}}).isNonLocal());
+  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).isNonLocal());
+  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0)).isNonLocal());
+  EXPECT_TRUE(
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isNonLocal());
+  EXPECT_TRUE(Id::makeFromEncodedVal(738).isNonLocal());
+}

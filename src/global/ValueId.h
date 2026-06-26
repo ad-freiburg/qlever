@@ -227,6 +227,8 @@ class ValueId {
   // vectorization). In particular, this method should for example be used
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
+    AD_EXPENSIVE_CHECK(isNonLocal());
+    AD_EXPENSIVE_CHECK(other.isNonLocal());
     return ql::compareThreeWay(_bits, other._bits);
   }
 
@@ -391,6 +393,12 @@ class ValueId {
   // An ID is considered trivial, if its datatype is trivial (see
   // `isDatatypeTrivial` above).
   constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
+
+  // An `Id` is considered non-local if it doesn't have a dependency on a
+  // local-vocab.
+  constexpr bool isNonLocal() const {
+    return getDatatype() != Datatype::LocalVocabIndex;
+  }
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation

@@ -28,11 +28,9 @@ struct ComparatorForConstCol0 {
 // Helper function to make a row from `IdTable` easier to compare. This ties
 // the cells of the given row with the indices 0, 1 and 2.
 inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
-  auto isNonLocal = [](Id id) {
-    return id.getDatatype() != Datatype::LocalVocabIndex;
-  };
   std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
-  AD_CORRECTNESS_CHECK(ql::ranges::all_of(result, isNonLocal, &Id::fromBits));
+  AD_CORRECTNESS_CHECK(
+      ql::ranges::all_of(result, &Id::isNonLocal, &Id::fromBits));
   return result;
 };
 
