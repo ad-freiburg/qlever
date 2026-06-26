@@ -49,7 +49,7 @@ std::string vec(std::string_view body) {
 // `ex:T` uses the given `metric`, and three entities `ex:a`/`ex:b`/`ex:c` carry
 // the 2-D vectors a=[1,0], b=[0,1], c=[1,1] via an embedding node
 // (`emb:hasEmbedding` -> node -> `emb:asFp32Vector` + `emb:type`).
-std::string makeKg(std::string_view metric) {
+std::string makeKg(std::string_view metricLocalName) {
   auto entity = [](std::string_view name, std::string_view node,
                    std::string_view body) {
     return absl::StrCat("ex:", name, " emb:hasEmbedding ex:", node, " .\n",
@@ -59,8 +59,8 @@ std::string makeKg(std::string_view metric) {
   return absl::StrCat(
       "@prefix emb: <http://qlever.cs.uni-freiburg.de/embeddings/> .\n"
       "@prefix ex: <http://example.org/> .\n"
-      "ex:T emb:hasMetric \"",
-      metric, "\" ; emb:hasDimension 2 ; emb:hasPrecision \"fp32\" .\n",
+      "ex:T emb:hasMetric emb:",
+      metricLocalName, " ; emb:hasDimension 2 ; emb:hasPrecision emb:fp32 .\n",
       entity("a", "na", "[1, 0]"), entity("b", "nb", "[0, 1]"),
       entity("c", "nc", "[1, 1]"));
 }
@@ -227,7 +227,7 @@ TEST(EmbeddingExpression, MetricValuesL2AndSquaredL2) {
                                         "embf:distance(", vec("[1, 0]"), ", ",
                                         vec("[0, 1]"), ", ex:T) AS ?d) }")),
               std::sqrt(2.0), 1e-5);
-  EXPECT_NEAR(singleDouble(makeKg("squared-l2"),
+  EXPECT_NEAR(singleDouble(makeKg("squaredL2"),
                            absl::StrCat(kPrefixes, "SELECT ?d { BIND(",
                                         "embf:distance(", vec("[1, 0]"), ", ",
                                         vec("[0, 1]"), ", ex:T) AS ?d) }")),
@@ -237,7 +237,7 @@ TEST(EmbeddingExpression, MetricValuesL2AndSquaredL2) {
 // _____________________________________________________________________________
 TEST(EmbeddingExpression, MetricValuesDotProduct) {
   // dot([1,0],[1,1]) = 1, returned negated: -1.
-  EXPECT_NEAR(singleDouble(makeKg("dot-product"),
+  EXPECT_NEAR(singleDouble(makeKg("dotProduct"),
                            absl::StrCat(kPrefixes, "SELECT ?d { BIND(",
                                         "embf:distance(", vec("[1, 0]"), ", ",
                                         vec("[1, 1]"), ", ex:T) AS ?d) }")),

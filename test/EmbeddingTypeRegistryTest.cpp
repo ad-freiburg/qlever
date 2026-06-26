@@ -30,8 +30,8 @@ constexpr std::string_view kEmbPrefix =
 // mandatory metadata properties.
 std::string oneValidType() {
   return absl::StrCat(kEmbPrefix,
-                      "ex:T emb:hasMetric \"cosine\" ; emb:hasDimension 3 ; "
-                      "emb:hasPrecision \"fp32\" .\n"
+                      "ex:T emb:hasMetric emb:cosine ; emb:hasDimension 3 ; "
+                      "emb:hasPrecision emb:fp32 .\n"
                       "ex:n1 emb:type ex:T .\n");
 }
 }  // namespace
@@ -58,10 +58,10 @@ TEST(EmbeddingTypeRegistry, ParsesValidDeclaration) {
 
 // _____________________________________________________________________________
 TEST(EmbeddingTypeRegistry, AllSupportedMetricsAreParsed) {
-  auto check = [](std::string_view metric, EmbeddingMetric expected) {
+  auto check = [](std::string_view metricLocalName, EmbeddingMetric expected) {
     std::string turtle =
-        absl::StrCat(kEmbPrefix, "ex:T emb:hasMetric \"", metric,
-                     "\" ; emb:hasDimension 3 ; emb:hasPrecision \"fp32\" .\n"
+        absl::StrCat(kEmbPrefix, "ex:T emb:hasMetric emb:", metricLocalName,
+                     " ; emb:hasDimension 3 ; emb:hasPrecision emb:fp32 .\n"
                      "ex:n1 emb:type ex:T .\n");
     auto index = makeTestIndex(std::move(turtle));
     const auto& registry = index.getEmbeddingTypeRegistry();
@@ -72,18 +72,18 @@ TEST(EmbeddingTypeRegistry, AllSupportedMetricsAreParsed) {
   };
   check("cosine", EmbeddingMetric::Cosine);
   check("l2", EmbeddingMetric::L2);
-  check("squared-l2", EmbeddingMetric::SquaredL2);
-  check("dot-product", EmbeddingMetric::DotProduct);
+  check("squaredL2", EmbeddingMetric::SquaredL2);
+  check("dotProduct", EmbeddingMetric::DotProduct);
 }
 
 // _____________________________________________________________________________
 TEST(EmbeddingTypeRegistry, MultipleTypesAreRegistered) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T1 emb:hasMetric \"cosine\" ; emb:hasDimension 3 ; "
-                   "emb:hasPrecision \"fp32\" .\n"
-                   "ex:T2 emb:hasMetric \"l2\" ; emb:hasDimension 5 ; "
-                   "emb:hasPrecision \"fp32\" .\n"
+                   "ex:T1 emb:hasMetric emb:cosine ; emb:hasDimension 3 ; "
+                   "emb:hasPrecision emb:fp32 .\n"
+                   "ex:T2 emb:hasMetric emb:l2 ; emb:hasDimension 5 ; "
+                   "emb:hasPrecision emb:fp32 .\n"
                    "ex:n1 emb:type ex:T1 .\nex:n2 emb:type ex:T2 .\n");
   auto index = makeTestIndex(std::move(turtle));
   const auto& registry = index.getEmbeddingTypeRegistry();
@@ -115,7 +115,7 @@ TEST(EmbeddingTypeRegistry, NoEmbeddingTypes) {
 TEST(EmbeddingTypeRegistry, MissingMetricIsLoadError) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T emb:hasDimension 3 ; emb:hasPrecision \"fp32\" .\n"
+                   "ex:T emb:hasDimension 3 ; emb:hasPrecision emb:fp32 .\n"
                    "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeTestIndex(std::move(turtle)),
@@ -126,7 +126,7 @@ TEST(EmbeddingTypeRegistry, MissingMetricIsLoadError) {
 TEST(EmbeddingTypeRegistry, MissingDimensionIsLoadError) {
   std::string turtle = absl::StrCat(
       kEmbPrefix,
-      "ex:T emb:hasMetric \"cosine\" ; emb:hasPrecision \"fp32\" .\n"
+      "ex:T emb:hasMetric emb:cosine ; emb:hasPrecision emb:fp32 .\n"
       "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeTestIndex(std::move(turtle)),
@@ -137,7 +137,7 @@ TEST(EmbeddingTypeRegistry, MissingDimensionIsLoadError) {
 TEST(EmbeddingTypeRegistry, MissingPrecisionIsLoadError) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T emb:hasMetric \"cosine\" ; emb:hasDimension 3 .\n"
+                   "ex:T emb:hasMetric emb:cosine ; emb:hasDimension 3 .\n"
                    "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeTestIndex(std::move(turtle)),
@@ -148,8 +148,8 @@ TEST(EmbeddingTypeRegistry, MissingPrecisionIsLoadError) {
 TEST(EmbeddingTypeRegistry, UnsupportedMetricIsLoadError) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T emb:hasMetric \"euclidean\" ; emb:hasDimension 3 ; "
-                   "emb:hasPrecision \"fp32\" .\n"
+                   "ex:T emb:hasMetric emb:euclidean ; emb:hasDimension 3 ; "
+                   "emb:hasPrecision emb:fp32 .\n"
                    "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(makeTestIndex(std::move(turtle)),
                                HasSubstr("unsupported emb:hasMetric"));
@@ -159,19 +159,32 @@ TEST(EmbeddingTypeRegistry, UnsupportedMetricIsLoadError) {
 TEST(EmbeddingTypeRegistry, UnsupportedPrecisionIsLoadError) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T emb:hasMetric \"cosine\" ; emb:hasDimension 3 ; "
-                   "emb:hasPrecision \"fp16\" .\n"
+                   "ex:T emb:hasMetric emb:cosine ; emb:hasDimension 3 ; "
+                   "emb:hasPrecision emb:fp16 .\n"
                    "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(makeTestIndex(std::move(turtle)),
                                HasSubstr("unsupported emb:hasPrecision"));
 }
 
 // _____________________________________________________________________________
+TEST(EmbeddingTypeRegistry, MetricAsStringLiteralIsLoadError) {
+  // The metric must be one of the predefined `emb:` IRIs, not a string literal.
+  std::string turtle =
+      absl::StrCat(kEmbPrefix,
+                   "ex:T emb:hasMetric \"cosine\" ; emb:hasDimension 3 ; "
+                   "emb:hasPrecision emb:fp32 .\n"
+                   "ex:n1 emb:type ex:T .\n");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeTestIndex(std::move(turtle)),
+      HasSubstr("expected to be one of the predefined IRIs"));
+}
+
+// _____________________________________________________________________________
 TEST(EmbeddingTypeRegistry, InvalidDimensionIsLoadError) {
   std::string turtle =
       absl::StrCat(kEmbPrefix,
-                   "ex:T emb:hasMetric \"cosine\" ; emb:hasDimension 0 ; "
-                   "emb:hasPrecision \"fp32\" .\n"
+                   "ex:T emb:hasMetric emb:cosine ; emb:hasDimension 0 ; "
+                   "emb:hasPrecision emb:fp32 .\n"
                    "ex:n1 emb:type ex:T .\n");
   AD_EXPECT_THROW_WITH_MESSAGE(makeTestIndex(std::move(turtle)),
                                HasSubstr("invalid emb:hasDimension"));

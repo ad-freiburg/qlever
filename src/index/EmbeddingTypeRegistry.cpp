@@ -13,18 +13,17 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-std::optional<EmbeddingMetric> embeddingMetricFromString(
-    std::string_view metric) {
-  if (metric == EMBEDDING_METRIC_COSINE) {
+std::optional<EmbeddingMetric> embeddingMetricFromIri(std::string_view iri) {
+  if (iri == EMBEDDING_METRIC_COSINE_IRI) {
     return EmbeddingMetric::Cosine;
   }
-  if (metric == EMBEDDING_METRIC_L2) {
+  if (iri == EMBEDDING_METRIC_L2_IRI) {
     return EmbeddingMetric::L2;
   }
-  if (metric == EMBEDDING_METRIC_SQUARED_L2) {
+  if (iri == EMBEDDING_METRIC_SQUARED_L2_IRI) {
     return EmbeddingMetric::SquaredL2;
   }
-  if (metric == EMBEDDING_METRIC_DOT_PRODUCT) {
+  if (iri == EMBEDDING_METRIC_DOT_PRODUCT_IRI) {
     return EmbeddingMetric::DotProduct;
   }
   return std::nullopt;
