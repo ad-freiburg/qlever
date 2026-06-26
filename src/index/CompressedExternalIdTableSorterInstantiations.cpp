@@ -11,8 +11,14 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
+#include "util/CompilerWarnings.h"
 
 namespace ad_utility {
+
+// GCC 13 produces false-positive `-Warray-bounds` warnings when the comparators
+// from `ExternalSortFunctors.h` are inlined into `std::sort` during these
+// instantiations (see the macro definition for details).
+DISABLE_ARRAY_BOUNDS_WARNINGS
 
 template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
 template class CompressedExternalIdTableSorter<SortByOSP,
@@ -26,5 +32,7 @@ template class CompressedExternalIdTableSorter<SortByPSO,
 template class CompressedExternalIdTableSorter<SortByPSO,
                                                NumColumnsIndexBuilding + 2>;
 template class CompressedExternalIdTableSorter<SortText, 5>;
+
+GCC_REENABLE_WARNINGS
 
 }  // namespace ad_utility
