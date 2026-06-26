@@ -8,6 +8,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
@@ -15,6 +16,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,6 +27,7 @@
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
+#include "util/Log.h"
 
 namespace {
 
@@ -107,11 +110,10 @@ class ReadBatchForTesting {
     // addresses are stable (no further `add` will reallocate `targetBuffers_`).
     // `addBatch` copies each address into its read request, so this temporary
     // vector need not outlive the call.
-    std::vector<char*> pointers;
-    pointers.reserve(targetBuffers_.size());
-    for (auto& buffer : targetBuffers_) {
-      pointers.push_back(buffer.data());
-    }
+    std::vector<char*> pointers = ::ranges::to_vector(
+        targetBuffers_ | ql::views::transform([](std::string& buffer) {
+          return buffer.data();
+        }));
     return manager.addBatch(fd, numBytes_, offsets_, pointers);
   }
 
@@ -394,25 +396,65 @@ TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("C", "", "DDD"));
 }
 
+// Dropping a `SyncIoPolicy`-backed manager with reads submitted but never
+// waited: the synchronous policy performs all reads eagerly in `submitTo`, so
+// by the time the manager is destroyed nothing is in flight, the destructor has
+// nothing to drain, and it logs no warning. This is the counterpart to the
+// io_uring-specific `dropRunningManager` test below.
+TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
+  using Manager = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  // Capture the log so we can assert that the destructor stays silent.
+  std::ostringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup restoreLog{
+      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
+
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+  {
+    Manager manager(64);
+    batch.submitTo(manager, fd);  // reads happen synchronously here
+    // `manager` is destroyed here; nothing is in flight, so no warning.
+  }
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+  EXPECT_THAT(logStream.str(), ::testing::IsEmpty());
+}
+
+#ifdef QLEVER_HAS_IO_URING
 // Drop the manager while reads are still in flight (submitted but never
 // waited). `IoUringPolicy`'s destructor drains the outstanding completions
 // (and logs a warning) before tearing down the ring, so the kernel is done
 // writing into the target buffers. `batch` is declared before `manager`, so its
 // buffers outlive the destructor's drain. After the manager is destroyed every
-// read has completed, so the results are correct.
-TYPED_TEST(IoUringManagerTest, dropRunningManager) {
+// read has completed, so the results are correct. This draining is specific to
+// the asynchronous io_uring backend, so the test is not part of the typed
+// suite.
+TEST(IoUringManagerDrop, dropRunningManager) {
+  using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  // Redirect the global logging stream so we can assert on the destructor's
+  // warning.
+  std::ostringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup restoreLog{
+      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
   {
-    TypeParam manager(64);
+    Manager manager(64);
     batch.submitTo(manager, fd);  // submit, but never wait
     // `manager` is destroyed here; its destructor drains the in-flight reads.
   }
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("still in flight"));
 }
+#endif
 
 // Wait on `BatchHandle` for which the read call has already been reaped from
 // the completion queue.
