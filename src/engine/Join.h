@@ -1,6 +1,9 @@
-// Copyright 2026, University of Freiburg
+// Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Mark Veser <mark.veser87@gmail.com>
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//   2026      Mark Veser (mark.veser87@gmail.com)
 
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
@@ -13,7 +16,9 @@
 
 // This is a class that follows the PIMPL idiom and wraps the actual
 // `JoinImpl` class. It exposes only the constructors and virtual member
-// functions. Forward declaration of the impl class
+// functions.
+
+// Forward declaration of the impl class
 class JoinImpl;
 class Join : public Operation {
  public:

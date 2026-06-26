@@ -1,20 +1,14 @@
-// Copyright 2026, University of Freiburg
+// Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Mark Veser <mark.veser87@gmail.com>
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//   2026      Mark Veser (mark.veser87@gmail.com)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Join.h"
-
-#include <sstream>
-#include <vector>
-
-#include "engine/AddCombinedRowToTable.h"
 #include "engine/JoinImpl.h"
-#include "util/Algorithm.h"
-#include "util/Exception.h"
-#include "util/Generators.h"
-#include "util/HashMap.h"
-#include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
