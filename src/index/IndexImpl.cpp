@@ -1140,12 +1140,15 @@ void IndexImpl::buildEmbeddingTypeRegistry() {
   auto precisionMap = scanPredicate(EMBEDDING_HAS_PRECISION_IRI);
 
   LocalVocab localVocab;
-  auto readStringObject = [&, this](Id id) -> std::string {
-    auto literal = ql::exportIds::idToLiteral(*this, id, localVocab, false);
-    AD_CONTRACT_CHECK(literal.has_value(),
-                      "An embedding-type metadata value was expected to be a "
-                      "string literal");
-    return std::string{asStringViewUnsafe(literal->getContent())};
+  auto readIriObject = [&, this](Id id) -> std::string {
+    auto litOrIri =
+        ql::exportIds::idToLiteralOrIri(*this, id, localVocab, false);
+    if (!litOrIri.has_value() || !litOrIri->isIri()) {
+      throw std::runtime_error{
+          "An embedding-type emb:hasMetric/emb:hasPrecision value was expected "
+          "to be one of the predefined IRIs in the emb: namespace"};
+    }
+    return std::string{litOrIri->toStringRepresentation()};
   };
 
   // 3. Assemble and strictly validate each type's metadata.
@@ -1173,33 +1176,31 @@ void IndexImpl::buildEmbeddingTypeRegistry() {
     }
     auto dimension = static_cast<uint64_t>(dimensionId.getInt());
 
-    std::string metricStr =
-        readStringObject(require(metricMap, typeId, "emb:hasMetric"));
-    auto metric = embeddingMetricFromString(metricStr);
+    std::string metricIri =
+        readIriObject(require(metricMap, typeId, "emb:hasMetric"));
+    auto metric = embeddingMetricFromIri(metricIri);
     if (!metric.has_value()) {
       throw std::runtime_error{absl::StrCat(
           "The embedding type ", typeName,
-          " uses the unsupported emb:hasMetric "
-          "\"",
-          metricStr, "\"; the MVP supports \"", EMBEDDING_METRIC_COSINE,
-          "\", \"", EMBEDDING_METRIC_L2, "\", \"", EMBEDDING_METRIC_SQUARED_L2,
-          "\" and \"", EMBEDDING_METRIC_DOT_PRODUCT, "\".")};
+          " uses the unsupported emb:hasMetric ", metricIri,
+          "; the MVP supports ", EMBEDDING_METRIC_COSINE_IRI, ", ",
+          EMBEDDING_METRIC_L2_IRI, ", ", EMBEDDING_METRIC_SQUARED_L2_IRI,
+          " and ", EMBEDDING_METRIC_DOT_PRODUCT_IRI, ".")};
     }
 
-    std::string precision =
-        readStringObject(require(precisionMap, typeId, "emb:hasPrecision"));
-    if (precision != EMBEDDING_PRECISION_FP32) {
-      throw std::runtime_error{absl::StrCat("The embedding type ", typeName,
-                                            " uses the unsupported "
-                                            "emb:hasPrecision \"",
-                                            precision,
-                                            "\"; the MVP only supports \"",
-                                            EMBEDDING_PRECISION_FP32, "\".")};
+    std::string precisionIri =
+        readIriObject(require(precisionMap, typeId, "emb:hasPrecision"));
+    if (precisionIri != EMBEDDING_PRECISION_FP32_IRI) {
+      throw std::runtime_error{absl::StrCat(
+          "The embedding type ", typeName,
+          " uses the unsupported emb:hasPrecision ", precisionIri,
+          "; the MVP only supports ", EMBEDDING_PRECISION_FP32_IRI, ".")};
     }
 
     embeddingTypeRegistry_.addType(
         typeId,
-        EmbeddingTypeConfig{dimension, std::move(precision), metric.value()});
+        EmbeddingTypeConfig{dimension, std::string{EMBEDDING_PRECISION_FP32},
+                            metric.value()});
   }
 }
 

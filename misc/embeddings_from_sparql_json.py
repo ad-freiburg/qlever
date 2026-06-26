@@ -47,8 +47,16 @@ HAS_METRIC = EMB + "hasMetric"
 HAS_DIMENSION = EMB + "hasDimension"
 HAS_PRECISION = EMB + "hasPrecision"
 
-PRECISION = "fp32"
-SUPPORTED_METRICS = ("cosine", "l2", "squared-l2", "dot-product")
+# Metric and precision are predefined IRIs in the emb: namespace (not string
+# literals); the CLI `--metric` choice maps to its IRI here.
+PRECISION_IRI = EMB + "fp32"
+METRIC_IRI = {
+    "cosine": EMB + "cosine",
+    "l2": EMB + "l2",
+    "squared-l2": EMB + "squaredL2",
+    "dot-product": EMB + "dotProduct",
+}
+SUPPORTED_METRICS = tuple(METRIC_IRI)
 
 
 def parse_args():
@@ -141,11 +149,11 @@ def format_vector(vec):
 
 
 def write_type_metadata(out, type_iri, metric, dimension):
-    out.write(f'<{type_iri}> <{HAS_METRIC}> "{metric}" .\n')
+    out.write(f"<{type_iri}> <{HAS_METRIC}> <{METRIC_IRI[metric]}> .\n")
     out.write(
         f'<{type_iri}> <{HAS_DIMENSION}> "{dimension}"^^<{XSD_INTEGER}> .\n'
     )
-    out.write(f'<{type_iri}> <{HAS_PRECISION}> "{PRECISION}" .\n')
+    out.write(f"<{type_iri}> <{HAS_PRECISION}> <{PRECISION_IRI}> .\n")
 
 
 def write_embedding(out, node_id, entity_iri, type_iri, vec):

@@ -293,15 +293,35 @@ constexpr inline std::string_view EMBEDDING_HAS_DIMENSION_IRI =
     makeEmbeddingIriConst<string_constants::detail::embeddings_has_dimension>();
 constexpr inline std::string_view EMBEDDING_HAS_PRECISION_IRI =
     makeEmbeddingIriConst<string_constants::detail::embeddings_has_precision>();
-// The only supported precision for the MVP (strict); must match the
-// `emb:fp32Vector` datatype of the type's vectors.
+// The element precision of an embedding type, as a predefined IRI in the
+// embeddings namespace (the object of `emb:hasPrecision`, e.g. `emb:fp32`).
+// The MVP supports only `emb:fp32`, which must match the `emb:fp32Vector`
+// datatype of the type's vectors. `EMBEDDING_PRECISION_FP32` is the bare token
+// stored in the validated config.
+namespace string_constants::detail {
+constexpr inline std::string_view embeddings_fp32 = "fp32";
+}  // namespace string_constants::detail
 constexpr inline std::string_view EMBEDDING_PRECISION_FP32 = "fp32";
-// The supported `emb:hasMetric` values for the MVP (strict). All four are
-// computed as an exact *distance* (smaller = closer).
-constexpr inline std::string_view EMBEDDING_METRIC_COSINE = "cosine";
-constexpr inline std::string_view EMBEDDING_METRIC_L2 = "l2";
-constexpr inline std::string_view EMBEDDING_METRIC_SQUARED_L2 = "squared-l2";
-constexpr inline std::string_view EMBEDDING_METRIC_DOT_PRODUCT = "dot-product";
+constexpr inline std::string_view EMBEDDING_PRECISION_FP32_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_fp32>();
+
+// The supported `emb:hasMetric` values for the MVP (strict), as predefined IRIs
+// in the embeddings namespace (e.g. `emb:cosine`). All four are computed as an
+// exact *distance* (smaller = closer).
+namespace string_constants::detail {
+constexpr inline std::string_view embeddings_cosine = "cosine";
+constexpr inline std::string_view embeddings_l2 = "l2";
+constexpr inline std::string_view embeddings_squared_l2 = "squaredL2";
+constexpr inline std::string_view embeddings_dot_product = "dotProduct";
+}  // namespace string_constants::detail
+constexpr inline std::string_view EMBEDDING_METRIC_COSINE_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_cosine>();
+constexpr inline std::string_view EMBEDDING_METRIC_L2_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_l2>();
+constexpr inline std::string_view EMBEDDING_METRIC_SQUARED_L2_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_squared_l2>();
+constexpr inline std::string_view EMBEDDING_METRIC_DOT_PRODUCT_IRI =
+    makeEmbeddingIriConst<string_constants::detail::embeddings_dot_product>();
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";

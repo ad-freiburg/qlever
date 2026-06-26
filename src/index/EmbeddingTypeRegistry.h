@@ -27,11 +27,11 @@ enum class EmbeddingMetric {
   DotProduct,  // `−dot` (negated so `ORDER BY ASC` still yields nearest)
 };
 
-// Map an `emb:hasMetric` string to its `EmbeddingMetric`, or `std::nullopt` if
-// it is not one of the (MVP-)supported metrics. The single place that knows the
+// Map an `emb:hasMetric` IRI (its `<...>` string representation, e.g.
+// `<...embeddings/cosine>`) to its `EmbeddingMetric`, or `std::nullopt` if it
+// is not one of the (MVP-)supported metrics. The single place that knows the
 // metric vocabulary (used by the load-time validation).
-std::optional<EmbeddingMetric> embeddingMetricFromString(
-    std::string_view metric);
+std::optional<EmbeddingMetric> embeddingMetricFromIri(std::string_view iri);
 
 // The validated metadata of a single embedding type. All fields are mandatory;
 // the `EmbeddingTypeRegistry` only ever holds configs that passed strict
