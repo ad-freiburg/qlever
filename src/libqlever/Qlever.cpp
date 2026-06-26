@@ -177,7 +177,11 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
       [&result](std::string_view batch) { result.append(batch); }};
   ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      timer, std::move(handle), std::ref(yielder));
+      timer,
+      std::move(plannedQuery.queryExecutionTree()
+                    .getRootOperation()
+                    ->getCancellationHandle()),
+      std::ref(yielder));
 
 #endif
   return result;
