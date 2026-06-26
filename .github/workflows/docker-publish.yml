@@ -32,19 +32,19 @@ jobs:
         # Generate metadata for the docker image based on the GH Actions environment.
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build ${{ matrix.platform }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: build
         with:
           context: .
@@ -67,7 +67,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: digests-${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/digests/*
@@ -78,7 +78,7 @@ jobs:
         # seems to be the recommended way to do it.
       - name: Setup E2E test image
         if: matrix.platform == 'linux/amd64'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # The cache should already provide this. So no rebuild should occur.
           context: .
@@ -100,7 +100,7 @@ jobs:
         uses: actions/checkout@v6
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         env:
           # We build multiplatform images which have an image index above the
           # image manifests. Attach the annotations directly to the image index.
@@ -108,9 +108,9 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -121,7 +121,7 @@ jobs:
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
