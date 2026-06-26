@@ -1231,6 +1231,7 @@ TEST(IdTable, moveOrClone) {
   EXPECT_TRUE(table.empty());
 }
 
+// ______________________________________________________________________________
 TEST(IdTable, moveOrCloneOnView) {
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
