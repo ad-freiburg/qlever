@@ -95,7 +95,7 @@ class VocabLookupDataCommonBase {
 // instead when words are produced incrementally with unknown sizes.
 struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 
-// A vocaulbyar batch-lookup result when words are produced incrementally with
+// A vocabulary batch-lookup result when words are produced incrementally with
 // sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
 // single string buffer as in `VocabBatchLookupData` is unsuitable, as appending
 // would reallocate it and invalidate existing string_view's. Each word is
