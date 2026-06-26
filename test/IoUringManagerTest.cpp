@@ -95,9 +95,8 @@ class ReadBatchForTesting {
   }
 
   void add(std::initializer_list<std::pair<uint64_t, size_t>> reads) {
-    for (const auto& [offset, numBytes] : reads) {
-      add(offset, numBytes);
-    }
+    add(ql::span<const std::pair<uint64_t, size_t>>{reads.begin(),
+                                                    reads.size()});
   }
 
   // Submit all accumulated reads to `manager` for file `fd`; returns the
