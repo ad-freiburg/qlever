@@ -1,0 +1,8 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT (?o + ?o AS ?sum)
+WHERE {
+  ?s ?p ?o .
+  FILTER(DATATYPE(?o) = xsd:int)
+}
+LIMIT 250000

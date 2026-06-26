@@ -64,6 +64,7 @@ void Filter::setPrefilterExpressionForChildren() {
 
 // _____________________________________________________________________________
 Result Filter::computeResult(bool requestLaziness) {
+  std::cerr << "DEBUG: Filter::computeResult reached\n";
   AD_LOG_DEBUG << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
   AD_LOG_DEBUG << "Filter result computation..." << endl;
@@ -148,8 +149,11 @@ CPP_template_def(int WIDTH, typename Table)(
   evaluationContext._columnsByWhichResultIsSorted = std::move(sortedBy);
   const auto input =
       evaluationContext._inputTable.asStaticView<static_cast<size_t>(WIDTH)>();
+  std::cerr << "DEBUG: Filter is calling expression_->evaluate()\n";
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
+
+  std::cerr << "DEBUG: Filter evaluating expression\n";
 
   // Filter `input` by `expressionResult` and store the result in `resultTable`.
   // This is a lambda because `expressionResult` is a `std::variant`.
