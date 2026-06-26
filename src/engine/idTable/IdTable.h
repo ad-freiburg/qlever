@@ -920,10 +920,6 @@ class IdTable : public IdTableStatic<0> {
   using Base::Base;
 
   IdTable(Base&& b) : Base(std::move(b)) {}
-  IdTable& operator=(Base&& b) {
-    static_cast<Base&>(*this) = std::move(b);
-    return *this;
-  }
 };
 
 /// A constant view into an IdTable that does not own its data
