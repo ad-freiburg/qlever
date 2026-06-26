@@ -14,7 +14,23 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
 
-// TODO<qup42> implement explicit ::testing::PrintTo
+namespace ad_utility {
+// `SortedVector` has a `operator<<` defined but we use `std::pair<int, int>` as
+// value type here which doesn't have such an operator which would cause hard
+// compile errors. `::testing::PrintToString` fails gracefully.
+template <typename V, typename Compare, typename Projection>
+void PrintTo(const SortedVector<V, Compare, Projection>& s, std::ostream* os) {
+  *os << '[';
+  lazyStrJoin(os,
+              ql::views::transform(s.getSortedView(),
+                                   [](const auto& elem) {
+                                     return ::testing::PrintToString(elem);
+                                   }),
+              ",");
+  *os << ']';
+}
+}  // namespace ad_utility
+
 namespace std {
 template <typename T, typename U>
 std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {

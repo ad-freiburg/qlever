@@ -94,7 +94,7 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
 
   // For the range `rangeToSort` contained in `elements` sort it by the
   // projected key and keep the last element for each projected key.
-  CPP_template(typename R)(
+  CPP_template_2(typename R)(
       requires ql::ranges::range<
           R>) static void sortAndRemoveDuplicates(Storage& elements,
                                                   R&& rangeToSort) {
@@ -119,9 +119,10 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
 
   // Removes everything in `r1` that is contained in `r2`. Returns the number
   // of items deleted. NOTE: `r1` must be a subrange of `elements`.
-  CPP_template(typename R1, typename R2)(
-      requires ql::ranges::forward_range<R1>&& ql::ranges::output_range<
-          R1, ValueType>&& ql::ranges::input_range<R2>) static size_t
+  CPP_template_2(typename R1, typename R2)(
+      requires ql::ranges::forward_range<R1> CPP_and_2
+          ql::ranges::output_range<R1, ValueType>
+              CPP_and_2 ql::ranges::input_range<R2>) static size_t
       eraseSortedSubRange(Storage& elements, R1&& r1, R2&& r2) {
     auto [_, newEndOfSubrange] = ql::ranges::set_difference(
         r1, r2, ql::ranges::begin(r1), Compare{}, Projection{}, Projection{});
