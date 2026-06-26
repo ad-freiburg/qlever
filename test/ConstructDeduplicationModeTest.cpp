@@ -33,7 +33,7 @@ TEST(ConstructDeduplicationMode, FactoryFunctions) {
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, FromStringNone) {
-  auto mode = DeduplicationModeFromString{}("false");
+  auto mode = DeduplicationModeFromString{}("none");
   EXPECT_TRUE(std::holds_alternative<None>(mode.value_));
 }
 
@@ -45,34 +45,43 @@ TEST(ConstructDeduplicationMode, FromStringGlobal) {
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, FromStringBatchWise) {
-  auto mode = DeduplicationModeFromString{}("100");
+  auto mode = DeduplicationModeFromString{}("batchwise:100");
   ASSERT_TRUE(std::holds_alternative<BatchWise>(mode.value_));
   EXPECT_EQ(std::get<BatchWise>(mode.value_).batchSize_, 100u);
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, FromStringRejectsZeroBatchSize) {
-  EXPECT_THROW(DeduplicationModeFromString{}("0"), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("batchwise:0"),
+               std::runtime_error);
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, FromStringRejectsInvalidInput) {
   EXPECT_THROW(DeduplicationModeFromString{}(""), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("false"), std::runtime_error);
   EXPECT_THROW(DeduplicationModeFromString{}("true"), std::runtime_error);
-  EXPECT_THROW(DeduplicationModeFromString{}("-5"), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("100"), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("batchwise:"), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("batchwise:-5"),
+               std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("batchwise:abc"),
+               std::runtime_error);
   EXPECT_THROW(DeduplicationModeFromString{}("global "), std::runtime_error);
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, ToString) {
-  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::none()), "false");
+  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::none()), "none");
   EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::global()), "global");
-  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::batchWise(7)), "7");
+  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::batchWise(7)),
+            "batchwise:7");
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, RoundTrip) {
-  for (const std::string s : {"false", "global", "1", "1000"}) {
+  for (const std::string s :
+       {"none", "global", "batchwise:1", "batchwise:1000"}) {
     auto roundTripped =
         DeduplicationModeToString{}(DeduplicationModeFromString{}(s));
     EXPECT_EQ(roundTripped, s);
