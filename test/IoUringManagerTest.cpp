@@ -38,7 +38,8 @@ class TempFile {
  public:
   explicit TempFile(std::string_view content) {
     auto path = absl::StrCat(gtestCurrentTestName(), ".tmp");
-    ad_utility::File{path, "wb"}.write(content.data(), content.size());
+    readFile_ = ad_utility::File{path, "wb"};
+    readFile_.write(content.data(), content.size());
   }
   // Movable (so a factory can return it by value). The moved-from object's
   // `path_` is cleared so that only the live object removes the file.
@@ -79,7 +80,6 @@ class ReadBatchForTesting {
     }
   }
 
-  // Same, but from a brace list, e.g. `batch.add({{8, 4}, {0, 4}, {12, 4}})`.
   void add(std::initializer_list<std::pair<uint64_t, size_t>> reads) {
     for (const auto& [offset, numBytes] : reads) {
       add(offset, numBytes);
@@ -117,6 +117,11 @@ class ReadBatchForTesting {
 // registers a read of that region, and remembers `bytes` as the expected
 // result.
 class SequentialReadScenarioForTesting {
+ private:
+  std::string content_;
+  std::vector<std::string> expected_;
+  ReadBatchForTesting batch_;
+
  public:
   // Append `bytes` as the next region of the file and register a read for it.
   void addRead(std::string_view bytes) {
@@ -137,13 +142,8 @@ class SequentialReadScenarioForTesting {
   // The bytes actually read (valid once the batch has completed).
   const std::vector<std::string>& results() const { return batch_.result(); }
 
-  // The bytes that were written for each read, in request order.
+  // The bytes that we expect to be read, in request order.
   const std::vector<std::string>& expected() const { return expected_; }
-
- private:
-  std::string content_;
-  std::vector<std::string> expected_;
-  ReadBatchForTesting batch_;
 };
 
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
