@@ -654,3 +654,138 @@ TEST(ExecuteUpdate, setMinus) {
   expect({IdTriple(1, 2, 3)},
          {IdTriple(1, 2, 3), IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {});
 }
+
+// Test the `ExecuteUpdate::executeConstructInsert` method.
+// The test runs CONSTRUCT queries against the default test index and verifies
+// that the expected triples are inserted as delta triples.
+TEST(ExecuteUpdate, executeConstructInsert) {
+  using Iri = ad_utility::triple_component::Iri;
+
+  // Execute a CONSTRUCT query and insert its results as delta triples,
+  // then verify the delta-triple state with `matcher`.
+  auto runConstructInsert =
+      [](Index& index, const std::string& query, const Iri& targetGraph,
+         const testing::Matcher<const DeltaTriples&>& matcher,
+         source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+        auto l = generateLocationTrace(sourceLocation);
+        const auto sharedHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
+        QueryResultCache cache;
+        NamedResultCache namedResultCache;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
+        auto indexPtr = std::shared_ptr<Index>(&index, [](Index*) {});
+        QueryExecutionContext qec(indexPtr, &cache,
+                                  ad_utility::testing::makeAllocator(
+                                      ad_utility::MemorySize::megabytes(100)),
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  materializedViewsManager);
+        index.deltaTriplesManager().modify<void>(
+            [&index, &pq, &qec, &sharedHandle,
+             &targetGraph](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              QueryPlanner qp{&qec, sharedHandle};
+              auto qet = qp.createExecutionTree(pq);
+              ExecuteUpdate::executeConstructInsert(
+                  index, pq, qet, deltaTriples, targetGraph, sharedHandle);
+            });
+        index.deltaTriplesManager().modify<void>(
+            [&matcher](DeltaTriples& deltaTriples) {
+              EXPECT_THAT(deltaTriples, matcher);
+            });
+      };
+
+  const Iri inferredGraph = Iri::fromIriref(QLEVER_INFERRED_GRAPH_IRI);
+
+  // A CONSTRUCT query matching 2 `<is-a>` triples inserts 2 new triples.
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "ConstructInsert_twoMatches", ad_utility::testing::TestIndexConfig());
+    runConstructInsert(index,
+                       "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
+                       inferredGraph, NumTriples(2, 0, 2));
+  }
+
+  // A CONSTRUCT query that matches nothing should insert no triples.
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "ConstructInsert_noMatches", ad_utility::testing::TestIndexConfig());
+    runConstructInsert(
+        index,
+        "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <nonexistent-pred> ?o }",
+        inferredGraph, NumTriples(0, 0, 0));
+  }
+
+  // A CONSTRUCT template with all constants produces one unique triple even
+  // when the WHERE clause has multiple solutions.
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "ConstructInsert_deduplicated", ad_utility::testing::TestIndexConfig());
+    runConstructInsert(index,
+                       "CONSTRUCT { <s1> <p1> <o1> } WHERE { ?s <is-a> ?o }",
+                       inferredGraph, NumTriples(1, 0, 1));
+  }
+
+  // Inserting into a custom named graph works the same way.
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "ConstructInsert_customGraph", ad_utility::testing::TestIndexConfig());
+    const Iri customGraph = Iri::fromIriref("<http://example.org/inferred>");
+    runConstructInsert(index,
+                       "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }",
+                       customGraph, NumTriples(2, 0, 2));
+  }
+
+  // Running the same CONSTRUCT INSERT twice is idempotent because duplicates
+  // are removed before insertion.
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "ConstructInsert_idempotent", ad_utility::testing::TestIndexConfig());
+    auto sharedHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+    const std::string query =
+        "CONSTRUCT { ?s <new-rel> ?o } WHERE { ?s <is-a> ?o }";
+    auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
+    QueryResultCache cache;
+    NamedResultCache namedResultCache;
+    auto materializedViewsManager2 =
+        std::make_shared<MaterializedViewsManager>();
+    auto indexPtr2 = std::shared_ptr<Index>(&index, [](Index*) {});
+    QueryExecutionContext qec(indexPtr2, &cache,
+                              ad_utility::testing::makeAllocator(
+                                  ad_utility::MemorySize::megabytes(100)),
+                              SortPerformanceEstimator{}, &namedResultCache,
+                              materializedViewsManager2);
+    // First insertion.
+    index.deltaTriplesManager().modify<void>(
+        [&index, &pq, &qec, &sharedHandle,
+         &inferredGraph](DeltaTriples& deltaTriples) {
+          qec.setLocatedTriplesForEvaluation(
+              deltaTriples.getLocatedTriplesSharedStateReference());
+          QueryPlanner qp{&qec, sharedHandle};
+          auto qet = qp.createExecutionTree(pq);
+          ExecuteUpdate::executeConstructInsert(index, pq, qet, deltaTriples,
+                                                inferredGraph, sharedHandle);
+        });
+    // Second insertion of the same triples — `DeltaTriples::modifyTriplesImpl`
+    // filters out triples that are already present in `triplesInserted_` (a
+    // triple-keyed map), so re-running the identical CONSTRUCT INSERT is a
+    // true no-op: the inserted count stays exactly 2 and nothing is deleted.
+    index.deltaTriplesManager().modify<void>(
+        [&index, &pq, &qec, &sharedHandle,
+         &inferredGraph](DeltaTriples& deltaTriples) {
+          qec.setLocatedTriplesForEvaluation(
+              deltaTriples.getLocatedTriplesSharedStateReference());
+          QueryPlanner qp{&qec, sharedHandle};
+          auto qet = qp.createExecutionTree(pq);
+          ExecuteUpdate::executeConstructInsert(index, pq, qet, deltaTriples,
+                                                inferredGraph, sharedHandle);
+        });
+    // After two identical insertions the count is still exactly 2 — idempotent.
+    index.deltaTriplesManager().modify<void>([](DeltaTriples& deltaTriples) {
+      EXPECT_EQ(deltaTriples.numInserted(), 2);
+      EXPECT_EQ(deltaTriples.numDeleted(), 0);
+    });
+  }
+}
