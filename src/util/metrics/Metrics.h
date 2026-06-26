@@ -61,6 +61,59 @@ void initializeCounter(T* counter, std::string labelKey,
   }
 }
 
+constexpr std::pair<std::string_view, std::string_view> makeAttr(
+    std::string_view key, std::string_view value) {
+  return {key, value};
+}
+
+// Exception types during request handling before the request has been parsed as
+// SPARQL
+struct HttpErrorType {
+ private:
+  static constexpr std::string_view key = "type";
+
+ public:
+  static constexpr auto http = makeAttr(key, "http");
+  static constexpr auto internal = makeAttr(key, "internal");
+};
+
+// Type of the SPARQL operation. Graph Store Protocol is not listed here because
+// we translate it to a Query or Update as which it is then counted
+struct OperationType {
+ private:
+  static constexpr std::string_view key = "operation";
+
+ public:
+  static constexpr auto query = makeAttr(key, "query");
+  static constexpr auto update = makeAttr(key, "update");
+};
+
+// Exception types during the execution of a SPARQL operation
+struct SparqlErrorType {
+ private:
+  static constexpr std::string_view key = "type";
+
+ public:
+  // A `boost::system::system_error` was thrown. Happens when something goes
+  // wrong during the await of an async operation. Like the socket being closed.
+  static constexpr auto systemError = makeAttr(key, "system_error");
+  // An unspecified error (except `systemError` above) while streaming the
+  // response.
+  static constexpr auto sendStreamableResponse =
+      makeAttr(key, "send_streamable_response");
+  // An operation early returned a non-standard HTTP response status. Not always
+  // actually an error.
+  static constexpr auto protocol = makeAttr(key, "protocol");
+  // The operation's syntax was not valid.
+  static constexpr auto syntax = makeAttr(key, "syntax");
+  // The manually selected query id is already in use.
+  static constexpr auto inUse = makeAttr(key, "in_use");
+  // The execution of the operation timed out.
+  static constexpr auto timeout = makeAttr(key, "timeout");
+  // Other unspecified errors.
+  static constexpr auto internal = makeAttr(key, "internal");
+};
+
 }  // namespace ad_utility::metrics
 
 #endif  // QLEVER_SRC_UTIL_METRICS_METRICS_H

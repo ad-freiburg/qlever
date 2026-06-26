@@ -46,6 +46,7 @@
 
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
+using namespace ad_utility::metrics;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -157,10 +158,10 @@ void Server::run() {
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
-      metrics_->httpErrors_->Add(1, {{"type", "http"}});
+      metrics_->httpErrors_->Add(1, {HttpErrorType::http});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
-      metrics_->httpErrors_->Add(1, {{"type", "internal"}});
+      metrics_->httpErrors_->Add(1, {HttpErrorType::internal});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -674,7 +675,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             msg, ad_utility::truncateOperationString(operationString)));
       }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-        metrics_->startedSparqlOperations_->Add(1, {{"operation", "update"}});
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
         co_await processUpdate(std::move(operations), requestTimer, tracer,
                                cancellationHandle, qec, std::move(request),
                                send, timeLimit.value(), plannedQuery);
@@ -683,7 +684,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ParsedQuery query = std::move(operations[0]);
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
-        metrics_->startedSparqlOperations_->Add(1, {{"operation", "query"}});
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::query});
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, qec, std::move(request), send,
                               timeLimit.value(), plannedQuery);
@@ -938,7 +939,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
-    metrics_->sparqlErrors_->Add(1, {{"type", "system_error"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::systemError});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -955,7 +956,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
-    metrics_->sparqlErrors_->Add(1, {{"type", "send_streamable_response"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::sendStreamableResponse});
   }
 }
 
@@ -1119,8 +1120,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               << std::endl;
   metrics_->sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
-      {{"operation", "query"}});
-  metrics_->finishedSparqlOperations_->Add(1, {{"operation", "query"}});
+      {OperationType::query});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::query});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1305,8 +1306,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto operations = co_await std::move(coroutine);
   metrics_->sparqlOperationDuration_->Record(
       static_cast<double>(requestTimer.msecs().count()),
-      {{"operation", "update"}});
-  metrics_->finishedSparqlOperations_->Add(1, {{"operation", "update"}});
+      {OperationType::update});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1364,29 +1365,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
-    metrics_->sparqlErrors_->Add(1, {{"type", "protocol"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::protocol});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
-    metrics_->sparqlErrors_->Add(1, {{"type", "syntax"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::syntax});
   } catch (const QueryAlreadyInUseError& e) {
     // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-    metrics_->sparqlErrors_->Add(1, {{"type", "in_use"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::inUse});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    metrics_->sparqlErrors_->Add(1, {{"type", "timeout"}});
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::timeout});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
-    // TODO: this includes missing/wrong access token which should actually be a
-    // 403
-    metrics_->sparqlErrors_->Add(1, {{"type", "internal"}});
+    // TODO<qup42> this includes missing/wrong access token which should be 403
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic

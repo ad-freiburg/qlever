@@ -40,20 +40,26 @@ class PullMetricReader : public metrics_sdk::MetricReader,
             this, /*populate_target_info=*/false,
             /*without_otel_scope=*/true)) {}
 
+  // Returns the current state of the metrics in the Prometheus text format.
   std::string getMetricsText() const override {
     prometheus::TextSerializer serializer;
     return serializer.Serialize(collector_->Collect());
   }
 
+  // This Reader exports the total sum from the start. The alternative is only
+  // to export the change in metrics since the last scrape (`kDelta`).
   metrics_sdk::AggregationTemporality GetAggregationTemporality(
       metrics_sdk::InstrumentType) const noexcept override {
     return metrics_sdk::AggregationTemporality::kCumulative;
   }
 
  private:
+  // There is no flushing for a pull based `MetricReader` so return success.
   bool OnForceFlush(std::chrono::microseconds) noexcept override {
     return true;
   }
+  // As a pull based `MetricReader` we have no cleanup to do and simply return
+  // success.
   bool OnShutDown(std::chrono::microseconds) noexcept override { return true; }
 
   std::shared_ptr<metrics_exp::PrometheusCollector> collector_;

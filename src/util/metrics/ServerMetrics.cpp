@@ -16,10 +16,11 @@
 #include "util/metrics/Metrics.h"
 
 // _____________________________________________________________________________
-ServerMetrics::ServerMetrics(std::function<int64_t()> getDeltaTriples,
-                             std::function<int64_t()> getMemoryLeft,
-                             std::function<int64_t()> getCacheUsed,
-                             ad_utility::MemorySize maxMem)
+ServerMetrics::ServerMetrics(
+    absl::AnyInvocable<int64_t() const> getDeltaTriples,
+    absl::AnyInvocable<int64_t() const> getMemoryLeft,
+    absl::AnyInvocable<int64_t() const> getCacheUsed,
+    ad_utility::MemorySize maxMem)
     : getDeltaTriples_(std::move(getDeltaTriples)),
       getMemoryLeft_(std::move(getMemoryLeft)),
       getCacheUsed_(std::move(getCacheUsed)) {

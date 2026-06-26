@@ -13,9 +13,9 @@
 #include <opentelemetry/metrics/async_instruments.h>
 #include <opentelemetry/metrics/sync_instruments.h>
 
-#include <functional>
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
@@ -44,9 +44,9 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
-  ServerMetrics(std::function<int64_t()> getDeltaTriples,
-                std::function<int64_t()> getMemoryLeft,
-                std::function<int64_t()> getCacheUsed,
+  ServerMetrics(absl::AnyInvocable<int64_t() const> getDeltaTriples,
+                absl::AnyInvocable<int64_t() const> getMemoryLeft,
+                absl::AnyInvocable<int64_t() const> getCacheUsed,
                 ad_utility::MemorySize maxMem);
   void registerCallbacks();
 
@@ -60,9 +60,9 @@ class ServerMetrics {
   static void observe(opentelemetry::metrics::ObserverResult result,
                       int64_t value);
 
-  std::function<int64_t()> getDeltaTriples_;
-  std::function<int64_t()> getMemoryLeft_;
-  std::function<int64_t()> getCacheUsed_;
+  absl::AnyInvocable<int64_t() const> getDeltaTriples_;
+  absl::AnyInvocable<int64_t() const> getMemoryLeft_;
+  absl::AnyInvocable<int64_t() const> getCacheUsed_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.

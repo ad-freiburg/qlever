@@ -463,7 +463,7 @@ TEST(ServerTest, metricsEndpoint) {
              const auto& responseMatcher, const auto& bodyMatcher,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
-        SimulateHttpRequest sim{qec->getIndex().getOnDiskBase(),
+        SimulateHttpRequest sim{qec->getIndex().getOnDiskBase(), std::nullopt,
                                 std::move(metricsReader)};
         auto request = makeGetRequest("/metrics");
         if (accessToken) {
