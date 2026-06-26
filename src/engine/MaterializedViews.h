@@ -12,6 +12,12 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -36,6 +42,19 @@ class IndexScan;
 // cleanly without breaking the entire index format.
 static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 
+// The ID of a materialized view. Each materialized view of an index has a
+// unique and fixed ID in the range `[0, MATERIALIZED_VIEW_MAX_ID]`. IDs are
+// assigned when a view is written and freed for reuse when a view is deleted.
+// At query time, each view knows its own ID from its `viewinfo.json`. The full
+// list of all views and their IDs is only needed when writing or deleting a
+// view; it is kept in a single JSON file per index (`<onDiskBase>.views.json`).
+using MaterializedViewId = uint64_t;
+
+// The largest valid materialized view ID (inclusive). The limit ensures that a
+// view ID always fits into 12 bits, which reserves it for compact encodings in
+// the future.
+static constexpr MaterializedViewId MATERIALIZED_VIEW_MAX_ID = (1ULL << 12) - 1;
+
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
 // the results will be written to the view.
@@ -44,6 +63,9 @@ class MaterializedViewWriter {
   // Filename components for writing the view to disk.
   std::string onDiskBase_;
   std::string name_;
+
+  // The fixed ID assigned to this view. It is stored in the view's metadata.
+  MaterializedViewId viewId_;
 
   // Query plan to retrieve the view's rows.
   std::shared_ptr<QueryExecutionTree> qet_;
@@ -76,11 +98,11 @@ class MaterializedViewWriter {
 
   using QueryPlan = qlever::QueryPlan;
 
-  // Initialize a writer given the base filename of the view and a query plan.
-  // The view will be written to files prefixed with the index basename followed
-  // by the view name.
+  // Initialize a writer given the base filename of the view, a query plan and
+  // the fixed ID assigned to the view. The view will be written to files
+  // prefixed with the index basename followed by the view name.
   MaterializedViewWriter(std::string onDiskBase, std::string name,
-                         const QueryPlan& queryPlan,
+                         const QueryPlan& queryPlan, MaterializedViewId viewId,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -155,6 +177,10 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   std::optional<std::string> originalQuery_;
   std::optional<ParsedQuery> parsedQuery_;
 
+  // The fixed ID of this view, as read from its metadata. May be unset for
+  // views written before view IDs were introduced.
+  std::optional<MaterializedViewId> viewId_;
+
   // Lookup table for `BIND` statements from the view's query. Maps the cache
   // keys of the `BIND` expressions (based on the column indices in the view) to
   // the target column index.
@@ -193,6 +219,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
 
   // Get a parsed version of the original query, used for query analysis.
   const std::optional<ParsedQuery>& parsedQuery() const { return parsedQuery_; }
+
+  // Get the fixed ID of this view, if it has one.
+  const std::optional<MaterializedViewId>& id() const { return viewId_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
@@ -278,6 +307,32 @@ class MaterializedViewsManager {
 
   mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
+  // Guards the read-modify-write of the central views list file
+  // (`<onDiskBase>.views.json`) when writing or deleting views. Stored via
+  // `unique_ptr` so that `MaterializedViewsManager` remains moveable (required
+  // by `IndexAndViews`).
+  mutable std::unique_ptr<std::mutex> viewsListMutex_{
+      std::make_unique<std::mutex>()};
+
+  // The central list of all materialized views of the index, mapping each
+  // view's name to its fixed ID. It is only needed when writing or deleting
+  // views; at query time, each view knows its own ID from its `viewinfo.json`.
+  using ViewsList = ad_utility::HashMap<std::string, MaterializedViewId>;
+
+  // Return the filename of the central views list file for this index.
+  std::string viewsListFilename() const;
+
+  // Read the central views list from disk (empty if the file does not exist).
+  ViewsList readViewsList() const;
+
+  // Persist the central views list to disk as a JSON object mapping names to
+  // IDs.
+  void writeViewsList(const ViewsList& views) const;
+
+  // Return the smallest free ID in `[0, MATERIALIZED_VIEW_MAX_ID]` given the
+  // currently used IDs, throwing if no free ID is available.
+  static MaterializedViewId smallestFreeViewId(const ViewsList& views);
+
  public:
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)
@@ -287,6 +342,11 @@ class MaterializedViewsManager {
   // of the `MaterializedViewsManager`. This should only be called once and
   // before any calls to `loadView` and `getView`.
   void setOnDiskBase(const std::string& onDiskBase);
+
+  // Delete a materialized view: unload it if loaded, delete all of its files
+  // from disk, and remove it from the central views list, freeing its ID for
+  // reuse. Throws if the view does not exist.
+  void deleteView(const std::string& name) const;
 
   // Check if a materialized view is currently loaded.
   bool isViewLoaded(const std::string& name) const;

@@ -767,6 +767,134 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewIdsAndCentralList) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+
+  // Helper to read the `id` field of a view's metadata JSON file.
+  auto readViewId = [&](const std::string& name) {
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(
+        absl::StrCat(testIndexBase_, ".view.", name, ".viewinfo.json")) >>
+        viewInfo;
+    return viewInfo.at("id").get<MaterializedViewId>();
+  };
+
+  // Helper to read the central views list file.
+  const std::string viewsListFilename =
+      absl::StrCat(testIndexBase_, ".views.json");
+  auto readViewsList = [&]() {
+    nlohmann::json viewsList;
+    ad_utility::makeIfstream(viewsListFilename) >> viewsList;
+    return viewsList;
+  };
+
+  // Writing views assigns ascending IDs, starting from zero, stored both in the
+  // central views list and in the views' own metadata files.
+  manager.writeViewToDisk("testView1", plan);
+  manager.writeViewToDisk("testView2", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+  EXPECT_EQ(readViewId("testView2"), 1u);
+  EXPECT_TRUE(std::filesystem::exists(viewsListFilename));
+  {
+    auto viewsList = readViewsList();
+    EXPECT_EQ(viewsList.at("testView1").get<MaterializedViewId>(), 0u);
+    EXPECT_EQ(viewsList.at("testView2").get<MaterializedViewId>(), 1u);
+  }
+
+  // A loaded view exposes its own ID (read from its metadata).
+  EXPECT_THAT(manager.getView("testView1")->id(), ::testing::Optional(0u));
+
+  // Overwriting a view keeps its existing ID.
+  manager.writeViewToDisk("testView1", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+
+  // Deleting a view removes its files, removes it from the central list, and
+  // frees its ID for reuse.
+  manager.deleteView("testView1");
+  EXPECT_FALSE(manager.isViewLoaded("testView1"));
+  EXPECT_FALSE(readViewsList().contains("testView1"));
+  for (const auto* suffix :
+       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+    EXPECT_FALSE(std::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testView1", suffix)));
+  }
+
+  // The freed ID (0) is reused for the next new view.
+  manager.writeViewToDisk("testView3", plan);
+  EXPECT_EQ(readViewId("testView3"), 0u);
+
+  // Deleting a non-existent view throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.deleteView("doesNotExist"),
+      ::testing::HasSubstr(
+          "The materialized view 'doesNotExist' does not exist."));
+
+  // Deleting with an invalid name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.deleteView("invalid name!"),
+      ::testing::HasSubstr("is not a valid name for a materialized view"));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, libqleverDeleteMaterializedView) {
+  const std::string metadataFilename =
+      absl::StrCat(testIndexBase_, ".view.viewToDelete.viewinfo.json");
+  qlv().writeMaterializedView("viewToDelete", simpleWriteQuery_);
+  EXPECT_TRUE(std::filesystem::exists(metadataFilename));
+
+  qlv().deleteMaterializedView("viewToDelete");
+  EXPECT_FALSE(std::filesystem::exists(metadataFilename));
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("viewToDelete"));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewIdsCorruptedFiles) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  const std::string viewsListFilename =
+      absl::StrCat(testIndexBase_, ".views.json");
+
+  auto writeViewsList = [&](const std::string& content) {
+    ad_utility::makeOfstream(viewsListFilename) << content;
+  };
+
+  // Central views list: not a JSON object (array instead).
+  writeViewsList("[1, 2, 3]");
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("expected a JSON object"));
+
+  // Central views list: ID is a string, not an unsigned integer.
+  writeViewsList(R"({"testView1": "notAnId"})");
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("not an unsigned integer"));
+
+  // Central views list: ID exceeds MATERIALIZED_VIEW_MAX_ID.
+  writeViewsList(
+      absl::StrCat(R"({"testView1": )", MATERIALIZED_VIEW_MAX_ID + 1, "}"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk("testView1", plan),
+      ::testing::HasSubstr("exceeds the maximum allowed ID"));
+
+  // Remove the corrupted list so the next write succeeds.
+  std::filesystem::remove(viewsListFilename);
+  manager.writeViewToDisk("testView1", plan);
+
+  // viewinfo.json: ID exceeds MATERIALIZED_VIEW_MAX_ID.
+  {
+    const std::string viewinfoFilename =
+        absl::StrCat(testIndexBase_, ".view.testView1.viewinfo.json");
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(viewinfoFilename) >> viewInfo;
+    viewInfo["id"] = MATERIALIZED_VIEW_MAX_ID + 1;
+    ad_utility::makeOfstream(viewinfoFilename) << viewInfo.dump();
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.loadView("testView1"),
+      ::testing::HasSubstr("exceeds the maximum allowed ID"));
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
@@ -921,6 +1049,40 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         simulateHttpRequest(request),
         ::testing::HasSubstr("The name for the view may not be empty"));
+  }
+
+  // Delete a materialized view through a simulated HTTP GET request.
+  {
+    clearLog();
+    ASSERT_TRUE(std::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken");
+    auto response = simulateHttpRequest(request);
+
+    // Check HTTP response.
+    ASSERT_TRUE(response.has_value());
+    ASSERT_TRUE(response.value().contains("materialized-view-deleted"));
+    EXPECT_EQ(response.value()["materialized-view-deleted"],
+              "testViewFromHTTP2");
+
+    // The view's files have been deleted.
+    EXPECT_FALSE(std::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view \"testViewFromHTTP2\" deleted"));
+  }
+
+  // Test access token check for deletion.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        simulateHttpRequest(request),
+        ::testing::HasSubstr("delete-materialized-view requires a valid access "
+                             "token but no access token was provided"));
   }
 }
 

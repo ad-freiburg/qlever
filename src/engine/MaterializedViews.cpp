@@ -13,8 +13,10 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <system_error>
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -31,6 +33,7 @@
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -38,11 +41,12 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+    const qlever::Qlever::QueryPlan& queryPlan, MaterializedViewId viewId,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      viewId_{viewId},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
@@ -62,13 +66,97 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
+std::string MaterializedViewsManager::viewsListFilename() const {
+  return absl::StrCat(onDiskBase_, ".views.json");
+}
+
+// _____________________________________________________________________________
+MaterializedViewsManager::ViewsList MaterializedViewsManager::readViewsList()
+    const {
+  ViewsList views;
+  auto filename = viewsListFilename();
+  if (std::filesystem::exists(filename)) {
+    nlohmann::json viewsJson;
+    ad_utility::makeIfstream(filename) >> viewsJson;
+    if (!viewsJson.is_object()) {
+      throw std::runtime_error{
+          absl::StrCat("The views list file '", filename,
+                       "' is corrupted: expected a JSON object.")};
+    }
+    for (const auto& [name, idJson] : viewsJson.items()) {
+      if (!idJson.is_number_unsigned()) {
+        throw std::runtime_error{absl::StrCat(
+            "The views list file '", filename, "' is corrupted: ID for view '",
+            name, "' is not an unsigned integer.")};
+      }
+      auto id = idJson.get<MaterializedViewId>();
+      if (id > MATERIALIZED_VIEW_MAX_ID) {
+        throw std::runtime_error{absl::StrCat(
+            "The views list file '", filename, "' is corrupted: ID ", id,
+            " for view '", name, "' exceeds the maximum allowed ID ",
+            MATERIALIZED_VIEW_MAX_ID, ".")};
+      }
+      views.insert({name, id});
+    }
+  }
+  return views;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::writeViewsList(const ViewsList& views) const {
+  nlohmann::json viewsJson = nlohmann::json::object();
+  for (const auto& [name, id] : views) {
+    viewsJson[name] = id;
+  }
+  ad_utility::makeOfstream(viewsListFilename())
+      << viewsJson.dump() << std::endl;
+}
+
+// _____________________________________________________________________________
+MaterializedViewId MaterializedViewsManager::smallestFreeViewId(
+    const ViewsList& views) {
+  ad_utility::HashSet<MaterializedViewId> usedIds;
+  for (const auto& [name, id] : views) {
+    usedIds.insert(id);
+  }
+  MaterializedViewId newId = 0;
+  while (newId <= MATERIALIZED_VIEW_MAX_ID && usedIds.contains(newId)) {
+    ++newId;
+  }
+  if (newId > MATERIALIZED_VIEW_MAX_ID) {
+    throw std::runtime_error{absl::StrCat(
+        "Cannot create a new materialized view: the maximum number of ",
+        MATERIALIZED_VIEW_MAX_ID + 1,
+        " materialized views per index has been reached. Please delete an "
+        "existing materialized view first.")};
+  }
+  return newId;
+}
+
+// _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
     std::string name, const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
+  MaterializedView::throwIfInvalidName(name);
   unloadViewIfLoaded(name);
-  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
-                                std::move(memoryLimit), std::move(allocator)};
+
+  // Assign the view a fixed ID and record it in the central views list, reusing
+  // the existing ID if a view of the same name is being overwritten. Writing
+  // the list before the view avoids two concurrent writes claiming the same ID.
+  MaterializedViewId viewId;
+  {
+    std::lock_guard lock{*viewsListMutex_};
+    auto views = readViewsList();
+    auto it = views.find(name);
+    viewId = it != views.end() ? it->second : smallestFreeViewId(views);
+    views.insert_or_assign(name, viewId);
+    writeViewsList(views);
+  }
+
+  MaterializedViewWriter writer{
+      onDiskBase_, std::move(name),        queryPlan,
+      viewId,      std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -291,6 +379,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
   const auto& varToCol = qet_->getVariableColumns();
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
+      {"id", viewId_},
       {"columns",
        (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
           return nlohmann::json{
@@ -371,6 +460,19 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         version, ", however this version of QLever expects format version ",
         MATERIALIZED_VIEWS_VERSION,
         ". Please re-write the materialized view.")};
+  }
+
+  // Restore the fixed view ID if present (views written before view IDs were
+  // introduced do not have one).
+  if (viewInfoJson.contains("id")) {
+    auto id = viewInfoJson.at("id").get<MaterializedViewId>();
+    if (id > MATERIALIZED_VIEW_MAX_ID) {
+      throw std::runtime_error{absl::StrCat(
+          "The viewinfo.json for materialized view '", name_,
+          "' is corrupted: ID ", id, " exceeds the maximum allowed ID ",
+          MATERIALIZED_VIEW_MAX_ID, ".")};
+    }
+    viewId_ = id;
   }
 
   // Make variable to column map.
@@ -639,6 +741,49 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
       onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
       "Changing the on disk basename is not allowed.");
   onDiskBase_ = onDiskBase;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::deleteView(const std::string& name) const {
+  MaterializedView::throwIfInvalidName(name);
+  auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
+  if (!std::filesystem::exists(absl::StrCat(filenameBase, ".viewinfo.json"))) {
+    throw std::runtime_error(
+        absl::StrCat("The materialized view '", name, "' does not exist."));
+  }
+
+  // Unload the view if it is currently loaded so that it no longer holds open
+  // file handles or its permutation's memory mapping.
+  unloadViewIfLoaded(name);
+
+  // Remove the view from the central views list, freeing its ID for reuse.
+  {
+    std::lock_guard lock{*viewsListMutex_};
+    auto views = readViewsList();
+    views.erase(name);
+    writeViewsList(views);
+  }
+
+  // Delete all files belonging to the view from disk. The `.spo-sorter.dat`
+  // file is a temporary file that should normally not exist anymore, but we
+  // remove it defensively in case a previous write was interrupted.
+  for (const auto* suffix :
+       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+    std::error_code ec;
+    std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    if (ec) {
+      throw std::runtime_error(absl::StrCat(
+          "Failed to delete file '", filenameBase, suffix,
+          "' while deleting materialized view '", name, "': ", ec.message()));
+    }
+  }
+
+  // Best-effort removal of the sorter temp file; it normally doesn't exist.
+  std::error_code ignoredError;
+  std::filesystem::remove(absl::StrCat(filenameBase, ".spo-sorter.dat"),
+                          ignoredError);
+
+  AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
 }
 
 // _____________________________________________________________________________
