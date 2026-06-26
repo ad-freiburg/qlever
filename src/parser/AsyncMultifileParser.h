@@ -33,15 +33,18 @@ class AsyncMultifileParser {
   using TripleBatch = std::vector<TurtleTriple>;
   using Handler = AsyncSingleFileParser::Handler;
 
+  // The `exec` drives all per-file parser work and the dispatch strand. It is
+  // stored internally so callers do not need to supply it on every batch call.
   AsyncMultifileParser(std::vector<qlever::InputFileSpecification> files,
                        const EncodedIriManager* encodedIriManager,
-                       ad_utility::MemorySize bufferSize);
+                       ad_utility::MemorySize bufferSize,
+                       boost::asio::any_io_executor exec);
 
   ~AsyncMultifileParser();
 
   // Same single-flight contract as `AsyncSingleFileParser`. EOF is signaled
   // by `(nullptr, nullopt)`; an exception by `(exception_ptr, nullopt)`.
-  void asyncGetNextBatch(boost::asio::any_io_executor exec, Handler handler);
+  void asyncGetNextBatch(Handler handler);
 
   // Parser-wide settings; applied to every per-file parser when it is
   // constructed (so call these before the first `asyncGetNextBatch`).

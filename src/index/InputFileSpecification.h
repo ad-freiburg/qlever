@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 #define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
+#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -26,12 +27,15 @@ enum class Filetype { Turtle, NQuad };
 // Specify a single input file or stream for the index builder. The source of
 // bytes is either a filename or a factory that produces an `AsyncBlockSource`.
 struct InputFileSpecification {
+  using AsyncBlockSource = qlever::parser::AsyncBlockSource;
+
   // A factory that, when called, creates a ready-to-use `AsyncBlockSource`.
-  // The `size_t` is the preferred blocksize, and the `string_view` is a
-  // descriptor of the resource, used for logging and debugging.
+  // The `boost::asio::any_io_executor` drives the source, the `size_t` is the
+  // preferred blocksize, and the `string_view` is a descriptor of the
+  // resource, used for logging and debugging.
   using AsyncBlockSourceFactory =
-      std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
-          size_t, std::string_view)>;
+      std::function<std::unique_ptr<AsyncBlockSource>(
+          boost::asio::any_io_executor, size_t, std::string_view)>;
 
   struct BufferFactoryAndDescription {
     AsyncBlockSourceFactory bufferFactory_;
@@ -71,17 +75,17 @@ struct InputFileSpecification {
   }
 
   // Create and return an `AsyncBlockSource` for this spec. For filename-based
-  // specs, an `AsyncFileBlockSource` with the given `blocksize` is returned.
-  // For factory-based specs, the factory is called.
-  std::unique_ptr<qlever::parser::AsyncBlockSource> getAsyncBlockSource(
-      size_t blocksize) const {
+  // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
+  // returned. For factory-based specs, the factory is called with `exec`.
+  std::unique_ptr<AsyncBlockSource> getAsyncBlockSource(
+      boost::asio::any_io_executor exec, size_t blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
       return std::make_unique<qlever::parser::AsyncFileBlockSource>(
-          blocksize, std::get<std::string>(source_));
+          exec, blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =
         std::get<BufferFactoryAndDescription>(source_);
-    return factory(blocksize, description);
+    return factory(exec, blocksize, description);
   }
 };
 }  // namespace qlever

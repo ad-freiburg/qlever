@@ -34,8 +34,7 @@ class AsyncSingleFileParser {
   using Handler =
       std::function<void(std::exception_ptr, std::optional<TripleBatch>)>;
 
-  virtual void asyncGetNextBatch(boost::asio::any_io_executor exec,
-                                 Handler handler) = 0;
+  virtual void asyncGetNextBatch(Handler handler) = 0;
 
   // Parser-wide options. Mirror the ones on `RdfParserBase`; each concrete
   // class forwards to its inner parser instance.
@@ -54,22 +53,22 @@ class AsyncSingleFileParser {
 // Create an `AsyncSingleFileParser` for one input file specification. The
 // concrete type is `AsyncStreamingParser<T>` for `parseInParallel_ == false`
 // or `AsyncParallelFileParser<T>` otherwise. Templated over the tokenizer.
+// The `exec` drives both the block source and the parse work.
 std::unique_ptr<AsyncSingleFileParser> makeAsyncSingleFileParser(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
-    ad_utility::MemorySize bufferSize);
+    ad_utility::MemorySize bufferSize, boost::asio::any_io_executor exec);
 
 // Direct constructors for the two concrete async parser types. Used by
 // tests; production code uses `makeAsyncSingleFileParser`.
 template <typename InnerParser>
 std::unique_ptr<AsyncSingleFileParser> makeStreamingParser(
     std::unique_ptr<AsyncBlockSource> rawBuffer, const EncodedIriManager* ev,
-    TripleComponent defaultGraph = qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+    TripleComponent defaultGraph, boost::asio::any_io_executor exec);
 
 template <typename InnerParser>
 std::unique_ptr<AsyncSingleFileParser> makeParallelFileParser(
     std::unique_ptr<AsyncBlockSource> rawBuffer, const EncodedIriManager* ev,
-    const TripleComponent& defaultGraph =
-        qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+    const TripleComponent& defaultGraph, boost::asio::any_io_executor exec);
 
 }  // namespace qlever::parser
 

@@ -24,42 +24,51 @@ namespace qlever::parser {
 namespace net = boost::asio;
 
 // ____________________________________________________________________________
-AsyncFileBlockSource::AsyncFileBlockSource(size_t blocksize,
-                                           const std::string& filename)
-    : blocksize_{blocksize} {
-  file_.open(filename, "r");
-}
+AsyncBlockSource::AsyncBlockSource(net::any_io_executor exec, size_t blocksize)
+    : strand_{net::make_strand(exec)}, blocksize_{blocksize} {}
 
 // ____________________________________________________________________________
-void AsyncFileBlockSource::asyncGetNextBlock(net::any_io_executor exec,
-                                             Handler handler) {
-  if (eof_ || !file_.isOpen()) {
-    net::post(exec,
-              [h = std::move(handler)]() mutable { h(nullptr, std::nullopt); });
-    return;
-  }
-  net::post(exec, [this, h = std::move(handler)]() mutable {
+void AsyncBlockSource::asyncGetNextBlock(Handler handler) {
+  net::post(strand_, [this, h = std::move(handler)]() mutable {
+    std::exception_ptr ep;
+    std::optional<ByteBlock> block;
     try {
-      Block buf;
-      buf.resize(blocksize_);
-      size_t n = file_.read(buf.data(), blocksize_);
-      if (n == 0) {
-        eof_ = true;
-        h(nullptr, std::nullopt);
-        return;
-      }
-      buf.resize(n);
-      h(nullptr, std::move(buf));
+      block = getNextBlockImpl();
     } catch (...) {
-      h(std::current_exception(), std::nullopt);
+      ep = std::current_exception();
     }
+    std::move(h)(ep, std::move(block));
   });
 }
 
 // ____________________________________________________________________________
+AsyncFileBlockSource::AsyncFileBlockSource(net::any_io_executor exec,
+                                           size_t blocksize,
+                                           const std::string& filename)
+    : AsyncBlockSource{exec, blocksize} {
+  file_.open(filename, "r");
+}
+
+// ____________________________________________________________________________
+std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
+  if (eof_ || !file_.isOpen()) return std::nullopt;
+  Block buf;
+  buf.resize(getBlocksize());
+  size_t n = file_.read(buf.data(), getBlocksize());
+  if (n == 0) {
+    eof_ = true;
+    return std::nullopt;
+  }
+  buf.resize(n);
+  return buf;
+}
+
+// ____________________________________________________________________________
 AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
-    std::unique_ptr<AsyncBlockSource> inner, std::string endRegex)
-    : inner_{std::move(inner)},
+    net::any_io_executor exec, std::unique_ptr<AsyncBlockSource> inner,
+    std::string endRegex)
+    : AsyncBlockSource{exec, inner->getBlocksize()},
+      inner_{std::move(inner)},
       endRegex_{endRegex},
       endRegexAsString_{std::move(endRegex)} {}
 
@@ -85,93 +94,67 @@ std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
 }
 
 // ____________________________________________________________________________
-void AsyncEndRegexBlockSource::asyncGetNextBlock(net::any_io_executor exec,
-                                                 Handler handler) {
+std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
   if (exhausted_) {
-    if (remainder_.empty()) {
-      net::post(exec, [h = std::move(handler)]() mutable {
-        h(nullptr, std::nullopt);
-      });
-      return;
-    }
-    Block copy = std::move(remainder_);
+    if (remainder_.empty()) return std::nullopt;
+    Block result = std::move(remainder_);
     remainder_.clear();
-    net::post(exec, [h = std::move(handler), copy = std::move(copy)]() mutable {
-      h(nullptr, std::move(copy));
-    });
-    return;
+    return result;
   }
-  inner_->asyncGetNextBlock(
-      exec, [this, exec, h = std::move(handler)](
-                std::exception_ptr ep, std::optional<Block> opt) mutable {
-        if (ep) {
-          h(ep, std::nullopt);
-          return;
-        }
-        if (!opt) {
-          exhausted_ = true;
-          if (remainder_.empty()) {
-            h(nullptr, std::nullopt);
-            return;
-          }
-          Block copy = std::move(remainder_);
-          remainder_.clear();
-          h(nullptr, std::move(copy));
-          return;
-        }
-        Block rawInput = std::move(*opt);
-        auto endPosition = findRegexNearEnd(rawInput, endRegex_);
-        if (!endPosition) {
-          handleNoMatch(exec, std::move(rawInput), std::move(h));
-          return;
-        }
-        Block result;
-        result.reserve(remainder_.size() + *endPosition);
-        result.insert(result.end(), remainder_.begin(), remainder_.end());
-        result.insert(result.end(), rawInput.begin(),
-                      rawInput.begin() + *endPosition);
-        remainder_.clear();
-        remainder_.insert(remainder_.end(), rawInput.begin() + *endPosition,
-                          rawInput.end());
-        h(nullptr, std::move(result));
-      });
-}
 
-// ____________________________________________________________________________
-void AsyncEndRegexBlockSource::handleNoMatch(net::any_io_executor exec,
-                                             Block rawInput, Handler handler) {
-  // Peek at the inner source: if there is more data, this is a real
-  // "block too small for one statement" error; if it returns EOF, this is the
-  // last block and we treat its end as the implicit terminator.
-  inner_->asyncGetNextBlock(exec, [this, raw = std::move(rawInput),
-                                   h = std::move(handler)](
-                                      std::exception_ptr ep,
-                                      std::optional<Block> peek) mutable {
-    if (ep) {
-      h(ep, std::nullopt);
-      return;
-    }
-    if (peek) {
-      auto rawSize = raw.size();
-      h(std::make_exception_ptr(std::runtime_error{absl::StrCat(
-            "The regex ", endRegexAsString_,
-            " which marks the end of a statement was not found in the "
-            "current input batch (that was not the last one) of size ",
-            ad_utility::insertThousandSeparator(std::to_string(rawSize), ','),
-            "; possible fixes are: "
-            "use `--parser-buffer-size` to increase the buffer size or "
-            "use `--parallel-parsing false` to disable parallel parsing")}),
-        std::nullopt);
-      return;
-    }
+  // Fetch the next raw block from the inner source.
+  auto rawOpt = nextBlockFrom(*inner_);
+  if (!rawOpt) {
+    // Inner source is exhausted.
     exhausted_ = true;
-    Block result;
-    result.reserve(remainder_.size() + raw.size());
-    result.insert(result.end(), remainder_.begin(), remainder_.end());
-    result.insert(result.end(), raw.begin(), raw.end());
+    if (remainder_.empty()) return std::nullopt;
+    Block result = std::move(remainder_);
     remainder_.clear();
-    h(nullptr, std::move(result));
-  });
+    return result;
+  }
+  Block rawInput = std::move(*rawOpt);
+
+  // Search for the regex near the end of the raw block.
+  auto endPosition = findRegexNearEnd(rawInput, endRegex_);
+  if (endPosition) {
+    // Regex found: return remainder_ + rawInput[0..*endPosition].
+    Block result;
+    result.reserve(remainder_.size() + *endPosition);
+    result.insert(result.end(), remainder_.begin(), remainder_.end());
+    result.insert(result.end(), rawInput.begin(),
+                  rawInput.begin() + *endPosition);
+    remainder_.clear();
+    remainder_.insert(remainder_.end(), rawInput.begin() + *endPosition,
+                      rawInput.end());
+    return result;
+  }
+
+  // No regex match. Peek at the next raw block to decide how to handle this:
+  // if the inner source has more data, the current block is too short for a
+  // full statement and parsing must fail. If the inner source is exhausted,
+  // the current block is the last one; return it without requiring a match.
+  auto peek = nextBlockFrom(*inner_);
+  if (peek) {
+    // Inner source has more data: this is a real "statement too large" error.
+    auto rawSize = rawInput.size();
+    throw std::runtime_error{absl::StrCat(
+        "The regex ", endRegexAsString_,
+        " which marks the end of a statement was not found in the "
+        "current input batch (that was not the last one) of size ",
+        ad_utility::insertThousandSeparator(std::to_string(rawSize), ','),
+        "; possible fixes are: "
+        "use `--parser-buffer-size` to increase the buffer size or "
+        "use `--parallel-parsing false` to disable parallel parsing")};
+  }
+
+  // The current block is the last one: return remainder_ + rawInput.
+  exhausted_ = true;
+  Block result;
+  result.reserve(remainder_.size() + rawInput.size());
+  result.insert(result.end(), remainder_.begin(), remainder_.end());
+  result.insert(result.end(), rawInput.begin(), rawInput.end());
+  remainder_.clear();
+  return result;
 }
 
 }  // namespace qlever::parser

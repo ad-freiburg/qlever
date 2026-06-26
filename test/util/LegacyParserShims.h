@@ -40,14 +40,14 @@ using LegacyParallelFileBuffer = qlever::parser::AsyncFileBlockSource;
 // Helper: synchronously drain one `asyncGetNextBatch` call.
 template <typename AsyncParser>
 inline std::optional<std::vector<TurtleTriple>> drainOneBatch(
-    AsyncParser& parser, boost::asio::any_io_executor exec) {
+    AsyncParser& parser) {
   std::promise<
       std::pair<std::exception_ptr, std::optional<std::vector<TurtleTriple>>>>
       promise;
   auto future = promise.get_future();
   parser.asyncGetNextBatch(
-      exec, [&promise](std::exception_ptr ep,
-                       std::optional<std::vector<TurtleTriple>> opt) {
+      [&promise](std::exception_ptr ep,
+                 std::optional<std::vector<TurtleTriple>> opt) {
         promise.set_value({ep, std::move(opt)});
       });
   auto [ep, opt] = future.get();
@@ -66,14 +66,14 @@ class LegacyStreamParser {
       TripleComponent defaultGraph = qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : pool_{2} {
     parser_ = qlever::parser::makeStreamingParser<InnerParser>(
-        std::move(buffer), ev, std::move(defaultGraph));
+        std::move(buffer), ev, std::move(defaultGraph), pool_.get_executor());
   }
 
   ~LegacyStreamParser() {
     parser_->cancel();
     while (!eof_) {
       try {
-        auto batch = drainOneBatch(*parser_, pool_.get_executor());
+        auto batch = drainOneBatch(*parser_);
         if (!batch) eof_ = true;
       } catch (...) {
       }
@@ -83,7 +83,7 @@ class LegacyStreamParser {
   bool getLine(TurtleTriple& triple) { return getOne(triple); }
 
   std::optional<std::vector<TurtleTriple>> getBatch() {
-    return drainOneBatch(*parser_, pool_.get_executor());
+    return drainOneBatch(*parser_);
   }
 
   void printAndResetQueueStatistics() {}
@@ -103,7 +103,7 @@ class LegacyStreamParser {
       return true;
     }
     if (eof_) return false;
-    auto batch = drainOneBatch(*parser_, pool_.get_executor());
+    auto batch = drainOneBatch(*parser_);
     if (!batch) {
       eof_ = true;
       return false;
@@ -139,7 +139,7 @@ class LegacyParallelParser {
                            qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : pool_{2} {
     parser_ = qlever::parser::makeParallelFileParser<InnerParser>(
-        std::move(buffer), ev, defaultGraph);
+        std::move(buffer), ev, defaultGraph, pool_.get_executor());
   }
 
   // Overload that accepts a `sleepTimeForTesting` argument; ignored by the
@@ -159,7 +159,7 @@ class LegacyParallelParser {
     parser_->cancel();
     while (!eof_) {
       try {
-        auto batch = drainOneBatch(*parser_, pool_.get_executor());
+        auto batch = drainOneBatch(*parser_);
         if (!batch) eof_ = true;
       } catch (...) {
       }
@@ -172,7 +172,7 @@ class LegacyParallelParser {
       return true;
     }
     if (eof_) return false;
-    auto batch = drainOneBatch(*parser_, pool_.get_executor());
+    auto batch = drainOneBatch(*parser_);
     if (!batch) {
       eof_ = true;
       return false;
@@ -184,7 +184,7 @@ class LegacyParallelParser {
     return true;
   }
   std::optional<std::vector<TurtleTriple>> getBatch() {
-    return drainOneBatch(*parser_, pool_.get_executor());
+    return drainOneBatch(*parser_);
   }
   void printAndResetQueueStatistics() {}
   TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
@@ -212,14 +212,14 @@ class LegacyMultifileParser {
       ad_utility::MemorySize bufferSize = ad_utility::MemorySize::megabytes(10))
       : pool_{4} {
     parser_ = std::make_unique<qlever::parser::AsyncMultifileParser>(
-        files, ev, bufferSize);
+        files, ev, bufferSize, pool_.get_executor());
   }
 
   ~LegacyMultifileParser() {
     parser_->cancel();
     while (!eof_) {
       try {
-        auto batch = drainOneBatch(*parser_, pool_.get_executor());
+        auto batch = drainOneBatch(*parser_);
         if (!batch) eof_ = true;
       } catch (...) {
       }
@@ -227,7 +227,7 @@ class LegacyMultifileParser {
   }
 
   std::optional<std::vector<TurtleTriple>> getBatch() {
-    return drainOneBatch(*parser_, pool_.get_executor());
+    return drainOneBatch(*parser_);
   }
 
   bool getLine(TurtleTriple& triple) {

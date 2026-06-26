@@ -34,6 +34,11 @@
 namespace qlever::parser {
 class AsyncSingleFileParser;
 class AsyncMultifileParser;
+// Forward declarations for friend access from composition-based async parsers.
+template <typename>
+class AsyncStreamingParser;
+template <typename>
+class AsyncParallelFileParser;
 }  // namespace qlever::parser
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
@@ -81,14 +86,14 @@ class RdfParserBase {
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLineImpl(&triple); }
 
-  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
+  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
     return integerOverflowBehavior_;
   }
 
   // If true then triples with invalid literals (for example
   // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
   // such literals are encountered.
-  virtual bool& invalidLiteralsAreSkipped() {
+  virtual bool& invalidLiteralsAreSkipped() final {
     return invalidLiteralsAreSkipped_;
   }
 
@@ -112,7 +117,8 @@ class RdfParserBase {
   // exhausted, return `nullopt`.
   virtual std::optional<std::vector<TurtleTriple>> getBatch();
 
- protected:
+  // Return the `EncodedIriManager` used by this parser. Public so that
+  // composition-based async parsers can access it without friendship.
   const auto& encodedIriManager() const { return *encodedIriManager_; }
 };
 
@@ -130,6 +136,12 @@ class RdfParserBase {
  */
 template <class Tokenizer_T>
 class TurtleParser : public RdfParserBase {
+  // Allow composition-based async parsers to access protected members directly.
+  template <typename T>
+  friend class qlever::parser::AsyncStreamingParser;
+  template <typename T>
+  friend class qlever::parser::AsyncParallelFileParser;
+
  public:
   using ParseException = ::ParseException;
 
@@ -365,6 +377,18 @@ class TurtleParser : public RdfParserBase {
   std::string createAnonNode();
 
  public:
+  // These overrides make `TurtleParser` and its subclasses concrete so they can
+  // be stored as data members in composition-based types (e.g.,
+  // `AsyncParserBase<InnerParser>::parser_`). Calling either method directly on
+  // a raw `TurtleParser` is a programming error; the synchronous wrappers
+  // (`RdfStreamParser`, `RdfParallelParser`, `RdfMultifileParser`) always
+  // override them properly.
+  bool getLineImpl(TurtleTriple*) override {
+    throw std::logic_error{
+        "getLineImpl() must not be called on a raw TurtleParser."};
+  }
+  size_t getParsePosition() const override { return 0; }
+
   // To get consistent blank node labels when testing, we need to manually set
   // the prefix. This function is named `...ForTesting` so you really shouldn't
   // use it in the actual QLever code.
@@ -403,6 +427,12 @@ class TurtleParser : public RdfParserBase {
 
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
+  // Allow composition-based async parsers to call protected `statement()`.
+  template <typename T>
+  friend class qlever::parser::AsyncStreamingParser;
+  template <typename T>
+  friend class qlever::parser::AsyncParallelFileParser;
+
   TripleComponent defaultGraphId_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
@@ -564,20 +594,28 @@ class RdfStreamParser : public RdfParserBase {
                   TripleComponent defaultGraphIri =
                       qlever::specialIds().at(DEFAULT_GRAPH_IRI));
 
+  // Convenience constructor: opens `filename` and creates the block source
+  // using the internal pool's executor (avoids the chicken-and-egg problem of
+  // needing an executor before the parser is constructed).
+  RdfStreamParser(size_t blocksize, const std::string& filename,
+                  const EncodedIriManager* ev,
+                  TripleComponent defaultGraphIri =
+                      qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+
   bool getLineImpl(TurtleTriple* triple) override;
   std::optional<std::vector<TurtleTriple>> getBatch() override;
   size_t getParsePosition() const override { return 0; }
   ~RdfStreamParser() override;
 
  private:
-  // Declaration order is load-bearing: `pool_` (declared second) is destroyed
-  // before `parser_` (declared first), ensuring all async handlers finish
-  // before the inner parser object is destroyed.
-  // `pool_` is an `optional` so that the default constructor (which leaves
-  // `parser_` null) does not need to spawn threads and avoids triggering
+  // Declaration order is load-bearing: `pool_` is declared first so it is
+  // initialized before `parser_` (giving the parser a live executor) and
+  // destroyed last (joining threads only after the destructor body drains the
+  // parser). `pool_` is `optional` so that the default constructor (which
+  // leaves `parser_` null) does not spawn threads and does not trigger
   // `sizeof` checks on the incomplete `AsyncSingleFileParser` type.
-  std::unique_ptr<qlever::parser::AsyncSingleFileParser> parser_;
   std::optional<boost::asio::thread_pool> pool_;
+  std::unique_ptr<qlever::parser::AsyncSingleFileParser> parser_;
   std::vector<TurtleTriple> buffer_;
   size_t cursor_ = 0;
   bool eof_ = false;
@@ -602,6 +640,14 @@ class RdfParallelParser : public RdfParserBase {
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0});
 
+  // Convenience constructor: opens `filename` and creates the block source
+  // using the internal pool's executor (avoids the chicken-and-egg problem of
+  // needing an executor before the parser is constructed).
+  RdfParallelParser(size_t blocksize, const std::string& filename,
+                    const EncodedIriManager* ev,
+                    const TripleComponent& defaultGraphIri =
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+
   bool getLineImpl(TurtleTriple* triple) override;
   std::optional<std::vector<TurtleTriple>> getBatch() override;
   void printAndResetQueueStatistics() override {}
@@ -609,10 +655,10 @@ class RdfParallelParser : public RdfParserBase {
   ~RdfParallelParser() override;
 
  private:
-  // See `RdfStreamParser` for the rationale behind using `optional` for
-  // `pool_`.
-  std::unique_ptr<qlever::parser::AsyncSingleFileParser> parser_;
+  // See `RdfStreamParser` for the rationale on declaration order and
+  // `optional`.
   std::optional<boost::asio::thread_pool> pool_;
+  std::unique_ptr<qlever::parser::AsyncSingleFileParser> parser_;
   std::vector<TurtleTriple> buffer_;
   size_t cursor_ = 0;
   bool eof_ = false;
@@ -645,10 +691,10 @@ class RdfMultifileParser : public RdfParserBase {
   ~RdfMultifileParser() override;
 
  private:
-  // See `RdfStreamParser` for the rationale behind using `optional` for
-  // `pool_`.
-  std::unique_ptr<qlever::parser::AsyncMultifileParser> parser_;
+  // See `RdfStreamParser` for the rationale on declaration order and
+  // `optional`.
   std::optional<boost::asio::thread_pool> pool_;
+  std::unique_ptr<qlever::parser::AsyncMultifileParser> parser_;
   std::vector<TurtleTriple> buffer_;
   size_t cursor_ = 0;
   bool eof_ = false;

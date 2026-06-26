@@ -13,6 +13,7 @@
 #include <re2/re2.h>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/strand.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -29,10 +30,11 @@ namespace qlever::parser {
 // here directly into `RdfStringParser::setInputStream`.
 using ByteBlock = ad_utility::UninitializedVector<char>;
 
-// Abstract async byte source. Replaces the old `ParallelBuffer` family. Each
-// implementation is single-flight: callers must not call `asyncGetNextBlock`
-// again before the previous handler has fired. The handler is always invoked
-// via `exec`. Result encoding:
+// Abstract async byte source. Replaces the old `ParallelBuffer` family. The
+// executor passed at construction owns an internal strand that serializes all
+// `getNextBlockImpl()` calls. Callers must not invoke `asyncGetNextBlock`
+// again before the previous handler has fired (single-flight contract).
+// Result encoding of the handler:
 //   - `error == nullptr`, `block == nullopt`  → EOF (no more data).
 //   - `error == nullptr`, `block` set          → next chunk of bytes.
 //   - `error != nullptr`                       → fatal error; rethrow to
@@ -42,10 +44,33 @@ class AsyncBlockSource {
   using Block = ByteBlock;
   using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
 
-  virtual void asyncGetNextBlock(boost::asio::any_io_executor exec,
-                                 Handler handler) = 0;
-  virtual size_t getBlocksize() const = 0;
+  explicit AsyncBlockSource(boost::asio::any_io_executor exec,
+                            size_t blocksize);
   virtual ~AsyncBlockSource() = default;
+
+  // Asynchronously deliver the next block of bytes. The handler is invoked
+  // on the internal strand.
+  void asyncGetNextBlock(Handler handler);
+
+  size_t getBlocksize() const { return blocksize_; }
+
+ protected:
+  // Synchronously produce the next block of bytes. Called from within the
+  // internal strand — implementers do not need extra synchronization.
+  // Return `nullopt` to signal EOF.
+  virtual std::optional<ByteBlock> getNextBlockImpl() = 0;
+
+  // Helper for `AsyncEndRegexBlockSource`: call `getNextBlockImpl()` on a
+  // different `AsyncBlockSource` instance. C++ protected-access rules prevent
+  // calling a protected method on a sibling object, so this static trampoline
+  // is provided in the base.
+  static std::optional<ByteBlock> nextBlockFrom(AsyncBlockSource& src) {
+    return src.getNextBlockImpl();
+  }
+
+ private:
+  boost::asio::strand<boost::asio::any_io_executor> strand_;
+  size_t blocksize_;
 };
 
 // Read bytes from a file on disk. Replaces `ParallelFileBuffer`. There is no
@@ -56,15 +81,14 @@ class AsyncFileBlockSource : public AsyncBlockSource {
  public:
   // Opens `filename` immediately and prepares to deliver `blocksize`-sized
   // blocks. Throws if the file cannot be opened.
-  AsyncFileBlockSource(size_t blocksize, const std::string& filename);
+  AsyncFileBlockSource(boost::asio::any_io_executor exec, size_t blocksize,
+                       const std::string& filename);
 
-  void asyncGetNextBlock(boost::asio::any_io_executor exec,
-                         Handler handler) override;
-  size_t getBlocksize() const override { return blocksize_; }
+ protected:
+  std::optional<ByteBlock> getNextBlockImpl() override;
 
  private:
   ad_utility::File file_;
-  size_t blocksize_;
   bool eof_ = false;
 };
 
@@ -72,17 +96,26 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 // Wraps any `AsyncBlockSource` as the underlying byte source; for each
 // produced block, searches for the last match of `endRegex` (typically the
 // `.` that ends a Turtle statement) and returns the part of the block up to
-// and including that match, prepending any tail carried over from the
-// previous block. Single-flight: the consumer must wait for the handler
-// before calling `asyncGetNextBlock` again.
+// and including that match, prepending any tail carried over from the previous
+// block. Single-flight: the consumer must wait for the handler before calling
+// `asyncGetNextBlock` again.
+//
+// The non-parallel turtle parser wraps its byte source with this class using
+// the regex `"([\\r\\n]+)"` to ensure every delivered block ends at a
+// newline. This is important for two reasons:
+//
+// 1. A block must not end in the middle of a comment; otherwise the remaining
+//    comment text, prepended to the next block, is not recognized as a
+//    comment.
+//
+// 2. A block must not end with a `.` without a subsequent newline, because at
+//    that point it is ambiguous whether the `.` ends a statement or continues
+//    a `PN_LOCAL` token that spans blocks.
 class AsyncEndRegexBlockSource : public AsyncBlockSource {
  public:
-  AsyncEndRegexBlockSource(std::unique_ptr<AsyncBlockSource> inner,
+  AsyncEndRegexBlockSource(boost::asio::any_io_executor exec,
+                           std::unique_ptr<AsyncBlockSource> inner,
                            std::string endRegex);
-
-  void asyncGetNextBlock(boost::asio::any_io_executor exec,
-                         Handler handler) override;
-  size_t getBlocksize() const override { return inner_->getBlocksize(); }
 
   // Search for `regex` near the end of `vec` in exponentially-growing chunks
   // from the back. Returns the number of bytes in `vec` up to the end of the
@@ -90,13 +123,10 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
   static std::optional<size_t> findRegexNearEnd(const Block& vec,
                                                 const re2::RE2& regex);
 
- private:
-  // After receiving a block whose regex match is missing, peek at the inner
-  // source to decide whether this is the last block (treat as terminator) or
-  // an oversized statement (raise). Continuation of `asyncGetNextBlock`.
-  void handleNoMatch(boost::asio::any_io_executor exec, Block rawInput,
-                     Handler handler);
+ protected:
+  std::optional<ByteBlock> getNextBlockImpl() override;
 
+ private:
   std::unique_ptr<AsyncBlockSource> inner_;
   Block remainder_;
   re2::RE2 endRegex_;

@@ -29,14 +29,12 @@ namespace qp = qlever::parser;
 // Synchronously drive an `AsyncBlockSource` until EOF and return all blocks
 // in order. Throws if the source signals an error.
 std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
-  boost::asio::thread_pool pool{1};
   std::vector<qp::ByteBlock> result;
   while (true) {
     std::promise<std::pair<std::exception_ptr, std::optional<qp::ByteBlock>>>
         promise;
     auto future = promise.get_future();
     source.asyncGetNextBlock(
-        pool.get_executor(),
         [&promise](std::exception_ptr ep,
                    std::optional<qp::ByteBlock> opt) mutable {
           promise.set_value({ep, std::move(opt)});
@@ -58,8 +56,9 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
   of << "abcdefghij";
   of.close();
 
+  boost::asio::thread_pool pool{1};
   size_t blocksize = 4;
-  qp::AsyncFileBlockSource buf(blocksize, filename);
+  qp::AsyncFileBlockSource buf(pool.get_executor(), blocksize, filename);
   EXPECT_EQ(buf.getBlocksize(), blocksize);
   std::vector<qp::ByteBlock> expected{
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
@@ -76,6 +75,7 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
   of << "ab1cde23fgh";
   of.close();
 
+  boost::asio::thread_pool pool{1};
   size_t blocksize = 5;
   {
     // We will always have blocks that end with a number that is followed by
@@ -84,7 +84,9 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // capture group. The end of the capture group determines the end of
     // the block.
     qp::AsyncEndRegexBlockSource buf(
-        std::make_unique<qp::AsyncFileBlockSource>(blocksize, filename),
+        pool.get_executor(),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         "([0-9])[a-z]");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
@@ -95,7 +97,9 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // The following regex is not found in the data, and the data is too
     // large for one block, so the parsing fails.
     qp::AsyncEndRegexBlockSource buf(
-        std::make_unique<qp::AsyncFileBlockSource>(blocksize, filename),
+        pool.get_executor(),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         "([x-z])");
     AD_EXPECT_THROW_WITH_MESSAGE(
         drainAllBlocks(buf),
@@ -105,8 +109,10 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // The same example but with a larger blocksize, s.t. the complete input
     // fits into a single block. In this case it is no error that the regex
     // can never be found.
-    qp::AsyncEndRegexBlockSource buf(
-        std::make_unique<qp::AsyncFileBlockSource>(100, filename), "([x-z])");
+    qp::AsyncEndRegexBlockSource buf(pool.get_executor(),
+                                     std::make_unique<qp::AsyncFileBlockSource>(
+                                         pool.get_executor(), 100, filename),
+                                     "([x-z])");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
@@ -126,10 +132,13 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
   }
   of.close();
 
+  boost::asio::thread_pool pool{1};
   size_t blocksize = 2000;
   {
     qp::AsyncEndRegexBlockSource buf(
-        std::make_unique<qp::AsyncFileBlockSource>(blocksize, filename),
+        pool.get_executor(),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         "([0-9])[a-z]");
     std::vector<qp::ByteBlock> expected{{'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');

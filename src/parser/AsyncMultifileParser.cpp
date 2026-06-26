@@ -29,6 +29,7 @@ struct AsyncMultifileParser::Impl {
   std::vector<qlever::InputFileSpecification> files_;
   const EncodedIriManager* encodedIriManager_;
   ad_utility::MemorySize bufferSize_;
+  net::any_io_executor exec_;
   TurtleParserIntegerOverflowBehavior overflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool invalidLiteralsAreSkipped_ = false;
@@ -59,54 +60,55 @@ struct AsyncMultifileParser::Impl {
   bool dispatcherDone_ = false;
 
   Impl(std::vector<qlever::InputFileSpecification> files,
-       const EncodedIriManager* ev, ad_utility::MemorySize bufferSize)
+       const EncodedIriManager* ev, ad_utility::MemorySize bufferSize,
+       net::any_io_executor exec)
       : files_{std::move(files)},
         encodedIriManager_{ev},
-        bufferSize_{bufferSize} {
+        bufferSize_{bufferSize},
+        exec_{exec} {
     filesRemaining_ = files_.size();
   }
 
-  void ensureStarted(net::any_io_executor exec) {
-    std::call_once(started_, [this, exec] {
-      dispatcherStrand_ = std::make_unique<Strand>(net::make_strand(exec));
-      outputCh_ = std::make_unique<OutputCh>(exec, /*max_buffer_size=*/10);
+  void ensureStarted() {
+    std::call_once(started_, [this] {
+      dispatcherStrand_ = std::make_unique<Strand>(net::make_strand(exec_));
+      outputCh_ = std::make_unique<OutputCh>(exec_, /*max_buffer_size=*/10);
       tokenCh_ = std::make_unique<TokenCh>(
-          exec, /*max_buffer_size=*/NUM_PARALLEL_PARSER_THREADS);
+          exec_, /*max_buffer_size=*/NUM_PARALLEL_PARSER_THREADS);
       for (size_t i = 0; i < NUM_PARALLEL_PARSER_THREADS; ++i) {
         tokenCh_->try_send(ec_t{}, true);
       }
-      net::post(*dispatcherStrand_,
-                [this, exec] { dispatchNextFile(exec, /*idx=*/0); });
+      net::post(*dispatcherStrand_, [this] { dispatchNextFile(/*idx=*/0); });
     });
   }
 
   // Walk the file list and, for each, acquire a token before constructing and
   // pumping the per-file `AsyncSingleFileParser`. Runs on the dispatcher
   // strand.
-  void dispatchNextFile(net::any_io_executor exec, size_t idx) {
+  void dispatchNextFile(size_t idx) {
     if (idx >= files_.size()) {
       dispatcherDone_ = true;
       maybeFinish();
       return;
     }
     tokenCh_->async_receive(net::bind_executor(
-        *dispatcherStrand_, [this, exec, idx](ec_t ec, bool) mutable {
+        *dispatcherStrand_, [this, idx](ec_t ec, bool) mutable {
           if (ec) {
             // Channel closed during shutdown.
             return;
           }
-          startFile(exec, idx);
-          dispatchNextFile(exec, idx + 1);
+          startFile(idx);
+          dispatchNextFile(idx + 1);
         }));
   }
 
   // Construct the per-file parser and arm its first `asyncGetNextBatch`. On
   // each batch arrival, push to the output channel and re-arm; on EOF release
   // the file token and consider the orchestrator's overall completion.
-  void startFile(net::any_io_executor exec, size_t idx) {
+  void startFile(size_t idx) {
     try {
       auto parser = makeAsyncSingleFileParser(files_[idx], encodedIriManager_,
-                                              bufferSize_);
+                                              bufferSize_, exec_);
       // Propagate the parser-wide configuration set by the caller before the
       // file is actually parsed. The per-file parser inherits these settings
       // via its `RdfParserBase` portion.
@@ -114,7 +116,7 @@ struct AsyncMultifileParser::Impl {
       parser->invalidLiteralsAreSkipped() = invalidLiteralsAreSkipped_;
       auto parserPtr =
           std::shared_ptr<AsyncSingleFileParser>{std::move(parser)};
-      pumpFile(exec, parserPtr);
+      pumpFile(parserPtr);
     } catch (...) {
       // Construction failure: emit the exception through the output channel
       // and free the slot.
@@ -128,11 +130,10 @@ struct AsyncMultifileParser::Impl {
     }
   }
 
-  void pumpFile(net::any_io_executor exec,
-                std::shared_ptr<AsyncSingleFileParser> parser) {
+  void pumpFile(std::shared_ptr<AsyncSingleFileParser> parser) {
     parser->asyncGetNextBatch(
-        exec, [this, exec, parser](std::exception_ptr ep,
-                                   std::optional<TripleBatch> opt) mutable {
+        [this, parser](std::exception_ptr ep,
+                       std::optional<TripleBatch> opt) mutable {
           if (ep) {
             outputCh_->async_send(
                 ec_t{}, BatchOrError{std::nullopt, ep},
@@ -151,7 +152,7 @@ struct AsyncMultifileParser::Impl {
             return;
           }
           outputCh_->async_send(ec_t{}, BatchOrError{std::move(*opt), nullptr},
-                                [this, exec, parser](ec_t sendEc) mutable {
+                                [this, parser](ec_t sendEc) mutable {
                                   if (sendEc) {
                                     // Output channel closed mid-flight.
                                     net::dispatch(*dispatcherStrand_, [this] {
@@ -160,7 +161,7 @@ struct AsyncMultifileParser::Impl {
                                     });
                                     return;
                                   }
-                                  pumpFile(exec, parser);
+                                  pumpFile(parser);
                                 });
         });
   }
@@ -182,9 +183,9 @@ struct AsyncMultifileParser::Impl {
 AsyncMultifileParser::AsyncMultifileParser(
     std::vector<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize)
+    ad_utility::MemorySize bufferSize, net::any_io_executor exec)
     : impl_{std::make_unique<Impl>(std::move(files), encodedIriManager,
-                                   bufferSize)} {}
+                                   bufferSize, exec)} {}
 
 // ____________________________________________________________________________
 AsyncMultifileParser::~AsyncMultifileParser() { cancel(); }
@@ -207,9 +208,8 @@ bool& AsyncMultifileParser::invalidLiteralsAreSkipped() {
 }
 
 // ____________________________________________________________________________
-void AsyncMultifileParser::asyncGetNextBatch(net::any_io_executor exec,
-                                             Handler handler) {
-  impl_->ensureStarted(exec);
+void AsyncMultifileParser::asyncGetNextBatch(Handler handler) {
+  impl_->ensureStarted();
   impl_->outputCh_->async_receive(
       [h = std::move(handler)](ec_t ec, Impl::BatchOrError v) mutable {
         if (ec) {

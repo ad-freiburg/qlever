@@ -943,12 +943,12 @@ bool TurtleParser<T>::iriref() {
 // async callback are rethrown on the caller's thread.
 template <typename AsyncParser>
 static std::optional<std::vector<TurtleTriple>> drainOneBatch(
-    AsyncParser& parser, boost::asio::any_io_executor exec) {
+    AsyncParser& parser) {
   using Batch = std::optional<std::vector<TurtleTriple>>;
   std::promise<std::pair<std::exception_ptr, Batch>> promise;
   auto future = promise.get_future();
   parser.asyncGetNextBatch(
-      exec, [&promise](std::exception_ptr ep, Batch opt) mutable {
+      [&promise](std::exception_ptr ep, Batch opt) mutable {
         promise.set_value({ep, std::move(opt)});
       });
   auto [ep, opt] = future.get();
@@ -967,9 +967,23 @@ RdfStreamParser<T>::RdfStreamParser(
     std::unique_ptr<qlever::parser::AsyncBlockSource> rawBuffer,
     const EncodedIriManager* ev, TripleComponent defaultGraphIri)
     : RdfParserBase{ev},
+      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS},
+      parser_{qlever::parser::makeStreamingParser<T>(std::move(rawBuffer), ev,
+                                                     std::move(defaultGraphIri),
+                                                     pool_->get_executor())} {}
+
+// ____________________________________________________________________________
+template <typename T>
+RdfStreamParser<T>::RdfStreamParser(size_t blocksize,
+                                    const std::string& filename,
+                                    const EncodedIriManager* ev,
+                                    TripleComponent defaultGraphIri)
+    : RdfParserBase{ev},
+      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS},
       parser_{qlever::parser::makeStreamingParser<T>(
-          std::move(rawBuffer), ev, std::move(defaultGraphIri))},
-      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS} {}
+          std::make_unique<qlever::parser::AsyncFileBlockSource>(
+              pool_->get_executor(), blocksize, filename),
+          ev, std::move(defaultGraphIri), pool_->get_executor())} {}
 
 // ____________________________________________________________________________
 template <typename T>
@@ -983,7 +997,7 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
     eof_ = true;
     return false;
   }
-  auto batch = drainOneBatch(*parser_, pool_->get_executor());
+  auto batch = drainOneBatch(*parser_);
   if (!batch) {
     eof_ = true;
     return false;
@@ -999,7 +1013,7 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
 template <typename T>
 std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
   if (eof_ || !parser_) return std::nullopt;
-  return drainOneBatch(*parser_, pool_->get_executor());
+  return drainOneBatch(*parser_);
 }
 
 // ____________________________________________________________________________
@@ -1009,12 +1023,13 @@ RdfStreamParser<T>::~RdfStreamParser() {
   parser_->cancel();
   while (!eof_) {
     try {
-      auto batch = drainOneBatch(*parser_, pool_->get_executor());
+      auto batch = drainOneBatch(*parser_);
       if (!batch) eof_ = true;
     } catch (...) {
     }
   }
-  // pool_ is destroyed next (joining its threads), then parser_.
+  // pool_ is destroyed last (joining threads after the destructor body drains
+  // the parser).
 }
 
 // ____________________________________________________________________________
@@ -1029,9 +1044,22 @@ RdfParallelParser<T>::RdfParallelParser(
     const EncodedIriManager* ev, const TripleComponent& defaultGraphIri,
     std::chrono::milliseconds /*sleepTimeForTesting*/)
     : RdfParserBase{ev},
-      parser_{qlever::parser::makeParallelFileParser<T>(std::move(rawBuffer),
-                                                        ev, defaultGraphIri)},
-      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS} {}
+      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS},
+      parser_{qlever::parser::makeParallelFileParser<T>(
+          std::move(rawBuffer), ev, defaultGraphIri, pool_->get_executor())} {}
+
+// ____________________________________________________________________________
+template <typename T>
+RdfParallelParser<T>::RdfParallelParser(size_t blocksize,
+                                        const std::string& filename,
+                                        const EncodedIriManager* ev,
+                                        const TripleComponent& defaultGraphIri)
+    : RdfParserBase{ev},
+      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS},
+      parser_{qlever::parser::makeParallelFileParser<T>(
+          std::make_unique<qlever::parser::AsyncFileBlockSource>(
+              pool_->get_executor(), blocksize, filename),
+          ev, defaultGraphIri, pool_->get_executor())} {}
 
 // ____________________________________________________________________________
 template <typename T>
@@ -1045,7 +1073,7 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
     eof_ = true;
     return false;
   }
-  auto batch = drainOneBatch(*parser_, pool_->get_executor());
+  auto batch = drainOneBatch(*parser_);
   if (!batch) {
     eof_ = true;
     return false;
@@ -1061,7 +1089,7 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
 template <typename T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
   if (eof_ || !parser_) return std::nullopt;
-  return drainOneBatch(*parser_, pool_->get_executor());
+  return drainOneBatch(*parser_);
 }
 
 // ____________________________________________________________________________
@@ -1071,7 +1099,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
   parser_->cancel();
   while (!eof_) {
     try {
-      auto batch = drainOneBatch(*parser_, pool_->get_executor());
+      auto batch = drainOneBatch(*parser_);
       if (!batch) eof_ = true;
     } catch (...) {
     }
@@ -1107,9 +1135,9 @@ RdfMultifileParser::RdfMultifileParser(
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase{encodedIriManager},
+      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS},
       parser_{std::make_unique<qlever::parser::AsyncMultifileParser>(
-          files, encodedIriManager, bufferSize)},
-      pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS} {}
+          files, encodedIriManager, bufferSize, pool_->get_executor())} {}
 
 // ____________________________________________________________________________
 bool RdfMultifileParser::getLineImpl(TurtleTriple*) { AD_FAIL(); }
@@ -1117,7 +1145,7 @@ bool RdfMultifileParser::getLineImpl(TurtleTriple*) { AD_FAIL(); }
 // ____________________________________________________________________________
 std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
   if (eof_ || !parser_) return std::nullopt;
-  return drainOneBatch(*parser_, pool_->get_executor());
+  return drainOneBatch(*parser_);
 }
 
 // ____________________________________________________________________________
@@ -1126,7 +1154,7 @@ RdfMultifileParser::~RdfMultifileParser() {
   parser_->cancel();
   while (!eof_) {
     try {
-      auto batch = drainOneBatch(*parser_, pool_->get_executor());
+      auto batch = drainOneBatch(*parser_);
       if (!batch) eof_ = true;
     } catch (...) {
     }

@@ -15,6 +15,7 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <cstring>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -30,53 +31,80 @@ namespace net = boost::asio;
 using ec_t = boost::system::error_code;
 
 // ============================================================================
-// AsyncStreamingParser<T>
+// AsyncParserBase<InnerParser>
+// ============================================================================
+//
+// Common base for `AsyncStreamingParser` and `AsyncParallelFileParser`. Stores
+// the inner parser as a member (composition instead of inheritance), removing
+// the multiple-inheritance conflict that would arise if the async parsers both
+// inherited from `InnerParser` (which has `final` methods in `RdfParserBase`)
+// and from `AsyncSingleFileParser`.
+template <typename InnerParser>
+class AsyncParserBase : public AsyncSingleFileParser {
+ protected:
+  InnerParser parser_;
+
+ public:
+  explicit AsyncParserBase(const EncodedIriManager* ev,
+                           TripleComponent defaultGraphIri =
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : parser_{ev, std::move(defaultGraphIri)} {}
+
+  // Forward the `AsyncSingleFileParser` option accessors to the inner parser.
+  TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() override {
+    return parser_.integerOverflowBehavior();
+  }
+  bool& invalidLiteralsAreSkipped() override {
+    return parser_.invalidLiteralsAreSkipped();
+  }
+};
+
+// ============================================================================
+// AsyncStreamingParser<InnerParser>
 // ============================================================================
 //
 // One-thread-at-a-time streaming parser. Each call to `asyncGetNextBatch`
 // returns the next ~PARSER_MIN_TRIPLES_AT_ONCE triples (or fewer at EOF). On
 // a partial statement, the parser saves its state via `backupState()`, asks
 // the byte source for more bytes, splices them into the buffer, and retries.
-template <typename T>
-class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
+//
+// `InnerParser` is a concrete parser type such as `TurtleParser<Tokenizer>`.
+// It is held by composition in `AsyncParserBase<InnerParser>::parser_`, which
+// means `AsyncStreamingParser` no longer inherits from `InnerParser` and
+// therefore does not need `getLineImpl`/`getParsePosition` stubs or forwarding
+// overrides for `integerOverflowBehavior`/`invalidLiteralsAreSkipped`.
+template <typename InnerParser>
+class AsyncStreamingParser final : public AsyncParserBase<InnerParser> {
+  using Handler = AsyncSingleFileParser::Handler;
+  using TripleBatch = AsyncSingleFileParser::TripleBatch;
+
  public:
   AsyncStreamingParser(std::unique_ptr<AsyncBlockSource> rawBuffer,
                        const EncodedIriManager* ev,
-                       TripleComponent defaultGraphIri =
-                           qlever::specialIds().at(DEFAULT_GRAPH_IRI))
-      : T{ev, std::move(defaultGraphIri)} {
-    this->clear();
+                       TripleComponent defaultGraphIri,
+                       net::any_io_executor exec)
+      : AsyncParserBase<InnerParser>{ev, std::move(defaultGraphIri)},
+        strand_{net::make_strand(exec)} {
+    this->parser_.clear();
+    // The block source is given our strand as executor so that its
+    // `asyncGetNextBlock` callbacks fire on `strand_` without a second
+    // re-dispatch.
     fileBuffer_ = std::make_unique<AsyncEndRegexBlockSource>(
-        std::move(rawBuffer), "([\\r\\n]+)");
+        strand_, std::move(rawBuffer), "([\\r\\n]+)");
   }
 
-  void asyncGetNextBatch(net::any_io_executor exec, Handler handler) override {
-    net::post(exec, [this, exec, h = std::move(handler)]() mutable {
-      if (this->isParserExhausted_) {
+  void asyncGetNextBatch(Handler handler) override {
+    net::post(strand_, [this, h = std::move(handler)]() mutable {
+      if (this->parser_.isParserExhausted_) {
         h(nullptr, std::nullopt);
         return;
       }
       if (!firstBlockLoaded_) {
-        loadFirstBlock(exec, std::move(h));
+        loadFirstBlock(std::move(h));
         return;
       }
-      runOneParseRound(exec, std::move(h));
+      runOneParseRound(std::move(h));
     });
-  }
-
-  // These sync methods are not used in the async streaming path.
-  bool getLineImpl(TurtleTriple*) override { AD_FAIL(); }
-  size_t getParsePosition() const override { return 0; }
-
-  // Forward `AsyncSingleFileParser`'s pure virtual accessors to `T`'s
-  // implementations (in `RdfParserBase`). Without explicit forwarding, clang
-  // does not merge the two vtable slots even though the signatures are
-  // identical.
-  TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() override {
-    return T::integerOverflowBehavior();
-  }
-  bool& invalidLiteralsAreSkipped() override {
-    return T::invalidLiteralsAreSkipped();
   }
 
  private:
@@ -90,28 +118,30 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
   // Snapshot the parts of the parser state that may need to be rewound when
   // a partial statement forces an asynchronous re-read.
   BackupState backupState() const {
-    return {this->numBlankNodes_, this->triples_.size(),
-            this->tok_.data().begin(), this->tok_.data().size()};
+    return {this->parser_.numBlankNodes_, this->parser_.triples_.size(),
+            this->parser_.tok_.data().begin(),
+            this->parser_.tok_.data().size()};
   }
 
   // Restore the parser to `b` and splice the freshly-arrived `nextBytes` at
   // the unparsed tail of `byteVec_`. Returns false (only) if the total buffer
   // exceeds `RDF_PARSER_MAX_TOTAL_BUFFER_SIZE` — caller raises in that case.
   bool spliceAndResetState(BackupState& b, ByteBlock nextBytes) {
-    this->numBlankNodes_ = b.numBlankNodes;
-    AD_CONTRACT_CHECK(this->triples_.size() >= b.numTriples);
-    this->triples_.resize(b.numTriples);
-    this->tok_.reset(b.tokenizerPosition, b.tokenizerSize);
+    this->parser_.numBlankNodes_ = b.numBlankNodes;
+    AD_CONTRACT_CHECK(this->parser_.triples_.size() >= b.numTriples);
+    this->parser_.triples_.resize(b.numTriples);
+    this->parser_.tok_.reset(b.tokenizerPosition, b.tokenizerSize);
 
     ByteBlock buf;
-    numBytesBeforeCurrentBatch_ += byteVec_.size() - this->tok_.data().size();
-    buf.resize(this->tok_.data().size() + nextBytes.size());
-    std::memcpy(buf.data(), this->tok_.data().begin(),
-                this->tok_.data().size());
-    std::memcpy(buf.data() + this->tok_.data().size(), nextBytes.data(),
+    numBytesBeforeCurrentBatch_ +=
+        byteVec_.size() - this->parser_.tok_.data().size();
+    buf.resize(this->parser_.tok_.data().size() + nextBytes.size());
+    std::memcpy(buf.data(), this->parser_.tok_.data().begin(),
+                this->parser_.tok_.data().size());
+    std::memcpy(buf.data() + this->parser_.tok_.data().size(), nextBytes.data(),
                 nextBytes.size());
     byteVec_ = std::move(buf);
-    this->tok_.reset(byteVec_.data(), byteVec_.size());
+    this->parser_.tok_.reset(byteVec_.data(), byteVec_.size());
     AD_LOG_TRACE << "Successfully decompressed next batch of "
                  << nextBytes.size() << " << bytes to parser\n";
 
@@ -120,10 +150,11 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
   }
 
   // Initialize: read the first block of bytes and prime the tokenizer.
-  void loadFirstBlock(net::any_io_executor exec, Handler h) {
+  // Called on `strand_`; the block source callback also fires on `strand_`.
+  void loadFirstBlock(Handler h) {
     fileBuffer_->asyncGetNextBlock(
-        exec, [this, exec, h = std::move(h)](
-                  std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
+        [this, h = std::move(h)](std::exception_ptr ep,
+                                 std::optional<ByteBlock> opt) mutable {
           if (ep) {
             h(ep, std::nullopt);
             return;
@@ -132,13 +163,13 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
           if (!opt) {
             AD_LOG_WARN << "The input stream for the turtle parser seems to "
                            "contain no data!\n";
-            this->isParserExhausted_ = true;
+            this->parser_.isParserExhausted_ = true;
             h(nullptr, std::nullopt);
             return;
           }
           byteVec_ = std::move(*opt);
-          this->tok_.reset(byteVec_.data(), byteVec_.size());
-          runOneParseRound(exec, std::move(h));
+          this->parser_.tok_.reset(byteVec_.data(), byteVec_.size());
+          runOneParseRound(std::move(h));
         });
   }
 
@@ -146,68 +177,66 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
   // PARSER_MIN_TRIPLES_AT_ONCE triples, EOF, or a partial statement that needs
   // more bytes. If a partial statement is hit, request more bytes from the byte
   // source and resume.
-  void runOneParseRound(net::any_io_executor exec, Handler h) {
+  void runOneParseRound(Handler h) {
     auto backup = backupState();
-    while (this->triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
-           !this->isParserExhausted_) {
+    while (this->parser_.triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
+           !this->parser_.isParserExhausted_) {
       bool parsedStatement;
-      std::optional<typename T::ParseException> ex;
+      std::optional<typename InnerParser::ParseException> ex;
       try {
-        parsedStatement = T::statement();
-      } catch (const typename T::ParseException& p) {
+        parsedStatement = this->parser_.statement();
+      } catch (const typename InnerParser::ParseException& p) {
         parsedStatement = false;
         ex = p;
       }
       if (parsedStatement) continue;
 
       // Partial statement: fetch more bytes asynchronously and resume.
-      fileBuffer_->asyncGetNextBlock(
-          exec,
-          [this, exec, h = std::move(h), backup, ex](
-              std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
-            if (ep) {
-              h(ep, std::nullopt);
-              return;
-            }
-            if (!opt || opt->empty()) {
-              // No more bytes. Surface the parse exception if any, else mark
-              // exhausted and return the triples parsed so far.
-              if (ex) {
-                h(std::make_exception_ptr(*ex), std::nullopt);
-                return;
-              }
-              this->tok_.skipWhitespaceAndComments();
-              std::string_view unparsed = this->tok_.view();
-              if (!unparsed.empty()) {
-                AD_LOG_INFO
-                    << "Parsing of line has Failed, but parseInput is not "
-                       "yet exhausted. Remaining bytes: "
-                    << unparsed.size() << '\n';
-                AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-                AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-              }
-              this->isParserExhausted_ = true;
-              deliverTriples(std::move(h));
-              return;
-            }
-            BackupState b = backup;
-            if (!spliceAndResetState(b, std::move(*opt))) {
-              std::string_view unparsed = this->tok_.view();
-              AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                           << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
-                           << " of Turtle input\n";
-              AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-              AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-              h(ex ? std::make_exception_ptr(*ex)
-                   : std::make_exception_ptr(std::runtime_error{
-                         "Too many bytes parsed without finishing a turtle "
-                         "statement"}),
-                std::nullopt);
-              return;
-            }
-            // Continue the same parse round with the extended buffer.
-            runOneParseRoundFromState(exec, std::move(h), b);
-          });
+      fileBuffer_->asyncGetNextBlock([this, h = std::move(h), backup, ex](
+                                         std::exception_ptr ep,
+                                         std::optional<ByteBlock> opt) mutable {
+        if (ep) {
+          h(ep, std::nullopt);
+          return;
+        }
+        if (!opt || opt->empty()) {
+          // No more bytes. Surface the parse exception if any, else mark
+          // exhausted and return the triples parsed so far.
+          if (ex) {
+            h(std::make_exception_ptr(*ex), std::nullopt);
+            return;
+          }
+          this->parser_.tok_.skipWhitespaceAndComments();
+          std::string_view unparsed = this->parser_.tok_.view();
+          if (!unparsed.empty()) {
+            AD_LOG_INFO << "Parsing of line has Failed, but parseInput is not "
+                           "yet exhausted. Remaining bytes: "
+                        << unparsed.size() << '\n';
+            AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
+          }
+          this->parser_.isParserExhausted_ = true;
+          deliverTriples(std::move(h));
+          return;
+        }
+        BackupState b = backup;
+        if (!spliceAndResetState(b, std::move(*opt))) {
+          std::string_view unparsed = this->parser_.tok_.view();
+          AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
+                       << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
+                       << " of Turtle input\n";
+          AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+          AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
+          h(ex ? std::make_exception_ptr(*ex)
+               : std::make_exception_ptr(std::runtime_error{
+                     "Too many bytes parsed without finishing a turtle "
+                     "statement"}),
+            std::nullopt);
+          return;
+        }
+        // Continue the same parse round with the extended buffer.
+        runOneParseRoundFromState(std::move(h), b);
+      });
       return;
     }
     deliverTriples(std::move(h));
@@ -215,15 +244,14 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
 
   // Same as `runOneParseRound`, but uses a caller-provided backup state — used
   // by the async fetch continuation to avoid re-creating the snapshot.
-  void runOneParseRoundFromState(net::any_io_executor exec, Handler h,
-                                 BackupState backup) {
-    while (this->triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
-           !this->isParserExhausted_) {
+  void runOneParseRoundFromState(Handler h, BackupState backup) {
+    while (this->parser_.triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
+           !this->parser_.isParserExhausted_) {
       bool parsedStatement;
-      std::optional<typename T::ParseException> ex;
+      std::optional<typename InnerParser::ParseException> ex;
       try {
-        parsedStatement = T::statement();
-      } catch (const typename T::ParseException& p) {
+        parsedStatement = this->parser_.statement();
+      } catch (const typename InnerParser::ParseException& p) {
         parsedStatement = false;
         ex = p;
       }
@@ -232,65 +260,64 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
         continue;
       }
       // Re-enter the async fetch path with the latest snapshot.
-      fileBuffer_->asyncGetNextBlock(
-          exec,
-          [this, exec, h = std::move(h), backup, ex](
-              std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
-            if (ep) {
-              h(ep, std::nullopt);
-              return;
-            }
-            if (!opt || opt->empty()) {
-              if (ex) {
-                h(std::make_exception_ptr(*ex), std::nullopt);
-                return;
-              }
-              this->tok_.skipWhitespaceAndComments();
-              std::string_view unparsed = this->tok_.view();
-              if (!unparsed.empty()) {
-                AD_LOG_INFO
-                    << "Parsing of line has Failed, but parseInput is not "
-                       "yet exhausted. Remaining bytes: "
-                    << unparsed.size() << '\n';
-                AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-                AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-              }
-              this->isParserExhausted_ = true;
-              deliverTriples(std::move(h));
-              return;
-            }
-            BackupState b = backup;
-            if (!spliceAndResetState(b, std::move(*opt))) {
-              std::string_view unparsed = this->tok_.view();
-              AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                           << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
-                           << " of Turtle input\n";
-              AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-              AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-              h(ex ? std::make_exception_ptr(*ex)
-                   : std::make_exception_ptr(std::runtime_error{
-                         "Too many bytes parsed without finishing a turtle "
-                         "statement"}),
-                std::nullopt);
-              return;
-            }
-            runOneParseRoundFromState(exec, std::move(h), b);
-          });
+      fileBuffer_->asyncGetNextBlock([this, h = std::move(h), backup, ex](
+                                         std::exception_ptr ep,
+                                         std::optional<ByteBlock> opt) mutable {
+        if (ep) {
+          h(ep, std::nullopt);
+          return;
+        }
+        if (!opt || opt->empty()) {
+          if (ex) {
+            h(std::make_exception_ptr(*ex), std::nullopt);
+            return;
+          }
+          this->parser_.tok_.skipWhitespaceAndComments();
+          std::string_view unparsed = this->parser_.tok_.view();
+          if (!unparsed.empty()) {
+            AD_LOG_INFO << "Parsing of line has Failed, but parseInput is not "
+                           "yet exhausted. Remaining bytes: "
+                        << unparsed.size() << '\n';
+            AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
+          }
+          this->parser_.isParserExhausted_ = true;
+          deliverTriples(std::move(h));
+          return;
+        }
+        BackupState b = backup;
+        if (!spliceAndResetState(b, std::move(*opt))) {
+          std::string_view unparsed = this->parser_.tok_.view();
+          AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
+                       << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
+                       << " of Turtle input\n";
+          AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+          AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
+          h(ex ? std::make_exception_ptr(*ex)
+               : std::make_exception_ptr(std::runtime_error{
+                     "Too many bytes parsed without finishing a turtle "
+                     "statement"}),
+            std::nullopt);
+          return;
+        }
+        runOneParseRoundFromState(std::move(h), b);
+      });
       return;
     }
     deliverTriples(std::move(h));
   }
 
   void deliverTriples(Handler h) {
-    if (this->triples_.empty()) {
+    if (this->parser_.triples_.empty()) {
       h(nullptr, std::nullopt);
       return;
     }
-    TripleBatch batch = std::move(this->triples_);
-    this->triples_.clear();
+    TripleBatch batch = std::move(this->parser_.triples_);
+    this->parser_.triples_.clear();
     h(nullptr, std::move(batch));
   }
 
+  net::strand<net::any_io_executor> strand_;
   std::unique_ptr<AsyncEndRegexBlockSource> fileBuffer_;
   ByteBlock byteVec_;
   size_t numBytesBeforeCurrentBatch_ = 0;
@@ -298,44 +325,49 @@ class AsyncStreamingParser final : public T, public AsyncSingleFileParser {
 };
 
 // ============================================================================
-// AsyncParallelFileParser<T>
+// AsyncParallelFileParser<InnerParser>
 // ============================================================================
 //
 // Fan-out parser. A feeder coroutine (modeled as a callback chain on the
 // feeder strand) pulls statement-aligned blocks from the byte source, and for
 // each block grabs a token from an inflight-cap channel (capacity
-// `NUM_PARALLEL_PARSER_THREADS`) and posts a parse task to `exec`. Each parse
-// task constructs an ephemeral `RdfStringParser<T>`, parses the block in
-// isolation, pushes the result to an output channel (capacity
+// `NUM_PARALLEL_PARSER_THREADS`) and posts a parse task to `exec_`. Each parse
+// task constructs an ephemeral `RdfStringParser<InnerParser>`, parses the block
+// in isolation, pushes the result to an output channel (capacity
 // `QUEUE_SIZE_AFTER_PARALLEL_PARSING`), releases the token, and increments a
 // completed-batch counter on the feeder strand. When the byte source signals
 // EOF and all dispatched parses have completed, the output channel is closed.
 //
 // Each external `asyncGetNextBatch` call is a single `async_receive` on the
 // output channel.
-template <typename T>
-class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
+template <typename InnerParser>
+class AsyncParallelFileParser final : public AsyncParserBase<InnerParser> {
+  using Handler = AsyncSingleFileParser::Handler;
+  using TripleBatch = AsyncSingleFileParser::TripleBatch;
+
  public:
   AsyncParallelFileParser(std::unique_ptr<AsyncBlockSource> rawBuffer,
                           const EncodedIriManager* ev,
-                          const TripleComponent& defaultGraphIri =
-                              qlever::specialIds().at(DEFAULT_GRAPH_IRI))
-      : T{ev, defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
-    this->clear();
+                          const TripleComponent& defaultGraphIri,
+                          net::any_io_executor exec)
+      : AsyncParserBase<InnerParser>{ev, defaultGraphIri},
+        defaultGraphIri_{defaultGraphIri},
+        exec_{exec} {
+    this->parser_.clear();
     fileBuffer_ = std::make_unique<AsyncEndRegexBlockSource>(
-        std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
+        exec, std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
   }
 
-  void asyncGetNextBatch(net::any_io_executor exec, Handler handler) override {
+  void asyncGetNextBatch(Handler handler) override {
     // Lazily start the feeder on first call; pin the output channel and
-    // tokens channel to `exec` and the feeder strand to a strand on `exec`.
-    std::call_once(feederStarted_, [this, exec] {
-      feederStrand_ = std::make_unique<Strand>(net::make_strand(exec));
+    // tokens channel to `exec_` and the feeder strand to a strand on `exec_`.
+    std::call_once(feederStarted_, [this] {
+      feederStrand_ = std::make_unique<Strand>(net::make_strand(exec_));
       outputCh_ = std::make_unique<OutputCh>(
-          exec, /*max_buffer_size=*/QUEUE_SIZE_AFTER_PARALLEL_PARSING);
+          exec_, /*max_buffer_size=*/QUEUE_SIZE_AFTER_PARALLEL_PARSING);
       tokenCh_ = std::make_unique<TokenCh>(
-          exec, /*max_buffer_size=*/NUM_PARALLEL_PARSER_THREADS);
-      net::post(*feederStrand_, [this, exec] { initFeeder(exec); });
+          exec_, /*max_buffer_size=*/NUM_PARALLEL_PARSER_THREADS);
+      net::post(*feederStrand_, [this] { initFeeder(); });
     });
     outputCh_->async_receive(
         [h = std::move(handler)](ec_t ec, BatchOrEof v) mutable {
@@ -361,20 +393,14 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
         });
   }
 
-  ~AsyncParallelFileParser() override { cancel(); }
-
-  // These sync methods are not used in the async parallel path.
-  bool getLineImpl(TurtleTriple*) override { AD_FAIL(); }
-  size_t getParsePosition() const override { return 0; }
-
-  // Forward `AsyncSingleFileParser`'s pure virtual accessors to `T`'s
-  // implementations (in `RdfParserBase`). Same rationale as in
-  // `AsyncStreamingParser<T>`.
-  TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() override {
-    return T::integerOverflowBehavior();
-  }
-  bool& invalidLiteralsAreSkipped() override {
-    return T::invalidLiteralsAreSkipped();
+  // Destroy the parser. If the feeder was ever started, waits for all async
+  // work (including any in-flight `dispatchParse` tasks) to finish before
+  // returning so that no callbacks reference `this` after destruction.
+  ~AsyncParallelFileParser() override {
+    cancel();
+    // `feederStrand_` is non-null only if `asyncGetNextBatch` was called at
+    // least once (lazy init inside `std::call_once`).
+    if (feederStrand_) feederDoneFuture_.get();
   }
 
   void cancel() override {
@@ -402,9 +428,9 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
   // declarations synchronously from the first block(s), copies the resulting
   // headers to the master parser (so that error messages refer to them), and
   // then enters the main feeder loop.
-  void initFeeder(net::any_io_executor exec) {
+  void initFeeder() {
     fillTokenBucket();
-    readPrefixHeaderStep(exec);
+    readPrefixHeaderStep();
   }
 
   // Pre-populate the inflight-token channel with NUM_PARALLEL_PARSER_THREADS
@@ -418,112 +444,114 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
   // Step 1 of initialization: read blocks until we have parsed all prefix
   // declarations. The residual bytes (which belong to the first real
   // statement) become the first batch of the feeder loop.
-  void readPrefixHeaderStep(net::any_io_executor exec) {
+  //
+  // `asyncGetNextBlock` fires its callback on the file buffer's strand, which
+  // is a different strand from `feederStrand_`. All state accesses below
+  // (`inflight_`, `pendingError_`, etc.) must run on `feederStrand_`, so we
+  // dispatch the entire callback body there.
+  void readPrefixHeaderStep() {
     fileBuffer_->asyncGetNextBlock(
-        exec, [this, exec](std::exception_ptr ep,
-                           std::optional<ByteBlock> opt) mutable {
-          if (ep) {
-            closeWithError(ep);
-            return;
-          }
-          if (!opt) {
-            // Empty input: no prefix block to read.
-            AD_LOG_WARN << "Empty input to the TURTLE parser, is this what "
-                           "you intended?"
-                        << std::endl;
-            finishFeeder();
-            return;
-          }
-          // Use a transient string parser to consume prefix declarations.
-          declarationParser_.setInputStream(std::move(*opt));
-          while (declarationParser_.parseDirectiveManually()) {
-          }
-          auto remainder = declarationParser_.getUnparsedRemainder();
-          if (remainder.empty()) {
-            // Need more bytes to find the first non-directive content.
-            net::post(*feederStrand_,
-                      [this, exec] { readPrefixHeaderStep(exec); });
-            return;
-          }
-          // Copy parsed prefixes / base IRI into the master parser so its
-          // diagnostics see the same headers.
-          T::copyHeaderFrom(declarationParser_, *this);
-          ByteBlock first;
-          first.reserve(remainder.size());
-          ql::ranges::copy(remainder, std::back_inserter(first));
-          // Feeder strand now drives the main loop.
-          net::post(*feederStrand_,
-                    [this, exec, first = std::move(first)]() mutable {
-                      feederStep(exec, std::move(first));
-                    });
+        [this](std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
+          net::dispatch(
+              *feederStrand_, [this, ep, opt = std::move(opt)]() mutable {
+                if (ep) {
+                  closeWithError(ep);
+                  return;
+                }
+                if (!opt) {
+                  // Empty input: no prefix block to read.
+                  AD_LOG_WARN << "Empty input to the TURTLE parser, is "
+                                 "this what you intended?"
+                              << std::endl;
+                  finishFeeder();
+                  return;
+                }
+                declarationParser_.setInputStream(std::move(*opt));
+                while (declarationParser_.parseDirectiveManually()) {
+                }
+                auto remainder = declarationParser_.getUnparsedRemainder();
+                if (remainder.empty()) {
+                  readPrefixHeaderStep();
+                  return;
+                }
+                InnerParser::copyHeaderFrom(declarationParser_, this->parser_);
+                ByteBlock first;
+                first.reserve(remainder.size());
+                ql::ranges::copy(remainder, std::back_inserter(first));
+                feederStep(std::move(first));
+              });
         });
   }
 
   // The main feeder loop. `firstBatch` is the residual bytes from the prefix
   // initialization (used only on the first invocation; empty on subsequent
   // ones).
-  void feederStep(net::any_io_executor exec, ByteBlock firstBatch) {
+  void feederStep(ByteBlock firstBatch) {
     if (cancelled_) {
-      finishFeeder();
+      // Don't call `finishFeeder()` until all in-flight parse tasks are done.
+      if (inflight_ == 0) finishFeeder();
       return;
     }
     if (!firstBatch.empty()) {
-      acquireTokenAndDispatch(exec, std::move(firstBatch));
+      acquireTokenAndDispatch(std::move(firstBatch));
       return;
     }
+    // The callback fires on the file buffer's strand; dispatch to
+    // `feederStrand_` so all accesses to shared feeder state are serialized.
     fileBuffer_->asyncGetNextBlock(
-        exec, [this, exec](std::exception_ptr ep,
-                           std::optional<ByteBlock> opt) mutable {
-          if (ep) {
-            closeWithError(ep);
-            return;
-          }
-          if (!opt) {
-            // EOF: no more blocks. Wait for inflight parses to complete and
-            // then close the output channel.
-            eofSeen_ = true;
-            maybeFinishFeeder();
-            return;
-          }
-          acquireTokenAndDispatch(exec, std::move(*opt));
+        [this](std::exception_ptr ep, std::optional<ByteBlock> opt) mutable {
+          net::dispatch(*feederStrand_,
+                        [this, ep, opt = std::move(opt)]() mutable {
+                          if (ep) {
+                            closeWithError(ep);
+                            return;
+                          }
+                          if (!opt) {
+                            // EOF: wait for inflight parses, then close.
+                            eofSeen_ = true;
+                            maybeFinishFeeder();
+                            return;
+                          }
+                          acquireTokenAndDispatch(std::move(*opt));
+                        });
         });
   }
 
   // Acquire a token from the inflight semaphore, then post a parse task to
-  // `exec`. The parse task pushes its result to the output channel, releases
+  // `exec_`. The parse task pushes its result to the output channel, releases
   // the token, and on the feeder strand triggers the next feeder step or
   // finalization.
-  void acquireTokenAndDispatch(net::any_io_executor exec, ByteBlock block) {
+  void acquireTokenAndDispatch(ByteBlock block) {
     tokenCh_->async_receive(net::bind_executor(
         *feederStrand_,
-        [this, exec, block = std::move(block)](ec_t ec, bool) mutable {
+        [this, block = std::move(block)](ec_t ec, bool) mutable {
           if (ec) {
-            // Channel closed (cancellation).
-            finishFeeder();
+            // Token channel closed (cancellation). Only call `finishFeeder()`
+            // when no parse tasks are in flight so they can still complete.
+            if (inflight_ == 0) finishFeeder();
             return;
           }
           ++inflight_;
           size_t parsePosition = parsePositionCursor_;
           parsePositionCursor_ += block.size();
-          dispatchParse(exec, parsePosition, std::move(block));
+          dispatchParse(parsePosition, std::move(block));
           // Immediately schedule the next feeder step so the inflight cap is
           // re-checked.
-          net::post(*feederStrand_,
-                    [this, exec] { feederStep(exec, ByteBlock{}); });
+          net::post(*feederStrand_, [this] { feederStep(ByteBlock{}); });
         }));
   }
 
-  void dispatchParse(net::any_io_executor exec, size_t parsePosition,
-                     ByteBlock block) {
-    net::post(exec, [this, parsePosition, block = std::move(block)]() mutable {
+  void dispatchParse(size_t parsePosition, ByteBlock block) {
+    net::post(exec_, [this, parsePosition, block = std::move(block)]() mutable {
       std::exception_ptr error;
       std::optional<TripleBatch> result;
       try {
-        RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-        T::copyHeaderFrom(*this, parser);
+        RdfStringParser<InnerParser> parser{&this->parser_.encodedIriManager(),
+                                            defaultGraphIri_};
+        InnerParser::copyHeaderFrom(this->parser_, parser);
         parser.useSimplifiedGrammar();
         parser.setPositionOffset(parsePosition);
-        parser.setFileBlankNodePrefix(this->fileBlankNodePrefix_);
+        parser.setFileBlankNodePrefix(this->parser_.fileBlankNodePrefix_);
         parser.setInputStream(std::move(block));
         result = parser.parseAndReturnAllTriples();
       } catch (...) {
@@ -538,8 +566,17 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
                               // release the token and tick the feeder strand.
                               net::dispatch(*feederStrand_, [this] {
                                 --inflight_;
-                                tokenCh_->try_send(ec_t{}, true);
-                                maybeFinishFeeder();
+                                if (pendingError_) {
+                                  // A file-read error was deferred until all
+                                  // in-flight tasks completed; now check.
+                                  maybeCloseWithError();
+                                } else if (cancelled_ && inflight_ == 0) {
+                                  // Cancellation: all tasks drained.
+                                  finishFeeder();
+                                } else if (!cancelled_) {
+                                  tokenCh_->try_send(ec_t{}, true);
+                                  maybeFinishFeeder();
+                                }
                               });
                             });
     });
@@ -551,21 +588,37 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
     }
   }
 
+  // Close channels and signal the destructor that all feeder work is done.
+  // Guard with `feederDoneFlag_` so the promise is fulfilled exactly once.
   void finishFeeder() {
     if (outputCh_) outputCh_->close();
     if (tokenCh_) tokenCh_->close();
+    std::call_once(feederDoneFlag_, [this] { feederDonePromise_.set_value(); });
   }
 
-  void closeWithError(std::exception_ptr ep) {
+  // Send the pending error and close channels. Called on `feederStrand_`
+  // once `inflight_ == 0` to guarantee all parse tasks have completed.
+  void maybeCloseWithError() {
+    if (inflight_ != 0) return;
     if (outputCh_) {
-      outputCh_->async_send(ec_t{}, BatchOrEof{std::nullopt, ep},
+      outputCh_->async_send(ec_t{}, BatchOrEof{std::nullopt, pendingError_},
                             [this](ec_t) { finishFeeder(); });
     }
   }
 
-  std::unique_ptr<AsyncEndRegexBlockSource> fileBuffer_;
+  // Defer a file-read error: record it and wait for in-flight parse tasks to
+  // drain (so they can still push their results), then close via
+  // `maybeCloseWithError()`.
+  void closeWithError(std::exception_ptr ep) {
+    pendingError_ = ep;
+    maybeCloseWithError();
+  }
+
+  net::any_io_executor exec_;
   TripleComponent defaultGraphIri_;
-  RdfStringParser<T> declarationParser_{&this->encodedIriManager()};
+  std::unique_ptr<AsyncEndRegexBlockSource> fileBuffer_;
+  RdfStringParser<InnerParser> declarationParser_{
+      &this->parser_.encodedIriManager()};
   std::once_flag feederStarted_;
   std::unique_ptr<Strand> feederStrand_;
   std::unique_ptr<OutputCh> outputCh_;
@@ -574,6 +627,16 @@ class AsyncParallelFileParser final : public T, public AsyncSingleFileParser {
   bool eofSeen_ = false;
   bool cancelled_ = false;
   size_t parsePositionCursor_ = 0;
+  // Set when the file reader signals an error; the error is forwarded to the
+  // output channel only after all in-flight parse tasks finish (so their
+  // results — which may include valid triples — are emitted first).
+  std::exception_ptr pendingError_;
+  // Fulfilled by `finishFeeder()` once all async work is done. The destructor
+  // waits on this future to prevent callbacks from referencing `this` after
+  // destruction.
+  std::promise<void> feederDonePromise_;
+  std::shared_future<void> feederDoneFuture_{feederDonePromise_.get_future()};
+  std::once_flag feederDoneFlag_;
 };
 
 // ============================================================================
@@ -585,7 +648,7 @@ namespace {
 template <typename TokenizerT>
 std::unique_ptr<AsyncSingleFileParser> makeWithTokenizer(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
-    ad_utility::MemorySize bufferSize) {
+    ad_utility::MemorySize bufferSize, net::any_io_executor exec) {
   auto graph = [&input]() -> TripleComponent {
     if (input.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
@@ -594,7 +657,7 @@ std::unique_ptr<AsyncSingleFileParser> makeWithTokenizer(
     return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   };
   auto impl = ad_utility::ApplyAsValueIdentity{
-      [&input, &bufferSize, &graph, ev](
+      [&input, &bufferSize, &graph, ev, &exec](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<AsyncSingleFileParser> {
         using InnerParser =
@@ -604,7 +667,8 @@ std::unique_ptr<AsyncSingleFileParser> makeWithTokenizer(
                                            AsyncParallelFileParser<InnerParser>,
                                            AsyncStreamingParser<InnerParser>>;
         return std::make_unique<ParserT>(
-            input.getAsyncBlockSource(bufferSize.getBytes()), ev, graph());
+            input.getAsyncBlockSource(exec, bufferSize.getBytes()), ev, graph(),
+            exec);
       }};
   return ad_utility::callFixedSize(
       std::array{input.parseInParallel_ ? 1 : 0,
@@ -615,25 +679,25 @@ std::unique_ptr<AsyncSingleFileParser> makeWithTokenizer(
 
 std::unique_ptr<AsyncSingleFileParser> makeAsyncSingleFileParser(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
-    ad_utility::MemorySize bufferSize) {
-  return makeWithTokenizer<Tokenizer>(input, ev, bufferSize);
+    ad_utility::MemorySize bufferSize, net::any_io_executor exec) {
+  return makeWithTokenizer<Tokenizer>(input, ev, bufferSize, exec);
 }
 
 // ____________________________________________________________________________
 template <typename InnerParser>
 std::unique_ptr<AsyncSingleFileParser> makeStreamingParser(
     std::unique_ptr<AsyncBlockSource> rawBuffer, const EncodedIriManager* ev,
-    TripleComponent defaultGraph) {
+    TripleComponent defaultGraph, net::any_io_executor exec) {
   return std::make_unique<AsyncStreamingParser<InnerParser>>(
-      std::move(rawBuffer), ev, std::move(defaultGraph));
+      std::move(rawBuffer), ev, std::move(defaultGraph), exec);
 }
 
 template <typename InnerParser>
 std::unique_ptr<AsyncSingleFileParser> makeParallelFileParser(
     std::unique_ptr<AsyncBlockSource> rawBuffer, const EncodedIriManager* ev,
-    const TripleComponent& defaultGraph) {
+    const TripleComponent& defaultGraph, net::any_io_executor exec) {
   return std::make_unique<AsyncParallelFileParser<InnerParser>>(
-      std::move(rawBuffer), ev, defaultGraph);
+      std::move(rawBuffer), ev, defaultGraph, exec);
 }
 
 // Explicit instantiations of the factory templates so the symbols are
@@ -641,32 +705,38 @@ std::unique_ptr<AsyncSingleFileParser> makeParallelFileParser(
 template std::unique_ptr<AsyncSingleFileParser>
 makeStreamingParser<TurtleParser<Tokenizer>>(std::unique_ptr<AsyncBlockSource>,
                                              const EncodedIriManager*,
-                                             TripleComponent);
-template std::unique_ptr<AsyncSingleFileParser> makeStreamingParser<
-    TurtleParser<TokenizerCtre>>(std::unique_ptr<AsyncBlockSource>,
-                                 const EncodedIriManager*, TripleComponent);
+                                             TripleComponent,
+                                             net::any_io_executor);
+template std::unique_ptr<AsyncSingleFileParser>
+makeStreamingParser<TurtleParser<TokenizerCtre>>(
+    std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
+    TripleComponent, net::any_io_executor);
 template std::unique_ptr<AsyncSingleFileParser>
 makeStreamingParser<NQuadParser<Tokenizer>>(std::unique_ptr<AsyncBlockSource>,
                                             const EncodedIriManager*,
-                                            TripleComponent);
-template std::unique_ptr<AsyncSingleFileParser> makeStreamingParser<
-    NQuadParser<TokenizerCtre>>(std::unique_ptr<AsyncBlockSource>,
-                                const EncodedIriManager*, TripleComponent);
+                                            TripleComponent,
+                                            net::any_io_executor);
+template std::unique_ptr<AsyncSingleFileParser>
+makeStreamingParser<NQuadParser<TokenizerCtre>>(
+    std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
+    TripleComponent, net::any_io_executor);
 
-template std::unique_ptr<AsyncSingleFileParser> makeParallelFileParser<
-    TurtleParser<Tokenizer>>(std::unique_ptr<AsyncBlockSource>,
-                             const EncodedIriManager*, const TripleComponent&);
+template std::unique_ptr<AsyncSingleFileParser>
+makeParallelFileParser<TurtleParser<Tokenizer>>(
+    std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
+    const TripleComponent&, net::any_io_executor);
 template std::unique_ptr<AsyncSingleFileParser>
 makeParallelFileParser<TurtleParser<TokenizerCtre>>(
     std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
-    const TripleComponent&);
-template std::unique_ptr<AsyncSingleFileParser> makeParallelFileParser<
-    NQuadParser<Tokenizer>>(std::unique_ptr<AsyncBlockSource>,
-                            const EncodedIriManager*, const TripleComponent&);
+    const TripleComponent&, net::any_io_executor);
+template std::unique_ptr<AsyncSingleFileParser>
+makeParallelFileParser<NQuadParser<Tokenizer>>(
+    std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
+    const TripleComponent&, net::any_io_executor);
 template std::unique_ptr<AsyncSingleFileParser>
 makeParallelFileParser<NQuadParser<TokenizerCtre>>(
     std::unique_ptr<AsyncBlockSource>, const EncodedIriManager*,
-    const TripleComponent&);
+    const TripleComponent&, net::any_io_executor);
 
 // Explicit instantiations.
 template class AsyncStreamingParser<TurtleParser<Tokenizer>>;
