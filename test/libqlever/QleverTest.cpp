@@ -257,7 +257,7 @@ TEST(LibQlever, disableCaching) {
     Qlever engine{ec};
     auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
     auto& qec = plan.queryExecutionContext();
-    EXPECT_TRUE(qec->disableCaching());
+    EXPECT_TRUE(qec.disableCaching());
   }
   {
     // Load the index with `disableCaching` set to false.
@@ -266,7 +266,7 @@ TEST(LibQlever, disableCaching) {
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
       auto& qec = plan.queryExecutionContext();
-      EXPECT_FALSE(qec->disableCaching());
+      EXPECT_FALSE(qec.disableCaching());
     }
   }
 
@@ -279,7 +279,7 @@ TEST(LibQlever, disableCaching) {
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
       auto& qec = plan.queryExecutionContext();
-      EXPECT_FALSE(qec->disableCaching());
+      EXPECT_FALSE(qec.disableCaching());
     }
     // Now after the fact disable the caching for new operations via the runtime
     // parameters:
@@ -288,7 +288,7 @@ TEST(LibQlever, disableCaching) {
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
       auto& qec = plan.queryExecutionContext();
-      EXPECT_TRUE(qec->disableCaching());
+      EXPECT_TRUE(qec.disableCaching());
     }
   }
 }
@@ -355,7 +355,7 @@ TEST(LibQlever, externallySpecifiedValues) {
 
     auto res = qet->getResult();
     auto i = &Id::makeFromInt;
-    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    auto getId = ad_utility::testing::makeGetId(qec.getIndex());
     // The order of the two columns `?x` and `?o` might not be deterministic.
     auto expected =
         makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});

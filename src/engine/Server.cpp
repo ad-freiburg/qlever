@@ -764,8 +764,9 @@ Server::PlannedQuery Server::planQuery(
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
   QueryPlanner qp(&qec, handle);
-  PlannedQuery plannedQuery{std::move(operation),
-                            qp.createExecutionTree(operation), qec};
+  auto executionTree = qp.createExecutionTree(operation);
+  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree),
+                            qec};
   handle->throwIfCancelled();
   // Set some additional attributes on the `PlannedQuery`.
   plannedQuery.queryExecutionTree()
