@@ -1561,8 +1561,9 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
         ql::ranges::find_if(
             block,
             [&lastRowFromPrevious](const auto& row) {
-              return tieFirstThreeColumns(lastRowFromPrevious) !=
-                     tieFirstThreeColumns(row);
+              return pickFirstThreeColumnsOfIdsWithoutLocalVocab(
+                         lastRowFromPrevious) !=
+                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(row);
             }) -
         block.begin();
 

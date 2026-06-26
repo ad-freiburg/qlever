@@ -27,7 +27,7 @@ struct ComparatorForConstCol0 {
 
 // Helper function to make a row from `IdTable` easier to compare. This ties
 // the cells of the given row with the indices 0, 1 and 2.
-inline auto tieFirstThreeColumns = [](const auto& row) {
+inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
   auto isNonLocal = [](Id id) {
     return id.getDatatype() != Datatype::LocalVocabIndex;
   };

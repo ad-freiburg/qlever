@@ -114,6 +114,7 @@ struct CompressedRelationWriter::PermutationWriter {
   ad_utility::AllocatorWithLimit<ValueId> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 
+  // TODO<joka921> Use call_fixed_size if there is benefit to it.
   IdTable relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
@@ -270,8 +271,10 @@ struct CompressedRelationWriter::PermutationWriter {
     // Compare first three columns of current triple with last buffered
     // triple
     const auto& lastBufferedRow = relation_.back();
-    return compressedRelationHelpers::tieFirstThreeColumns(curRemainingCols) !=
-           compressedRelationHelpers::tieFirstThreeColumns(lastBufferedRow);
+    return compressedRelationHelpers::
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(curRemainingCols) !=
+           compressedRelationHelpers::
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(lastBufferedRow);
   }
 
   // ___________________________________________________________________________
