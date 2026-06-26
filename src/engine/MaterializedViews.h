@@ -13,6 +13,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -307,8 +308,11 @@ class MaterializedViewsManager {
   mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
   // Guards the read-modify-write of the central views list file
-  // (`<onDiskBase>.views.json`) when writing or deleting views.
-  mutable std::mutex viewsListMutex_;
+  // (`<onDiskBase>.views.json`) when writing or deleting views. Stored via
+  // `unique_ptr` so that `MaterializedViewsManager` remains moveable (required
+  // by `IndexAndViews`).
+  mutable std::unique_ptr<std::mutex> viewsListMutex_{
+      std::make_unique<std::mutex>()};
 
   // The central list of all materialized views of the index, mapping each
   // view's name to its fixed ID. It is only needed when writing or deleting

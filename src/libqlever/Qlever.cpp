@@ -263,7 +263,7 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 void Qlever::deleteMaterializedView(std::string name) const {
-  materializedViewsManager_->deleteView(name);
+  materializedViewsManager()->deleteView(name);
 }
 
 // ___________________________________________________________________________

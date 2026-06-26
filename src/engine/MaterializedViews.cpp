@@ -146,7 +146,7 @@ void MaterializedViewsManager::writeViewToDisk(
   // the list before the view avoids two concurrent writes claiming the same ID.
   MaterializedViewId viewId;
   {
-    std::lock_guard lock{viewsListMutex_};
+    std::lock_guard lock{*viewsListMutex_};
     auto views = readViewsList();
     auto it = views.find(name);
     viewId = it != views.end() ? it->second : smallestFreeViewId(views);
@@ -758,7 +758,7 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 
   // Remove the view from the central views list, freeing its ID for reuse.
   {
-    std::lock_guard lock{viewsListMutex_};
+    std::lock_guard lock{*viewsListMutex_};
     auto views = readViewsList();
     views.erase(name);
     writeViewsList(views);
