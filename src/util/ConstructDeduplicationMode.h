@@ -17,6 +17,7 @@
 #include <string_view>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
@@ -73,7 +74,7 @@ struct DeduplicationModeFromString {
 
     // `batchwise:<positive integer>`.
     constexpr std::string_view prefix = "batchwise:";
-    if (s.starts_with(prefix)) {
+    if (ql::starts_with(s, prefix)) {
       size_t batchSize = 0;
       const char* begin = s.data() + prefix.size();
       const char* end = s.data() + s.size();
