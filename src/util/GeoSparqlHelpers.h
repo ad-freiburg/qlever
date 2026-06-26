@@ -259,7 +259,7 @@ class WktSimplify {
           }
         },
         tolerance);
-    if (!tol.has_value() || !(tol.value() > 0) || !std::isfinite(tol.value())) {
+    if (!tol.has_value() || tol.value() <= 0 || !std::isfinite(tol.value())) {
       return ValueId::makeUndefined();
     }
 
