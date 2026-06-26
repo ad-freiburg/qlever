@@ -260,6 +260,8 @@ addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
 
+addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
+
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
