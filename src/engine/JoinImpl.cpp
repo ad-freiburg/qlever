@@ -156,7 +156,7 @@ Result JoinImpl::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : left_->getResult(true);
   checkCancellation();
-  if (leftRes->isFullyMaterialized() && leftRes->idTable().empty()) {
+  if (leftRes->isFullyMaterialized() && leftRes->idTableView().empty()) {
     right_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return createEmptyResult();
   }
@@ -610,7 +610,7 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        const IdTable& idTable = resultWithIdTable->idTable();
+        const IdTableView<0>& idTable = resultWithIdTable->idTableView();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         auto permutationIdTable =
