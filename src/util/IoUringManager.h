@@ -101,9 +101,13 @@ class BatchManager {
 // in a synchronous (blocking) manner. Single-threaded use only.
 struct SyncIoPolicy {
   using BatchHandle = uint64_t;
+
   // `ringSize` is ignored; it exists only so the policy is constructible the
   // same way as `IoUringPolicy`.
-  explicit SyncIoPolicy([[maybe_unused]] unsigned ringSize = 256) {}
+  //
+  // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
+  // void.
+  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
 
   ~SyncIoPolicy() = default;
   SyncIoPolicy(const SyncIoPolicy&) = delete;
