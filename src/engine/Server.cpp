@@ -569,7 +569,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                       "Deleting a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
 
-    materializedViewsManager()->deleteView(name.value());
+    indexAndViews->materializedViewsManager_.deleteView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};
