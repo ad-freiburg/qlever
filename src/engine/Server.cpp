@@ -777,7 +777,6 @@ Server::PlannedQuery Server::planQuery(
       ->recursivelySetTimeConstraint(timeLimit);
   auto& qet = plannedQuery.queryExecutionTree();
   qet.isRoot() = true;  // allow pinning of the final result
-
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
