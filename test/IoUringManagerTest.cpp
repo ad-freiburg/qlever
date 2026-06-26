@@ -195,6 +195,24 @@ TYPED_TEST(IoUringManagerTest, SingleBatch) {
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
 }
 
+// `addBatch` requires the per-request spans (byte counts, offsets, target
+// buffers) to all have the same length. Passing spans of differing lengths is
+// a precondition violation and must throw before any I/O is issued.
+TYPED_TEST(IoUringManagerTest, mismatchedSpanLengthsThrow) {
+  auto [tmp, fd] = makeTempFile("DOESNT_MATTER");
+
+  TypeParam manager(64);
+
+  std::string buffer(4, '\0');
+  std::vector<size_t> numBytes{4};            // length 1
+  std::vector<uint64_t> fileOffsets{0, 4};    // length 2 -> mismatch
+  std::vector<char*> buffers{buffer.data()};  // length 1
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      std::ignore = manager.addBatch(fd, numBytes, fileOffsets, buffers),
+      HasSubstr("spans should have same length"));
+}
+
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
 TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDDEEEEFFFFGGGG");
