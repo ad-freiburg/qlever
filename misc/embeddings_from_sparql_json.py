@@ -162,6 +162,12 @@ def main():
     # Import lazily so `--help` works without the (heavy) dependency installed.
     from sentence_transformers import SentenceTransformer
 
+    # Optional progress bar; degrade gracefully if `tqdm` is not installed.
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        tqdm = None
+
     print(f"Loading model '{args.model}' ...", file=sys.stderr)
     model = SentenceTransformer(args.model)
 
@@ -173,6 +179,10 @@ def main():
     type_iri = None
     node_id = 0
     written = 0
+
+    # Streaming input means the row count is unknown up front, so the bar tracks
+    # throughput (count + rate) rather than a percentage. `None` when tqdm is absent.
+    pbar = tqdm(unit=" emb", desc="Embedding") if tqdm is not None else None
 
     def flush(batch):
         """Embed a batch of (entity, text) pairs and write their triples."""
@@ -196,6 +206,8 @@ def main():
             write_embedding(out, node_id, entity_iri, type_iri, vec)
             node_id += 1
             written += 1
+        if pbar is not None:
+            pbar.update(len(batch))
 
     try:
         batch = []
@@ -213,6 +225,8 @@ def main():
                 batch = []
         flush(batch)
     finally:
+        if pbar is not None:
+            pbar.close()
         if in_file is not sys.stdin:
             in_file.close()
         if out is not sys.stdout:
