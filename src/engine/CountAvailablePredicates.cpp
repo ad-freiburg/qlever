@@ -143,7 +143,7 @@ Result CountAvailablePredicates::computeResult(
     AD_LOG_DEBUG << "CountAvailablePredicates subresult computation done."
                  << std::endl;
 
-    size_t width = subresult->idTable().numColumns();
+    size_t width = subresult->idTableView().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
     ad_utility::callFixedSizeVi(width, [&](auto width) {
       return computePatternTrick<width>(subresult->idTableView(), &idTable,
