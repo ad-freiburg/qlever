@@ -59,7 +59,7 @@ struct BatchEvaluationContext {
   BatchEvaluationContext(IdTableView<0> idTable, size_t firstRow, size_t endRow)
       : idTable_(std::move(idTable)), firstRow_(firstRow), endRow_(endRow) {
     AD_CONTRACT_CHECK(firstRow <= endRow);
-    AD_CONTRACT_CHECK(endRow <= idTable.numRows());
+    AD_CONTRACT_CHECK(endRow <= idTable_.numRows());
   }
 
   size_t numRows() const { return endRow_ - firstRow_; }
