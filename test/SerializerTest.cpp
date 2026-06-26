@@ -13,6 +13,7 @@
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
@@ -26,6 +27,8 @@
 #include "util/Serializer/Serializer.h"
 
 using namespace ad_utility;
+using namespace memory_literals;
+using ad_utility::serialization::BufferedWriteSerializer;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
 using ad_utility::serialization::CompressedReadSerializer;
@@ -883,4 +886,86 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, TransparentPassthrough) {
+  std::array<std::string_view, 4> strings{"alpha", "beta", "gamma", "delta"};
+
+  ByteBufferWriteSerializer expectedWriter;
+  expectedWriter << strings;
+  auto expected = std::move(expectedWriter).data();
+
+  for (MemorySize blockSize : {1_B, 7_B, 64_B, 1024_B}) {
+    BufferedWriteSerializer writer{ByteBufferWriteSerializer{}, blockSize};
+    writer << strings;
+    auto actual = std::move(writer).underlyingSerializer().data();
+    EXPECT_EQ(actual, expected) << "block size was " << blockSize;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, RoundtripWithByteBuffer) {
+  std::vector<int> original;
+  for (int i = 0; i < 10'000; ++i) {
+    original.push_back(i);
+  }
+
+  BufferedWriteSerializer writer{ByteBufferWriteSerializer{}, 7_B};
+  writer << original;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer reader{std::move(buffer).data()};
+  std::vector<int> read;
+  reader >> read;
+  EXPECT_EQ(original, read);
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, RoundtripWithFileSerializerViaClose) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto blockSize = 13_B;
+
+  std::vector<std::string> original{"alpha", "beta", "gamma", "delta"};
+
+  {
+    BufferedWriteSerializer writer{FileWriteSerializer{filename}, blockSize};
+    writer << original;
+    // `close` flushes the remaining buffered data to the file.
+    writer.close();
+  }
+
+  {
+    FileReadSerializer reader{filename};
+    std::vector<std::string> read;
+    reader >> read;
+    EXPECT_EQ(original, read);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, FlushOnDestruction) {
+  // The remaining, incomplete block is flushed on destruction, even if neither
+  // `close` nor `underlyingSerializer` is called explicitly.
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+
+  std::vector<int> original = {1, 2, 3, 4, 5};
+  {
+    BufferedWriteSerializer writer{FileWriteSerializer{filename}, 1_MB};
+    writer << original;
+  }
+
+  FileReadSerializer reader{filename};
+  std::vector<int> read;
+  reader >> read;
+  EXPECT_EQ(original, read);
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, IsWriteSerializer) {
+  static_assert(WriteSerializer<BufferedWriteSerializer<FileWriteSerializer>>);
+  static_assert(
+      WriteSerializer<BufferedWriteSerializer<ByteBufferWriteSerializer>>);
 }

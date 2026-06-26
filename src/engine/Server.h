@@ -48,7 +48,9 @@ struct SimulateHttpRequest;
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
+  using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
@@ -71,7 +73,7 @@ class Server {
   void configureQueryEventLog(const std::filesystem::path& path);
 
   // Get server statistics.
-  json composeStatsJson() const;
+  static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
@@ -217,7 +219,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -237,8 +239,9 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Prepare the execution of an operation
-  auto prepareOperation(std::string_view operationName,
+  //  Prepare the execution of an operation.
+  auto prepareOperation(SharedIndexAndView indexAndViews,
+                        std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
@@ -275,7 +278,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
+      const Index& index, const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
@@ -382,12 +385,6 @@ class Server {
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
 
-  Index& index() { return qlever().index(); }
-  const Index& index() const { return qlever().index(); }
-  std::shared_ptr<const Index> sharedIndex() const {
-    return qlever().sharedIndex();
-  }
-
   QueryResultCache& cache() { return qlever().cache(); }
   const QueryResultCache& cache() const { return qlever().cache(); }
   ad_utility::AllocatorWithLimit<Id>& allocator() {
@@ -406,8 +403,13 @@ class Server {
   const NamedResultCache& namedResultCache() const {
     return qlever().namedResultCache();
   }
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return qlever().materializedViewsManager();
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  SharedIndexAndView indexAndViewsSnapshot() const {
+    return qlever().indexAndViewsSnapshot();
   }
 };
 

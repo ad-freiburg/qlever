@@ -204,6 +204,15 @@ int main(int argc, char** argv) {
       "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
       "as an upper bound — messages above it are never emitted regardless of "
       "this setting.");
+  add("construct-deduplication",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
+      R"("Controls deduplication of triples in CONSTRUCT query results. "
+      "\"none\" (default): no deduplication, every triple is emitted. "
+      "\"global\": a triple is emitted at most once across the entire result. "
+      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
+      "recently seen unique triples per template triple (bounded memory, "
+      "partial deduplication).")");
   po::variables_map optionsMap;
 
   try {
