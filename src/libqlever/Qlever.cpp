@@ -178,7 +178,7 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
   ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
       timer,
-      sharedCancellationHandle),
+      sharedCancellationHandle,
       std::ref(yielder));
 
 #endif
