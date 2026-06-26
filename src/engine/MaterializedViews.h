@@ -309,7 +309,8 @@ class MaterializedViewsManager {
 
   // Guards the read-modify-write of the central views list file
   // (`<onDiskBase>.views.json`) when writing views. Stored via `unique_ptr` so
-  // that `MaterializedViewsManager` remains moveable (required by `IndexAndViews`).
+  // that `MaterializedViewsManager` remains moveable (required by
+  // `IndexAndViews`).
   mutable std::unique_ptr<std::mutex> viewsListMutex_{
       std::make_unique<std::mutex>()};
 

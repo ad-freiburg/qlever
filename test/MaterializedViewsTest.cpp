@@ -823,19 +823,17 @@ TEST_F(MaterializedViewsTest, ViewIdsCorruptedFiles) {
 
   // Central views list: not a JSON object (array instead).
   writeViewsList("[1, 2, 3]");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk("testView1", plan),
-      ::testing::HasSubstr("expected a JSON object"));
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("expected a JSON object"));
 
   // Central views list: ID is a string, not an unsigned integer.
   writeViewsList(R"({"testView1": "notAnId"})");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk("testView1", plan),
-      ::testing::HasSubstr("not an unsigned integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("not an unsigned integer"));
 
   // Central views list: ID exceeds MATERIALIZED_VIEW_MAX_ID.
-  writeViewsList(absl::StrCat(R"({"testView1": )",
-                              MATERIALIZED_VIEW_MAX_ID + 1, "}"));
+  writeViewsList(
+      absl::StrCat(R"({"testView1": )", MATERIALIZED_VIEW_MAX_ID + 1, "}"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk("testView1", plan),
       ::testing::HasSubstr("exceeds the maximum allowed ID"));
