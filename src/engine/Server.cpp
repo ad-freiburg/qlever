@@ -1181,7 +1181,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<qlever::PlannedQuery>& plannedUpdate) {
+        TimeLimit timeLimit,
+        std::optional<qlever::PlannedQuery>& plannedUpdate) {
   auto& index = indexAndViews->index_;
   outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
@@ -1480,7 +1481,8 @@ void Server::writeMaterializedView(
                         cancellationHandle);
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  indexAndViews->materializedViewsManager_.writeViewToDisk(name, plan, memoryLimit);
+  indexAndViews->materializedViewsManager_.writeViewToDisk(name, plan,
+                                                           memoryLimit);
 }
 
 // _____________________________________________________________________________

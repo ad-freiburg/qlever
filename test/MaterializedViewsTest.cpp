@@ -109,7 +109,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       getQueryResultAsIdTable("SELECT ?s ?x { ?s ?p ?o . BIND(1 AS ?x) }");
 
   for (const auto& query : equivalentQueries) {
-    auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
+    auto plannedQuery = qlv().parseAndPlanQuery(query);
     auto& qet = plannedQuery.queryExecutionTree();
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),

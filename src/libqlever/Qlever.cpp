@@ -175,9 +175,9 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 #else
   ad_utility::streams::StringBatcher yielder{
       [&result](std::string_view batch) { result.append(batch); }};
-  ExportQueryExecutionTrees::computeResult(parsedQuery, *qet, mediaType, timer,
-                                           std::move(handle),
-                                           std::ref(yielder));
+  ExportQueryExecutionTrees::computeResult(
+      plannedQuery.parsedQuery(), *plannedQuery.queryExecutionTree(), mediaType,
+      timer, std::move(handle), std::ref(yielder));
 
 #endif
   return result;
@@ -216,11 +216,13 @@ PlannedQuery Qlever::parseAndPlanQuery(
     bool pinResult) const {
   ad_utility::Timer planningTimer{ad_utility::Timer::InitialStatus::Started};
 
-  auto qecPtr = createQueryExecutionContext(indexAndViewsSnapshot(), std::move(updateCallback),
-                                            pinSubstrees, pinResult, disableCaching_);
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubstrees,
+      pinResult, disableCaching_);
 
   auto parsedQuery = SparqlParser::parseQuery(
-      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), datasetClauses);
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
+      datasetClauses);
 
   QueryPlanner qp{qecPtr.get(), handle};
 
