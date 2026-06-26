@@ -68,8 +68,8 @@ Result Minus::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Minus subresult computation done" << std::endl;
 
   AD_LOG_DEBUG << "Computing minus of results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
   IdTable idTable = computeMinus(leftResult->idTableView(),
                                  rightResult->idTableView(), _matchedColumns);
@@ -253,7 +253,7 @@ std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   }
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
-  const IdTable& leftTable = leftRes->idTable();
+  const IdTableView<0>& leftTable = leftRes->idTableView();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};

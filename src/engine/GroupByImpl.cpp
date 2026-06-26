@@ -652,7 +652,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                         resultSortedOn()};
   }
 
-  AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
+  AD_CORRECTNESS_CHECK(subresult->idTableView().numColumns() == inWidth);
 
   // Make a copy of the local vocab. Note: the LocalVocab has reference
   // semantics via `shared_ptr`, so no actual strings are copied here.
@@ -1071,7 +1071,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       {subtree.getRootOperation()->getRuntimeInfoPointer(),
        threeVarSubtree.getRootOperation()->getRuntimeInfoPointer()});
   IdTable result{2, getExecutionContext()->getAllocator()};
-  if (subresult->idTable().size() == 0) {
+  if (subresult->idTableView().size() == 0) {
     return result;
   }
 
@@ -1093,7 +1093,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   // input iterators.
 
   // Take care of duplicate values in the input.
-  Id currentId = subresult->idTable()(0, columnIndex);
+  Id currentId = subresult->idTableView()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality = getExactCardinality(currentId);
 
@@ -1108,8 +1108,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
-  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
-    auto id = subresult->idTable()(i, columnIndex);
+  for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
+    auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
       pushRow();
       currentId = id;
@@ -1916,7 +1916,7 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   // Compute the result as a single `size_t`.
   auto res = [&input = *childRes]() -> size_t {
     if (input.isFullyMaterialized()) {
-      return input.idTable().size();
+      return input.idTableView().size();
     } else {
       auto gen = input.idTables();
       auto sz = gen | ql::views::transform([](const auto& pair) {
