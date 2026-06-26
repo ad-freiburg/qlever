@@ -71,9 +71,7 @@ class BatchManager {
   [[nodiscard]] BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
                                      ql::span<const uint64_t> offsets,
                                      ql::span<char*> buffers) {
-    if (!validateSameLength(numBytes, offsets, buffers)) {
-      AD_THROW("spans should have same length");
-    }
+    validateSameLength(numBytes, offsets, buffers);
 
     BatchHandle handle = nextBatchHandle_++;
 
@@ -91,9 +89,13 @@ class BatchManager {
   BatchHandle nextBatchHandle_ = 0;
 
   template <typename Span0, typename... Spans>
-  static bool validateSameLength(const Span0& first, const Spans&... rest) {
+  static void validateSameLength(const Span0& first, const Spans&... rest) {
     const auto n = ql::ranges::size(first);
-    return ((ql::ranges::size(rest) == n) && ...);
+    auto valid = ((ql::ranges::size(rest) == n) && ...);
+    if (!valid) {
+      AD_THROW("spans should have same length");
+    }
+    return;
   }
 };
 
