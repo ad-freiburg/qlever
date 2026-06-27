@@ -47,7 +47,6 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinMaxNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
-  add(useBatchVocabLookup_);
   add(treatDefaultGraphAsNamedGraph_);
   add(sparqlResultsJsonWithTime_);
   add(materializedViewWriterMemory_);
