@@ -48,7 +48,9 @@ ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
       EvaluatedTermData{std::move(str), type});
 }
 
-// _____________________________________________________________________________
+// TODO<ms2144>: 1.4M memory allocations here for a 500k triples construct
+//  export. WHY?
+//  _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
