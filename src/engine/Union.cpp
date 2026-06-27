@@ -363,7 +363,7 @@ Result::LazyResult Union::computeResultLazily(
       return InputRangeTypeErased(
           lazySingleValueRange([transform = transformFactory(permutation),
                                 result = std::move(result)]() {
-            return transform(result->idTable().clone(),
+            return transform(result->cloneIdTable(),
                              result->getCopyOfLocalVocab());
           }));
     }
