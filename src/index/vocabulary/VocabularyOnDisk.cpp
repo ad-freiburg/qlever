@@ -77,8 +77,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 
   // Phase 2: Read string data via io_uring (reusing the same manager).
   auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer.resize(totalSize);
-  data->views.resize(n);
+  data->buffer().resize(totalSize);
+  data->views().resize(n);
 
   std::vector<size_t> sizes(n);
   std::vector<uint64_t> fileOffsets(n);
@@ -88,7 +88,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     for (size_t i = 0; i < n; ++i) {
       sizes[i] = offsetPairs[i].nextOffset - offsetPairs[i].offset;
       fileOffsets[i] = offsetPairs[i].offset;
-      targetPointers[i] = data->buffer.data() + bufferOffset;
+      targetPointers[i] = data->buffer().data() + bufferOffset;
       bufferOffset += sizes[i];
     }
   }
@@ -100,7 +100,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 
   // Build string_views pointing into the buffer.
   for (size_t i = 0; i < n; ++i) {
-    data->views[i] = std::string_view(targetPointers[i], sizes[i]);
+    data->views()[i] = std::string_view(targetPointers[i], sizes[i]);
   }
 
   return VocabBatchLookupData::asResult(std::move(data));
@@ -236,8 +236,8 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
       }
 
       batch.data = std::make_shared<VocabBatchLookupData>();
-      batch.data->buffer.resize(totalSize);
-      batch.data->views.resize(numIndicesInBatch);
+      batch.data->buffer().resize(totalSize);
+      batch.data->views().resize(numIndicesInBatch);
 
       batch.sizes.resize(numIndicesInBatch);
       batch.targetBuffers.resize(numIndicesInBatch);
@@ -248,7 +248,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
           batch.sizes[i] =
               batch.offsetPairs[i].nextOffset - batch.offsetPairs[i].offset;
           fileOffsets[i] = batch.offsetPairs[i].offset;
-          batch.targetBuffers[i] = batch.data->buffer.data() + bufferOffset;
+          batch.targetBuffers[i] = batch.data->buffer().data() + bufferOffset;
           bufferOffset += batch.sizes[i];
         }
       }
@@ -267,7 +267,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
 
     const size_t n = front.numIndices;
     for (size_t i = 0; i < n; ++i) {
-      front.data->views[i] =
+      front.data->views()[i] =
           std::string_view(front.targetBuffers[i], front.sizes[i]);
     }
     auto result = VocabBatchLookupData::asResult(std::move(front.data));
