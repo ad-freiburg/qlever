@@ -31,7 +31,7 @@ CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
 // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
 // `IdTableView<0>`. Identity for `IdTableView<0>`.
 template <typename T>
-static IdTableView<0> toView(const T& table) {
+IdTableView<0> toView(const T& table) {
   if constexpr (CPP_requires_ref(concepts::HasAsStaticView, T)) {
     return table.template asStaticView<0>();
   } else {
@@ -42,8 +42,8 @@ static IdTableView<0> toView(const T& table) {
 // Merge the local vocab contained in `T` with the `targetVocab` and set the
 // passed pointer reference to that vocab.
 template <typename T>
-static void mergeVocabInto(const T& table, const LocalVocab*& currentVocab,
-                           LocalVocab& targetVocab) {
+void mergeVocabInto(const T& table, const LocalVocab*& currentVocab,
+                    LocalVocab& targetVocab) {
   AD_CORRECTNESS_CHECK(currentVocab == nullptr);
   if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
     currentVocab = &table.getLocalVocab();

@@ -398,7 +398,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
       const auto& optStr = idToValueForValuesClause(
-          getIndex(), siblingResult->idTable()(rowIndex, columnIdx),
+          getIndex(), siblingResult->idTableView()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
       if (!optStr.has_value()) {
@@ -412,7 +412,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   ad_utility::HashSet<std::string> rowSet;
   std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTableView().size();
        ++rowIndex) {
     std::string row = createValueRow(rowIndex);
     if (row.empty() || rowSet.contains(row)) {
@@ -633,7 +633,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   if (siblingResult->isFullyMaterialized()) {
     bool resultIsSmall =
-        siblingResult->idTable().size() <=
+        siblingResult->idTableView().size() <=
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(

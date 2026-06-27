@@ -19,7 +19,7 @@
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Timer.h"
@@ -213,27 +213,16 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
 
-  static constexpr size_t flushThreshold = 16ULL * 1024 * 1024;  // 16 MB
-
-  ad_utility::serialization::FileWriteSerializer serializer{fileName};
-  // TODO<RobinTF> Ideally the `FileWriteSerializer` should come with its own
-  // buffer to avoid having to implement this logic here. Despite `fwrite`
-  // (which is called by `FileWriteSerializer::serializeBytes`) buffering data
-  // on its own it is faster to buffer with our own buffer, presumably because
-  // `fwrite` is thread-safe and therefore has to acquire a mutex for every
-  // call.
-  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  byteBuffer.reserve(flushThreshold + 1024);  // + slack for the last item
+  // We buffer the data with our own buffer before passing it to the file in
+  // large chunks. Despite `fwrite` (which is ultimately called by
+  // `FileWriteSerializer::serializeBytes`) buffering data on its own, it is
+  // faster to buffer with our own buffer, presumably because `fwrite` is
+  // thread-safe and therefore has to acquire a mutex for every call.
+  serialization::BufferedWriteSerializer serializer{
+      serialization::FileWriteSerializer{fileName}, 16_MB};
 
   uint64_t size = els.size();
-  byteBuffer << size;
-
-  auto flush = [&]() {
-    ad_utility::TimeBlockAndLog t{"performing the actual write"};
-    serializer.serializeBytes(byteBuffer.data().data(),
-                              byteBuffer.data().size());
-    byteBuffer.clear();
-  };
+  serializer << size;
 
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
@@ -242,17 +231,11 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    byteBuffer << word;
-    byteBuffer << idAndExternal.isExternal();
-    byteBuffer << idAndExternal.id();
-
-    if (byteBuffer.data().size() >= flushThreshold) {
-      flush();
-    }
+    serializer << word;
+    serializer << idAndExternal.isExternal();
+    serializer << idAndExternal.id();
   }
 
-  // Flush remaining data.
-  flush();
   serializer.close();
 
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
