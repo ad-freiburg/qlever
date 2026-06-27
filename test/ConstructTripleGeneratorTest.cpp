@@ -9,6 +9,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTableHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/Result.h"
@@ -23,6 +24,8 @@ using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::ResultOf;
 using Triples = ad_utility::sparql_types::Triples;
+
+auto iriV = ad_utility::testing::iriV;
 
 static auto matchTriple(const std::string& s, const std::string& p,
                         const std::string& o) {
@@ -120,7 +123,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
 TEST_F(ConstructTripleGeneratorTest, emptyTable) {
   auto result = makeResult(makeIdTableFromVector({}));
   auto table = makeTableWithRange(*result, 0, 0);  // empty table
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   EXPECT_TRUE(run(templateTriples, {}, table).empty());
 }
@@ -134,7 +137,7 @@ TEST_F(ConstructTripleGeneratorTest, allConstantsYieldsOneTriplePerRow) {
   // row 2:       undefined
   auto result = makeResult(makeIdTableFromVector({{U}, {U}, {U}}));
   auto table = makeTableWithRange(*result, 0, 3);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   EXPECT_THAT(run(templateTriples, {}, table),
               ElementsAre(matchTriple("<s>", "<p>", "<o>"),
@@ -149,7 +152,7 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
   // row 1:       <o>
   auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 2);
-  auto triples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  auto triples = oneTriple(Variable{"?sub"}, iriV("<p>"), iriV("<o>"));
   VariableToColumnMap varMap;
   // values of variable ?sub are located in column 0 of `Idtable`.
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
@@ -165,7 +168,7 @@ TEST_F(ConstructTripleGeneratorTest, variableInSubjectResolved) {
 TEST_F(ConstructTripleGeneratorTest, undefDropsTriple) {
   auto result = makeResult(makeIdTableFromVector({{idS_}, {U}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 3);
-  auto triples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  auto triples = oneTriple(Variable{"?sub"}, iriV("<p>"), iriV("<o>"));
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
@@ -180,8 +183,8 @@ TEST_F(ConstructTripleGeneratorTest, multipleTemplateTriples) {
   auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 2);
   Triples templateTriples{
-      std::array<GraphTerm, 3>{Variable{"?sub"}, Iri{"<p>"}, Iri{"<o1>"}},
-      std::array<GraphTerm, 3>{Variable{"?sub"}, Iri{"<q>"}, Iri{"<o2>"}},
+      std::array<GraphTerm, 3>{Variable{"?sub"}, iriV("<p>"), iriV("<o1>")},
+      std::array<GraphTerm, 3>{Variable{"?sub"}, iriV("<q>"), iriV("<o2>")},
   };
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
@@ -205,7 +208,7 @@ TEST_F(ConstructTripleGeneratorTest, blankNodeUsesCorrectRowId) {
   // row 0 of batch -> blankNodeRowId = 0 + 1 + 0 = 1
   // row 1 of batch -> blankNodeRowId = 0 + 1 + 1 = 2
   auto templateTriples =
-      oneTriple(BlankNode{false, "node"}, Iri{"<p>"}, Iri{"<o>"});
+      oneTriple(BlankNode{false, "node"}, iriV("<p>"), iriV("<o>"));
 
   EXPECT_THAT(run(templateTriples, {}, table),
               ElementsAre(matchTriple("_:u1_node", "<p>", "<o>"),
@@ -225,7 +228,7 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
   auto table2 = makeTableWithRange(*result2, 5, 7);
 
   auto templateTriples =
-      oneTriple(BlankNode{false, "x"}, Iri{"<p>"}, Iri{"<o>"});
+      oneTriple(BlankNode{false, "x"}, iriV("<p>"), iriV("<o>"));
 
   std::vector<TableWithRange> tables{table1, table2};
 
@@ -262,7 +265,7 @@ TEST_F(ConstructTripleGeneratorTest, viewSubrangeReadsCorrectRowsOfIdTable) {
       makeResult(makeIdTableFromVector({{idS_}, {idP_}, {idO_}, {idQ_}}));
   auto table = makeTableWithRange(*result, 1, 3);
   auto templateTriples =
-      oneTriple(Variable{"?sub"}, Iri{"<pred>"}, Iri{"<obj>"});
+      oneTriple(Variable{"?sub"}, iriV("<pred>"), iriV("<obj>"));
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
@@ -280,7 +283,7 @@ TEST_F(ConstructTripleGeneratorTest, acrossBatchBoundary) {
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
-  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(Variable{"?sub"}, iriV("<p>"), iriV("<o>"));
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
@@ -301,7 +304,7 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
@@ -327,7 +330,7 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
   static_assert(2 < ConstructTripleGenerator::BATCH_SIZE);
   auto result = makeResult(makeIdTableFromVector({{idS_}, {idO_}}));
   auto table = makeTableWithRange(*result, 0, 2);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
@@ -362,7 +365,7 @@ TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto result = makeResult(makeIdTableFromVector(rows));
   auto table = makeTableWithRange(*result, 0, N);
-  auto templateTriples = oneTriple(Variable{"?sub"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(Variable{"?sub"}, iriV("<p>"), iriV("<o>"));
   VariableToColumnMap varMap;
   varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
 
@@ -416,7 +419,7 @@ TEST(MakeIdCache, multipleVariables) {
 TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
   auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   auto range = ConstructTripleGenerator::generateStringTriples(
       templateTriples, {}, index_, makeHandle(),
@@ -453,7 +456,7 @@ class GenerateFormattedTriplesTest
 TEST_P(GenerateFormattedTriplesTest, formatsCorrectly) {
   auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   auto range = ConstructTripleGenerator::generateFormattedTriples(
       templateTriples, {}, index_, makeHandle(),
@@ -476,7 +479,7 @@ TEST_F(ConstructTripleGeneratorTest,
        generateFormattedTriplesRejectsUnsupportedMediaType) {
   auto result = makeResult(makeIdTableFromVector({{U}}));
   auto table = makeTableWithRange(*result, 0, 1);
-  auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
+  auto templateTriples = oneTriple(iriV("<s>"), iriV("<p>"), iriV("<o>"));
 
   static constexpr std::array supported{ad_utility::MediaType::turtle,
                                         ad_utility::MediaType::csv,

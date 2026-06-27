@@ -14,12 +14,21 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
+#include <ctre-unicode.hpp>
 #include <utility>
 
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
 
 using namespace std::string_view_literals;
+
+namespace {
+// CTRE pattern for the SPARQL/Turtle `IRIREF` production used by
+// `Iri::fromIrirefValidated` (see its documentation in `Iri.h` for a full
+// explanation). `\0- ` matches every byte in the range `#x00`-`#x20` (control
+// chars and space).
+constexpr ctll::fixed_string irirefRegex = R"(<[^<>"{}|^\\`\0- ]*>)";
+}  // namespace
 
 namespace ad_utility::triple_component {
 
@@ -60,6 +69,16 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
                    asStringViewUnsafe(RdfEscaping::normalizeIriWithBrackets(
                        stringWithBrackets.substr(first))),
                    ">")};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromIrirefValidated(std::string_view stringWithBrackets) {
+  if (!ctre::match<irirefRegex>(stringWithBrackets)) {
+    AD_THROW(absl::StrCat("The string \"", stringWithBrackets,
+                          "\" is not a valid IRI reference (IRIREF)."
+                          "See https://www.ietf.org/rfc/rfc3987.txt"));
+  }
+  return fromIriref(stringWithBrackets);
 }
 
 // ____________________________________________________________________________

@@ -176,12 +176,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     if (vocabSize > 1) {
       runtimeInfo().addDetail("local-vocab-size", vocabSize);
     }
-    AD_CORRECTNESS_CHECK(result.idTable().numColumns() == getResultWidth());
-    updateRuntimeInformationOnSuccess(result.idTable().size(),
+    AD_CORRECTNESS_CHECK(result.idTableView().numColumns() == getResultWidth());
+    updateRuntimeInformationOnSuccess(result.idTableView().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
     AD_CORRECTNESS_CHECK(
-        result.idTable().empty() || !knownEmptyResult(), [&]() {
+        result.idTableView().empty() || !knownEmptyResult(), [&]() {
           return absl::StrCat("Operation ", getDescriptor(),
                               "returned non-empty result, but "
                               "knownEmptyResult() returned true");
@@ -294,8 +294,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
         });
   }
   if (result.isFullyMaterialized()) {
-    auto resultNumRows = result.idTable().size();
-    auto resultNumCols = result.idTable().numColumns();
+    auto resultNumRows = result.idTableView().size();
+    auto resultNumCols = result.idTableView().numColumns();
     AD_LOG_DEBUG << "Computed result of size " << resultNumRows << " x "
                  << resultNumCols << std::endl;
   }
@@ -393,7 +393,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
     if (result._resultPointer->resultTable().isFullyMaterialized()) {
       AD_CORRECTNESS_CHECK(
-          result._resultPointer->resultTable().idTable().numColumns() ==
+          result._resultPointer->resultTable().idTableView().numColumns() ==
               getResultWidth(),
           result._cacheStatus == ad_utility::CacheStatus::computed
               ? "This should never happen, non-matching result widths should "
@@ -470,14 +470,14 @@ void Operation::storeToNamedResultCache(const Result& result) {
                         .at(geoIndexVar.value())
                         .columnIndex_;
     return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                  result.idTable(),
+                                  result.idTableView(),
                                   _executionContext->getIndex()};
   };
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(result.idTable().clone()),
+      std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
       result.sortedBy(),
       result.localVocab().clone(),
@@ -539,7 +539,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   const auto& result = resultAndCacheStatus._resultPointer->resultTable();
   AD_CONTRACT_CHECK(result.isFullyMaterialized());
   updateRuntimeInformationOnSuccess(
-      result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
+      result.idTableView().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
