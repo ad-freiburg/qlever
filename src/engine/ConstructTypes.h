@@ -16,6 +16,9 @@
 #include <variant>
 #include <vector>
 
+#include "global/ValueId.h"
+#include "index/LocalVocab.h"
+
 namespace qlever::constructExport {
 
 // Canonical representation of a resolved RDF term stored in the LRU cache.
@@ -47,6 +50,13 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
+  // The stable `ValueId` used as this constant's component of the full-triple
+  // deduplication key. IRIs and encoded values resolve from the index
+  // vocabulary / ID bits; literals not present in the vocabulary are assigned a
+  // fresh `LocalVocabIndex` in the template's `constantLocalVocab_`. Resolved
+  // once at preprocessing time (see
+  // `ConstructTemplatePreprocessor::preprocessIri`/`preprocessLiteral`).
+  ValueId dedupId_ = ValueId::makeUndefined();
 };
 
 // After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
@@ -87,6 +97,16 @@ struct PreprocessedConstructTemplate {
   // The dedupicated set of `IdTable` column indices that appear in the template
   // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
+  // For each template triple at index i (parallel to `preprocessedTriples_`),
+  // this flag is true if the triple contains at least one blank node term
+  // (either a user-defined blank-node term like `_:a` or an anonymous blank
+  // node `[]`).
+  std::vector<bool> tripleContainsBlankNode_;
+  // Owns the `LocalVocabEntry`s created while resolving literal (and
+  // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
+  // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
+  // entry living in this `LocalVocab`.
+  LocalVocab constantLocalVocab_;
 };
 
 // Result of instantiating a single template triple for a specific result table

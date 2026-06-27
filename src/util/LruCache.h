@@ -13,9 +13,12 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <boost/optional.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <list>
+#include <type_traits>
+#include <utility>
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
@@ -81,6 +84,57 @@ class LRUCache {
         AD_FWD(key), computeFunction(keys_.front()), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;
+  }
+
+  // Insert the key-value pair into the cache.
+  //
+  // Returns true if `key` was not previously present and inserts it. If `key`
+  // is already present, update the stored value, mark the entry as most
+  // recently used and return false. If the cache is full, evict the least
+  // recently used entry first.
+  template <typename Key, typename Value>
+  bool insert(Key&& key, Value&& v) {
+    auto it = cache_.find(key);
+    if (it != cache_.end()) {
+      // Move to MRU position.
+      keys_.splice(keys_.begin(), keys_, it->second.second);
+
+      // Replace the old cached value with the newly provided value.
+      it->second.first = std::forward<Value>(v);
+
+      return false;
+    }
+
+    // Evict LRU if necessary.
+    if (cache_.size() >= capacity_) {
+      K& lruKey = keys_.back();
+      cache_.erase(lruKey);
+
+      keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
+      lruKey = K{std::forward<Key>(key)};
+
+      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
+                                       keys_.begin());
+
+      AD_CORRECTNESS_CHECK(result.second);
+    } else {
+      keys_.push_front(K{std::forward<Key>(key)});
+
+      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
+                                       keys_.begin());
+
+      AD_CORRECTNESS_CHECK(result.second);
+    }
+
+    return true;
+  }
+
+  // Set-like insertion for empty value types. This stores a default-constructed
+  // empty value and returns true iff the key was not already present.
+  CPP_template(typename Key)(
+      requires std::is_empty_v<V> CPP_and
+          std::is_default_constructible_v<V>) bool insert(Key&& key) {
+    return insert(std::forward<Key>(key), V{});
   }
 };
 
