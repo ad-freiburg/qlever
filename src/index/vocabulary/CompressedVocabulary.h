@@ -82,6 +82,8 @@ CPP_template(typename UnderlyingVocabulary,
     // monotonic_buffer_resource pre-allocates a buffer sized for the estimated
     // total decompressed data; `buffer()` owns it for the result's lifetime.
     auto data = std::make_shared<PmrVocabBatchLookupData>();
+    // FSST decompresses at most 8x per pass. That's why we multiply
+    // `totalCompressedSize` by `8` here.
     data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>(
         totalCompressedSize * 8 + 256);
     auto* resource = data->buffer().get();
@@ -94,11 +96,12 @@ CPP_template(typename UnderlyingVocabulary,
 
     for (size_t i = 0; i < indices.size(); ++i) {
       // FSST decompresses at most 8x per pass; for FSST^2 max is 64x.
-      size_t maxSize = compressedViews[i].size() * 64 + 64;
-      char* wordBuf = static_cast<char*>(resource->allocate(maxSize, 1));
+      size_t maxDecompressedWordSize = compressedViews[i].size() * 64 + 64;
+      char* wordBuf =
+          static_cast<char*>(resource->allocate(maxDecompressedWordSize, 1));
       size_t written = compressionWrapper_.decompressInto(
-          compressedViews[i], getDecoderIdx(indices[i]), wordBuf, maxSize,
-          scratchBuf.get(), kScratchSize);
+          compressedViews[i], getDecoderIdx(indices[i]), wordBuf,
+          maxDecompressedWordSize, scratchBuf.get(), kScratchSize);
       data->views()[i] = std::string_view(wordBuf, written);
     }
 
