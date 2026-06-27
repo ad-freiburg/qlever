@@ -60,9 +60,9 @@ class VocabularyInMemory
   /// The returned string_views point directly into the in-memory word storage.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     auto data = std::make_shared<VocabBatchLookupData>();
-    data->views.resize(indices.size());
+    data->views().resize(indices.size());
     for (size_t i = 0; i < indices.size(); ++i) {
-      data->views[i] = _words[indices[i]];
+      data->views()[i] = _words[indices[i]];
     }
     return VocabBatchLookupData::asResult(std::move(data));
   }
