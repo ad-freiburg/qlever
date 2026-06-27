@@ -1153,6 +1153,15 @@ void IndexImpl::buildEmbeddingTypeRegistry() {
 
   // 3. Assemble and strictly validate each type's metadata.
   for (Id typeId : typeIds) {
+    // The object of an `emb:type` triple must be an IRI from the regular
+    // vocabulary (it carries the metadata and is looked up by the query-time
+    // `embf:distance`). Reject anything else (e.g. a literal or an inline
+    // numeric value) loudly instead of crashing on `getVocabIndex()` below.
+    if (typeId.getDatatype() != Datatype::VocabIndex) {
+      throw std::runtime_error{
+          "The object of an emb:type triple must be an IRI carrying the "
+          "emb:hasMetric, emb:hasDimension and emb:hasPrecision metadata."};
+    }
     std::string typeName{indexToString(typeId.getVocabIndex())};
     auto require = [&typeName](const ad_utility::HashMap<Id, Id>& map, Id key,
                                std::string_view field) -> Id {

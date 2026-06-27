@@ -156,17 +156,22 @@ CPP_template(typename UnderlyingVocabulary,
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
     size_t numBlocksLargerWhenCompressed_ = 0u;
+    // The queue sizes are read once from the environment (see
+    // `vocabWriterSizeFromEnv`) and reused for the members and the log below.
+    size_t writeQueueSize_ =
+        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_WRITE_QUEUE", 5);
+    size_t compressQueueSize_ =
+        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE", 10);
     ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
-        writeQueue_{detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_WRITE_QUEUE", 5)};
+        writeQueue_{writeQueueSize_};
     ad_utility::JThread writeThread_{[this] {
       while (auto opt = writeQueue_.pop()) {
         opt.value()();
       }
     }};
     std::atomic<size_t> queueIndex_ = 0;
-    ad_utility::TaskQueue<false> compressQueue_{
-        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE", 10),
-        detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE", 10)};
+    ad_utility::TaskQueue<false> compressQueue_{compressQueueSize_,
+                                                compressQueueSize_};
     uint64_t counter_ = 0;
 
    public:
@@ -176,12 +181,8 @@ CPP_template(typename UnderlyingVocabulary,
         : underlyingWriter_{filenameWords},
           filenameDecoders_{filenameDecoders} {
       AD_LOG_INFO << "Compressed vocabulary writer: " << NumWordsPerBlock
-                  << " words/block, compress-queue "
-                  << detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_COMPRESS_QUEUE",
-                                                    10)
-                  << ", write-queue "
-                  << detail::vocabWriterSizeFromEnv("QLEVER_VOCAB_WRITE_QUEUE", 5)
-                  << std::endl;
+                  << " words/block, compress-queue " << compressQueueSize_
+                  << ", write-queue " << writeQueueSize_ << '\n';
     }
 
     /// Compress the `uncompressedWord` and write it to disk.

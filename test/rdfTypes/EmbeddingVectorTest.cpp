@@ -9,22 +9,11 @@
 
 #include <gmock/gmock.h>
 
-#include "global/Constants.h"
 #include "rdfTypes/EmbeddingVector.h"
 
 using ad_utility::parseFloatVectorArrayBody;
-using ad_utility::parseFp32VectorLiteral;
 using ::testing::ElementsAre;
 using ::testing::Optional;
-
-namespace {
-// Wrap a vector body in the full serialized `fp32Vector` literal form, i.e.
-// `"<body>"^^<...fp32Vector>`. `EMBEDDING_FP32_LITERAL_SUFFIX` already starts
-// with the closing quote (`"^^<...>`), so only the opening quote is prepended.
-std::string fp32Literal(std::string_view body) {
-  return absl::StrCat("\"", body, EMBEDDING_FP32_LITERAL_SUFFIX);
-}
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(EmbeddingVector, ParseBodyValid) {
@@ -85,29 +74,4 @@ TEST(EmbeddingVector, ParseBodyNonFiniteRejected) {
   // A finite JSON number that overflows the `float` range becomes `inf` and is
   // rejected by the finiteness check.
   EXPECT_EQ(parseFloatVectorArrayBody("[1e40]"), std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST(EmbeddingVector, ParseLiteralValid) {
-  EXPECT_THAT(parseFp32VectorLiteral(fp32Literal("[1, 2, 3]")),
-              Optional(ElementsAre(1.0f, 2.0f, 3.0f)));
-  EXPECT_THAT(parseFp32VectorLiteral(fp32Literal("[-0.5]")),
-              Optional(ElementsAre(-0.5f)));
-}
-
-// _____________________________________________________________________________
-TEST(EmbeddingVector, ParseLiteralWrongShapeRejected) {
-  // Missing the opening quote.
-  EXPECT_EQ(parseFp32VectorLiteral(
-                absl::StrCat("[1, 2, 3]", EMBEDDING_FP32_LITERAL_SUFFIX)),
-            std::nullopt);
-  // Wrong datatype suffix.
-  EXPECT_EQ(parseFp32VectorLiteral(
-                "\"[1, 2, 3]\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-            std::nullopt);
-  // No datatype suffix at all (plain string literal).
-  EXPECT_EQ(parseFp32VectorLiteral("\"[1, 2, 3]\""), std::nullopt);
-  // Correct suffix but malformed body.
-  EXPECT_EQ(parseFp32VectorLiteral(fp32Literal("[1, 2,]")), std::nullopt);
-  EXPECT_EQ(parseFp32VectorLiteral(fp32Literal("[]")), std::nullopt);
 }

@@ -24,12 +24,6 @@ namespace ad_utility {
 std::optional<std::vector<float>> parseFloatVectorArrayBody(
     std::string_view body);
 
-// Parse a full serialized `fp32Vector` literal of the form
-// `"[...]"^^<...fp32Vector>` into a vector of `float`s: strip the surrounding
-// quote and datatype suffix, then delegate to `parseFloatVectorArrayBody`.
-// Returns `std::nullopt` if the suffix does not match or the body is malformed.
-std::optional<std::vector<float>> parseFp32VectorLiteral(std::string_view word);
-
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_RDFTYPES_EMBEDDINGVECTOR_H

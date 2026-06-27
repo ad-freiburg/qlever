@@ -155,11 +155,11 @@ TEST(EmbeddingExpression, ManyVsOneUnsortedCandidates) {
 }
 
 // _____________________________________________________________________________
-TEST(EmbeddingExpression, ManyVsFewCachedQueries) {
-  // 2 <= n <= kMaxDistinctQueries: VALUES binds three query subjects, crossed
-  // with all candidates. Both operands are `Variable` columns with three
-  // distinct values, so this exercises the small-n query-decode cache. The
-  // cosine ranking per query must be correct:
+TEST(EmbeddingExpression, ManyVsFewQueries) {
+  // VALUES binds three query subjects, crossed with all candidates. Both
+  // operands are `Variable` columns with three distinct values, so neither side
+  // is constant-valued and this exercises the generic per-row path. The cosine
+  // ranking per query must still be correct:
   //   from a=[1,0]: a<c<b ;  from b=[0,1]: b<c<a ;  from c=[1,1]: c<{a,b}
   // (the a/b tie at distance 1-1/√2 is broken by ?other, so a before b).
   std::string kg = makeKg("cosine");
@@ -270,5 +270,5 @@ TEST(EmbeddingExpression, StrictErrors) {
       runSelect(kg,
                 absl::StrCat(kPrefixes, "SELECT ?d { BIND(embf:distance(",
                              vec("[1, 0]"), ", ", vec("[0, 1]"), ") AS ?d) }")),
-      HasSubstr("embf:distance requires exactly three arguments"));
+      HasSubstr("embf:distance takes three arguments"));
 }

@@ -263,11 +263,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // Embedding functions.
   if (checkPrefix(EMBF_PREFIX)) {
     if (functionName == "distance") {
-      if (argList.size() != 3) {
-        AD_THROW(
-            "embf:distance requires exactly three arguments: the two vectors "
-            "and the embedding-type IRI");
-      }
+      checkNumArgs(3);
       return makeEmbeddingDistanceExpression(
           std::move(argList[0]), std::move(argList[1]), std::move(argList[2]));
     }

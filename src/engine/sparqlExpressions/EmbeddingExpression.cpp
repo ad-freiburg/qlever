@@ -11,16 +11,19 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cmath>
+#include <optional>
+#include <stdexcept>
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "engine/sparqlExpressions/EmbeddingDistance.h"
+#include "backports/span.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/Id.h"
 #include "index/EmbeddingTypeRegistry.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 
 namespace sparqlExpression {
 namespace {
@@ -28,31 +31,70 @@ using namespace detail;
 
 using OptVector = std::optional<std::vector<float>>;
 
-// `computeDistance` (the metric policy) lives in `EmbeddingDistance.h`, and the
-// raw `dotProduct`/`squaredL2` kernels in `EmbeddingDistanceKernels.h`.
+// Raw distance kernels, free of the metric/sign conventions. `double`
+// accumulation is used for numerical stability.
+double dotProduct(ql::span<const float> a, ql::span<const float> b) {
+  double sum = 0.0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    sum += static_cast<double>(a[i]) * static_cast<double>(b[i]);
+  }
+  return sum;
+}
 
-// The maximum number of distinct query vectors the many-vs-(few) fast path will
-// cache. A `Variable` column with at most this many distinct Ids is treated as
-// the "query" side (its decodes are hoisted); more than this and it is the
-// high-cardinality "candidate" side. `n = 1` is the dominant kNN case.
-constexpr size_t kMaxDistinctQueries = 32;
+double squaredL2(ql::span<const float> a, ql::span<const float> b) {
+  double sum = 0.0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    double diff = static_cast<double>(a[i]) - static_cast<double>(b[i]);
+    sum += diff * diff;
+  }
+  return sum;
+}
 
-// The distinct `ValueId`s of `ids`, or `nullopt` if there are more than `cap`
-// of them. The high-cardinality candidate side therefore bails after ~`cap`
-// rows; the linear membership test stays cheap because `distinct` never exceeds
-// `cap`.
-std::optional<std::vector<ValueId>> distinctCapped(ql::span<const ValueId> ids,
-                                                   size_t cap) {
-  std::vector<ValueId> distinct;
-  for (ValueId id : ids) {
-    if (ql::ranges::find(distinct, id) == distinct.end()) {
-      distinct.push_back(id);
-      if (distinct.size() > cap) {
-        return std::nullopt;
+// Compute the distance between two operand vectors under the type's metric, or
+// throw a hard query error if an operand is not an embedding vector or has the
+// wrong dimension. This is the metric policy of the `embf:distance` expression;
+// the negated-dot and `1 - cos` conventions keep `ORDER BY ASC` yielding the
+// nearest neighbours.
+Id computeDistance(const EmbeddingTypeConfig& config, const OptVector& optA,
+                   const OptVector& optB) {
+  if (!optA.has_value() || !optB.has_value()) {
+    throw std::runtime_error{
+        "embf:distance: an argument is not an embedding vector literal of the "
+        "type's precision (emb:fp32Vector)"};
+  }
+  ql::span<const float> a{*optA};
+  ql::span<const float> b{*optB};
+  if (a.size() != config.dimension_ || b.size() != config.dimension_) {
+    throw std::runtime_error{absl::StrCat(
+        "embf:distance: a vector's dimension (", a.size(), " resp. ", b.size(),
+        ") does not match the embedding type's emb:hasDimension (",
+        config.dimension_, ")")};
+  }
+  double distance;
+  switch (config.metric_) {
+    case EmbeddingMetric::DotProduct:
+      // Negated so that `ORDER BY ASC` still yields the nearest neighbours.
+      distance = -dotProduct(a, b);
+      break;
+    case EmbeddingMetric::SquaredL2:
+      distance = squaredL2(a, b);
+      break;
+    case EmbeddingMetric::L2:
+      distance = std::sqrt(squaredL2(a, b));
+      break;
+    case EmbeddingMetric::Cosine: {
+      double dot = dotProduct(a, b);
+      double denom = std::sqrt(dotProduct(a, a)) * std::sqrt(dotProduct(b, b));
+      if (denom == 0.0) {
+        throw std::runtime_error{
+            "embf:distance: cosine distance is undefined for a zero-norm "
+            "vector"};
       }
+      distance = 1.0 - dot / denom;
+      break;
     }
   }
-  return distinct;
+  return Id::makeFromDouble(distance);
 }
 
 // The `embf:distance` expression. Holds the two vector child expressions and
@@ -85,24 +127,14 @@ class EmbeddingDistanceExpression : public SparqlExpression {
       constexpr bool resultIsConstant =
           isConstantResult<A> && isConstantResult<B>;
 
-      // Many-vs-(few) fast path. When both operands are `Variable` columns and
-      // one of them has only a few distinct values, that side is the "query"
-      // set and the other is the "candidate" set we stream. This covers the
-      // dominant kNN shapes:
-      //   * n = 1: a query bound by a single-subject triple
-      //     (`<X> emb:hasEmbedding/emb:asFp32Vector ?q . … distance(?q, ?ev)`),
-      //     whose `?q` column is constant-valued at runtime — invisible to the
-      //     compile-time `resultIsConstant` check above.
-      //   * 2 <= n <= kMaxDistinctQueries: a handful of queries crossed with
-      //   the
-      //     candidates (e.g. `VALUES ?q { … } . ?e emb:hasEmbedding/… ?ev`).
-      // The generic per-row path would re-decode the query operand on every row
-      // (a vocab lookup + parse). Instead we decode the few distinct query
-      // vectors *once* and reuse them.
-      //
-      // A literal / constant-folded query operand is NOT a `Variable`, so it
-      // does not reach here; it is already decoded once by the constant
-      // `resultGenerator` in the generic path below.
+      // kNN fast path: when both operands are `Variable` columns and one of
+      // them is constant-valued at runtime (the dominant case: a single query
+      // vector compared against many candidates), decode that shared vector
+      // once instead of re-decoding it (a vocab lookup + parse) on every row.
+      // The query side is invisible to the compile-time `resultIsConstant`
+      // check above (it is a `Variable`, just single-valued at runtime). A
+      // literal / constant-folded operand is not a `Variable` and never reaches
+      // here; it is already decoded once by the generic path below.
       if constexpr (ad_utility::isSimilar<::Variable, A> &&
                     ad_utility::isSimilar<::Variable, B>) {
         ql::span<const ValueId> idsA = getIdsFromVariable(opA, context);
@@ -110,81 +142,49 @@ class EmbeddingDistanceExpression : public SparqlExpression {
         AD_CORRECTNESS_CHECK(idsA.size() == targetSize &&
                              idsB.size() == targetSize);
 
-        // Distinct Ids of each column, capped: `nullopt` == "more than
-        // kMaxDistinctQueries distinct" (the high-cardinality candidate side,
-        // detected after only ~kMaxDistinctQueries rows).
-        auto distinctA = distinctCapped(idsA, kMaxDistinctQueries);
-        auto distinctB = distinctCapped(idsB, kMaxDistinctQueries);
+        // The single shared `ValueId` of a column, or `nullopt` if it varies.
+        auto constantId =
+            [](ql::span<const ValueId> ids) -> std::optional<ValueId> {
+          if (ids.empty()) {
+            return std::nullopt;
+          }
+          ValueId front = ids.front();
+          return ql::ranges::all_of(ids,
+                                    [front](ValueId id) { return id == front; })
+                     ? std::optional<ValueId>{front}
+                     : std::nullopt;
+        };
+        std::optional<ValueId> constA = constantId(idsA);
+        std::optional<ValueId> constB = constantId(idsB);
 
-        EmbeddingValueGetter getter{};
+        if (constA || constB) {
+          EmbeddingValueGetter getter{};
+          OptVector decodedA = constA ? getter(*constA, context) : OptVector{};
+          OptVector decodedB = constB ? getter(*constB, context) : OptVector{};
 
-        // Both columns single-valued: one distance, replicated for every row.
-        if (distinctA && distinctA->size() == 1 && distinctB &&
-            distinctB->size() == 1) {
-          context->cancellationHandle_->throwIfCancelled();
-          Id distance = computeDistance(config, getter(idsA.front(), context),
-                                        getter(idsB.front(), context));
-          VectorWithMemoryLimit<Id> result{context->_allocator};
-          result.insert(result.end(), targetSize, distance);
-          return result;
-        }
-
-        // Compute distances for the candidate column. `getQuery(row)` yields
-        // the already-decoded query operand for that row; `queryIsFirst` keeps
-        // the operand order of `computeDistance` (and the dimension-mismatch
-        // message) identical to the textual argument order.
-        auto computeColumn =
-            [&config, context, &getter](
-                ql::span<const ValueId> candidates, auto&& getQuery,
-                bool queryIsFirst) -> VectorWithMemoryLimit<Id> {
-          auto one = [&](size_t row) {
-            const OptVector& query = getQuery(row);
-            OptVector candidate = getter(candidates[row], context);
-            return queryIsFirst ? computeDistance(config, query, candidate)
-                                : computeDistance(config, candidate, query);
-          };
-          VectorWithMemoryLimit<Id> out{context->_allocator};
-          size_t k = candidates.size();
-          out.reserve(k);
-          for (size_t i = 0; i < k; ++i) {
+          // Both columns constant: one distance, replicated for every row.
+          if (constA && constB) {
             context->cancellationHandle_->throwIfCancelled();
-            out.push_back(one(i));
+            Id distance = computeDistance(config, decodedA, decodedB);
+            VectorWithMemoryLimit<Id> result{context->_allocator};
+            result.insert(result.end(), targetSize, distance);
+            return result;
+          }
+
+          // Exactly one side is constant (decoded once above); the other is
+          // decoded per row. The textual operand order is preserved so the
+          // dimension-mismatch message matches the argument order.
+          VectorWithMemoryLimit<Id> out{context->_allocator};
+          out.reserve(targetSize);
+          for (size_t i = 0; i < targetSize; ++i) {
+            context->cancellationHandle_->throwIfCancelled();
+            out.push_back(constA ? computeDistance(config, decodedA,
+                                                   getter(idsB[i], context))
+                                 : computeDistance(config,
+                                                   getter(idsA[i], context),
+                                                   decodedB));
           }
           return out;
-        };
-
-        // Pick the low-cardinality "query" side (fewer distinct values; prefer
-        // A on a tie). If neither side is low-cardinality, fall through to the
-        // generic both-vary path.
-        const bool aIsQuery =
-            distinctA && (!distinctB || distinctA->size() <= distinctB->size());
-        const bool bIsQuery = !aIsQuery && distinctB.has_value();
-        if (aIsQuery || bIsQuery) {
-          ql::span<const ValueId> queryIds = aIsQuery ? idsA : idsB;
-          ql::span<const ValueId> candidateIds = aIsQuery ? idsB : idsA;
-          const std::vector<ValueId>& distinct =
-              aIsQuery ? *distinctA : *distinctB;
-          if (distinct.size() == 1) {
-            // n == 1: decode the single shared query once, no per-row lookup.
-            OptVector query = getter(queryIds.front(), context);
-            return computeColumn(
-                candidateIds,
-                [&query](size_t) -> const OptVector& { return query; },
-                aIsQuery);
-          }
-          // 2 <= n <= kMaxDistinctQueries: decode the distinct query vectors
-          // once into a small cache, then look each row's query up by its Id.
-          ad_utility::HashMap<ValueId, OptVector> queryCache;
-          queryCache.reserve(distinct.size());
-          for (ValueId id : distinct) {
-            queryCache.emplace(id, getter(id, context));
-          }
-          return computeColumn(
-              candidateIds,
-              [&queryCache, queryIds](size_t row) -> const OptVector& {
-                return queryCache.at(queryIds[row]);
-              },
-              aIsQuery);
         }
       }
 
