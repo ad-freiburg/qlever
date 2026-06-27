@@ -8,12 +8,6 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
-#include <chrono>
-#include <cstdlib>
-#include <fstream>
-#include <mutex>
-
-#include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "util/Views.h"
 
@@ -48,7 +42,7 @@ ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
       EvaluatedTermData{std::move(str), type});
 }
 
-//  _____________________________________________________________________________
+// _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
