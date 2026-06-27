@@ -124,12 +124,6 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::defaultQueryTimeout_>(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
-  add("use-batch-vocab-lookup",
-      optionFactory
-          .getProgramOption<&RuntimeParameters::useBatchVocabLookup_>(),
-      "If true (default), CONSTRUCT export resolves vocabulary cache-misses "
-      "with a single batched (io_uring-backed) lookup; if false, with one "
-      "lookup per index. Used to select the baseline in the export benchmark.");
   add("service-max-value-rows,S",
       optionFactory
           .getProgramOption<&RuntimeParameters::serviceMaxValueRows_>(),
