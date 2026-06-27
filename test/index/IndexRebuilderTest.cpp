@@ -22,6 +22,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "libqlever/Qlever.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -594,8 +595,9 @@ TEST(IndexRebuilder, serverIntegration) {
   std::string indexName = "IndexRebuilder_serverIntegration";
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  server.initialize(indexName, false);
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  Server server{4321, 1, "accessToken", config};
   auto performRequest = [&threadPool, &server](auto& request) {
     using ResT = ad_utility::httpUtils::ResponseT;
     auto task =

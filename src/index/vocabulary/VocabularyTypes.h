@@ -20,64 +20,89 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 
-// The result type for batch vocabulary lookups. It is a shared_ptr to a span
-// of string_views, using the aliasing constructor to keep the underlying data
-// alive.
+// The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
-// Type-erased input range of batches (each batch is a vector of indices).
+// Type-erased input range of batches (each batch consists of a vector of
+// indices into the underlying Vocabulary, specifying which terms' string
+// representations need to be read from the underlying Vocabulary).
 using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
-// Type-erased output range of batch lookup results.
+
+// Type-erased output range of batch-lookup results (which are the string
+// representations of the terms specified by `VocabLookupInput` to be read).
 using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
-// Helper struct for batch lookup results. Holds the materialized string data
-// and the views into it. Use `finalize()` after filling `views` to set up the
-// span, then use `asResult()` to get a VocabBatchLookupResult via aliasing
-// shared_ptr.
-struct VocabBatchLookupData {
-  // Buffer for materialized string data (used by disk-based vocabularies).
-  std::string buffer;
-  // The individual string_views, one per looked-up index.
-  std::vector<std::string_view> views;
-  // The span over `views`, set by `finalize()`.
-  ql::span<std::string_view> span;
+// Base class for a vocabulary batch-lookup result, shared by the different
+// vocabulary implementations. Owns the materialized string data (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation) and one
+// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
+// The vocabulary implementation that performs the lookup fills `buffer()` and
+// `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
+// that keeps this object (and thus the storage the views point into) alive for
+// as long as the `VocabBatchLookupResult` is used.
+//
+// NOTE: Use `finalize()` after filling `views` to set up the span, then use
+// `asResult()` to get a `VocabBatchLookupResult` via aliasing shared_ptr.
+template <typename BufferType>
+class VocabLookupDataCommonBase {
+ public:
+  // Mutable access to the buffer that holds the materialized string data, for
+  // the producer to fill before calling `asResult`.
+  BufferType& buffer() { return buffer_; }
 
-  // Call after filling `views` to set up the span.
-  void finalize() { span = ql::span<std::string_view>{views}; }
+  // Mutable access to the views (one `string_view` per looked-up index, each
+  // pointing into `buffer()`), for the producer to fill before calling
+  // `asResult`.
+  std::vector<std::string_view>& views() { return views_; }
 
-  // Create a VocabBatchLookupResult using aliasing shared_ptr.
-  // `self` must be a shared_ptr to `this`.
+  // Convert a filled lookup-data object into the public result type
+  // `VocabBatchLookupResult`. `self` must be the owning shared_ptr of the
+  // object to convert. The returned aliasing shared_ptr exposes only the span
+  // over `views()`, but keeps the whole object (and thus the
+  // `buffer()`/`views()` that the span points into) alive as long as the result
+  // lives.
   static VocabBatchLookupResult asResult(
-      std::shared_ptr<VocabBatchLookupData> self) {
+      std::shared_ptr<VocabLookupDataCommonBase> self) {
     self->finalize();
-    auto* spanPtr = &self->span;
+    auto* spanPtr = &self->span_;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
                                                        spanPtr);
   }
+
+ private:
+  // Buffer for the materialized string data (used by disk-based vocabularies).
+  BufferType buffer_;
+
+  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  std::vector<std::string_view> views_;
+
+  // The span over `views_`, populated by `finalize()` and exposed by
+  // `asResult()`.
+  ql::span<std::string_view> span_;
+
+  // Set up `span_` over `views_`. Call after `views_` is fully filled; do not
+  // modify `views_` afterward, as `span_` would be invalidated.
+  void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
-// A batch lookup result backed by a PMR monotonic_buffer_resource.
-// Each decompressed word is individually allocated from the resource;
-// all allocations remain valid until this struct is destroyed.
-// Used by CompressedVocabulary::lookupBatch to avoid per-word heap allocations.
-struct PmrVocabBatchLookupData {
-  // The resource must be destroyed AFTER views (declared first = destroyed
-  // last).
-  std::unique_ptr<ql::pmr::monotonic_buffer_resource> resource;
-  std::vector<std::string_view> views;
-  ql::span<std::string_view> span;
+// A vocabulary batch-lookup result whose total size is known up front, so all
+// strings can be materialized into a single contiguous `buffer()` in one go
+// (e.g. reading a contiguous byte range from a disk-based vocabulary). Because
+// the `views()` point into that one `std::vector<char>`, the buffer must not be
+// grown after the views are created: a reallocation would move the bytes and
+// invalidate every existing `string_view`. Use `PmrVocabBatchLookupData`
+// instead when words are produced incrementally with unknown sizes.
+struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 
-  void finalize() { span = ql::span<std::string_view>{views}; }
-
-  static VocabBatchLookupResult asResult(
-      std::shared_ptr<PmrVocabBatchLookupData> self) {
-    self->finalize();
-    auto* spanPtr = &self->span;
-    return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
-                                                       spanPtr);
-  }
-};
+// A vocabulary batch-lookup result when words are produced incrementally with
+// sizes not known in advance (e.g. `CompressedVocabulary::lookupBatch`). A
+// single string buffer as in `VocabBatchLookupData` is unsuitable, as appending
+// would reallocate it and invalidate existing string_view's. Each word is
+// instead allocated from a monotonic_buffer_resource, giving pointer-stable
+// allocations. Exposed as a `VocabBatchLookupResult` via `asResult()`.
+using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
+struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`
