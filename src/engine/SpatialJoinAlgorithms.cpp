@@ -516,14 +516,18 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
   std::string sweeperTmpPath = basePath.parent_path().string();
 
-  // `parent_path()` returns `""` if parent path is empty, not `"."`
+  // `parent_path()` returns `""` if the parent path is empty, not `"."`.
   if (sweeperTmpPath.empty()) {
     sweeperTmpPath = ".";
   }
 
   std::string baseName = basePath.filename().string();
 
-  // the prefix added before each spatialjoin file
+  // The prefix added before each spatialjoin file.
+  //
+  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
+  // and the spatialjoin files end up named `.spatialjoin`. We should consider
+  // disallowing empty index base names at the engine boundary.
   std::string sweeperPrefix = baseName + ".spatialjoin";
 
   sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);

@@ -319,7 +319,7 @@ Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(const std::string& indexBasename,
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
                               TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
@@ -365,8 +365,9 @@ QueryExecutionContext* getQec(const std::string& indexBasename,
     // We have to pass `false` to `gtestCurrentTestName` to make this work for
     // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
     // also calls `getQec()` outside a running gtest.
-    std::string testIndexBasename = absl::StrCat(
-        indexBasename, gtestCurrentTestName(false), "_", contextMap.size());
+    std::string testIndexBasename =
+        absl::StrCat(indexBasenamePrefix, gtestCurrentTestName(false), "_",
+                     contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
                      for (const std::string& indexFilename :
