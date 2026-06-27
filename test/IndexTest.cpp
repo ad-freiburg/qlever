@@ -701,6 +701,68 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(IndexImpl, numWordsPerCodebookSettingRoundTrip) {
+  // Build a small index whose `settings.json` overrides
+  // `num-words-per-codebook` to a non-default value, and check that this value
+  // is parsed (the `if (j.count(...))` branch in
+  // `readIndexBuilderSettingsFromFile`), persisted in the meta-data JSON, and
+  // restored when the index is loaded again (in `readConfiguration`).
+  std::string basename = "numWordsPerCodebookSettingRoundTrip";
+  std::string ttlFile = basename + ".ttl";
+  std::string settingsFile = basename + ".settings.json";
+  absl::Cleanup cleanup{[&]() {
+    for (const std::string& f : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(f, false);
+    }
+    ad_utility::deleteFile(settingsFile, false);
+  }};
+
+  {
+    std::ofstream f{ttlFile};
+    f << "<x> <label> \"alpha\" . <x> <label> \"beta\" . <x> <label> "
+         "\"gamma\" .";
+  }
+  {
+    std::ofstream f{settingsFile};
+    nlohmann::json settings;
+    settings["prefixes-external"] = std::vector<std::string>{""};
+    settings["languages-internal"] = std::vector<std::string>{""};
+    settings["num-words-per-codebook"] = 8;
+    f << settings.dump();
+  }
+
+  static std::ostringstream ignoreLogStream;
+  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  absl::Cleanup resetLog{
+      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
+
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFile);
+    // Use a compressed vocabulary so that the value actually affects the
+    // codebooks.
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        ad_utility::VocabularyType{
+            ad_utility::VocabularyType::Enum::OnDiskCompressed});
+    index.createFromFiles({qlever::InputFileSpecification{
+        ttlFile, qlever::Filetype::Turtle, std::nullopt}});
+  }
+
+  // The setting was parsed and persisted in the meta-data JSON.
+  {
+    nlohmann::json metaData;
+    std::ifstream f{basename + CONFIGURATION_FILE};
+    f >> metaData;
+    EXPECT_EQ(metaData["num-words-per-codebook"], 8u);
+  }
+
+  // Load the index from disk; the value is restored in `readConfiguration`.
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  EXPECT_NO_THROW(index.createFromOnDiskIndex(basename, false));
+}
+
 TEST(IndexTest, getBlankNodeManager) {
   // The `blankNodeManager_` is initialized after initializing the Index itself.
   // Therefore we expect a throw when the getter is called by an

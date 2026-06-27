@@ -387,6 +387,12 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
+  // Propagate the (possibly overridden) number of words per codebook to the
+  // vocabulary so that the word writer created later uses it, and persist it in
+  // the meta-data JSON so the reader uses the same value.
+  vocab_.setNumWordsPerCodebook(numWordsPerCodebook_);
+  configurationJson_["num-words-per-codebook"] = numWordsPerCodebook_;
+
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeRdfParser(files));
@@ -1303,6 +1309,14 @@ void IndexImpl::readConfiguration() {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // Restore the number of words per codebook (defaults to the historical value
+  // for old indexes that don't have this key). This must happen before
+  // `vocab_.readFromFile(...)` so that the compressed vocabulary uses the
+  // correct codebook block size.
+  numWordsPerCodebook_ =
+      configurationJson_.value("num-words-per-codebook", size_t{1} << 20);
+  vocab_.setNumWordsPerCodebook(numWordsPerCodebook_);
+
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
   loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);
@@ -1482,6 +1496,12 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                 << parserBatchSize_
                 << " This might influence performance during index build."
                 << std::endl;
+  }
+
+  if (j.count("num-words-per-codebook")) {
+    numWordsPerCodebook_ = size_t{j["num-words-per-codebook"]};
+    AD_LOG_INFO << "Overriding setting num-words-per-codebook to "
+                << numWordsPerCodebook_ << std::endl;
   }
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";

@@ -138,6 +138,24 @@ class SplitVocabulary {
   // Close all underlying vocabularies.
   void close();
 
+  // Forward the number of words per codebook to all underlying vocabularies
+  // that support it (e.g. the compressed ones). No-op for vocabularies without
+  // codebooks.
+  void setNumWordsPerCodebook(size_t numWordsPerCodebook) {
+    for (auto& vocab : underlying_) {
+      std::visit(
+          [numWordsPerCodebook](auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (requires(T& vv) {
+                            vv.setNumWordsPerCodebook(numWordsPerCodebook);
+                          }) {
+              v.setNumWordsPerCodebook(numWordsPerCodebook);
+            }
+          },
+          vocab);
+    }
+  }
+
   // Read the vocabulary from files: all underlying vocabularies will be read
   // using the filenames returned by SplitFilenameFunction for the given base
   // filename.

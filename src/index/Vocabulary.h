@@ -240,6 +240,16 @@ class Vocabulary {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
     }
   }
+
+  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, forward the
+  // number of words per codebook to the inner compressed vocabularies. For
+  // other underlying vocabularies this is a no-op.
+  void setNumWordsPerCodebook(size_t numWordsPerCodebook) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setNumWordsPerCodebook(
+          numWordsPerCodebook);
+    }
+  }
 };
 
 namespace detail {

@@ -84,6 +84,15 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   }
 }
 
+// _______________________________________________________
+TEST(CompressedVocabulary, SetAndGetNumWordsPerCodebook) {
+  CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
+  // The default value is the historical block size of 1 million.
+  EXPECT_EQ(v.getNumWordsPerCodebook(), 1UL << 20);
+  v.setNumWordsPerCodebook(4);
+  EXPECT_EQ(v.getNumWordsPerCodebook(), 4u);
+}
+
 // The generic tests from the vocabulary testing framework, templated on all the
 // compressors that we have defined.
 
@@ -104,7 +113,8 @@ struct CompressedVocabularyF : public testing::Test {
     return [filename =
                 std::move(filename)](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
-      CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
+      CompressedVocabulary<VocabularyOnDisk, Compressor> vocab;
+      vocab.setNumWordsPerCodebook(4);
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
       auto& writer = *writerPtr;
       for (const auto& word : words) {
@@ -146,7 +156,8 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
-  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam> vocab;
+  vocab.setNumWordsPerCodebook(4);
   std::string filename = gtestCurrentTestName();
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
@@ -163,7 +174,8 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ASSERT_FALSE(blob.empty());
 
   // Read using serializer into a different vocabulary.
-  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> readVocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam> readVocab;
+  readVocab.setNumWordsPerCodebook(4);
   ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
   readSerializer | readVocab;
   assertThatRangesAreEqual(vocab, readVocab);
