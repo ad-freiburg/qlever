@@ -41,6 +41,8 @@ static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
+  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{iri.toSparql(), nullptr})};
   // The parser/data `Iri` stores the already-normalized QLever internal string
   // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
   // source text. Therefore, construct the `TripleComponent` from exactly that
@@ -49,7 +51,8 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
       ad_utility::triple_component::Iri::fromStringRepresentation(
           iri.toStringRepresentation())});
   return PrecomputedConstant{
-      std::make_shared<const EvaluatedTermData>(iri.iri(), nullptr), dedupId};
+      std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
+      dedupId};
 }
 
 // _____________________________________________________________________________
@@ -130,46 +133,47 @@ ConstructTemplatePreprocessor::preprocessTriple(
 
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
-    const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    const Index& index) {
-  return ConstructTemplatePreprocessor{variableColumns, index}.run(
-      templateTriples);
-}
+    const Triples& templateTriples,
+    const VariableToColumnMap& variableColumns) {
+  PreprocessedConstructTemplate result;
+  // Tracks which `IdTable` column indices have already been added to
+  // `result.uniqueVariableColumns_` to avoid duplicates.
+  ad_utility::HashSet<size_t> seenColumns;
 
-// _____________________________________________________________________________
-std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
-    const GraphTerm& term, PositionInTriple role,
-    const VariableToColumnMap& variableColumns, const Index& index,
-    LocalVocab& localVocabForConstants) {
-  return ConstructTemplatePreprocessor{variableColumns, index,
-                                       localVocabForConstants}
-      .preprocessTermImpl(term, role);
-}
-
-// _____________________________________________________________________________
-PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
-    const Triples& templateTriples) && {
-  for (const auto& triple : templateTriples) {
-    auto preprocessedTriple = preprocessTriple(triple);
-    if (!preprocessedTriple) continue;
-
-    // Collect each unique `IdTable` column index.
-    // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`
-    // column index so that it matches the keys in
-    // `BatchEvaluationResult::variablesByColumn_`.
-    for (const PrecomputedVariable& var :
-         ad_utility::filterRangeOfVariantsByType<PrecomputedVariable>(
-             *preprocessedTriple)) {
-      if (seenColumns_.insert(var.columnIndex_).second) {
-        result_.uniqueVariableColumns_.push_back(var.columnIndex_);
-      }
-    }
-    result_.tripleContainsBlankNode_.push_back(
-        tripleContainsBlankNode(*preprocessedTriple));
-    result_.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
+  // _____________________________________________________________________________
+  std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
+      const GraphTerm& term, PositionInTriple role,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      LocalVocab& localVocabForConstants) {
+    return ConstructTemplatePreprocessor{variableColumns, index,
+                                         localVocabForConstants}
+        .preprocessTermImpl(term, role);
   }
 
-  return std::move(result_);
-}
+  // _____________________________________________________________________________
+  PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
+      const Triples& templateTriples)&& {
+    for (const auto& triple : templateTriples) {
+      auto preprocessedTriple = preprocessTriple(triple);
+      if (!preprocessedTriple) continue;
+
+      // Collect each unique `IdTable` column index.
+      // `PrecomputedVariable::columnIndex_` is kept as the original `IdTable`
+      // column index so that it matches the keys in
+      // `BatchEvaluationResult::variablesByColumn_`.
+      for (const PrecomputedVariable& var :
+           ad_utility::filterRangeOfVariantsByType<PrecomputedVariable>(
+               *preprocessedTriple)) {
+        if (seenColumns_.insert(var.columnIndex_).second) {
+          result_.uniqueVariableColumns_.push_back(var.columnIndex_);
+        }
+      }
+      result_.tripleContainsBlankNode_.push_back(
+          tripleContainsBlankNode(*preprocessedTriple));
+      result_.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
+    }
+
+    return std::move(result_);
+  }
 
 }  // namespace qlever::constructExport

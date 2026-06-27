@@ -39,4 +39,5 @@ if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
 endif()
 
 add_library(server Server.cpp)
-qlever_target_link_libraries(server engine util index parser global http SortPerformanceEstimator)
+qlever_target_link_libraries(server engine util index parser global http
+SortPerformanceEstimator qlever)

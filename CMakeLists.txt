@@ -64,6 +64,8 @@ if (CHEAPER_COMPILATION)
     # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
     # even with debug builds.
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    # General flag used throughout the codebase to opt into cheaper-to-compile alternatives.
+    add_compile_definitions(QLEVER_CHEAPER_COMPILATION)
 endif()
 
 # Coroutines require an additional compiler flag that is called differently
@@ -85,7 +87,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
-        add_compile_options(-fcoroutines)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
@@ -113,13 +115,16 @@ set(CMAKE_CXX_FLAGS_ASAN
         CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
         FORCE)
 
-# Add colored output for Ninja
+# Add colored output for Ninja. Use per-language compiler-ID generator expressions so that
+# flags are only passed to the compiler that actually supports them (e.g. uriparser can be
+# compiled by /usr/bin/cc even when the main build uses Clang).
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        add_compile_options(-fcolor-diagnostics)
-    endif ()
+    add_compile_options(
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+    )
 endif ()
 
 # Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
@@ -197,12 +202,12 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        GIT_TAG 2d2a6d74ddf28447afabb75943913a6445a27d4f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
-add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=1 SPATIALJOIN_NO_ZLIB=1)
 
 ################################
 # Threading
@@ -281,7 +286,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -318,7 +323,7 @@ endif ()
 
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
 
 if (${PERFTOOLS_PROFILER})
@@ -437,10 +442,28 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
+
+################################
+# uriparser
+################################
+FetchContent_Declare(
+        uriparser
+        GIT_REPOSITORY https://github.com/uriparser/uriparser.git
+        GIT_TAG 04d8b8df5e0c6bf6c06e472540c015943a613bd2 # 1.0.0
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
+)
+
+set(URIPARSER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
+
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -509,22 +532,73 @@ if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "
   message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
-##################################################
-# Precompiled headers
-set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
-
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
-if (USE_PRECOMPILED_HEADERS)
-    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
-    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
-endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+
+##################################################
+# Precompiled headers
+#
+# PRECOMPILED_HEADER_FILES_EXTERNAL: stable third-party headers that never change
+# and are expensive to parse. Applied to every library target.
+set(PRECOMPILED_HEADER_FILES_EXTERNAL
+    <absl/strings/str_cat.h>
+    <absl/container/flat_hash_map.h>
+    <absl/container/flat_hash_set.h>
+    <range/v3/all.hpp>
+    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
+    # nlohmann header already sees the correct flag value.
+    <nlohmann/json.hpp>
+)
+
+# PRECOMPILED_HEADER_FILES_WITH_BEAST: extends EXTERNAL with boost networking and
+# iostreams. Applied to targets that transitively include beast.h or
+# boost::iostreams (engine, index, http). Without this, the index target would
+# still parse beast.h (~8 s) on every TU that reaches it via
+# Operation.h → QueryExecutionContext.h → ResponseMiddleware.h → beast.h, even
+# though it is already covered for engine TUs.
+set(PRECOMPILED_HEADER_FILES_WITH_BEAST
+    <util/http/beast.h>
+    <boost/iostreams/filter/gzip.hpp>
+    <boost/iostreams/filtering_stream.hpp>
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_ENGINE
+    src/util/HashMap.h
+    src/engine/Operation.h
+    src/engine/QueryExecutionTree.h
+    ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+set(PRECOMPILED_HEADER_FILES_PARSER
+    src/engine/sparqlExpressions/AggregateExpression.h
+    ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp
+    ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+
+set(PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS
+   src/engine/sparqlExpressions/SparqlExpression.h
+   ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+    target_precompile_headers(sparqlExpressions PRIVATE ${PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS})
+    # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
+    # and `boost::iostreams` via `ResponseMiddleware.h` / `CompressorStream.h`.
+    target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        target_precompile_headers(http PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    endif ()
+    target_precompile_headers(rdfTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(rdfEscaping PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+endif ()
+
 add_subdirectory(benchmark)
 
 enable_testing()
