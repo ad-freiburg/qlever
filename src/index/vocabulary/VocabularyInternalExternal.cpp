@@ -38,17 +38,26 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   // Step 4: Combine results. We need a struct that keeps both the internal and
   // external results alive, since our string_views point into their memory.
   struct CombinedData {
+    // Keeps the internal view objects alive, but NOT their underlying storage:
+    // that storage lives in `internalVocab_`s RAM, owned by this instance,
+    // which must outlive the returned `VocabBatchLookupResult`.
     decltype(internalResult) internal;
+    // Owns the disk buffer that the external views point into, keeping it.
+    // alive.
     VocabBatchLookupResult external;
-    std::vector<std::string_view> views;
-    ql::span<std::string_view> span;
+    std::vector<std::string_view> views;  // the merged view list
+    ql::span<std::string_view> span;      // a span over `views`
   };
 
+  // Hand ownership of both source results to `combined` so it keeps their data
+  // alive. Size `views` to hold one merged entry per input index.
   auto combined = std::make_shared<CombinedData>();
   combined->internal = std::move(internalResult);
   combined->external = std::move(externalResult);
   combined->views.resize(indices.size());
 
+  // Merge: take each word form the internal result if present, otherwise pull
+  // the next external result.
   size_t externalIdx = 0;
   for (size_t i = 0; i < indices.size(); ++i) {
     if ((*combined->internal)[i].has_value()) {
@@ -58,6 +67,10 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     }
   }
 
+  // Expose a `span` via an aliasing shared_ptr that shares `combined`s
+  // refcount: dereferencing the result yields the span over the merged `views`,
+  // while holding it keeps the whole `CombinedData` alive, and thus the
+  // underlying storage those merged `views` point into.
   combined->span = ql::span<std::string_view>{combined->views};
   auto* spanPtr = &combined->span;
   return VocabBatchLookupResult(std::move(combined), spanPtr);
