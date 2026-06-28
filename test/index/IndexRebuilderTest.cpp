@@ -11,6 +11,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <filesystem>
 
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -21,6 +22,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "libqlever/Qlever.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -115,8 +117,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  auto makeVocabEntry = [](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str)};
+  auto makeVocabEntry = [&oldIndex](std::string_view str) {
+    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -157,11 +159,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                   std::make_pair(toBits(h),
                                  Id::makeFromVocabIndex(VocabIndex::make(7))),
                   std::make_pair(toBits(j),
-                                 Id::makeFromVocabIndex(VocabIndex::make(14))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(13))),
                   std::make_pair(toBits(l),
-                                 Id::makeFromVocabIndex(VocabIndex::make(16))),
+                                 Id::makeFromVocabIndex(VocabIndex::make(15))),
                   std::make_pair(toBits(m), Id::makeFromVocabIndex(
-                                                VocabIndex::make(17)))));
+                                                VocabIndex::make(16)))));
 
   Index::Vocab newVocab;
   newVocab.resetToType(type);
@@ -179,12 +181,11 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(9)], HAS_PATTERN_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(10)], HAS_PREDICATE_PREDICATE);
   EXPECT_EQ(newVocab[VocabIndex::make(11)], QLEVER_INTERNAL_GRAPH_IRI);
-  EXPECT_EQ(newVocab[VocabIndex::make(12)], LANGUAGE_PREDICATE);
-  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<i>");
-  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<j>");
-  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
-  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
-  EXPECT_EQ(newVocab[VocabIndex::make(17)], "<m>");
+  EXPECT_EQ(newVocab[VocabIndex::make(12)], "<i>");
+  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<j>");
+  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<k>");
+  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<l>");
+  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
 }
 
 // _____________________________________________________________________________
@@ -271,24 +272,20 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                DEFAULT_GRAPH_IRI)}
-               .toValueId(index.getVocab(), index.encodedIriManager())
+               .toValueId(index)
                .value();
 
-  index.deltaTriplesManager().modify<void>([&cancellationHandle,
-                                            g](DeltaTriples& deltaTriples) {
-    LocalVocabEntry entry1{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<a2>")};
-    LocalVocabEntry entry2{
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            "<d2>")};
-    auto a2 = Id::makeFromLocalVocabIndex(&entry1);
-    auto d2 = Id::makeFromLocalVocabIndex(&entry2);
-    deltaTriples.insertTriples(
-        cancellationHandle,
-        {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
-         IdTriple<0>{std::array{V(0), d2, B(1), g}}});
-  });
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
+        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
+        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        auto a2 = Id::makeFromLocalVocabIndex(&entry1);
+        auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
+             IdTriple<0>{std::array{V(0), d2, B(1), g}}});
+      });
 
   auto [state, vocabEntries, rawBlocks] =
       index.deltaTriplesManager()
@@ -404,7 +401,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
-  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = "/tmp/createPermutationWriterTask";
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
@@ -468,7 +465,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                  DeltaTriples& deltaTriples) {
       auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                                    DEFAULT_GRAPH_IRI)}
-                   .toValueId(index.getVocab(), index.encodedIriManager())
+                   .toValueId(index)
                    .value();
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
@@ -487,7 +484,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -508,6 +505,56 @@ TEST(IndexRebuilder, materializeToIndex) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
+  // Build a regular source index (with the default, unlimited allocator), but
+  // then load it with an allocator that has zero available memory. Rebuilding
+  // such an index should still succeed, because the rebuild streams the data
+  // and does not rely on the source index's allocator.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string sourceIndexName = "materializeToIndexWithZeroMemorySourceIndex";
+  std::string baseFolder = "/tmp/" + sourceIndexName;
+  std::string newIndexName = baseFolder + "/index";
+  std::string logFile = newIndexName + ".log";
+
+  // Build the on-disk source index using the default unlimited allocator.
+  ad_utility::testing::makeTestIndex(sourceIndexName,
+                                     "<a> <b> <c> . <d> <e> _:f .");
+
+  // Load the source index with a zero-memory allocator.
+  Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+  index.createFromOnDiskIndex(sourceIndexName, false);
+
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
+        auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                                     DEFAULT_GRAPH_IRI)}
+                     .toValueId(index)
+                     .value();
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                    Id::makeFromInt(3), g}}});
+      });
+
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  std::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+
+  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
+                                             state, vocab, blankNodes,
+                                             cancellationHandle, logFile));
+
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  EXPECT_EQ(newIndex.numTriples().normal, 3);
+}
+
+// _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
@@ -525,19 +572,34 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       ad_utility::Exception);
 }
 
+namespace {
+// Get rid of previous files with the specified prefix.
+void cleanFilesWithPrefix(std::string_view prefix) {
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(".")) {
+    std::string name = entry.path().filename().string();
+    if (ql::starts_with(name, prefix)) {
+      ad_utility::deleteFile(name);
+    }
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
+  cleanFilesWithPrefix("my-name");
+  cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
   std::string indexName = "IndexRebuilder_serverIntegration";
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  server.initialize(indexName, false);
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  Server server{4321, 1, "accessToken", config};
   auto performRequest = [&threadPool, &server](auto& request) {
-    namespace http = boost::beast::http;
-    using ResT = std::optional<http::response<http::string_body>>;
+    using ResT = ad_utility::httpUtils::ResponseT;
     auto task =
         server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
                                               ResT>(request);
@@ -562,10 +624,8 @@ TEST(IndexRebuilder, serverIntegration) {
   auto response1 = future1.get();
   auto response2 = future2.get();
 
-  ASSERT_TRUE(response1.has_value());
-  ASSERT_TRUE(response2.has_value());
-  EXPECT_EQ(response1.value().base().result(), boost::beast::http::status::ok);
-  EXPECT_EQ(response2.value().base().result(),
+  EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
   // We use this config as a proxy for the index rebuilder having finished
@@ -575,10 +635,30 @@ TEST(IndexRebuilder, serverIntegration) {
   auto request3 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
-  ASSERT_TRUE(response3.has_value());
-  EXPECT_EQ(response3.value().base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
   EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+
+  // The index with the same name already exists, so we don't want to overwrite
+  // it.
+  auto request4 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request4).get(),
+      ::testing::HasSubstr("already files with the same base name"));
+
+  // The index has to reside within the same directory as the original index.
+  auto request5 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request5).get(),
+      ::testing::HasSubstr("not located in the same directory"));
+
+  auto request6 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request6).get(),
+      ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }

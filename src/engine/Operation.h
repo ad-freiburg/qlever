@@ -21,14 +21,34 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class ExternalValues;
+namespace parsedQuery {
+struct Bind;
+}
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
   ONLY_IF_CACHED,
   LAZY_IF_SUPPORTED
+};
+
+enum class LimitOffsetHandling {
+  // The operation does not handle `LIMIT`/`OFFSET` itself; it must be applied
+  // externally on the result.
+  NONE,
+  // The operation propagates `LIMIT`/`OFFSET` to its children to reduce their
+  // work, but does not enforce it on its own output — an external apply is
+  // still required.
+  PARTIAL,
+  // The operation handles `LIMIT`/`OFFSET` end-to-end so that no external
+  // apply is needed. This can mean applying it during its own processing
+  // (e.g. `IndexScan` stops scanning after N rows), forwarding it to a child
+  // that handles it (e.g. `Bind`, `Sort`), or both.
+  FULL
 };
 
 class Operation {
@@ -60,7 +80,7 @@ class Operation {
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimitOffset()`
+  //    efficient calculation of the limit (see also the `handlesLimitOffset()`
   //    function).
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
@@ -88,8 +108,8 @@ class Operation {
   mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
-  // True if this operation does not support limits/offsets natively and a
-  // limit/offset is applied post computation.
+  // True if this operation does not handle limits/offsets itself and the
+  // limit/offset is therefore applied post computation.
   bool externalLimitApplied_ = false;
 
   // See the documentation of the getter function below.
@@ -99,10 +119,7 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
-
-  // Typical Constructor.
+  // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
@@ -226,6 +243,10 @@ class Operation {
     return false;
   }
 
+  // Check whether all variables given are covered by this `Operation` and are
+  // always defined.
+  bool coversVariables(const std::vector<const Variable*>& variables) const;
+
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
@@ -288,17 +309,21 @@ class Operation {
     return false;
   }
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
+  // Return how this operation handles `LIMIT` and `OFFSET`. See the docs of
+  // `LimitOffsetHandling` for the meaning of `NONE` / `PARTIAL` / `FULL`.
+  [[nodiscard]] virtual LimitOffsetHandling handlesLimitOffset() const {
+    return LimitOffsetHandling::NONE;
+  }
 
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
+  // way.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+    // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
+    // after the computation of the result. Make sure to also override
+    // `handlesLimitOffset()` if this function is overridden, otherwise the
+    // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
   // This function is called when the operation's result is requested to be
@@ -342,6 +367,16 @@ class Operation {
 
   const auto& getLimitOffset() const { return limitOffset_; }
 
+  // Directly set the `limitOffset_` without merging and without calling
+  // `onLimitOffsetChanged`. The only intended use case is to restore a
+  // previously set limit/offset that was removed by a cloning/rewriting
+  // operation (e.g. column stripping). In almost all other cases, use
+  // `applyLimitOffset` instead.
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    limitOffset_ = limitOffsetClause;
+  }
+
  private:
   // Actual implementation of `clone()` without extra checks.
   virtual std::unique_ptr<Operation> cloneImpl() const = 0;
@@ -349,6 +384,19 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Recursively collect all `ExternalValues` operations in this
+  // operation tree. This allows the following pattern:
+  // 1. Parse and plan a query that contains an `ExternalValues`
+  //    clause.
+  // 2. Modify the contents of the `ExternalValues` after obtaining
+  //    them from the planned `QueryExecutionTree` via this function.
+  // 3. Execute the query.
+  // 4. Repeat steps 2 and 3 with different values. This does not require
+  //    running the parser and query planner again (which is the point of the
+  //    whole `ExternalValues` feature). For a complete E2E example,
+  //    see QleverTest.cpp.
+  virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.
@@ -371,6 +419,17 @@ class Operation {
   // operation? The the result wouldn't have to be `optional`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
+
+  // Try to create a version of this operation with an additional column from a
+  // `BIND` pushed down into the tree. The default is to disallow push down. All
+  // operations where a `BIND` push down is semantically possible should
+  // override this method. Pushing a `BIND` down to a materialized view might
+  // produce a cheaper query plan for example. This function is tested in the
+  // `BindRewrite` test case in `MaterializedViewsTest`.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind&) const {
+    return std::nullopt;
+  };
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -411,6 +470,24 @@ class Operation {
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
 
+  // Internal default implementation for `makeTreeWithBindColumn`. This
+  // implementation makes the assumption that a `BIND` can be pushed into this
+  // `Operation` iff any of its children accepts the `BIND` push down. This is
+  // the correct behavior for various operations like `Join`, which make use of
+  // this function for their `makeTreeWithBindColumn` override. Returns the
+  // index of the replaced child and its new `QueryExecutionTree`.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
+  // be instantiated in the code for operations that use it.
+  CPP_template(typename MakeCloneWithNewChildren)(
+      requires ad_utility::InvocableWithExactReturnType<
+          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+          std::vector<std::shared_ptr<QueryExecutionTree>>>)
+      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          const parsedQuery::Bind& bind,
+          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   virtual Result computeResult(bool requestLaziness) = 0;
@@ -420,10 +497,10 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimitOffset() == true`, then the operation does
-  // already track the limit stats correctly and there's no need to keep track
-  // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
-  // be handled.
+  // operation. If `handlesLimitOffset() == LimitOffsetHandling::FULL`, then
+  // the operation already tracks the limit stats correctly and there's no
+  // need to keep track of both. Otherwise `externalLimitApplied_` decides how
+  // stat tracking should be handled.
   void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
                           std::chrono::microseconds duration) const;
 
@@ -500,6 +577,10 @@ class Operation {
   // of the result).
   virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
 
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
@@ -520,6 +601,7 @@ class Operation {
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
   FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
   FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
   FRIEND_TEST(Operation,

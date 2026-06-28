@@ -341,3 +341,93 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
   return DateYearOrDuration(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
+    const DateYearOrDuration& rhs) const {
+  if (isDate() && rhs.isDate()) {
+    // `Date` - `Date` => `DayTimeDuration` ; getting time between the two
+    // `Date`s.
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+
+    std::optional<DayTimeDuration> difference = ownDate - otherDate;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` - `DayTimeDuration` => `DayTimeDuration`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+    return DateYearOrDuration{ownDuration - otherDuration};
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` - `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<Date> difference = ownDate - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isLongYear() && rhs.isLongYear()) {
+    //  `LargeYear` - `LargeYear` => `DayTimeDuration`.
+    using namespace std::chrono;
+    // Assuming Jan 1st of respective year because only year is stored.
+    auto year1 = year_month_day{year(getYear()) / 1 / 1};
+    auto year2 = year_month_day{year(rhs.getYear()) / 1 / 1};
+
+    auto difference = sys_days(year1) - sys_days(year2);
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+    auto diff_count = difference.count();
+    if (diff_count < 0) {
+      durationType = DayTimeDuration::Type::Negative;
+      diff_count = -diff_count;
+    }
+    return DateYearOrDuration{
+        DayTimeDuration{durationType, static_cast<int>(diff_count), 0, 0, 0}};
+  }
+
+  // The following will not be implemented (not viable):
+  //  `DayTimeDuration` - `Date`,
+  //  `DayTimeDuration` - `LargeYear`.
+
+  // No viable subtraction.
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
+    const DateYearOrDuration& rhs) const {
+  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` + `DayTimeDuration` => `DayTimeDuration`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+    return DateYearOrDuration{ownDuration + otherDuration};
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` + `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<Date> sum = ownDate + otherDuration;
+    if (!sum.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{sum.value()};
+    }
+  }
+
+  // The following will not be implemented (not viable):
+  //  `Date` + `Date`,
+  //  `DayTimeDuration` + `Date`,
+  //  `DayTimeDuration` + `LargeYear`,
+  //  `LargeYear` + `LargeYear` .
+
+  // No viable addition.
+  return std::nullopt;
+}
+#endif

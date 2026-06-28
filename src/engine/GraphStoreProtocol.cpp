@@ -85,6 +85,26 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 }
 
 // ____________________________________________________________________________
+ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
+    const ad_utility::triple_component::Iri& graphIri) {
+  namespace http = boost::beast::http;
+  return ResponseMiddleware(
+      [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
+        response.result(http::status::created);
+        response.set(http::field::location,
+                     asStringViewUnsafe(graphIri.getContent()));
+        return std::move(response);
+      });
+}
+
+// ____________________________________________________________________________
+ad_utility::triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
+  ad_utility::UuidGenerator uuidGen;
+  return ad_utility::triple_component::Iri::fromIriref(
+      absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX, uuidGen(), ">"));
+}
+
+// ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(
     const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
   // Construct the parsed query from its short equivalent SPARQL Update
@@ -102,6 +122,22 @@ ParsedQuery GraphStoreProtocol::transformGet(
 }
 
 // ____________________________________________________________________________
+ParsedQuery GraphStoreProtocol::transformHead(
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
+  auto pq = transformGet(graph, encodedIriManager);
+  // HEAD does the same as GET except that the response has no body.
+  // Overwrite the body to be empty.
+  pq.responseMiddleware_ =
+      ResponseMiddleware([](ResponseMiddleware::ResponseT&& response) {
+        response.body() = []() -> cppcoro::generator<std::string> {
+          co_return;
+        }();
+        return response;
+      });
+  return pq;
+}
+
+// ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
                                                 const Index& index) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
@@ -114,8 +150,24 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
       return "DROP DEFAULT";
     }
   };
-  return ad_utility::getSingleElement(SparqlParser::parseUpdate(
+  auto update = ad_utility::getSingleElement(SparqlParser::parseUpdate(
       index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
+  // DELETE must return 404 if the graph being deleted does not exist (GSP 5.4).
+  // With implicit graph existence a graph existed iff triples were actually
+  // deleted.
+  update.responseMiddleware_ = ResponseMiddleware(
+      [](ResponseMiddleware::ResponseT response, const auto& result) {
+        AD_CORRECTNESS_CHECK(result.size() == 1);
+        const auto& updateMeta = result.at(0);
+        AD_CORRECTNESS_CHECK(updateMeta.inUpdate_.has_value());
+        if (updateMeta.inUpdate_->triplesDeleted_ == 0) {
+          response.result(boost::beast::http::status::not_found);
+        } else {
+          response.result(boost::beast::http::status::ok);
+        }
+        return response;
+      });
+  return update;
 }
 
 #endif

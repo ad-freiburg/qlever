@@ -70,6 +70,10 @@ SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
@@ -92,6 +96,7 @@ SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 

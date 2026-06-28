@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -84,7 +85,7 @@ class WordWriterBase {
  private:
   ad_utility::ThrowInDestructorIfSafe throwIfSafe_;
   std::string readableName_;
-  bool finishWasCalled_ = false;
+  std::atomic_bool finishWasCalled_ = false;
 
  public:
   // Write the next word. The `isExternal` flag is ignored for all the
@@ -117,7 +118,7 @@ class WordWriterBase {
   // files. After calling `finish`, no more calls to `operator()` are allowed.
   // The destructor also calls `finish` if it wasn't called manually.
   virtual void finish() final {
-    if (std::exchange(finishWasCalled_, true)) {
+    if (finishWasCalled_.exchange(true)) {
       return;
     }
     finishImpl();

@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 

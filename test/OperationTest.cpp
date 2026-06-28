@@ -177,21 +177,23 @@ class OperationTestFixture : public testing::Test {
  protected:
   std::vector<std::string> jsonHistory;
 
-  Index index = []() {
+  std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
     indexConfig.blocksizePermutations = 32_B;
-    return makeTestIndex("OperationTest", std::move(indexConfig));
+
+    return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
-  MaterializedViewsManager materializedViewsManager;
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager =
+      std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -434,7 +436,8 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+      ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+      qec->getLocalVocabContext()});
   ValuesForTesting valuesForTesting{
       qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{}, std::move(localVocab)};
@@ -482,17 +485,19 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
 // _____________________________________________________________________________
 TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
-  const Index& index = ad_utility::testing::getQec()->getIndex();
+  auto index = std::make_shared<Index>(
+      makeTestIndex("ensureFailedStatusIsSetWhenGeneratorThrowsException",
+                    TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -509,23 +514,59 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
 }
 
 // _____________________________________________________________________________
-TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
-  uint32_t updateCallCounter = 0;
-  auto idTable = makeIdTableFromVector({{}});
-  const Index& index = getQec()->getIndex();
+TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
+  bool signaledUpdate = false;
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "ensureFailedStatusIsSetWhenGeneratorIsCancelled", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
+      [&](std::string) { signaledUpdate = true; }};
+  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
+                                       throw CancellationException{
+                                           CancellationState::MANUAL,
+                                           "Operation was cancelled"};
+                                       co_return;
+                                     }()};
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            Status::lazilyMaterializedInProgress);
+
+  EXPECT_THROW(result.idTables().begin(), ad_utility::CancellationException);
+
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::cancelled);
+  EXPECT_TRUE(signaledUpdate);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  uint32_t updateCallCounter = 0;
+  auto idTable = makeIdTableFromVector({{}});
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", TestIndexConfig{}));
+  QueryResultCache cache{};
+  NamedResultCache namedCache{};
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  QueryExecutionContext context{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -563,17 +604,19 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
-  const Index& index = getQec()->getIndex();
+  auto index = std::make_shared<Index>(
+      makeTestIndex("ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption",
+                    TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  MaterializedViewsManager materializedViewsManager;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
-      &materializedViewsManager,
+      materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -798,7 +841,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
 }
 
 // _____________________________________________________________________________
-TEST(OperationTest, disableCaching) {
+TEST(OperationTest, disableCachingForOperation) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
@@ -833,4 +876,33 @@ TEST(OperationTest, disableCaching) {
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
   valuesForTesting.getResult(false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, disableCachingGlobally) {
+  auto qecPtr = getQec();
+  auto qecCopy = *qecPtr;
+  qecCopy.setDisableCachingOnlyForTesting(true);
+  auto* qec = &qecCopy;
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
+
+  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+                         qec->locatedTriplesState().index_};
+
+  // Initially not contained in the cache (because we cleared the cache).
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(true);
+  // Still not stored in the cache, because caching was disabled.
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+
+  // ONLY_IF_CACHED returns nullptr when caching is disabled.
+  EXPECT_EQ(valuesForTesting.getResult(false, ComputationMode::ONLY_IF_CACHED),
+            nullptr);
 }

@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "index/LocalVocabEntry.h"
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
@@ -23,8 +24,9 @@ TEST(NamedResultCache, basicWorkflow) {
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref("<bliBlaBlubb>"));
+  auto* qec = ad_utility::testing::getQec();
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      "<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -37,7 +39,6 @@ TEST(NamedResultCache, basicWorkflow) {
         get, UnorderedElementsAreArray(localVocab.getAllWordsForTesting()));
   };
 
-  auto qec = ad_utility::testing::getQec();
   auto getCacheValue = [&varColMap, &localVocab](const auto& table) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
@@ -133,10 +134,9 @@ TEST(NamedResultCache, E2E) {
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
-  auto litOrIri =
-      ad_utility::triple_component::LiteralOrIri::iriref("<notInVocab>");
   auto notInVocab = Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(litOrIri));
+      dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTable(), matchesIdTable(expected));

@@ -90,7 +90,8 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTable& a, const IdTable& b, IdTable* result) const;
+  void join(const IdTableView<0>& a, const IdTableView<0>& b,
+            IdTable* result) const;
 
  public:
   // Fallback implementation of a join that is used when at least one of the two
@@ -128,6 +129,9 @@ class Join : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the

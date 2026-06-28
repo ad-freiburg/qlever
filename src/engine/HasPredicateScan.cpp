@@ -282,8 +282,7 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   };
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id =
-        tc.toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
+    std::optional<Id> id = tc.toValueId(getIndex());
     if (!id.has_value()) {
       AD_THROW("The entity '" + tc.toRdfLiteral() +
                "' required by `ql:has-predicate` is not in the vocabulary.");
@@ -351,7 +350,7 @@ void HasPredicateScan::computeFreeO(
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
                               Variable{"?_o"});
   auto result = scan->getResult(false);
-  const auto& hasPattern = result->idTable();
+  const auto& hasPattern = result->idTableView();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -387,7 +386,7 @@ Result HasPredicateScan::computeSubqueryS(
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();
   auto result = std::move(*dynResult).toStatic<WIDTH>();
-  for (const auto& row : subresult->idTable().asStaticView<WIDTH>()) {
+  for (const auto& row : subresult->idTableView().asStaticView<WIDTH>()) {
     const auto& pattern = patterns[row[patternCol].getInt()];
     for (auto predicate : pattern) {
       result.push_back(row);

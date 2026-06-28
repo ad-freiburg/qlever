@@ -108,7 +108,7 @@ class GroupByImpl : public Operation {
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
-      LocalVocab& localVocab, const IdTable& idTable) const;
+      LocalVocab& localVocab, const IdTableView<0>& idTable) const;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -163,14 +163,13 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTableView<0>& inTable,
+                    const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
-
-  FRIEND_TEST(GroupByTest, doGroupBy);
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
@@ -445,7 +444,8 @@ class GroupByImpl : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function of `evaluateAlias`.
   // 1. In the Expressions for the aliases of this GROUP BY, replace all
@@ -464,7 +464,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator,
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator,
       std::vector<HashMapAggregateInformation>& info,
       const std::vector<HashMapGroupedVariableInformation>& substitutions);
 
@@ -476,7 +477,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function to evaluate the child expression of an aggregate function.
   // Only `COUNT(*)` does not have a single child, so we make a special case for
@@ -531,8 +533,8 @@ class GroupByImpl : public Operation {
           std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
           size_t endIndex,
           const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          IdTable* resultTable, LocalVocab* localVocab,
-          const Allocator& allocator);
+          IdTable* resultTable, const LocalVocabContext& context,
+          LocalVocab* localVocab, const Allocator& allocator);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
@@ -577,7 +579,7 @@ class GroupByImpl : public Operation {
     // the JOIN, etc. `SPO` if the variable that joins the three variable triple
     // and the rest of the query body is the subject of the three variable
     // triple, `PSO` if it is the predicate, `OSP` if it is the object.
-    Permutation::Enum permutation_;
+    const Permutation& permutation_;
     // The column index wrt the `otherSubtree_` of the variable that joins the
     // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
@@ -592,12 +594,12 @@ class GroupByImpl : public Operation {
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
   // `variableThatMustBeContained`. (They might be the same). If this check
-  // fails, `std::nullopt` is returned. Else the permutation corresponding to
-  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // fails, an empty optional is returned. Else the permutation corresponding
+  // to `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
-  static std::optional<Permutation::Enum> getPermutationForThreeVariableTriple(
+  boost::optional<const Permutation&> getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-      const Variable& variableThatMustBeContained);
+      const Variable& variableThatMustBeContained) const;
 
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct
   // count of a single variable, return that variable. Else return

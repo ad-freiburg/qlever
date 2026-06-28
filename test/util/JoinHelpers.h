@@ -12,9 +12,9 @@
 #include "AllocatorTestHelpers.h"
 #include "IndexTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/idTable/IdTable.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 
@@ -84,7 +84,7 @@ inline auto makeJoinLambda() {
         auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
         Join join{qec, leftTree, rightTree, jc1, jc2, true, false};
-        return join.join(a, b, result);
+        return join.join(a.asStaticView<0>(), b.asStaticView<0>(), result);
       }};
 }
 

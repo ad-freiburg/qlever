@@ -153,16 +153,15 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            const auto& idx = testQec->getIndex();
-            auto idOpt =
-                field.toValueId(idx.getVocab(), idx.encodedIriManager());
+            auto idOpt = field.toValueId(testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
               using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-              auto lveOpt = lv.getIndexOrNullopt(
+              auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
-                                    : LiteralOrIri{field.getIri()});
+                                    : LiteralOrIri{field.getIri()},
+                  testQec->getLocalVocabContext()});
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }

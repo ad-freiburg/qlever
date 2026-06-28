@@ -18,6 +18,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -151,7 +152,7 @@ Result Join::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult(true);
   checkCancellation();
-  if (leftRes->isFullyMaterialized() && leftRes->idTable().empty()) {
+  if (leftRes->isFullyMaterialized() && leftRes->idTableView().empty()) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return createEmptyResult();
   }
@@ -297,7 +298,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________________________
 
-void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
+void Join::join(const IdTableView<0>& a, const IdTableView<0>& b,
+                IdTable* result) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
@@ -603,7 +605,7 @@ Result Join::computeResultForIndexScanAndIdTable(
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        const IdTable& idTable = resultWithIdTable->idTable();
+        const IdTableView<0>& idTable = resultWithIdTable->idTableView();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         auto permutationIdTable =
@@ -700,7 +702,7 @@ Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
-  join(leftRes->idTable(), rightRes->idTable(), &idTable);
+  join(leftRes->idTableView(), rightRes->idTableView(), &idTable);
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(),
@@ -771,4 +773,20 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, _joinVar));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {_left, _right},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        auto leftCol = left->getVariableColumn(_joinVar);
+        auto rightCol = right->getVariableColumn(_joinVar);
+        return ad_utility::makeExecutionTree<Join>(
+            getExecutionContext(), std::move(left), std::move(right), leftCol,
+            rightCol);
+      });
 }

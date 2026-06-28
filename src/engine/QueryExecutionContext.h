@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 
+#include <gtest/gtest_prod.h>
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -48,7 +50,9 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  CPP_template(typename IdTableT)(
+      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
+      getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }
@@ -57,7 +61,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }
@@ -94,23 +98,27 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 class NamedResultCache;
 class MaterializedViewsManager;
 
-// Execution context for queries.
-// Holds references to index and engine, implements caching.
-class QueryExecutionContext {
+// Execution context for queries. Holds a `std::shared_ptr` to the `Index`
+// and `MaterializedViewsManager` to ensure that they stay alive as long as
+// this context is alive.
+class QueryExecutionContext
+    : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
+  enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
-      const Index& index, QueryResultCache* const cache,
+      std::shared_ptr<const Index> index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
-      MaterializedViewsManager* materializedViewsManager,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      bool pinSubtrees = false, bool pinResult = false);
+      bool pinSubtrees = false, bool pinResult = false,
+      DisableCaching = DisableCaching::FromRuntimeParameter);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
-  [[nodiscard]] const Index& getIndex() const { return _index; }
+  [[nodiscard]] const Index& getIndex() const { return *_index; }
 
   const LocatedTriplesState& locatedTriplesState() const {
     AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
@@ -160,6 +168,16 @@ class QueryExecutionContext {
   bool _pinSubtrees;
   bool _pinResult;
 
+  // If true, then caching is disabled for all operations. This means that all
+  // operations that use this `QueryExecutionContext` will neither read from nor
+  // write to the cache. This avoids in particular the overhead of computing
+  // cache keys for operations.
+  bool disableCaching() const { return disableCaching_; }
+
+  void setDisableCachingOnlyForTesting(bool disableCaching) {
+    disableCaching_ = disableCaching;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -189,19 +207,26 @@ class QueryExecutionContext {
   auto& pinResultWithName() { return pinResultWithName_; }
   const auto& pinResultWithName() const { return pinResultWithName_; }
 
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
   // header.
   static bool areWebSocketUpdatesEnabled();
   static std::chrono::milliseconds websocketUpdateInterval();
-  const Index& _index;
+
+  // Shared pointer to the `Index` to ensure that it stays alive as long as
+  // this context is alive.
+  std::shared_ptr<const Index> _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
   LocatedTriplesSharedState locatedTriplesSharedState_{
-      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
+      _index->deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -232,7 +257,12 @@ class QueryExecutionContext {
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
-  MaterializedViewsManager* materializedViewsManager_;
+  // Shared pointer to the `MaterializedViewsManager` to ensure that it stays
+  // alive as long as this context is alive.
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
+
+  // See the documentation for the getter with the same name above;
+  bool disableCaching_ = false;
 
   // The last point in time when a websocket update was sent. This is used for
   // limiting the update frequency when `sendPriority` is `IfDue`.

@@ -34,7 +34,10 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
     // For non-lazy results applying the limit introduces some overhead, but for
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
-    right_->applyLimit({1});
+    // Defensive copy to avoid modifying other trees that share the same subtree
+    // as `right_`.
+    right_ = right_->clone();
+    right_->applyLimitOffset({1});
   }
 }
 
@@ -71,6 +74,9 @@ size_t ExistsJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+  if (rightIndexNestedLoopJoinIsPossible()) {
+    return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
+  }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }
@@ -105,7 +111,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
 
   if (!noJoinNecessary) {
-    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
       return std::move(res).value();
     }
   }
@@ -122,7 +128,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // no column.
     return {Result::LazyResult{
                 ad_utility::OwningView{leftRes->idTables()} |
-                ql::views::transform([exists = !rightRes->idTable().empty(),
+                ql::views::transform([exists = !rightRes->idTableView().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -139,8 +145,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
                           requestLaziness);
   }
-  const auto& right = rightRes->idTable();
-  const auto& left = leftRes->idTable();
+  const auto& right = rightRes->idTableView();
+  const auto& left = leftRes->idTableView();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
   // callbacks: one for each matching pair of rows from `left` and `right`, and
@@ -248,6 +254,26 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
+    // Nudge the query planner into producing a tree that is already sorted
+    // the way `QueryExecutionTree::getJoinColumns` expects, so that
+    // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
+    pq._isInternalSort = IsInternalSort::True;
+    pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
+                  ql::views::filter([&visibleVars = pq.getVisibleVariables()](
+                                        const Variable& variable) {
+                    return ad_utility::contains(visibleVars, variable);
+                  }) |
+                  ql::views::transform([](const Variable& variable) {
+                    return VariableOrderKey{variable};
+                  }) |
+                  ::ranges::to<std::vector>;
+    // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
+    // would produce.
+    ql::ranges::sort(pq._orderBy, {},
+                     [&columns = subtree->getVariableColumns()](
+                         const VariableOrderKey& key) {
+                       return columns.at(key.variable_).columnIndex_;
+                     });
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
     // Hide non-visible variables in the subtree, so that they are not
@@ -272,35 +298,75 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
-  auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                            right_);
-  };
-  // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side. It currently doesn't support undef.
-  auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
-  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate() ||
-      !alwaysDefined()) {
+bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
+  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
+                                                                 joinColumns_);
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
+  auto optionalResults =
+      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_,
+                                                                   right_);
+  if (!optionalResults.has_value()) {
     return std::nullopt;
   }
 
-  auto leftRes = left_->getResult(false);
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
+  auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->idTable().clone();
+  IdTable result = leftRes->cloneIdTable();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
-  result.addEmptyColumn();
-  ad_utility::chunkedCopy(
-      ql::views::transform(
-          ad_utility::OwningView{nestedLoopJoin.computeExistance()},
-          [](char tracker) { return Id::makeFromBool(tracker != 0); }),
-      result.getColumn(result.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+  addExistsColumn(
+      result, ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()});
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  // This algorithm only works well if the right side is smaller and we can
+  // avoid sorting the left side. It currently doesn't support undef.
+  if (!rightIndexNestedLoopJoinIsPossible()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+      std::dynamic_pointer_cast<Sort>(left_->getRootOperation()),
+      requestLaziness);
+  bool isLazy = !leftRes->isFullyMaterialized();
+  auto rightRes = right_->getResult(false);
+
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
+  auto result = nestedLoopJoin.computeRightExistance(
+      [this](auto&& idTable, LocalVocab localVocab,
+             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
+                 matchingTracker) {
+        IdTable resultTable = AD_FWD(idTable).moveOrClone();
+        addExistsColumn(resultTable, matchingTracker);
+        return Result::IdTableVocabPair{std::move(resultTable),
+                                        std::move(localVocab)};
+      });
+  return std::optional{
+      isLazy ? Result{std::move(result), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(result)),
+                      resultSortedOn()}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                        right_)) {
+    return std::nullopt;
+  }
+  if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return result;
+  }
+  return tryLeftIndexNestedLoopJoinIfSuitable();
 }
 
 // _____________________________________________________________________________
@@ -329,8 +395,7 @@ struct LazyExistsJoinImpl
   // Store the ranges of the child results. The left result is owned, the right
   // is just a view to the wrapped `IdTable`s.
   ad_utility::InputRangeTypeErased<Result::IdTableVocabPair> leftRange_;
-  ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
-      rightRange_;
+  ad_utility::InputRangeTypeErased<IdTableView<0>> rightRange_;
 
   // Store the join columns.
   ColumnIndex leftJoinColumn_;
@@ -338,8 +403,7 @@ struct LazyExistsJoinImpl
 
   // Store the current result of the right child. This is a view to the current
   // `IdTable`.
-  std::optional<std::reference_wrapper<const IdTable>> currentRight_ =
-      std::nullopt;
+  std::optional<IdTableView<0>> currentRight_ = std::nullopt;
   // Store the current index in the right child that was last being checked.
   size_t currentRightIndex_ = 0;
 
@@ -356,23 +420,24 @@ struct LazyExistsJoinImpl
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          std::array{Result::IdTableVocabPair{result->idTable().clone(),
+          std::array{Result::IdTableVocabPair{result->cloneIdTable(),
                                               result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();
   }
 
   // Convert result to a view of `IdTable`s. This is used for the right side.
-  static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
-  toRangeView(const std::shared_ptr<const Result>& result) {
+  static ad_utility::InputRangeTypeErased<IdTableView<0>> toRangeView(
+      const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          std::array{std::cref(result->idTable())}};
+          std::array{result->idTableView()}};
     }
     return ad_utility::InputRangeTypeErased{
         ad_utility::CachingTransformInputRange{
-            result->idTables(),
-            [](const auto& pair) { return std::cref(pair.idTable_); }}};
+            result->idTables(), [](const auto& pair) {
+              return pair.idTable_.template asStaticView<0>();
+            }}};
   }
 
   // Construct an instance of `LazyExistsJoinImpl` with the given left and right
@@ -393,7 +458,7 @@ struct LazyExistsJoinImpl
   void fetchNextRightBlock() {
     do {
       currentRight_ = rightRange_.get();
-    } while (currentRight_.has_value() && currentRight_.value().get().empty());
+    } while (currentRight_.has_value() && currentRight_.value().empty());
   }
 
   // Increment `currentRightIndex_` by one, or fetch the next non-empty element
@@ -402,7 +467,7 @@ struct LazyExistsJoinImpl
     currentRightIndex_++;
     // Get the next block from the range if we couldn't find a matching value
     // in this one.
-    if (currentRightIndex_ == currentRight_.value().get().size()) {
+    if (currentRightIndex_ == currentRight_.value().size()) {
       fetchNextRightBlock();
       currentRightIndex_ = 0;
       // Optimization to copy all remaining blocks in one.
@@ -423,11 +488,9 @@ struct LazyExistsJoinImpl
     }
     // Search for the next match.
     while (currentRight_.has_value()) {
-      AD_CORRECTNESS_CHECK(currentRightIndex_ <
-                           currentRight_.value().get().size());
+      AD_CORRECTNESS_CHECK(currentRightIndex_ < currentRight_.value().size());
       auto comparison = ql::compareThreeWay(
-          currentRight_.value().get().at(currentRightIndex_, rightJoinColumn_),
-          id);
+          currentRight_.value().at(currentRightIndex_, rightJoinColumn_), id);
       if (comparison == 0) {
         return true;
       }
@@ -446,7 +509,7 @@ struct LazyExistsJoinImpl
         allRowsFromLeftExist_ == FastForwardState::Unknown) {
       fetchNextRightBlock();
       if (currentRight_.has_value()) {
-        if (currentRight_.value().get().at(0, rightJoinColumn_).isUndefined()) {
+        if (currentRight_.value().at(0, rightJoinColumn_).isUndefined()) {
           allRowsFromLeftExist_ = FastForwardState::Yes;
         }
       } else {
@@ -502,4 +565,22 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
              ? Result{std::move(generator), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(generator)),
                       resultSortedOn()};
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename Range)(
+    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
+        ql::concepts::convertible_to<
+            ql::ranges::range_value_t<Range>,
+            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
+                                                    Range&& range) const {
+  idTable.addEmptyColumn();
+  ad_utility::chunkedCopy(
+      ql::views::transform(AD_FWD(range),
+                           [](auto tracker) {
+                             return Id::makeFromBool(
+                                 static_cast<bool>(tracker));
+                           }),
+      idTable.getColumn(idTable.numColumns() - 1).begin(),
+      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
 }

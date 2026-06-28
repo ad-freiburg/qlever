@@ -10,7 +10,9 @@
 #include <absl/cleanup/cleanup.h>
 
 #include "backports/shift.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -54,8 +56,10 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
 namespace {
 // _____________________________________________________________________________
 // Check if sort order promised by `sortedBy` is kept within `idTable`.
-void assertSortOrderIsRespected(const IdTable& idTable,
+template <typename IdTableT>
+void assertSortOrderIsRespected(const IdTableT& idTable,
                                 const std::vector<ColumnIndex>& sortedBy) {
+  static_assert(ad_utility::SameAsAny<IdTableT, IdTable, IdTableView<0>>);
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
         return colIndex < idTable.numColumns();
@@ -72,8 +76,8 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
     : data_{IdTableSharedLocalVocabPair{std::move(idTable),
                                         std::move(localVocab.localVocab_)}},
       sortedBy_{std::move(sortedBy)} {
-  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
-                    nullptr);
+  AD_CONTRACT_CHECK(
+      std::get<IdTableSharedLocalVocabPair>(data_).localVocabPtr() != nullptr);
   assertSortOrderIsRespected(this->idTable(), sortedBy_);
 }
 
@@ -84,12 +88,11 @@ Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
           std::move(idTablePtr),
           std::make_shared<const LocalVocab>(std::move(localVocab))}},
       sortedBy_{std::move(sortedBy)} {
-  const auto& materializedResult = std::get<IdTableSharedLocalVocabPair>(data_);
-  AD_CONTRACT_CHECK(std::get<IdTablePtr>(materializedResult.idTableOrPtr_) !=
-                    nullptr);
-  // Note: This second check can never throw because of how we initialize the
-  // pointer above, but it still increases confidence.
-  AD_CORRECTNESS_CHECK(materializedResult.localVocab_ != nullptr);
+  // The non-null check for `idTablePtr` is performed inside
+  // `IdTableSharedLocalVocabPair::makeView`. The check below can never throw
+  // because of how we initialize the pointer above, but increases confidence.
+  AD_CORRECTNESS_CHECK(
+      std::get<IdTableSharedLocalVocabPair>(data_).localVocabPtr() != nullptr);
   assertSortOrderIsRespected(this->idTable(), sortedBy_);
 }
 
@@ -160,6 +163,73 @@ IdTable makeResizedClone(const IdTable& idTable,
 }  // namespace
 
 // _____________________________________________________________________________
+IdTableView<0> Result::IdTableSharedLocalVocabPair::makeView(
+    const std::variant<IdTable, std::shared_ptr<const IdTable>>& idTableOrPtr) {
+  return std::visit(
+      [](const auto& arg) -> IdTableView<0> {
+        if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+          return arg.template asStaticView<0>();
+        } else {
+          static_assert(ad_utility::isSimilar<decltype(arg),
+                                              std::shared_ptr<const IdTable>>);
+          AD_CONTRACT_CHECK(arg != nullptr);
+          return arg->template asStaticView<0>();
+        }
+      },
+      idTableOrPtr);
+}
+
+// _____________________________________________________________________________
+Result::IdTableSharedLocalVocabPair::IdTableSharedLocalVocabPair(
+    IdTable idTable, std::shared_ptr<const LocalVocab> localVocab)
+    : idTableOrPtr_{std::move(idTable)},
+      localVocab_{std::move(localVocab)},
+      view_{makeView(idTableOrPtr_)} {}
+
+// _____________________________________________________________________________
+Result::IdTableSharedLocalVocabPair::IdTableSharedLocalVocabPair(
+    std::shared_ptr<const IdTable> idTablePtr,
+    std::shared_ptr<const LocalVocab> localVocab)
+    : idTableOrPtr_{std::move(idTablePtr)},
+      localVocab_{std::move(localVocab)},
+      view_{makeView(idTableOrPtr_)} {}
+
+// _____________________________________________________________________________
+const IdTable& Result::IdTableSharedLocalVocabPair::idTable() const {
+  return std::visit(
+      [](const auto& arg) -> const IdTable& {
+        if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+          return arg;
+        } else {
+          static_assert(ad_utility::isSimilar<decltype(arg),
+                                              std::shared_ptr<const IdTable>>);
+          return *arg;
+        }
+      },
+      idTableOrPtr_);
+}
+
+// _____________________________________________________________________________
+void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
+    const LimitOffsetClause& limitOffset) {
+  std::visit(
+      [&limitOffset](auto& arg) {
+        if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+          resizeIdTable(arg, limitOffset);
+        } else {
+          static_assert(ad_utility::isSimilar<decltype(arg),
+                                              std::shared_ptr<const IdTable>>);
+          arg = std::make_shared<const IdTable>(
+              makeResizedClone(*arg, limitOffset));
+        }
+      },
+      idTableOrPtr_);
+  // Refresh the view: the underlying data has moved (in-place resize) or the
+  // pointer has been replaced, both of which invalidate the old spans.
+  view_ = makeView(idTableOrPtr_);
+}
+
+// _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
     std::function<void(std::chrono::microseconds, const IdTable&)>
@@ -173,19 +243,7 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    auto& tableOrPtr =
-        std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_;
-    std::visit(
-        [&limitOffset](auto& arg) {
-          if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
-            resizeIdTable(arg, limitOffset);
-          } else {
-            static_assert(ad_utility::isSimilar<decltype(arg), IdTablePtr>);
-            arg = std::make_shared<const IdTable>(
-                makeResizedClone(*arg, limitOffset));
-          }
-        },
-        tableOrPtr);
+    std::get<IdTableSharedLocalVocabPair>(data_).applyLimitOffset(limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
@@ -238,7 +296,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, const IdTable& idTable) {
+  auto performCheck = [](const auto& map, const auto& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -270,7 +328,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 void Result::runOnNewChunkComputed(
     std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
         onNewChunk,
-    std::function<void(bool)> onGeneratorFinished) {
+    std::function<void(GeneratorState)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto inputAsGet = ad_utility::CachingTransformInputRange(
       idTables(), [](auto& input) { return std::move(input); });
@@ -281,24 +339,30 @@ void Result::runOnNewChunkComputed(
       std::move(onGeneratorFinished));
 
   // The main lambda that when being called processes the next chunk.
-  auto get =
-      [inputAsGet = std::move(inputAsGet), sharedFinish,
-       cleanup = absl::Cleanup{[&finish = *sharedFinish]() { finish(false); }},
-       onNewChunk =
-           std::move(onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
+  auto get = [inputAsGet = std::move(inputAsGet), sharedFinish,
+              cleanup = absl::Cleanup{[&finish = *sharedFinish]() noexcept {
+                ad_utility::ignoreExceptionIfThrows(
+                    [&finish]() { finish(GeneratorState::FINISHED); });
+              }},
+              onNewChunk = std::move(
+                  onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
     try {
       Timer timer{Timer::Started};
       auto input = inputAsGet.get();
       if (!input.has_value()) {
         std::move(cleanup).Cancel();
-        (*sharedFinish)(false);
+        (*sharedFinish)(GeneratorState::FINISHED);
         return std::nullopt;
       }
       onNewChunk(input.value(), timer.value());
       return input;
+    } catch (const ad_utility::CancellationException&) {
+      std::move(cleanup).Cancel();
+      (*sharedFinish)(GeneratorState::CANCELLED);
+      throw;
     } catch (...) {
       std::move(cleanup).Cancel();
-      (*sharedFinish)(true);
+      (*sharedFinish)(GeneratorState::FAILED);
       throw;
     }
   };
@@ -309,18 +373,17 @@ void Result::runOnNewChunkComputed(
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::visit(
-      [](const auto& arg) -> const IdTable& {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, IdTable>) {
-          return arg;
-        } else {
-          static_assert(std::is_same_v<T, IdTablePtr>);
-          return *arg;
-        }
-      },
-      std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);
+  return std::get<IdTableSharedLocalVocabPair>(data_).idTable();
 }
+
+// _____________________________________________________________________________
+const IdTableView<0>& Result::idTableView() const {
+  AD_CONTRACT_CHECK(isFullyMaterialized());
+  return std::get<IdTableSharedLocalVocabPair>(data_).idTableView();
+}
+
+// _____________________________________________________________________________
+IdTable Result::cloneIdTable() const { return IdTable{idTable().clone()}; }
 
 // _____________________________________________________________________________
 Result::LazyResult Result::idTables() const {

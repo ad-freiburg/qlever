@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "engine/UpdateMetadata.h"
 #include "index/DeltaTriples.h"
 #include "index/LocatedTriples.h"
 #include "util/GTestHelpers.h"

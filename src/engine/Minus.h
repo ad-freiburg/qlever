@@ -52,13 +52,13 @@ class Minus : public Operation {
   // `std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>` to
   // avoid including expensive headers that are only relevant for the
   // implementation of this function.
-  auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
+  auto makeUndefRangesChecker(bool left, const IdTableView<0>& idTable) const;
 
   // Helper function to copy all rows from `left` that have a corresponding
   // value of `reference` in `keepEntry`.
-  template <typename T>
+  template <typename IdTableT, typename T>
   IdTable copyMatchingRows(
-      const IdTable& left, T reference,
+      const IdTableT& left, T reference,
       const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const;
 
  public:
@@ -78,15 +78,36 @@ class Minus : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   IdTable computeMinus(
-      const IdTable& a, const IdTable& b,
+      const IdTableView<0>& a, const IdTableView<0>& b,
       const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // Return true if the size estimate for the right side is smaller or equal
+  // than the estimate of the left side, a sort on the left can be skipped and
+  // all join columns are statically guaranteed to not contain undef values.
+  bool rightIndexNestedLoopJoinIsPossible() const;
+
+  // Specialized algorithm that performs a join when the left side is fully
+  // materialized and sorted, and the right side is unsorted. Only returns a
+  // result when the size estimate for the left side is smaller or equal than
+  // the estimate of the right side and a sort on the right can be skipped.
+  std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
+
+  // Specialized algorithm that performs a join when the right side is fully
+  // materialized and sorted, and the left side is unsorted. Only returns a
+  // result when `rightIndexNestedLoopJoinIsPossible()` returns true, in this
+  // case the result is also unsorted.
+  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable(
+      bool requestLaziness);
+
   // Nested loop join optimization than can apply when a memory intensive sort
-  // can be avoided this way.
-  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
+  // can be avoided this way. This currently only works when we can statically
+  // guarantee that no undef values are found in the join columns. The
+  // implementation first tries `tryRightIndexNestedLoopJoinIfSuitable` and then
+  // `tryLeftIndexNestedLoopJoinIfSuitable`.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
 
   // Lazily compute the minus join of two results when at least one of the
   // results is computed lazily. This currently only works if we have just a

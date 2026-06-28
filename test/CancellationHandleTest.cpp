@@ -41,7 +41,7 @@ TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 TEST(CancellationException, verifyConstructorMessageIsPassed) {
   auto message = "Message";
-  CancellationException exception{message};
+  CancellationException exception{MANUAL, message};
   EXPECT_STREQ(message, exception.what());
 }
 
@@ -54,12 +54,23 @@ TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationException, stateAccessorReturnsConstructorReason) {
+  EXPECT_EQ(CancellationException{TIMEOUT}.state(), TIMEOUT);
+  EXPECT_EQ(CancellationException{MANUAL}.state(), MANUAL);
+  // Custom message paired with a known reason keeps both.
+  CancellationException withReason{TIMEOUT, "estimate exceeded remaining time"};
+  EXPECT_EQ(withReason.state(), TIMEOUT);
+  EXPECT_STREQ(withReason.what(), "estimate exceeded remaining time");
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
   auto message = "Message";
   auto operation = "Operation";
   auto otherThing = "Other Thing";
   {
-    CancellationException exception{message};
+    CancellationException exception{MANUAL, message};
 
     exception.setOperation(operation);
     EXPECT_THAT(exception.what(),
@@ -294,7 +305,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -323,10 +334,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  if constexpr (LOGLEVEL < WARN) {
-    GTEST_SKIP() << "This test requires log level of at least INFO.";
-  }
-  EXPECT_GE(LOGLEVEL, WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -411,10 +419,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  if constexpr (LOGLEVEL < WARN) {
-    GTEST_SKIP() << "This test requires log level of at least INFO.";
-  }
-  EXPECT_GE(LOGLEVEL, WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -449,7 +454,7 @@ TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
 
   handle.startWatchDog();
   // Wait for Watchdog to start
-  std::this_thread::sleep_for(1ms);
+  std::this_thread::sleep_for(5ms);
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
 

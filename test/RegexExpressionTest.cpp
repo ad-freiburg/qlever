@@ -116,13 +116,14 @@ void testValuesInVariables(
   auto toLiteralId = [&ctx](const std::string& value) {
     return Id::makeFromLocalVocabIndex(
         ctx.localVocab.getIndexAndAddIfNotContained(
-            ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                value)));
+            LocalVocabEntry::literalWithoutQuotes(
+                value, ctx.qec->getLocalVocabContext())));
   };
   for (const auto& value : inputValues) {
     ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),
                          toLiteralId(value.at(2))});
   }
+  ctx.context._inputTable = ctx.table.asStaticView<0>();
   ctx.context._endIndex = inputValues.size();
   auto resultAsVariant =
       makeRegexExpression(variable("?string"), variable("?regex"),
@@ -163,6 +164,11 @@ TEST(RegexExpression, nonPrefixRegex) {
   // A prefix regex, but not a fixed string.
   test("?vocab", "^a.*", {F, T, F});
 
+  // Regression test for issue #2920: a regex starting with `^` that uses `\d`
+  // (or any other RE2-supported character class escape) must not throw but
+  // simply be routed to the code for processing general regexes.
+  test("?vocab", R"(^\\d+)", {F, F, F});
+
   test("?mixed", "x", {U, U, U});
   test("?mixed", "x", {F, F, T}, true);
   test("?mixed", "1$", {U, U, U});
@@ -199,10 +205,11 @@ TEST(RegexExpression, nonPrefixRegex) {
 
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   // Our expression is a fixed string literal: "hallo".
-  VectorWithMemoryLimit<IdOrLiteralOrIri> input{
-      ad_utility::testing::getQec()->getAllocator()};
-  input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
+  VectorWithMemoryLimit<IdOrLocalVocabEntry> input{qec->getAllocator()};
+  input.push_back(LocalVocabEntry{lit("\"hallo\""), localVocabContext});
 
   {
     auto child =
@@ -314,9 +321,38 @@ TEST(RegexExpression, getPrefixRegex) {
   ASSERT_EQ("alpha", PrefixRegexExpression::getPrefixRegex("^alpha"));
   ASSERT_EQ(R"(\al*ph.a()",
             PrefixRegexExpression::getPrefixRegex(R"(^\\al\*ph\.a\()"));
-  // Invalid escaping of `"` (no need to escape it).
-  ASSERT_THROW(PrefixRegexExpression::getPrefixRegex(R"(^\")"),
-               std::runtime_error);
+  // Escapes of non-special characters (e.g. `\"`) are valid regex features
+  // handled by RE2 in the general regex path, so the prefix check declines
+  // (returns `std::nullopt`) rather than throwing.
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex(R"(^\")"));
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, makePrefixMatchExpression) {
+  using namespace ::testing;
+  auto hasPrefixAndVariableMatcher = [](std::string variableName,
+                                        std::string_view prefix) {
+    return Pointee(WhenDynamicCastTo<const PrefixRegexExpression&>(
+        AllOf(AD_FIELD(PrefixRegexExpression, prefixRegex_, Eq(prefix)),
+              AD_FIELD(PrefixRegexExpression, variable_,
+                       Eq(Variable{std::move(variableName)})))));
+  };
+  EXPECT_THAT(makePrefixMatchExpression(variable("?x"), literal("Prefix")),
+              hasPrefixAndVariableMatcher("?x", "Prefix"));
+  EXPECT_THAT(makePrefixMatchExpression(makeStrExpression(variable("?x")),
+                                        literal("Prefix")),
+              hasPrefixAndVariableMatcher("?x", "Prefix"));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      makePrefixMatchExpression(makeStrExpression(variable("?x")),
+                                literal("Prefix", "@en")),
+      HasSubstr("literals without a language tag or a datatype"),
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      makePrefixMatchExpression(literal("Not a variable"), literal("Prefix")),
+      HasSubstr("STR(?var) or ?var"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      makePrefixMatchExpression(variable("?x"), variable("?not_a_constant")),
+      HasSubstr("static string literals"), std::runtime_error);
 }
 }  // namespace sparqlExpression
 
