@@ -118,21 +118,22 @@ VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
     ql::span<const size_t> indices) const {
   // Partition indices by marker: for each marker, collect the vocabIndex
   // values and track original positions.
-  std::array<std::vector<size_t>, numberOfVocabs> subIndices;
-  std::array<std::vector<size_t>, numberOfVocabs> originalPositions;
+  std::array<std::vector<size_t>, numberOfVocabs> unmarkedIndicesPerVocab;
+  std::array<std::vector<size_t>, numberOfVocabs> originalIndices;
   for (size_t i = 0; i < indices.size(); ++i) {
     auto marker = getMarker(indices[i]);
-    subIndices[marker].push_back(getVocabIndex(indices[i]));
-    originalPositions[marker].push_back(i);
+    unmarkedIndicesPerVocab[marker].push_back(getVocabIndex(indices[i]));
+    originalIndices[marker].push_back(i);
   }
 
   // Perform batch lookup on each underlying vocabulary that has indices.
-  std::array<VocabBatchLookupResult, numberOfVocabs> subResults;
+  std::array<VocabBatchLookupResult, numberOfVocabs> resultsPerVocab;
   for (uint8_t m = 0; m < numberOfVocabs; ++m) {
-    if (!subIndices[m].empty()) {
-      subResults[m] = std::visit(
+    if (!unmarkedIndicesPerVocab[m].empty()) {
+      resultsPerVocab[m] = std::visit(
           [&](const auto& vocab) {
-            return vocab.lookupBatch(ql::span<const size_t>{subIndices[m]});
+            return vocab.lookupBatch(
+                ql::span<const size_t>{unmarkedIndicesPerVocab[m]});
           },
           underlying_[m]);
     }
@@ -146,14 +147,14 @@ VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
     ql::span<std::string_view> span;
   };
   auto merged = std::make_shared<MergedData>();
-  merged->subResults = std::move(subResults);
+  merged->subResults = std::move(resultsPerVocab);
   merged->views.resize(indices.size());
 
   for (uint8_t m = 0; m < numberOfVocabs; ++m) {
     if (merged->subResults[m]) {
       const auto& resultSpan = *merged->subResults[m];
-      for (size_t j = 0; j < originalPositions[m].size(); ++j) {
-        merged->views[originalPositions[m][j]] = resultSpan[j];
+      for (size_t j = 0; j < originalIndices[m].size(); ++j) {
+        merged->views[originalIndices[m][j]] = resultSpan[j];
       }
     }
   }
@@ -168,8 +169,6 @@ QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
 VocabLookupOutput SplitVocabulary<SF, SFN, S...>::lookupBatchesStreamed(
     VocabLookupInput input) const {
-  // NOTE: Not implemented as a coroutine, because coroutines are not
-  // available in the C++17 compatibility build.
   return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
       [this, input = std::move(
                  input)]() mutable -> std::optional<VocabBatchLookupResult> {

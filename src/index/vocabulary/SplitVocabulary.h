@@ -120,7 +120,7 @@ class SplitVocabulary {
 
   // Use the SplitFunction to determine the marker for a given word (that is, in
   // which vocabulary this word would go)
-  static uint8_t getMarkerForWord(const std::string_view& word) {
+  static uint8_t getMarkerForWord(std::string_view word) {
     return splitFunction_(word);
   };
 
@@ -186,7 +186,7 @@ class SplitVocabulary {
   }
 
   // Perform a search for upper or lower bound on the underlying vocabulary
-  // given by the marker parameter. By default this is the "main" vocabulary
+  // given by the marker parameter. By default, this is the "main" vocabulary
   // (first).
   template <typename InternalStringType, typename Comparator,
             bool getUpperBound>

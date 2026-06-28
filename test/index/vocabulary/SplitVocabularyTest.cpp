@@ -294,6 +294,137 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 }
 
 // _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchEdgeCases) {
+  // Two-vocab: a batch hitting only ONE (bucket 1), leaving bucket 0's
+  // sub-result null.
+  {
+    TwoSplitVocabulary sv;
+    auto ww = sv.makeDiskWriterPtr("twoSplitVocabBatch.dat");
+    (*ww)("\"\"", true);      // main[0]
+    (*ww)("\"abc\"", true);   // vocab1[0]
+    (*ww)("\"axyz\"", true);  // vocab1[1]
+    (*ww)("\"xyz\"", true);   // main[1]
+    ww->finish();
+    sv.readFromFile("twoSplitVocabBatch.dat");
+
+    // Only bucket 1, plus a duplicate index.
+    std::array<size_t, 3> indices{
+        static_cast<size_t>(sv.addMarker(1, 1)),  // "\"axyz\""
+        static_cast<size_t>(sv.addMarker(0, 1)),  // "\"abc\""
+        static_cast<size_t>(sv.addMarker(1, 1)),  // "\"axyz\"" again
+    };
+    auto result = sv.lookupBatch(indices);
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_EQ((*result)[0], "\"axyz\"");
+    EXPECT_EQ((*result)[1], "\"abc\"");
+    EXPECT_EQ((*result)[2], "\"axyz\"");
+    sv.close();
+  }
+
+  // Three-vocab: a batch spanning all three buckets, shuffled, to exercise
+  // partitioning/merging with numberOfVocabs == 3.
+  {
+    ThreeSplitVocabulary sv;
+    auto ww = sv.makeDiskWriterPtr("threeSplitVocabBatch.dat");
+    (*ww)("\"\"", true);                           // main[0]
+    (*ww)("\"abc\"", true);                        // main[1]
+    (*ww)("\"axyz\"", true);                       // main[2]
+    (*ww)("\"xyz\"^^<blabliblu>", true);           // vocab2[0]
+    (*ww)("\"xyz\"^^<http://example.com>", true);  // vocab1[0]
+    (*ww)("\"zzz\"^^<blabliblu>", true);           // vocab2[1]
+    ww->finish();
+    sv.readFromFile("threeSplitVocabBatch.dat");
+
+    std::array<size_t, 4> indices{
+        static_cast<size_t>(sv.addMarker(0, 2)),  // "\"xyz"^^<blabliblu>"
+        static_cast<size_t>(sv.addMarker(0, 0)),  // main[0] = "\"\""
+        static_cast<size_t>(
+            sv.addMarker(0, 1)),  // "\"xyz\"^^<http://example.com>"
+        static_cast<size_t>(sv.addMarker(1, 2)),  // "\"zzz\"^^<blabliblu>"
+    };
+    auto result = sv.lookupBatch(indices);
+    ASSERT_EQ(result->size(), 4);
+    EXPECT_EQ((*result)[0], "\"xyz\"^^<blabliblu>");
+    EXPECT_EQ((*result)[1], "\"\"");
+    EXPECT_EQ((*result)[2], "\"xyz\"^^<http://example.com>");
+    EXPECT_EQ((*result)[3], "\"zzz\"^^<blabliblu>");
+    sv.close();
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchesStreamed) {
+  TwoSplitVocabulary sv;
+  auto ww = sv.makeDiskWriterPtr("twoSplitVocabStreamed.dat");
+  (*ww)("\"\"", true);      // main[0]
+  (*ww)("\"abc\"", true);   // vocab1[0]
+  (*ww)("\"axyz\"", true);  // vocab1[1]
+  (*ww)("\"xyz\"", true);   // main[1]
+  ww->finish();
+  sv.readFromFile("twoSplitVocabStreamed.dat");
+
+  // Three batches: a mixed one, an empty one in the middle, and another mixed
+  std::vector<std::vector<size_t>> batches{
+      {
+          static_cast<size_t>(sv.addMarker(1, 0)),  // "\"xyz\""
+          static_cast<size_t>(sv.addMarker(0, 1)),  // "\"abc\""
+      },
+      {},
+      {
+          static_cast<size_t>(sv.addMarker(0, 0)),  // "\"\""
+          static_cast<size_t>(sv.addMarker(1, 1)),  // "\"axyz\""
+      }};
+  auto streamed = sv.lookupBatchesStreamed(VocabLookupInput{batches});
+
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& r : streamed) {
+    results.push_back(std::move(r));
+  }
+  ASSERT_EQ(results.size(), 3);
+
+  // Each streamed result must match the eager `lookupBatch` on the same batch.
+  auto expectMatchesEager = [&sv](const VocabBatchLookupResult& actual,
+                                  ql::span<const size_t> indices) {
+    auto expected = sv.lookupBatch(indices);
+    ASSERT_EQ(actual->size(), expected->size());
+    for (size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*actual)[i], (*expected)[i]);
+    }
+  };
+  expectMatchesEager(results[0], batches[0]);
+  expectMatchesEager(results[1], batches[1]);  // empty batch -> size 0
+  expectMatchesEager(results[2], batches[2]);
+
+  // Also assert exact contents of the first batch directly.
+  ASSERT_EQ(results[0]->size(), 2);
+  EXPECT_EQ((*results[0])[0], "\"xyz\"");
+  EXPECT_EQ((*results[0])[1], "\"abc\"");
+  EXPECT_EQ(results[1]->size(), 0);
+
+  sv.close();
+}
+
+TEST(Vocabulary, SplitVocabularyLookupBatchesStreamedEmptyInput) {
+  TwoSplitVocabulary sv;
+  auto ww = sv.makeDiskWriterPtr("twoSplitVocabStreamedEmpty.dat");
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  ww->finish();
+  sv.readFromFile("twoSplitVocabStreamedEmpty.dat");
+
+  // No baches in -> empty stream out.
+  std::vector<std::vector<size_t>> noBatches;
+  auto streamed = sv.lookupBatchesStreamed(VocabLookupInput{noBatches});
+
+  size_t count = 0;
+  for ([[maybe_unused]] auto& r : streamed) {
+    ++count;
+  }
+  EXPECT_EQ(count, 0);
+  sv.close();
+}
+
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyItemAt) {
   HashSet<std::string> s;
   s.insert("a");
