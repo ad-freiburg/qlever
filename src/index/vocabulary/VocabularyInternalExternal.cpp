@@ -41,29 +41,29 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     // Keeps the internal view objects alive, but NOT their underlying storage:
     // that storage lives in `internalVocab_`s RAM, owned by this instance,
     // which must outlive the returned `VocabBatchLookupResult`.
-    decltype(internalResult) internal;
+    decltype(internalResult) internal_;
     // Owns the disk buffer that the external views point into, keeping it.
     // alive.
-    VocabBatchLookupResult external;
-    std::vector<std::string_view> views;  // the merged view list
-    ql::span<std::string_view> span;      // a span over `views`
+    VocabBatchLookupResult external_;
+    std::vector<std::string_view> views_;  // the merged view list
+    ql::span<std::string_view> span_;      // a span over `views`
   };
 
   // Hand ownership of both source results to `combined` so it keeps their data
   // alive. Size `views` to hold one merged entry per input index.
   auto combined = std::make_shared<CombinedData>();
-  combined->internal = std::move(internalResult);
-  combined->external = std::move(externalResult);
-  combined->views.resize(indices.size());
+  combined->internal_ = std::move(internalResult);
+  combined->external_ = std::move(externalResult);
+  combined->views_.resize(indices.size());
 
   // Merge: take each word form the internal result if present, otherwise pull
   // the next external result.
   size_t externalIdx = 0;
   for (size_t i = 0; i < indices.size(); ++i) {
-    if ((*combined->internal)[i].has_value()) {
-      combined->views[i] = (*combined->internal)[i].value();
+    if ((*combined->internal_)[i].has_value()) {
+      combined->views_[i] = (*combined->internal_)[i].value();
     } else {
-      combined->views[i] = (*combined->external)[externalIdx++];
+      combined->views_[i] = (*combined->external_)[externalIdx++];
     }
   }
 
@@ -71,8 +71,8 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   // refcount: dereferencing the result yields the span over the merged `views`,
   // while holding it keeps the whole `CombinedData` alive, and thus the
   // underlying storage those merged `views` point into.
-  combined->span = ql::span<std::string_view>{combined->views};
-  auto* spanPtr = &combined->span;
+  combined->span_ = ql::span<std::string_view>{combined->views_};
+  auto* spanPtr = &combined->span_;
   return VocabBatchLookupResult(std::move(combined), spanPtr);
 }
 

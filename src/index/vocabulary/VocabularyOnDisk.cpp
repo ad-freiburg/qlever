@@ -51,8 +51,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   // For each index i, read offsets_[i] and offsets_[i+1] (16 bytes) at file
   // position i * sizeof(uint64_t).
   struct OffsetPair {
-    uint64_t offset;
-    uint64_t nextOffset;
+    uint64_t offset_;
+    uint64_t nextOffset_;
   };
   std::vector<OffsetPair> offsetPairs(n);
   std::vector<size_t> offsetSizes(n, sizeof(OffsetPair));
@@ -72,7 +72,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   // Compute string sizes and total buffer size.
   size_t totalSize = 0;
   for (size_t i = 0; i < n; ++i) {
-    totalSize += offsetPairs[i].nextOffset - offsetPairs[i].offset;
+    totalSize += offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
   }
 
   // Phase 2: Read string data via io_uring (reusing the same manager).
@@ -86,8 +86,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   {
     size_t bufferOffset = 0;
     for (size_t i = 0; i < n; ++i) {
-      sizes[i] = offsetPairs[i].nextOffset - offsetPairs[i].offset;
-      fileOffsets[i] = offsetPairs[i].offset;
+      sizes[i] = offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
+      fileOffsets[i] = offsetPairs[i].offset_;
       targetPointers[i] = data->buffer().data() + bufferOffset;
       bufferOffset += sizes[i];
     }
@@ -123,19 +123,19 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
   // Per-batch state for the pipeline.
   struct PipelineBatch {
     struct OffsetPair {
-      uint64_t offset;
-      uint64_t nextOffset;
+      uint64_t offset_;
+      uint64_t nextOffset_;
     };
-    std::vector<OffsetPair> offsetPairs;
-    ad_utility::BatchIoManager::BatchHandle phase1Handle;
+    std::vector<OffsetPair> offsetPairs_;
+    ad_utility::BatchIoManager::BatchHandle phase1Handle_;
 
-    std::shared_ptr<VocabBatchLookupData> data;
-    std::vector<size_t> sizes;
-    std::vector<char*> targetBuffers;
-    ad_utility::BatchIoManager::BatchHandle phase2Handle;
+    std::shared_ptr<VocabBatchLookupData> data_;
+    std::vector<size_t> sizes_;
+    std::vector<char*> targetBuffers_;
+    ad_utility::BatchIoManager::BatchHandle phase2Handle_;
 
-    size_t numIndices;
-    enum Stage { PHASE1_SUBMITTED, PHASE2_SUBMITTED } stage;
+    size_t numIndices_;
+    enum Stage { PHASE1_SUBMITTED, PHASE2_SUBMITTED } stage_;
   };
 
   // The state of the pipeline. On destruction, wait for all in-flight I/O
@@ -153,11 +153,11 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
 
     ~PipelineState() {
       for (auto& b : pipeline_) {
-        if (b.stage == PipelineBatch::PHASE1_SUBMITTED) {
-          manager_->wait(b.phase1Handle);
+        if (b.stage_ == PipelineBatch::PHASE1_SUBMITTED) {
+          manager_->wait(b.phase1Handle_);
         }
-        if (b.stage == PipelineBatch::PHASE2_SUBMITTED) {
-          manager_->wait(b.phase2Handle);
+        if (b.stage_ == PipelineBatch::PHASE2_SUBMITTED) {
+          manager_->wait(b.phase2Handle_);
         }
       }
       self_->ioManagers_->push(std::move(manager_));
@@ -193,8 +193,8 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
 
       const size_t numIndicesInBatch = indices.size();
       PipelineBatch batch;
-      batch.numIndices = numIndicesInBatch;
-      batch.offsetPairs.resize(numIndicesInBatch);
+      batch.numIndices_ = numIndicesInBatch;
+      batch.offsetPairs_.resize(numIndicesInBatch);
 
       std::vector<size_t> offsetSizes(numIndicesInBatch,
                                       sizeof(PipelineBatch::OffsetPair));
@@ -205,13 +205,13 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
         AD_CONTRACT_CHECK(indices[i] < self->size());
         offsetFileOffsets[i] = indices[i] * sizeof(uint64_t);
         targetBufferForOffsetValues[i] =
-            reinterpret_cast<char*>(&batch.offsetPairs[i]);
+            reinterpret_cast<char*>(&batch.offsetPairs_[i]);
       }
 
-      batch.phase1Handle =
+      batch.phase1Handle_ =
           manager->addBatch(self->offsetsFile_.fd(), offsetSizes,
                             offsetFileOffsets, targetBufferForOffsetValues);
-      batch.stage = PipelineBatch::PHASE1_SUBMITTED;
+      batch.stage_ = PipelineBatch::PHASE1_SUBMITTED;
       totalSubmittedSQEs += numIndicesInBatch;
       pipeline.push_back(std::move(batch));
     }
@@ -224,55 +224,55 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     // PHASE2_SUBMITTED by waiting for their offset reads and submitting
     // string reads.
     while (!pipeline.empty() &&
-           pipeline.front().stage == PipelineBatch::PHASE1_SUBMITTED) {
+           pipeline.front().stage_ == PipelineBatch::PHASE1_SUBMITTED) {
       auto& batch = pipeline.front();
-      manager->wait(batch.phase1Handle);
+      manager->wait(batch.phase1Handle_);
 
-      const size_t numIndicesInBatch = batch.numIndices;
+      const size_t numIndicesInBatch = batch.numIndices_;
       size_t totalSize = 0;
       for (size_t i = 0; i < numIndicesInBatch; ++i) {
         totalSize +=
-            batch.offsetPairs[i].nextOffset - batch.offsetPairs[i].offset;
+            batch.offsetPairs_[i].nextOffset_ - batch.offsetPairs_[i].offset_;
       }
 
-      batch.data = std::make_shared<VocabBatchLookupData>();
-      batch.data->buffer().resize(totalSize);
-      batch.data->views().resize(numIndicesInBatch);
+      batch.data_ = std::make_shared<VocabBatchLookupData>();
+      batch.data_->buffer().resize(totalSize);
+      batch.data_->views().resize(numIndicesInBatch);
 
-      batch.sizes.resize(numIndicesInBatch);
-      batch.targetBuffers.resize(numIndicesInBatch);
+      batch.sizes_.resize(numIndicesInBatch);
+      batch.targetBuffers_.resize(numIndicesInBatch);
       std::vector<uint64_t> fileOffsets(numIndicesInBatch);
       {
         size_t bufferOffset = 0;
         for (size_t i = 0; i < numIndicesInBatch; ++i) {
-          batch.sizes[i] =
-              batch.offsetPairs[i].nextOffset - batch.offsetPairs[i].offset;
-          fileOffsets[i] = batch.offsetPairs[i].offset;
-          batch.targetBuffers[i] = batch.data->buffer().data() + bufferOffset;
-          bufferOffset += batch.sizes[i];
+          batch.sizes_[i] =
+              batch.offsetPairs_[i].nextOffset_ - batch.offsetPairs_[i].offset_;
+          fileOffsets[i] = batch.offsetPairs_[i].offset_;
+          batch.targetBuffers_[i] = batch.data_->buffer().data() + bufferOffset;
+          bufferOffset += batch.sizes_[i];
         }
       }
 
-      batch.phase2Handle = manager->addBatch(self->file_.fd(), batch.sizes,
-                                             fileOffsets, batch.targetBuffers);
-      batch.stage = PipelineBatch::PHASE2_SUBMITTED;
+      batch.phase2Handle_ = manager->addBatch(
+          self->file_.fd(), batch.sizes_, fileOffsets, batch.targetBuffers_);
+      batch.stage_ = PipelineBatch::PHASE2_SUBMITTED;
       totalSubmittedSQEs += numIndicesInBatch;
     }
 
     // YIELD: wait for front batch's phase-2, return result.
     AD_CORRECTNESS_CHECK(!pipeline.empty());
     auto& front = pipeline.front();
-    AD_CORRECTNESS_CHECK(front.stage == PipelineBatch::PHASE2_SUBMITTED);
-    manager->wait(front.phase2Handle);
+    AD_CORRECTNESS_CHECK(front.stage_ == PipelineBatch::PHASE2_SUBMITTED);
+    manager->wait(front.phase2Handle_);
 
-    const size_t n = front.numIndices;
+    const size_t n = front.numIndices_;
     for (size_t i = 0; i < n; ++i) {
-      front.data->views()[i] =
-          std::string_view(front.targetBuffers[i], front.sizes[i]);
+      front.data_->views()[i] =
+          std::string_view(front.targetBuffers_[i], front.sizes_[i]);
     }
-    auto result = VocabBatchLookupData::asResult(std::move(front.data));
+    auto result = VocabBatchLookupData::asResult(std::move(front.data_));
 
-    totalSubmittedSQEs -= 2 * front.numIndices;
+    totalSubmittedSQEs -= 2 * front.numIndices_;
     pipeline.pop_front();
     return result;
   };

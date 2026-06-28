@@ -58,6 +58,67 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   EXPECT_EQ((*result)[0], "gamma");
   EXPECT_EQ((*result)[1], "alpha");
   EXPECT_EQ((*result)[2], "beta");
+
+  // `lookupBatch` edge cases: an empty batch, and a batch with duplicate
+  // indices (each position must be resolved independently).
+  {
+    auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+    EXPECT_EQ(emptyResult->size(), 0);
+
+    std::array<size_t, 4> dupIndices{1, 1, 0, 1};
+    auto dupResult = vocab.lookupBatch(dupIndices);
+    ASSERT_EQ(dupResult->size(), 4);
+    EXPECT_EQ((*dupResult)[0], "beta");
+    EXPECT_EQ((*dupResult)[1], "beta");
+    EXPECT_EQ((*dupResult)[2], "alpha");
+    EXPECT_EQ((*dupResult)[3], "beta");
+  }
+
+  // Test lookupBatchesStreamed: a stream of batches, where each yielded result
+  // must match the eager `lookupBatch` on the same batch. The input is built
+  // from a plain container (no coroutine) so this also compiles in the C++17
+  // reduced-feature build.
+  {
+    std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
+    auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{batches});
+
+    std::vector<VocabBatchLookupResult> results;
+    for (auto& r : streamed) {
+      results.push_back(std::move(r));
+    }
+    ASSERT_EQ(results.size(), 3);
+
+    auto expectMatchesEager = [&vocab](const VocabBatchLookupResult& actual,
+                                       ql::span<const size_t> batchIndices) {
+      auto expected = vocab.lookupBatch(batchIndices);
+      ASSERT_EQ(actual->size(), expected->size());
+      for (size_t i = 0; i < expected->size(); ++i) {
+        EXPECT_EQ((*actual)[i], (*expected)[i]);
+      }
+    };
+    expectMatchesEager(results[0], batches[0]);
+    expectMatchesEager(results[1], batches[1]);  // empty batch -> size 0
+    expectMatchesEager(results[2], batches[2]);
+
+    // Exact contents.
+    ASSERT_EQ(results[0]->size(), 2);
+    EXPECT_EQ((*results[0])[0], "gamma");
+    EXPECT_EQ((*results[0])[1], "alpha");
+    EXPECT_EQ(results[1]->size(), 0);
+    ASSERT_EQ(results[2]->size(), 1);
+    EXPECT_EQ((*results[2])[0], "beta");
+  }
+
+  // An empty input stream must produce no results.
+  {
+    std::vector<std::vector<size_t>> noBatches;
+    auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{noBatches});
+    size_t count = 0;
+    for ([[maybe_unused]] auto& r : streamed) {
+      ++count;
+    }
+    EXPECT_EQ(count, 0);
+  }
 }
 }  // namespace
 

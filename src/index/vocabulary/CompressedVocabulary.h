@@ -97,7 +97,7 @@ CPP_template(typename UnderlyingVocabulary,
     for (size_t i = 0; i < indices.size(); ++i) {
       // FSST decompresses at most 8x per pass; for FSST^2 max is 64x.
       size_t maxDecompressedWordSize = compressedViews[i].size() * 64 + 64;
-      char* wordBuf =
+      auto wordBuf =
           static_cast<char*>(resource->allocate(maxDecompressedWordSize, 1));
       size_t written = compressionWrapper_.decompressInto(
           compressedViews[i], getDecoderIdx(indices[i]), wordBuf,

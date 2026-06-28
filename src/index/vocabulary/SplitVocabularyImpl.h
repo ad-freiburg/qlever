@@ -142,25 +142,25 @@ VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
   // Merge results back into original order. We need a custom holder that
   // keeps the sub-results alive since our string_views point into them.
   struct MergedData {
-    std::array<VocabBatchLookupResult, numberOfVocabs> subResults;
-    std::vector<std::string_view> views;
-    ql::span<std::string_view> span;
+    std::array<VocabBatchLookupResult, numberOfVocabs> subResults_;
+    std::vector<std::string_view> views_;
+    ql::span<std::string_view> span_;
   };
   auto merged = std::make_shared<MergedData>();
-  merged->subResults = std::move(resultsPerVocab);
-  merged->views.resize(indices.size());
+  merged->subResults_ = std::move(resultsPerVocab);
+  merged->views_.resize(indices.size());
 
   for (uint8_t m = 0; m < numberOfVocabs; ++m) {
-    if (merged->subResults[m]) {
-      const auto& resultSpan = *merged->subResults[m];
+    if (merged->subResults_[m]) {
+      const auto& resultSpan = *merged->subResults_[m];
       for (size_t j = 0; j < originalIndices[m].size(); ++j) {
-        merged->views[originalIndices[m][j]] = resultSpan[j];
+        merged->views_[originalIndices[m][j]] = resultSpan[j];
       }
     }
   }
 
-  merged->span = ql::span<std::string_view>{merged->views};
-  return VocabBatchLookupResult(merged, &merged->span);
+  merged->span_ = ql::span<std::string_view>{merged->views_};
+  return VocabBatchLookupResult(merged, &merged->span_);
 }
 
 // _____________________________________________________________________________
