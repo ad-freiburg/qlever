@@ -79,8 +79,6 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyInternalExternal::lookupBatchesStreamed(
     VocabLookupInput input) const {
-  // NOTE: Not implemented as a coroutine, because coroutines are not
-  // available in the C++17 compatibility build.
   return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
       [this, input = std::move(
                  input)]() mutable -> std::optional<VocabBatchLookupResult> {

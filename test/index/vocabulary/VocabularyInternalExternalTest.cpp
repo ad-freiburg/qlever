@@ -132,3 +132,51 @@ TEST(VocabularyInternalExternal, LookupBatch) {
   auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
   EXPECT_EQ(emptyResult->size(), 0);
 }
+
+TEST(VocabularyInternalExternal, LookupBatchesStreamed) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamed"};
+  auto vocab = creator.createVocabulary(words);
+
+  // Batches spanning both the internal (RAM) and external (disk) parts, plus an
+  // empty batch.
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {}, {1}};
+  auto streamedResults = vocab.lookupBatchesStreamed(
+      VocabLookupInput{ad_utility::InputRangeTypeErased{batches}});
+
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& result : streamedResults) {
+    results.push_back(std::move(result));
+  }
+  ASSERT_EQ(results.size(), 3);
+
+  // Each streamed batch matches the corresponding eager `lookupBatch`.
+  auto expectMatchesEager = [&vocab](const VocabBatchLookupResult& actual,
+                                     ql::span<const size_t> indices) {
+    auto expected = vocab.lookupBatch(indices);
+    ASSERT_EQ(actual->size(), expected->size());
+    for (size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*actual)[i], (*expected)[i]);
+    }
+  };
+  expectMatchesEager(results[0], std::array<size_t, 3>{2, 0, 3});
+  expectMatchesEager(results[1], ql::span<const size_t>{});  // empty batch
+  expectMatchesEager(results[2], std::array<size_t, 1>{1});
+}
+
+TEST(VocavularyInternalExternal, LookupBatchesStreamedEmptyInput) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedEmptyInput"};
+  auto vocab = creator.createVocabulary(words);
+
+  // No batches in -> empty stream out.
+  std::vector<std::vector<size_t>> noBatches;
+  auto streamedResults = vocab.lookupBatchesStreamed(
+      VocabLookupInput{ad_utility::InputRangeTypeErased{noBatches}});
+
+  size_t count = 0;
+  for ([[maybe_unused]] auto& result : streamedResults) {
+    ++count;
+  }
+  EXPECT_EQ(count, 0);
+}
