@@ -232,6 +232,8 @@ addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
+addLinkAndDiscoverTestSerial(ProxyTest engine)
+
 addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
@@ -341,6 +343,8 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
+
+addLinkAndDiscoverTestSerial(SparqlJsonBindingUtilsTest engine)
 
 addLinkAndDiscoverTest(LoadTest engine)
 

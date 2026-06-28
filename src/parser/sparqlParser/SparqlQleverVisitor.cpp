@@ -43,6 +43,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/PathQuery.h"
+#include "parser/ProxyQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -1284,6 +1285,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == QLPROXY_IRI) {
+    return visitMagicServiceQuery<parsedQuery::ProxyQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
              ql::starts_with(serviceIri.toStringRepresentation(),
                              EXTERNAL_VALUES_IRI_PREFIX)) {

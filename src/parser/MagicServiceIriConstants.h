@@ -24,6 +24,9 @@ constexpr inline std::string_view SPATIAL_SEARCH_IRI =
 constexpr inline std::string_view TEXT_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/textSearch/>";
 
+constexpr inline std::string_view QLPROXY_IRI =
+    "<https://qlever.cs.uni-freiburg.de/qlproxy/>";
+
 constexpr inline std::string_view EXTERNAL_VALUES_IRI =
     "<https://qlever.cs.uni-freiburg.de/external-values/>";
 
