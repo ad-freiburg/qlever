@@ -43,10 +43,10 @@ CPP_concept SplitFilenameFunctionT =
 class PolymorphicVocabulary;
 
 // A SplitVocabulary is a vocabulary layer that divides words into different
-// underlying vocabularies. It is templated on the UnderlyingVocabularies as
-// well as a SplitFunction that decides which underlying vocabulary is used for
-// each word and a SplitFilenameFunction that assigns filenames to underlying
-// vocabularies.
+// underlying vocabularies. It is templated on the `UnderlyingVocabularies` as
+// well as a `SplitFunction` that decides which underlying vocabulary is used
+// for each word and a `SplitFilenameFunction` that assigns filenames to
+// underlying vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
 QL_CONCEPT_OR_NOTHING(
@@ -105,7 +105,7 @@ class SplitVocabulary {
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
   // zero in all ValueId datatype bits.
-  static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
+  static constexpr uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
     return vocabIndex | (static_cast<uint64_t>(marker) << markerShift);
