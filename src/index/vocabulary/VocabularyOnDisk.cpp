@@ -135,7 +135,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     ad_utility::BatchIoManager::BatchHandle phase2Handle_;
 
     size_t numIndices_;
-    enum Stage { PHASE1_SUBMITTED, PHASE2_SUBMITTED } stage_;
+    enum class Stage { PHASE1_SUBMITTED, PHASE2_SUBMITTED } stage_;
   };
 
   // The state of the pipeline. On destruction, wait for all in-flight I/O
