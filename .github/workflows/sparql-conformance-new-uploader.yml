@@ -39,6 +39,7 @@ jobs:
         run: unzip conformance-report.zip
       - name: Read conformance report metadata
         run: |
+          echo "run_title=$(cat run_title)"                             >> $GITHUB_ENV
           echo "github_event=$(cat event)"                              >> $GITHUB_ENV
           echo "pr_number=$(cat pr)"                                    >> $GITHUB_ENV
           echo "original_github_ref=$(cat github_ref)"                 >> $GITHUB_ENV
@@ -62,6 +63,7 @@ jobs:
             -H "x-ref-kind: $REF_KIND" \
             -H "x-pr-number: ${{ env.pr_number }}" \
             -H "x-head-ref: ${{ env.head_ref }}" \
+            -H "x-run-title: ${{ env.run_title }}" \
             -H "x-workflow-run-id: ${{ github.event.workflow_run.id }}" \
             -H "x-upload-source: ci" \
             -F "file=@${{ env.commit_sha }}.json.bz2" \
