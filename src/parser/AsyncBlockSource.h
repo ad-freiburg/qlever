@@ -18,10 +18,7 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
-#include <boost/asio/system_executor.hpp>
-#include <boost/asio/use_future.hpp>
 #include <exception>
-#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -41,11 +38,9 @@ using ByteBlock = ad_utility::UninitializedVector<char>;
 // executor passed at construction owns an internal strand that serializes all
 // `getNextBlockImpl()` calls. Callers must not invoke `asyncGetNextBlock`
 // again before the previous handler has fired (single-flight contract).
-// Completion signatures:
-//   - `void(std::optional<Block>)` → delivers the next block, or `nullopt`
-//     at EOF.
-//   - `void(std::exception_ptr)` → fatal error; rethrow to surface to the
-//     user.
+// The completion signature is `void(std::exception_ptr, std::optional<Block>)`:
+// a null `exception_ptr` with a non-null optional delivers the next block; a
+// null optional signals EOF; a non-null `exception_ptr` signals a fatal error.
 class AsyncBlockSource {
  public:
   using Block = ByteBlock;
@@ -55,52 +50,33 @@ class AsyncBlockSource {
   virtual ~AsyncBlockSource() = default;
 
   // Asynchronously deliver the next block of bytes. Accepts any Asio
-  // completion token (e.g. `boost::asio::use_future`). The completion
-  // fires on the handler's associated executor.
-  //
-  // When Boost.Asio supports multiple completion signatures
-  // (`BOOST_ASIO_HAS_VARIADIC_TEMPLATES`), two separate signatures are used:
-  // `void(std::optional<Block>)` for the success case and
-  // `void(std::exception_ptr)` for errors. Older Boost.Asio versions fall back
-  // to a single `void(std::exception_ptr, std::optional<Block>)` signature,
-  // where a null `exception_ptr` indicates success.
+  // completion token (e.g. `boost::asio::use_future`). The completion fires
+  // on the handler's associated executor with signature
+  // `void(std::exception_ptr, std::optional<Block>)`: a null `exception_ptr`
+  // signals success, a non-null one signals a fatal error.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
-    auto initiator = [this](auto handler) mutable {
-      auto ex = net::get_associated_executor(handler, strand_);
-      net::post(strand_, [this, h = std::move(handler), ex]() mutable {
-        try {
-          auto block = getNextBlockImpl();
-          net::dispatch(ex,
-                        [h = std::move(h), block = std::move(block)]() mutable {
-#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-                          std::move(h)(std::move(block));
-#else
-                std::move(h)(nullptr, std::move(block));
-#endif
-                        });
-        } catch (...) {
-          net::dispatch(
-              ex, [h = std::move(h), ep = std::current_exception()]() mutable {
-#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-                std::move(h)(ep);
-#else
-                std::move(h)(ep, std::nullopt);
-#endif
-              });
-        }
-      });
-    };
-#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-    return net::async_initiate<CompletionToken, void(std::optional<Block>),
-                               void(std::exception_ptr)>(
-        std::move(initiator), std::forward<CompletionToken>(token));
-#else
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
-        std::move(initiator), std::forward<CompletionToken>(token));
-#endif
+        [this](auto handler) mutable {
+          auto ex = net::get_associated_executor(handler, strand_);
+          net::post(strand_, [this, h = std::move(handler), ex]() mutable {
+            try {
+              auto block = getNextBlockImpl();
+              net::dispatch(
+                  ex, [h = std::move(h), block = std::move(block)]() mutable {
+                    std::move(h)(nullptr, std::move(block));
+                  });
+            } catch (...) {
+              net::dispatch(ex, [h = std::move(h),
+                                 ep = std::current_exception()]() mutable {
+                std::move(h)(ep, std::nullopt);
+              });
+            }
+          });
+        },
+        std::forward<CompletionToken>(token));
   }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
@@ -172,45 +148,5 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
 };
 
 }  // namespace qlever::parser
-
-// Specialization of `async_result` so that `boost::asio::use_future` works
-// with the two-signature `asyncGetNextBlock`. This is only needed (and only
-// valid) when Boost.Asio supports multiple completion signatures; older
-// versions use the single-signature fallback which `use_future` handles
-// natively. The success overload `void(std::optional<T>)` stores the value
-// in a `std::promise`, and the error overload `void(std::exception_ptr)`
-// stores the exception. The result is always a `std::future<std::optional<T>>`.
-#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-namespace boost::asio {
-template <typename Allocator, typename T>
-class async_result<use_future_t<Allocator>, void(std::optional<T>),
-                   void(std::exception_ptr)> {
- public:
-  struct completion_handler_type {
-    std::shared_ptr<std::promise<std::optional<T>>> p_ =
-        std::make_shared<std::promise<std::optional<T>>>();
-    using executor_type = boost::asio::system_executor;
-    executor_type get_executor() const { return {}; }
-    void operator()(std::optional<T> opt) { p_->set_value(std::move(opt)); }
-    void operator()(std::exception_ptr ep) { p_->set_exception(std::move(ep)); }
-  };
-  using return_type = std::future<std::optional<T>>;
-  explicit async_result(completion_handler_type& h)
-      : future_{h.p_->get_future()} {}
-  return_type get() { return std::move(future_); }
-  template <typename Initiation, typename RawToken, typename... Args>
-  static return_type initiate(Initiation&& init, RawToken&&, Args&&... args) {
-    completion_handler_type handler;
-    async_result result(handler);
-    std::forward<Initiation>(init)(std::move(handler),
-                                   std::forward<Args>(args)...);
-    return result.get();
-  }
-
- private:
-  std::future<std::optional<T>> future_;
-};
-}  // namespace boost::asio
-#endif  // defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
 
 #endif  // QLEVER_SRC_PARSER_ASYNCBLOCKSOURCE_H
