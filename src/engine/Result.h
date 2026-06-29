@@ -86,11 +86,38 @@ class Result {
   // is useful when the result is still being constructed (because it is
   // mutable), the latter is useful when the result is read from a cache (e.g.
   // the named query cache), because the shared ownership doesn't require a copy
-  // of the result.
-  struct IdTableSharedLocalVocabPair {
-    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
-    // The local vocabulary of the result.
+  // of the result. The `view_` member always reflects the current state of
+  // `idTableOrPtr_` and is kept in sync by the constructors and by
+  // `applyLimitOffset()`. This invariant enables callers to take the address of
+  // the view (e.g. for an alias `shared_ptr`) with a stable pointer.
+  // The spans inside `view_` survive moving this object because `IdTable` keeps
+  // its columns in heap-backed storage that the move only re-points to.
+  class IdTableSharedLocalVocabPair {
+    std::variant<IdTable, IdTablePtr> idTableOrPtr_;
     LocalVocabPtr localVocab_;
+    IdTableView<0> view_;
+
+    // Build the view from `idTableOrPtr_`. Used by the constructors and by
+    // `applyLimitOffset()` after the data has been modified.
+    static IdTableView<0> makeView(
+        const std::variant<IdTable, IdTablePtr>& idTableOrPtr);
+
+   public:
+    IdTableSharedLocalVocabPair(IdTable idTable, LocalVocabPtr localVocab);
+    IdTableSharedLocalVocabPair(IdTablePtr idTablePtr,
+                                LocalVocabPtr localVocab);
+
+    const IdTable& idTable() const;
+    // The returned reference is stable for the lifetime of this object.
+    // `applyLimitOffset()` refreshes the view in place; copies of the view
+    // value taken before that call should not be reused afterwards.
+    const IdTableView<0>& idTableView() const { return view_; }
+    const LocalVocab& localVocab() const { return *localVocab_; }
+    LocalVocabPtr localVocabPtr() const { return localVocab_; }
+
+    // Resize/replace the internal `IdTable` according to `limitOffset` and
+    // refresh `view_`.
+    void applyLimitOffset(const LimitOffsetClause& limitOffset);
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
 
@@ -201,6 +228,17 @@ class Result {
   // materialized.
   const IdTable& idTable() const;
 
+  // Returns a non-owning view of the materialized `idTable()`. Throw if not
+  // fully materialized. The reference is stable for the lifetime of this
+  // `Result`; `applyLimitOffset()` refreshes the view in place, so copies of
+  // the view value taken before that call should not be reused afterwards.
+  const IdTableView<0>& idTableView() const;
+
+  // Returns a clone of the materialized `idTable()`. Throw if not fully
+  // materialized. This operation is potentially expensive as it copies all
+  // data.
+  IdTable cloneIdTable() const;
+
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
   // has previously already been retrieved.
@@ -225,7 +263,7 @@ class Result {
   //
   const LocalVocab& localVocab() const {
     AD_CONTRACT_CHECK(isFullyMaterialized());
-    return *std::get<IdTableSharedLocalVocabPair>(data_).localVocab_;
+    return std::get<IdTableSharedLocalVocabPair>(data_).localVocab();
   }
 
   // Get the local vocab as a shared pointer to const. This can be used if one
@@ -233,7 +271,7 @@ class Result {
   SharedLocalVocabWrapper getSharedLocalVocab() const {
     AD_CONTRACT_CHECK(isFullyMaterialized());
     return SharedLocalVocabWrapper{
-        std::get<IdTableSharedLocalVocabPair>(data_).localVocab_};
+        std::get<IdTableSharedLocalVocabPair>(data_).localVocabPtr()};
   }
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
