@@ -490,34 +490,43 @@ class IdTable {
   static constexpr bool isCloneable =
       std::is_copy_constructible_v<Storage> &&
       std::is_copy_constructible_v<ColumnStorage>;
+
+  // The type returned by `clone()` and `moveOrClone()`: always the non-view
+  // (owning) variant of this table type.
+  using OwnedTable = IdTable<T, NumColumns, ColumnStorage, IsView::False>;
+
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
   // this behaves exactly like the copy constructor with the following
   // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
-  CPP_template(typename = void)(requires(isCloneable))
-      IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const {
+  CPP_template(typename = void)(requires(isCloneable)) OwnedTable
+      clone() const {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
     }
-    return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
-        std::move(storage), numColumns_, numRows_, allocator_};
+    return OwnedTable{std::move(storage), numColumns_, numRows_, allocator_};
   }
 
-  // Move or clone returns a copied or moved IdTable depending on the value
-  // category of `*this`. The typical usage is
-  // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
-  // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
-  // (which `IdTable` is not.).
-  CPP_member auto moveOrClone() const& -> CPP_ret(IdTable)(
+  // `moveOrClone` always returns an `OwnedTable`. For r-value `IdTables` (no
+  // views), this moves the table. For l-value referenced `IdTable`s and
+  // all `IdTableView`s return a deep copy via `clone()`. The typical usage is
+  // `auto newTable = AD_FWD(oldTable).moveOrClone()` meaning "I want to take
+  // ownership of an `IdTable` that owns its data as efficiently as possible".
+  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
                                            requires isCloneable) {
     return clone();
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(IdTable&&)(requires isCloneable) {
-    return std::move(*this);
+  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
+                                       requires isCloneable) {
+    if constexpr (isView) {
+      return clone();
+    } else {
+      return std::move(*this);
+    }
   }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
