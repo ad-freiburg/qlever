@@ -320,7 +320,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const IdTableView<0>&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

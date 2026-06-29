@@ -49,7 +49,7 @@ TEST(QueryExecutionTree, sortedUnionSpecialCase) {
 
   qec->getQueryTreeCache().clearAll();
   auto result = sortedTree->getResult(false);
-  EXPECT_EQ(result->idTable(), makeIdTableFromVector({{0}, {1}}));
+  EXPECT_EQ(result->idTableView(), makeIdTableFromVector({{0}, {1}}));
 }
 
 // _____________________________________________________________________________

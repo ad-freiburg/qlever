@@ -726,7 +726,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
       aggregatedValue.value()._resultPointer->resultTable();
   ASSERT_TRUE(aggregatedResult.isFullyMaterialized());
 
-  const auto& idTable = aggregatedResult.idTable();
+  const auto& idTable = aggregatedResult.idTableView();
   ASSERT_EQ(idTable.numColumns(), 2);
   ASSERT_EQ(idTable.numRows(), 3);
 
