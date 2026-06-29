@@ -169,14 +169,10 @@ TEST(VocabularyOnDisk, LookupBatchesStreamed) {
   VocabularyCreator creator{"LookupBatchesStreamed"};
   auto vocab = creator.createVocabulary(words);
 
-  // Create a generator that yields two batches.
-  auto makeBatches = []() -> cppcoro::generator<std::vector<size_t>> {
-    co_yield std::vector<size_t>{2, 0, 3};
-    co_yield std::vector<size_t>{1};
-  };
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}};
 
   auto streamedResults =
-      vocab.lookupBatchesStreamed(VocabLookupInput{makeBatches()});
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
   // Collect results from the stream.
   std::vector<VocabBatchLookupResult> results;

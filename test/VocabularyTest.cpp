@@ -196,7 +196,7 @@ TEST(VocabularyTest, LookupBatch) {
 }
 
 // _____________________________________________________________________________
-TEST(VocabularyTest, LookupBachesStreamed) {
+TEST(VocabularyTest, LookupBatchesStreamed) {
   using ad_utility::VocabularyType;
   RdfsVocabulary v;
   v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
