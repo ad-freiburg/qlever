@@ -67,48 +67,39 @@ class AsyncBlockSource {
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
+    auto initiator = [this](auto handler) mutable {
+      auto ex = net::get_associated_executor(handler, strand_);
+      net::post(strand_, [this, h = std::move(handler), ex]() mutable {
+        try {
+          auto block = getNextBlockImpl();
+          net::dispatch(ex,
+                        [h = std::move(h), block = std::move(block)]() mutable {
+#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
+                          std::move(h)(std::move(block));
+#else
+                std::move(h)(nullptr, std::move(block));
+#endif
+                        });
+        } catch (...) {
+          net::dispatch(
+              ex, [h = std::move(h), ep = std::current_exception()]() mutable {
+#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
+                std::move(h)(ep);
+#else
+                std::move(h)(ep, std::nullopt);
+#endif
+              });
+        }
+      });
+    };
 #if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
     return net::async_initiate<CompletionToken, void(std::optional<Block>),
                                void(std::exception_ptr)>(
-        [this](auto handler) mutable {
-          auto ex = net::get_associated_executor(handler, strand_);
-          net::post(strand_, [this, h = std::move(handler), ex]() mutable {
-            try {
-              auto block = getNextBlockImpl();
-              net::dispatch(
-                  ex, [h = std::move(h), block = std::move(block)]() mutable {
-                    std::move(h)(std::move(block));
-                  });
-            } catch (...) {
-              net::dispatch(ex, [h = std::move(h),
-                                 ep = std::current_exception()]() mutable {
-                std::move(h)(ep);
-              });
-            }
-          });
-        },
-        std::forward<CompletionToken>(token));
+        std::move(initiator), std::forward<CompletionToken>(token));
 #else
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
-        [this](auto handler) mutable {
-          auto ex = net::get_associated_executor(handler, strand_);
-          net::post(strand_, [this, h = std::move(handler), ex]() mutable {
-            try {
-              auto block = getNextBlockImpl();
-              net::dispatch(
-                  ex, [h = std::move(h), block = std::move(block)]() mutable {
-                    std::move(h)(nullptr, std::move(block));
-                  });
-            } catch (...) {
-              net::dispatch(ex, [h = std::move(h),
-                                 ep = std::current_exception()]() mutable {
-                std::move(h)(ep, std::nullopt);
-              });
-            }
-          });
-        },
-        std::forward<CompletionToken>(token));
+        std::move(initiator), std::forward<CompletionToken>(token));
 #endif
   }
 
