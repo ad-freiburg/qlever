@@ -28,6 +28,12 @@ namespace ad_utility::triple_component {
 // is `std::string`. When `isOwning = false`, storage is `std::string_view` and
 // all mutating/allocating functions are disabled. Use the `Iri` and `IriView`
 // wrapper classes for the concrete owning and non-owning variants.
+//
+// The IRI is stored in QLever's internal normalized format: the full IRI
+// including the surrounding angle brackets, with all `\u`/`\U` escape
+// sequences resolved to their literal UTF-8 characters (see `fromIriref`).
+// For example, the IRI written as `<http://x/\u00E9>` in SPARQL is stored
+// as `<http://x/é>`.
 template <bool isOwning = true>
 class BasicIri {
  public:
@@ -59,8 +65,17 @@ class BasicIri {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
 
+  // Build an `Iri` from a string that is already in QLever's internal
+  // normalized format (see the class comment). The string is stored verbatim
+  // (no validation, no transformation); this is the exact inverse of
+  // `toStringRepresentation`. To build an `Iri` from a raw (possibly escaped)
+  // SPARQL/Turtle IRI instead, use `fromIriref`.
   static BasicIri fromStringRepresentation(StorageType s);
 
+  // Return the IRI in QLever's internal normalized format (see the class
+  // comment). This is the exact inverse of `fromStringRepresentation`. Code
+  // that uses the IRI semantically (e.g. for RDF/SPARQL output) should use
+  // `toSparql()` instead.
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
     return iri_;
@@ -69,6 +84,20 @@ class BasicIri {
   std::conditional_t<isOwning, std::string, std::string_view>
   toStringRepresentation() && {
     return std::move(iri_);
+  }
+
+  // Return a valid RDF/SPARQL representation of the IRI.
+  //
+  // NOTE: currently this is equal to the internal string representation. Should
+  // this ever change, all call sites that rely on this equality have to be
+  // inspected.
+  std::conditional_t<isOwning, std::string, std::string_view> toSparql()
+      const& {
+    return toStringRepresentation();
+  }
+
+  std::conditional_t<isOwning, std::string, std::string_view> toSparql() && {
+    return std::move(*this).toStringRepresentation();
   }
 
   // Return true iff the IRI is empty.
@@ -99,6 +128,19 @@ class Iri : public BasicIri<true> {
 
   // Create a new `Iri` given an IRI string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);
+
+  // Like `fromIriref`, but first validate that `stringWithBrackets` is a
+  // syntactically valid `IRIREF` and `throw` an `ad_utility::Exception`
+  // otherwise. The accepted format is the SPARQL/Turtle `IRIREF` production
+  // according to https://www.ietf.org/rfc/rfc3987.txt:
+  //
+  //   IRIREF ::= '<' ([^<>"{}|^`\] - [#x00-#x20])* '>'
+  //
+  // which the regex below encodes: a `<`, then zero or more characters that are
+  // none of `<>"{}|^`\` and not a control character or space (the `\0- ` range
+  // covers all bytes from `#x00` to `#x20` inclusive), then a closing `>`. The
+  // body may be empty (`<>` is valid).
+  static Iri fromIrirefValidated(std::string_view stringWithBrackets);
 
   // Create a new `Iri` given an IRI string without brackets.
   static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);

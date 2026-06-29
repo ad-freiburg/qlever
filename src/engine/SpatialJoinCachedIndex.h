@@ -44,7 +44,7 @@ class SpatialJoinCachedIndex {
   // the `IdTable`. Currently only line strings are supported for the
   // experimental S2 point polyline algorithm.
   SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
-                         const IdTable& restable, const Index& index);
+                         const IdTableView<0>& restable, const Index& index);
 
   // Getters
   const Variable& getGeometryColumn() const;

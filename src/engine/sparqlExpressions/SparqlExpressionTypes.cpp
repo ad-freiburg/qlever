@@ -31,7 +31,7 @@ EvaluationContext::EvaluationContext(
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
-      _inputTable{inputTable},
+      _inputTable{std::move(inputTable)},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
