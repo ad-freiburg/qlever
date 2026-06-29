@@ -218,13 +218,16 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
   // mid-iteration.
   struct PipelineState {
     const VocabularyOnDisk* self_;
+    VocabLookupInput input_;
     std::unique_ptr<ad_utility::BatchIoManager> manager_;
     std::deque<PipelineBatch> pipeline_;
     size_t totalSubmittedSQEs_ = 0;
     bool inputExhausted_ = false;
 
-    explicit PipelineState(const VocabularyOnDisk* self)
-        : self_{self}, manager_{self->ioManagers_->pop().value()} {}
+    PipelineState(const VocabularyOnDisk* self, VocabLookupInput input)
+        : self_{self},
+          input_{std::move(input)},
+          manager_{self->ioManagers_->pop().value()} {}
 
     ~PipelineState() {
       ad_utility::terminateIfThrows(
@@ -241,61 +244,74 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
           },
           "Error while draining the I/O pipeline in ~PipelineState");
     }
-  };
 
-  auto pipelineState = std::make_shared<PipelineState>(this);
-
-  auto get = [pipelineState = std::move(pipelineState),
-              rangeOfIndexBatches = std::move(rangeOfIndexBatches)]() mutable
-      -> std::optional<VocabBatchLookupResult> {
-    // alias the captured `pipelineState` to improve readability.
-    const auto* self = pipelineState->self_;
-    auto& manager = pipelineState->manager_;
-    auto& pipeline = pipelineState->pipeline_;
-    auto& totalSubmittedSQEs = pipelineState->totalSubmittedSQEs_;
-
-    // FILL: submit phase-1 (offset reads) for new batches until threshold
-    // or input exhausted.
-    while (!pipelineState->inputExhausted_ &&
-           totalSubmittedSQEs < kPrefetchThreshold) {
-      auto batchOfIndices = rangeOfIndexBatches.get();
-      if (!batchOfIndices.has_value()) {
-        pipelineState->inputExhausted_ = true;
-        break;
+    // Produce the next result batch, or `std::nullopt` when the stream is
+    // exhausted. Each call tops up the in-flight read window (FILL), promotes
+    // ready batches to their string reads (ADVANCE), and returns the front
+    // batch's result (YIELD).
+    std::optional<VocabBatchLookupResult> getNextResult() {
+      if (auto emptyResult = fillPipeline()) {
+        return emptyResult;
       }
-      auto indices = std::move(batchOfIndices.value());
-
-      if (indices.empty()) {
-        auto emptyData = std::make_shared<VocabBatchLookupData>();
-        return VocabBatchLookupData::asResult(std::move(emptyData));
+      if (pipeline_.empty()) {
+        return std::nullopt;
       }
-
-      auto batch = PipelineBatch::submitOffsetReads(indices, *self, *manager);
-      totalSubmittedSQEs += batch.numIndices_;
-      pipeline.push_back(std::move(batch));
+      advanceFrontBatches();
+      return yieldFront();
     }
 
-    if (pipeline.empty()) {
+   private:
+    // FILL: submit phase-1 (offset) reads for new batches until the prefetch
+    // threshold is reached or the input is exhausted. Returns an empty result
+    // to be yielded immediately if an empty input batch is encountered,
+    // otherwise `std::nullopt`.
+    std::optional<VocabBatchLookupResult> fillPipeline() {
+      while (!inputExhausted_ && totalSubmittedSQEs_ < kPrefetchThreshold) {
+        auto batchOfIndices = input_.get();
+        if (!batchOfIndices.has_value()) {
+          inputExhausted_ = true;
+          break;
+        }
+        auto indices = std::move(batchOfIndices.value());
+        if (indices.empty()) {
+          auto emptyData = std::make_shared<VocabBatchLookupData>();
+          return VocabBatchLookupData::asResult(std::move(emptyData));
+        }
+        auto batch =
+            PipelineBatch::submitOffsetReads(indices, *self_, *manager_);
+        totalSubmittedSQEs_ += batch.numIndices_;
+        pipeline_.push_back(std::move(batch));
+      }
       return std::nullopt;
     }
 
-    // ADVANCE: move consecutive PHASE1_SUBMITTED batches at the front of
-    // `pipeline` to PHASE2_SUBMITTED by waiting for their offset reads and
-    // submitting string reads.
-    while (!pipeline.empty() &&
-           pipeline.front().stage_ == PipelineBatch::Stage::PHASE1_SUBMITTED) {
-      auto& batch = pipeline.front();
-      batch.submitStringReads(*self, *manager);
-      totalSubmittedSQEs += batch.numIndices_;
+    // ADVANCE: promote consecutive PHASE1_SUBMITTED batches at the front of
+    // `pipeline_` to PHASE2_SUBMITTED by submitting their string reads.
+    void advanceFrontBatches() {
+      while (!pipeline_.empty() && pipeline_.front().stage_ ==
+                                       PipelineBatch::Stage::PHASE1_SUBMITTED) {
+        auto& batch = pipeline_.front();
+        batch.submitStringReads(*self_, *manager_);
+        totalSubmittedSQEs_ += batch.numIndices_;
+      }
     }
 
-    // YIELD: wait for front batch's phase-2, return result.
-    AD_CORRECTNESS_CHECK(!pipeline.empty());
-    auto& front = pipeline.front();
-    auto result = front.waitAndFinalize(*manager);
-    totalSubmittedSQEs -= 2 * front.numIndices_;
-    pipeline.pop_front();
-    return result;
+    // YIELD: wait for the front batch's phase-2 reads and return its result.
+    VocabBatchLookupResult yieldFront() {
+      AD_CORRECTNESS_CHECK(!pipeline_.empty());
+      auto& front = pipeline_.front();
+      auto result = front.waitAndFinalize(*manager_);
+      totalSubmittedSQEs_ -= 2 * front.numIndices_;
+      pipeline_.pop_front();
+      return result;
+    }
+  };
+
+  auto pipelineState =
+      std::make_shared<PipelineState>(this, std::move(rangeOfIndexBatches));
+
+  auto get = [pipelineState = std::move(pipelineState)]() mutable {
+    return pipelineState->getNextResult();
   };
 
   return VocabLookupOutput{
