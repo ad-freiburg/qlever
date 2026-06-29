@@ -8,6 +8,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Join.h"
+
 #include "engine/JoinImpl.h"
 
 using std::string;
