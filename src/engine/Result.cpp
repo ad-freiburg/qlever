@@ -232,7 +232,7 @@ void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds, const IdTableView<0>&)>
+    std::function<void(std::chrono::microseconds, const IdTable&)>
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
@@ -244,7 +244,7 @@ void Result::applyLimitOffset(
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
     std::get<IdTableSharedLocalVocabPair>(data_).applyLimitOffset(limitOffset);
-    limitTimeCallback(limitTimer.msecs(), idTableView());
+    limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
         idTables(), [limitOffset = limitOffset,
@@ -264,8 +264,7 @@ void Result::applyLimitOffset(
             limitOffset._limit.value() -=
                 limitOffset.actualSize(originalSize - offsetDelta);
           }
-          limitTimeCallback(limitTimer.value(),
-                            idTable.template asStaticView<0>());
+          limitTimeCallback(limitTimer.value(), idTable);
           if (limitOffset._offset == 0) {
             return IdTableLoopControl::yieldValue(std::move(pair));
           } else {
