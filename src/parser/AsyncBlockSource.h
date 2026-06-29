@@ -13,9 +13,15 @@
 #include <re2/re2.h>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/system_executor.hpp>
+#include <boost/asio/use_future.hpp>
 #include <exception>
-#include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,24 +41,47 @@ using ByteBlock = ad_utility::UninitializedVector<char>;
 // executor passed at construction owns an internal strand that serializes all
 // `getNextBlockImpl()` calls. Callers must not invoke `asyncGetNextBlock`
 // again before the previous handler has fired (single-flight contract).
-// Result encoding of the handler:
-//   - `error == nullptr`, `block == nullopt`  → EOF (no more data).
-//   - `error == nullptr`, `block` set          → next chunk of bytes.
-//   - `error != nullptr`                       → fatal error; rethrow to
-//                                                surface to the user.
+// Completion signatures:
+//   - `void(std::optional<Block>)` → delivers the next block, or `nullopt`
+//     at EOF.
+//   - `void(std::exception_ptr)` → fatal error; rethrow to surface to the
+//     user.
 class AsyncBlockSource {
  public:
   using Block = ByteBlock;
-  using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
 
   explicit AsyncBlockSource(const boost::asio::any_io_executor& exec,
                             ad_utility::MemorySize blocksize);
   virtual ~AsyncBlockSource() = default;
 
-  // Asynchronously deliver the next block of bytes. The `handler` is invoked
-  // on the internal strand, meaning that handlers are never called
-  // concurrently.
-  void asyncGetNextBlock(Handler handler);
+  // Asynchronously deliver the next block of bytes. Accepts any Asio
+  // completion token (e.g. `boost::asio::use_future`). The completion
+  // fires on the handler's associated executor; `void(std::optional<Block>)`
+  // carries the result and `void(std::exception_ptr)` carries errors.
+  template <typename CompletionToken>
+  auto asyncGetNextBlock(CompletionToken&& token) {
+    namespace net = boost::asio;
+    return net::async_initiate<CompletionToken, void(std::optional<Block>),
+                               void(std::exception_ptr)>(
+        [this](auto handler) mutable {
+          auto ex = net::get_associated_executor(handler, strand_);
+          net::post(strand_, [this, h = std::move(handler), ex]() mutable {
+            try {
+              auto block = getNextBlockImpl();
+              net::dispatch(
+                  ex, [h = std::move(h), block = std::move(block)]() mutable {
+                    std::move(h)(std::move(block));
+                  });
+            } catch (...) {
+              net::dispatch(ex, [h = std::move(h),
+                                 ep = std::current_exception()]() mutable {
+                std::move(h)(ep);
+              });
+            }
+          });
+        },
+        std::forward<CompletionToken>(token));
+  }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
 
@@ -123,5 +152,41 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
 };
 
 }  // namespace qlever::parser
+
+// Specialization of `async_result` so that `boost::asio::use_future` works
+// with the two-signature `asyncGetNextBlock`. The success overload
+// `void(std::optional<T>)` stores the value in a `std::promise`, and the
+// error overload `void(std::exception_ptr)` stores the exception. The result
+// is always a `std::future<std::optional<T>>`.
+namespace boost::asio {
+template <typename Allocator, typename T>
+class async_result<use_future_t<Allocator>, void(std::optional<T>),
+                   void(std::exception_ptr)> {
+ public:
+  struct completion_handler_type {
+    std::shared_ptr<std::promise<std::optional<T>>> p_ =
+        std::make_shared<std::promise<std::optional<T>>>();
+    using executor_type = boost::asio::system_executor;
+    executor_type get_executor() const { return {}; }
+    void operator()(std::optional<T> opt) { p_->set_value(std::move(opt)); }
+    void operator()(std::exception_ptr ep) { p_->set_exception(std::move(ep)); }
+  };
+  using return_type = std::future<std::optional<T>>;
+  explicit async_result(completion_handler_type& h)
+      : future_{h.p_->get_future()} {}
+  return_type get() { return std::move(future_); }
+  template <typename Initiation, typename RawToken, typename... Args>
+  static return_type initiate(Initiation&& init, RawToken&&, Args&&... args) {
+    completion_handler_type handler;
+    async_result result(handler);
+    std::forward<Initiation>(init)(std::move(handler),
+                                   std::forward<Args>(args)...);
+    return result.get();
+  }
+
+ private:
+  std::future<std::optional<T>> future_;
+};
+}  // namespace boost::asio
 
 #endif  // QLEVER_SRC_PARSER_ASYNCBLOCKSOURCE_H

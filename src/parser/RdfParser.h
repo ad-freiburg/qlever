@@ -564,7 +564,8 @@ class RdfStreamParser : public Parser {
   explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
-  // creates its own I/O thread and `AsyncBlockSource` internally.
+  // creates its own I/O thread and `AsyncBlockSource` internally. The
+  // `blocksize` parameter controls the size of the underlying I/O block buffer.
   explicit RdfStreamParser(const qlever::InputFileSpecification& spec,
                            ad_utility::MemorySize blocksize,
                            const EncodedIriManager* ev,
@@ -593,9 +594,9 @@ class RdfStreamParser : public Parser {
   // to parse the next expression.
   TurtleParserBackupState backupState() const;
 
-  // Reset the parser to the state indicated by the argument. Must be called on
-  // the same parser object that was used to create the backup state (the actual
-  // triples are not backed up).
+  // Reset the parser to the state indicated by the argument
+  // Must be called on the same parser object that was used to create the backup
+  // state (the actual triples are not backed up)
   bool resetStateAndRead(TurtleParserBackupState* state);
 
   // Stores the current batch of bytes we have to parse. Might end in the
@@ -603,8 +604,8 @@ class RdfStreamParser : public Parser {
   // need the `backupState()` and `resetStateAndRead()` methods.
   qlever::parser::ByteBlock byteVec_;
 
-  // That many bytes were already parsed before dealing with the current batch
-  // in member `byteVec_`.
+  // that many bytes were already parsed before dealing with the current batch
+  // in member byteVec_
   size_t numBytesBeforeCurrentBatch_ = 0;
 
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
@@ -623,7 +624,8 @@ class RdfParallelParser : public Parser {
   explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
-  // creates its own I/O thread and `AsyncBlockSource` internally.
+  // creates its own I/O thread and `AsyncBlockSource` internally. The
+  // `blocksize` parameter controls the size of the underlying I/O block buffer.
   RdfParallelParser(const qlever::InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
                     const EncodedIriManager* ev,
@@ -677,7 +679,7 @@ class RdfParallelParser : public Parser {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
-  // Helper function used by `getBatch()` and `getLineImpl()` to abstract away
+  // Helper function used by `getBatch()` and `getLimeImpl()` to abstract away
   // common code. Return true if some triples could be collected and false if
   // the input has been fully consumed.
   bool processTriples();

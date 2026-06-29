@@ -26,34 +26,28 @@ namespace qlever::parser {
 // Encapsulate the I/O thread pool, `AsyncBlockSource`, and in-flight future
 // that both `RdfStreamParser` and `RdfParallelParser` previously duplicated.
 // Construct with an `InputFileSpecification`, a blocksize, and an end-regex;
-// then call `getNextBlockSync()` to retrieve blocks one at a time.
+// then call `getNextBlock()` to retrieve blocks one at a time.
 class AsyncFileBlockDriver {
-  using BlockResult = std::pair<std::exception_ptr, std::optional<ByteBlock>>;
-
  public:
   // Open the file described by `spec`, wrap it in an `AsyncEndRegexBlockSource`
   // with the given `endRegex`, and arm the first async read.
   AsyncFileBlockDriver(const qlever::InputFileSpecification& spec,
                        ad_utility::MemorySize blocksize, std::string endRegex);
 
-  // Return true if an async read is currently in flight.
-  bool isPending() const { return pendingBlock_.valid(); }
-
   // Wait for the in-flight read, arm the next one if more data follows, and
-  // return the block. Returns `nullopt` at EOF; rethrows on error.
-  std::optional<ByteBlock> getNextBlockSync();
+  // return the block. Returns `nullopt` at EOF or if no read is in flight;
+  // rethrows on error.
+  std::optional<ByteBlock> getNextBlock();
 
   // Wait for any in-flight handler to prevent use-after-free of `fileBuffer_`.
   ~AsyncFileBlockDriver();
 
  private:
-  void armNextBlock();
-
   // Declared before `fileBuffer_` so that the I/O thread outlives the source
   // it drives.
   boost::asio::thread_pool ioPool_{1};
   std::unique_ptr<AsyncBlockSource> fileBuffer_;
-  std::future<BlockResult> pendingBlock_;
+  std::future<std::optional<ByteBlock>> pendingBlock_;
 };
 
 }  // namespace qlever::parser

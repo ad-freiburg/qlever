@@ -9,6 +9,7 @@
 
 #include "parser/AsyncFileBlockDriver.h"
 
+#include <boost/asio/use_future.hpp>
 #include <memory>
 #include <utility>
 
@@ -22,7 +23,7 @@ AsyncFileBlockDriver::AsyncFileBlockDriver(
       ioPool_.get_executor(),
       spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
       std::move(endRegex));
-  armNextBlock();
+  pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);
 }
 
 // ____________________________________________________________________________
@@ -34,21 +35,12 @@ AsyncFileBlockDriver::~AsyncFileBlockDriver() {
 }
 
 // ____________________________________________________________________________
-void AsyncFileBlockDriver::armNextBlock() {
-  auto promise = std::make_shared<std::promise<BlockResult>>();
-  pendingBlock_ = promise->get_future();
-  fileBuffer_->asyncGetNextBlock(
-      [p = std::move(promise)](std::exception_ptr ep,
-                               std::optional<ByteBlock> opt) mutable {
-        p->set_value({std::move(ep), std::move(opt)});
-      });
-}
-
-// ____________________________________________________________________________
-std::optional<ByteBlock> AsyncFileBlockDriver::getNextBlockSync() {
-  auto [ep, opt] = pendingBlock_.get();
-  if (ep) std::rethrow_exception(ep);
-  if (opt.has_value()) armNextBlock();
+std::optional<ByteBlock> AsyncFileBlockDriver::getNextBlock() {
+  if (!pendingBlock_.valid()) return std::nullopt;
+  auto opt = pendingBlock_.get();
+  if (opt.has_value()) {
+    pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);
+  }
   return opt;
 }
 

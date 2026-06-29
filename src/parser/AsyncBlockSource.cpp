@@ -12,7 +12,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
-#include <boost/asio/post.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -27,20 +26,6 @@ namespace net = boost::asio;
 AsyncBlockSource::AsyncBlockSource(const net::any_io_executor& exec,
                                    ad_utility::MemorySize blocksize)
     : strand_{net::make_strand(exec)}, blocksize_{blocksize} {}
-
-// ____________________________________________________________________________
-void AsyncBlockSource::asyncGetNextBlock(Handler handler) {
-  net::post(strand_, [this, h = std::move(handler)]() mutable {
-    std::exception_ptr ep;
-    std::optional<ByteBlock> block;
-    try {
-      block = getNextBlockImpl();
-    } catch (...) {
-      ep = std::current_exception();
-    }
-    std::move(h)(ep, std::move(block));
-  });
-}
 
 // ____________________________________________________________________________
 AsyncFileBlockSource::AsyncFileBlockSource(const net::any_io_executor& exec,

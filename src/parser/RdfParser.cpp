@@ -954,11 +954,7 @@ template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
-  AD_CORRECTNESS_CHECK(driver_.has_value());
-  // If no read is in flight (EOF was already signalled), there are no more
-  // bytes to fetch.
-  if (!driver_->isPending()) return false;
-  auto nextBytesOpt = driver_->getNextBlockSync();
+  auto nextBytesOpt = driver_->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
     // do not alter any internal state.
@@ -1009,7 +1005,8 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
   driver_.emplace(spec, blocksize, "([\\r\\n]+)");
-  if (auto res = driver_->getNextBlockSync(); res) {
+  // Read the first block and initialize the tokenizer.
+  if (auto res = driver_->getNextBlock(); res.has_value()) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
   } else {
@@ -1172,10 +1169,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        // Guard against calling `getNextBlockSync()` when EOF was signalled
-        // during initialization (e.g. empty input file).
-        if (!driver_ || !driver_->isPending()) return;
-        auto nextOptional = driver_->getNextBlockSync();
+        auto nextOptional = driver_->getNextBlock();
         if (!nextOptional) {
           return;
         }
@@ -1212,7 +1206,7 @@ void RdfParallelParser<T>::initialize(
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = driver_->getNextBlockSync()) {
+    if (auto batch = driver_->getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
@@ -1302,7 +1296,6 @@ RdfParallelParser<T>::~RdfParallelParser() {
         parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
-  // `driver_` destructor drains any in-flight async read.
 }
 
 // Create a parser for a single file of an `InputFileSpecification`. The type

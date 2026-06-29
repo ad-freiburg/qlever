@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 #include <future>
 #include <memory>
 #include <optional>
@@ -33,16 +34,7 @@ using namespace ad_utility::memory_literals;
 std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
   std::vector<qp::ByteBlock> result;
   while (true) {
-    std::promise<std::pair<std::exception_ptr, std::optional<qp::ByteBlock>>>
-        promise;
-    auto future = promise.get_future();
-    source.asyncGetNextBlock(
-        [&promise](std::exception_ptr ep,
-                   std::optional<qp::ByteBlock> opt) mutable {
-          promise.set_value({ep, std::move(opt)});
-        });
-    auto [ep, opt] = future.get();
-    if (ep) std::rethrow_exception(ep);
+    auto opt = source.asyncGetNextBlock(boost::asio::use_future).get();
     if (!opt) break;
     result.push_back(std::move(*opt));
   }
@@ -147,5 +139,30 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
   }
+  ad_utility::deleteFile(filename);
+}
+
+// ________________________________________________________
+TEST(AsyncBlockSource, UseFutureToken) {
+  std::string filename = "asyncBlockSourceUseFuture.dat";
+  auto of = ad_utility::makeOfstream(filename);
+  of << "ab1cd";
+  of.close();
+
+  boost::asio::thread_pool pool{1};
+  qp::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
+
+  // Retrieve blocks via `use_future` and verify success and EOF paths.
+  auto opt1 = buf.asyncGetNextBlock(boost::asio::use_future).get();
+  ASSERT_TRUE(opt1.has_value());
+  EXPECT_THAT(*opt1, ::testing::ElementsAre('a', 'b', '1'));
+
+  auto opt2 = buf.asyncGetNextBlock(boost::asio::use_future).get();
+  ASSERT_TRUE(opt2.has_value());
+  EXPECT_THAT(*opt2, ::testing::ElementsAre('c', 'd'));
+
+  auto opt3 = buf.asyncGetNextBlock(boost::asio::use_future).get();
+  EXPECT_FALSE(opt3.has_value());
+
   ad_utility::deleteFile(filename);
 }
