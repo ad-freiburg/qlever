@@ -141,10 +141,10 @@ class LRUCache {
       // reassigning its key.
       auto leastRecentlyUsedKey = std::prev(keys_.end());
       markMRU(leastRecentlyUsedKey);
-      // replace least recently used key with new key.
+      // Replace least recently used key with new key.
       keys_.front() = AD_FWD(key);
     } else {
-      // if the capacity is not full, just insert new key as most recently used
+      // If the capacity is not full, just insert new key as most recently used
       // key (at the front of the list).
       keys_.push_front(K{AD_FWD(key)});
     }
