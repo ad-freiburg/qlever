@@ -963,7 +963,9 @@ TEST(AlignedSerializer, AlignSerializerForType) {
   // Read: an already-aligned position (0 % 8 == 0) must not skip any bytes.
   {
     AlignedByteBufferWriteSerializer tmpWriter;
-    for (int i = 0; i < 16; ++i) tmpWriter << char{0};
+    for (int i = 0; i < 16; ++i) {
+      tmpWriter << char{0};
+    }
     AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
     ASSERT_EQ(reader.getCurrentPosition(), 0u);
     alignSerializerForType<int64_t>(reader);
@@ -972,7 +974,9 @@ TEST(AlignedSerializer, AlignSerializerForType) {
   // Read: an unaligned position skips the correct number of bytes.
   {
     AlignedByteBufferWriteSerializer tmpWriter;
-    for (int i = 0; i < 16; ++i) tmpWriter << char{0};
+    for (int i = 0; i < 16; ++i) {
+      tmpWriter << char{0};
+    }
     AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
     char c;
     reader >> c;
