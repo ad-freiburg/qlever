@@ -41,8 +41,8 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     ql::span<const size_t> indices) const {
-  const size_t n = indices.size();
-  if (n == 0) {
+  const size_t numIndices = indices.size();
+  if (numIndices == 0) {
     auto data = std::make_shared<VocabBatchLookupData>();
     return VocabBatchLookupData::asResult(std::move(data));
   }
@@ -54,11 +54,11 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     uint64_t offset_;
     uint64_t nextOffset_;
   };
-  std::vector<OffsetPair> offsetPairs(n);
-  std::vector<size_t> offsetSizes(n, sizeof(OffsetPair));
-  std::vector<uint64_t> offsetFileOffsets(n);
-  std::vector<char*> offsetTargets(n);
-  for (size_t i = 0; i < n; ++i) {
+  std::vector<OffsetPair> offsetPairs(numIndices);
+  std::vector<size_t> offsetSizes(numIndices, sizeof(OffsetPair));
+  std::vector<uint64_t> offsetFileOffsets(numIndices);
+  std::vector<char*> offsetTargets(numIndices);
+  for (size_t i = 0; i < numIndices; ++i) {
     AD_CONTRACT_CHECK(indices[i] < size());
     offsetFileOffsets[i] = indices[i] * sizeof(uint64_t);
     offsetTargets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
@@ -71,21 +71,21 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 
   // Compute string sizes and total buffer size.
   size_t totalSize = 0;
-  for (size_t i = 0; i < n; ++i) {
+  for (size_t i = 0; i < numIndices; ++i) {
     totalSize += offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
   }
 
   // Phase 2: Read string data via io_uring (reusing the same manager).
   auto data = std::make_shared<VocabBatchLookupData>();
   data->buffer().resize(totalSize);
-  data->views().resize(n);
+  data->views().resize(numIndices);
 
-  std::vector<size_t> sizes(n);
-  std::vector<uint64_t> fileOffsets(n);
-  std::vector<char*> targetPointers(n);
+  std::vector<size_t> sizes(numIndices);
+  std::vector<uint64_t> fileOffsets(numIndices);
+  std::vector<char*> targetPointers(numIndices);
   {
     size_t bufferOffset = 0;
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < numIndices; ++i) {
       sizes[i] = offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
       fileOffsets[i] = offsetPairs[i].offset_;
       targetPointers[i] = data->buffer().data() + bufferOffset;
@@ -99,7 +99,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   ioManagers_->push(std::move(manager));
 
   // Build string_views pointing into the buffer.
-  for (size_t i = 0; i < n; ++i) {
+  for (size_t i = 0; i < numIndices; ++i) {
     data->views()[i] = std::string_view(targetPointers[i], sizes[i]);
   }
 
@@ -109,11 +109,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     VocabLookupInput rangeOfRowIndexBatches) const {
-  // NOTE: Not implemented as a coroutine, because coroutines are not
-  // available in the C++17 compatibility build. Instead, the pipeline state
-  // lives in `PipelineState` and each call to the lambda below produces the
-  // next result (each `return` corresponds to a `co_yield` of the former
-  // coroutine implementation).
+  // The pipeline state lives in `PipelineState` and each call to the lambda
+  // below produces the next result.
 
   // Constants for pipelining.
   static constexpr size_t kRingSize = 256;
@@ -152,11 +149,11 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
         : self_{self}, manager_{self->ioManagers_->pop().value()} {}
 
     ~PipelineState() {
-      for (auto& b : pipeline_) {
-        if (b.stage_ == PipelineBatch::PHASE1_SUBMITTED) {
+      for (const auto& b : pipeline_) {
+        if (b.stage_ == PipelineBatch::Stage::PHASE1_SUBMITTED) {
           manager_->wait(b.phase1Handle_);
         }
-        if (b.stage_ == PipelineBatch::PHASE2_SUBMITTED) {
+        if (b.stage_ == PipelineBatch::Stage::PHASE2_SUBMITTED) {
           manager_->wait(b.phase2Handle_);
         }
       }
@@ -211,7 +208,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
       batch.phase1Handle_ =
           manager->addBatch(self->offsetsFile_.fd(), offsetSizes,
                             offsetFileOffsets, targetBufferForOffsetValues);
-      batch.stage_ = PipelineBatch::PHASE1_SUBMITTED;
+      batch.stage_ = PipelineBatch::Stage::PHASE1_SUBMITTED;
       totalSubmittedSQEs += numIndicesInBatch;
       pipeline.push_back(std::move(batch));
     }
@@ -224,7 +221,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     // PHASE2_SUBMITTED by waiting for their offset reads and submitting
     // string reads.
     while (!pipeline.empty() &&
-           pipeline.front().stage_ == PipelineBatch::PHASE1_SUBMITTED) {
+           pipeline.front().stage_ == PipelineBatch::Stage::PHASE1_SUBMITTED) {
       auto& batch = pipeline.front();
       manager->wait(batch.phase1Handle_);
 
@@ -255,14 +252,15 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
 
       batch.phase2Handle_ = manager->addBatch(
           self->file_.fd(), batch.sizes_, fileOffsets, batch.targetBuffers_);
-      batch.stage_ = PipelineBatch::PHASE2_SUBMITTED;
+      batch.stage_ = PipelineBatch::Stage::PHASE2_SUBMITTED;
       totalSubmittedSQEs += numIndicesInBatch;
     }
 
     // YIELD: wait for front batch's phase-2, return result.
     AD_CORRECTNESS_CHECK(!pipeline.empty());
     auto& front = pipeline.front();
-    AD_CORRECTNESS_CHECK(front.stage_ == PipelineBatch::PHASE2_SUBMITTED);
+    AD_CORRECTNESS_CHECK(front.stage_ ==
+                         PipelineBatch::Stage::PHASE2_SUBMITTED);
     manager->wait(front.phase2Handle_);
 
     const size_t n = front.numIndices_;
