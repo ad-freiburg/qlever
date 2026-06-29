@@ -71,9 +71,10 @@ jobs:
             --sparql10-dir ${{ github.workspace }}/sparql-test-suite/sparql/sparql10/ \
             --type-alias '[["http://www.w3.org/2001/XMLSchema#int", "http://www.w3.org/2001/XMLSchema#integer"], ["http://www.w3.org/2001/XMLSchema#float", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#float"], ["http://www.w3.org/2001/XMLSchema#string", null]]'
       - name: Save workflow information
-        # Note: If you change any of the filenames here, you also have to change them in `sparql-conformance-new-uploader.yml`
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           mkdir -p conformance-report
           echo ${{ github.event_name }} > ./conformance-report/event
@@ -81,6 +82,12 @@ jobs:
           echo ${{ github.repository }} > ./conformance-report/github_repository
           echo ${GITHUB_REF} > ./conformance-report/github_ref
           echo "$HEAD_REF" > ./conformance-report/head_ref
+          # Write the first line only (subject line of commit msg / PR title)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "$PR_TITLE" | head -1 > ./conformance-report/run_title
+          else
+            echo "$COMMIT_MSG" | head -1 > ./conformance-report/run_title
+          fi
       - name: Save SHA and conformance report if it is a master commit.
         if: github.event_name == 'push'
         run: |
