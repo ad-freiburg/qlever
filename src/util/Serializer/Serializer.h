@@ -326,7 +326,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = alignment - (currentPos % alignment);
+    size_t padding = (alignment - (currentPos % alignment)) % alignment;
     if (padding > 0) {
       static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
@@ -341,8 +341,8 @@ CPP_template(typename T, typename S)(
     requires ReadSerializer<S>) void alignSerializerForType(S& serializer) {
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
-    size_t alignment = alignof(T);
-    size_t padding = alignment - (currentPos % alignment);
+    static constexpr size_t alignment = alignof(T);
+    size_t padding = (alignment - (currentPos % alignment)) % alignment;
     if (padding > 0) {
       serializer.skip(padding);
     }

@@ -936,6 +936,53 @@ TEST(ByteBufferReadSerializer, ThrowsOnGetSpanPastEnd) {
 }
 
 // _____________________________________________________________________________
+// Tests for `alignSerializerForType` directly.
+// _____________________________________________________________________________
+
+// _____________________________________________________________________________
+TEST(AlignedSerializer, AlignSerializerForType) {
+  using ad_utility::serialization::alignSerializerForType;
+
+  // Write: an already-aligned position (0 % 8 == 0) must not add any padding.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    ASSERT_EQ(writer.getCurrentPosition(), 0u);
+    alignSerializerForType<int64_t>(writer);
+    EXPECT_EQ(writer.getCurrentPosition(), 0u);
+  }
+  // Write: an unaligned position adds the correct number of padding bytes.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    alignSerializerForType<int64_t>(writer);
+    // 1 byte (char) + 7 bytes padding = position 8.
+    EXPECT_EQ(writer.getCurrentPosition(), 8u);
+  }
+
+  // Read: an already-aligned position (0 % 8 == 0) must not skip any bytes.
+  {
+    AlignedByteBufferWriteSerializer tmpWriter;
+    for (int i = 0; i < 16; ++i) tmpWriter << char{0};
+    AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
+    ASSERT_EQ(reader.getCurrentPosition(), 0u);
+    alignSerializerForType<int64_t>(reader);
+    EXPECT_EQ(reader.getCurrentPosition(), 0u);
+  }
+  // Read: an unaligned position skips the correct number of bytes.
+  {
+    AlignedByteBufferWriteSerializer tmpWriter;
+    for (int i = 0; i < 16; ++i) tmpWriter << char{0};
+    AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
+    char c;
+    reader >> c;
+    alignSerializerForType<int64_t>(reader);
+    // 1 byte (char) read + 7 bytes skipped = position 8.
+    EXPECT_EQ(reader.getCurrentPosition(), 8u);
+  }
+}
+
+// _____________________________________________________________________________
 // Tests for the UsesAlignedSerialization trait and aligned serializers.
 // _____________________________________________________________________________
 
