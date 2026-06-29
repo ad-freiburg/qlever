@@ -20,6 +20,18 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 
+// True iff `Vocab` exposes a `setNumWordsPerCodebook(size_t)` member. Used by
+// the polymorphic / split / geo vocabulary wrappers to forward the setting
+// only to those underlying vocabularies that have codebooks (i.e. the
+// compressed ones).
+template <typename Vocab>
+CPP_requires(SupportsNumWordsPerCodebook_,
+             requires(Vocab& v)(v.setNumWordsPerCodebook(size_t{})));
+
+template <typename Vocab>
+CPP_concept SupportsNumWordsPerCodebook =
+    CPP_requires_ref(SupportsNumWordsPerCodebook_, Vocab);
+
 // The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 

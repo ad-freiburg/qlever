@@ -55,8 +55,12 @@ CPP_template(typename UnderlyingVocabulary,
   // Set/get the number of words per codebook. The setter must be called before
   // `makeDiskWriterPtr` (when writing) and before `open` (when reading) so that
   // the codebook block size matches the one used when the vocabulary was
-  // written.
-  void setNumWordsPerCodebook(size_t n) { numWordsPerCodebook_ = n; }
+  // written. Must be positive: a value of 0 would divide by zero in
+  // `getDecoderIdx` and flush a codebook after every word in the writer.
+  void setNumWordsPerCodebook(size_t n) {
+    AD_CONTRACT_CHECK(n > 0, "num-words-per-codebook must be positive.");
+    numWordsPerCodebook_ = n;
+  }
   size_t getNumWordsPerCodebook() const { return numWordsPerCodebook_; }
 
   // The vocabulary is initialized using the `open()` method, the default

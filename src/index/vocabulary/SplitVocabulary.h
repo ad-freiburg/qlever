@@ -146,9 +146,7 @@ class SplitVocabulary {
       std::visit(
           [numWordsPerCodebook](auto& v) {
             using T = std::decay_t<decltype(v)>;
-            if constexpr (requires(T& vv) {
-                            vv.setNumWordsPerCodebook(numWordsPerCodebook);
-                          }) {
+            if constexpr (SupportsNumWordsPerCodebook<T>) {
               v.setNumWordsPerCodebook(numWordsPerCodebook);
             }
           },

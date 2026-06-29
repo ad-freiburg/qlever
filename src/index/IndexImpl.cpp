@@ -1312,7 +1312,8 @@ void IndexImpl::readConfiguration() {
   // Restore the number of words per codebook (defaults to the historical value
   // for old indexes that don't have this key). This must happen before
   // `vocab_.readFromFile(...)` so that the compressed vocabulary uses the
-  // correct codebook block size.
+  // correct codebook block size. The setter validates that the value is
+  // positive; an invalid meta-data entry (e.g. 0) throws there.
   numWordsPerCodebook_ =
       configurationJson_.value("num-words-per-codebook", size_t{1} << 20);
   vocab_.setNumWordsPerCodebook(numWordsPerCodebook_);

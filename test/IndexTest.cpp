@@ -716,6 +716,7 @@ TEST(IndexImpl, numWordsPerCodebookSettingRoundTrip) {
       ad_utility::deleteFile(f, false);
     }
     ad_utility::deleteFile(settingsFile, false);
+    ad_utility::deleteFile(ttlFile, false);
   }};
 
   {

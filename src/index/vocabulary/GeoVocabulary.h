@@ -101,9 +101,7 @@ class GeoVocabulary {
   // Forward the number of words per codebook to the underlying literal
   // vocabulary if it supports it (e.g. a `CompressedVocabulary`).
   void setNumWordsPerCodebook(size_t numWordsPerCodebook) {
-    if constexpr (requires(UnderlyingVocabulary& v) {
-                    v.setNumWordsPerCodebook(numWordsPerCodebook);
-                  }) {
+    if constexpr (SupportsNumWordsPerCodebook<UnderlyingVocabulary>) {
       literals_.setNumWordsPerCodebook(numWordsPerCodebook);
     }
   }

@@ -91,6 +91,8 @@ TEST(CompressedVocabulary, SetAndGetNumWordsPerCodebook) {
   EXPECT_EQ(v.getNumWordsPerCodebook(), 1UL << 20);
   v.setNumWordsPerCodebook(4);
   EXPECT_EQ(v.getNumWordsPerCodebook(), 4u);
+  // Zero would divide by zero in `getDecoderIdx` and flush after every word.
+  EXPECT_ANY_THROW(v.setNumWordsPerCodebook(0));
 }
 
 // The generic tests from the vocabulary testing framework, templated on all the

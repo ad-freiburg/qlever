@@ -56,9 +56,7 @@ void PolymorphicVocabulary::setNumWordsPerCodebook(size_t numWordsPerCodebook) {
   std::visit(
       [numWordsPerCodebook](auto& vocab) {
         using T = std::decay_t<decltype(vocab)>;
-        if constexpr (requires(T& v) {
-                        v.setNumWordsPerCodebook(numWordsPerCodebook);
-                      }) {
+        if constexpr (SupportsNumWordsPerCodebook<T>) {
           vocab.setNumWordsPerCodebook(numWordsPerCodebook);
         }
       },
