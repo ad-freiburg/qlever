@@ -228,6 +228,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edgesVocab The `LocalVocab` holding the vocabulary of the edges.
    * @param startNodes A range that yields an instantiation of
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
+   * @param startNodes An optional range that yields an instantiation of
+   * `TableColumnWithVocab` that can be consumed equally to the startNodes but
+   * yields targetNodes for the graph search operation.
    * @param start Start `TripleComponent`. If it's a variable, and the same as
    * an optional graph variable, values where these values are not equal are
    * skipped.

@@ -648,11 +648,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
   };
 
-  if (leftOpAndCol.has_value()) {
-    insertPayloadColumnsToPlan(leftOpAndCol, rightOpAndCol);
-  } else {
-    insertPayloadColumnsToPlan(rightOpAndCol, leftOpAndCol);
-  }
+  insertPayloadColumnsToPlan(leftOpAndCol, rightOpAndCol);
+  insertPayloadColumnsToPlan(rightOpAndCol, leftOpAndCol);
 
   // Make sure mapping actually points to the last column if it's not one
   // of the regular variables.
