@@ -28,38 +28,34 @@ namespace ad_utility {
 // `Compare`. After inserting elements `consolidate` must be called before
 // reading. Only the last inserted element for each projected key is retained.
 //
-// Internally the elements are stored in two-parts - a large and a small part.
-// Newly inserted elements are first inserted into the small part. `consolidate`
-// sorts the small part. Once the small parts get large it is merged into the
-// large part which is always sorted.
-CPP_template(typename ValueType, typename Compare = std::less<>,
-             typename Projection = ql::identity)(
-    requires true) class SortedVector {
- public:
-  // Some GTest matchers require `value_type`, also add it as a type for the
-  // `Container` requirement.
-  using value_type = ValueType;
-
- private:
-  using Storage = std::vector<value_type>;
+// Internally the elements are stored in two-parts - an always sorted large and
+// a small part. Newly inserted elements are first inserted into the small part.
+// `consolidate` sorts the small part. Iteration will the internally merge the
+// two sorted parts using `ZipMergeUniqueView`. Once the small parts get large
+// it is merged into the large part which is always sorted.
+template <typename ValueType, typename Compare = std::less<>,
+          typename Projection = ql::identity>
+class SortedVector {
+  using Storage = std::vector<ValueType>;
   Storage elements_ = {};
   size_t numItemsLargePart_ = 0;
   bool smallPartIsSorted_ = true;
   [[no_unique_address]] Compare comp_ = {};
   [[no_unique_address]] Projection proj_ = {};
 
-  // Returns the subrange of the small/large part from the whole storage vector.
+  // Return the subrange of the small part from the whole storage vector.
   auto smallPart() {
     return ql::ranges::subrange(elements_.begin() + numItemsLargePart_,
                                 elements_.end());
   }
+  // Return the subrange of the large part from the whole storage vector.
   auto largePart() {
     return ql::ranges::subrange(elements_.begin(),
                                 elements_.begin() + numItemsLargePart_);
   }
 
   // Merge the elements of the small part into the large part. The small part
-  // must be sorted before.
+  // must be sorted before calling this function. Preserves `isConsolidated`.
   void mergeParts() {
     AD_CORRECTNESS_CHECK(smallPartIsSorted_);
     Storage merged;
@@ -69,28 +65,25 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     numItemsLargePart_ = elements_.size();
     smallPartIsSorted_ = true;
   }
+  // Sort and deduplicate the elements in the small part. Afterwards
+  // `isConsolidated()` is true.
   void sortSmallPart() {
     sortAndRemoveDuplicates(elements_, smallPart());
     smallPartIsSorted_ = true;
   }
 
   // Whether the items are all sorted and deduplicated. Items can only be read
-  // if `isClean` is true. Also enforces the class invariant that the boundary
-  // index `numItemsLargePart_` lies within `elements_`; if it ever drifts out
-  // of range, sorted-access methods fail this check rather than silently UB'ing
+  // if `isConsolidated` is true. `isConsolidated` is true iff no inserts have
+  // been made since the last call to `consolidate` or construction. Deletes
+  // keep this invariant true.
+  //
+  // Note: Also enforces the class invariant that the boundary index
+  // `numItemsLargePart_` lies within `elements_`; if it ever drifts out of
+  // range, sorted-access methods fail this check rather than silently UB'ing
   // through `elements_.begin() + numItemsLargePart_`.
-  bool isClean() const {
+  bool isConsolidated() const {
     return smallPartIsSorted_ && numItemsLargePart_ <= elements_.size();
   }
-
-  FRIEND_TEST(SortedVectorTest, eraseSortedSubRange);
-  FRIEND_TEST(SortedVectorTest, sortAndRemoveDuplicates);
-  FRIEND_TEST(SortedVectorTest, constructor);
-  FRIEND_TEST(SortedVectorTest, insert);
-  friend struct SortedVectorPairsTestHelper;
-
- public:
-  SortedVector() = default;
 
   // For the range `rangeToSort` contained in `elements` sort it by the
   // projected key and keep the last element for each projected key.
@@ -117,13 +110,19 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     elements.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
-  // Removes everything in `r1` that is contained in `r2`. Returns the number
-  // of items deleted. NOTE: `r1` must be a subrange of `elements`.
+  // Let r1 be a sorted subrange of elements and r2 be an arbitrary sorted range
+  // not overlapping with r1. Delete all elements from r1 that are also
+  // contained in r2. Duplicates within r1/r2 are handled according to
+  // ql::ranges::set_difference, but never happen within this class (as we
+  // always first deduplicate within the small/large part before calling this
+  // function.
   CPP_template_2(typename R1, typename R2)(
       requires ql::ranges::forward_range<R1> CPP_and_2
           ql::ranges::output_range<R1, ValueType>
               CPP_and_2 ql::ranges::input_range<R2>) static size_t
       eraseSortedSubRange(Storage& elements, R1&& r1, R2&& r2) {
+    // TODO<qup42> this is undefined because the output range overlaps with one
+    // of the input ranges
     auto [_, newEndOfSubrange] = ql::ranges::set_difference(
         r1, r2, ql::ranges::begin(r1), Compare{}, Projection{}, Projection{});
     auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
@@ -131,6 +130,16 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     return numItemsErased;
   }
 
+  FRIEND_TEST(SortedVectorTest, eraseSortedSubRange);
+  FRIEND_TEST(SortedVectorTest, sortAndRemoveDuplicates);
+  FRIEND_TEST(SortedVectorTest, constructor);
+  FRIEND_TEST(SortedVectorTest, insert);
+  friend struct SortedVectorPairsTestHelper;
+
+ public:
+  SortedVector() = default;
+
+  // Create a `SortedVector` from a already sorted and deduplicated elements.
   static SortedVector fromSorted(std::vector<ValueType> sortedElements,
                                  Compare comp = {}, Projection proj = {}) {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElements, comp, proj));
@@ -145,11 +154,19 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     return vec;
   }
 
-  // Consolidates the stored items after inserts. `consolidate` must be called
-  // before any access after inserting new items. After calling `consolidate`
-  // `isClean` will be true.
+  // Some GTest matchers require `value_type`, also add it as a type for the
+  // `Container` requirement.
+  using value_type = ValueType;
+
+  // Consolidate the stored items after inserts have been performed by sorting
+  // and deduplicating the small part. If the small part makes up at
+  // least `threshold` of the total items, the two parts are additionally
+  // merged. `consolidate` must be called before any read access after inserting
+  // new items. After calling `consolidate` `isConsolidated` will be true.
   void consolidate(double threshold = 0.25) {
-    if (smallPartIsSorted_) return;
+    if (smallPartIsSorted_) {
+      return;
+    }
 
     sortSmallPart();
     if (static_cast<double>(elements_.size() - numItemsLargePart_) /
@@ -159,29 +176,36 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     }
   }
 
+  // Insert an element. `consolidate` must be called before the next read
+  // access.
   void insert(ValueType elem) {
     elements_.push_back(std::move(elem));
     smallPartIsSorted_ = false;
   }
 
-  auto getSortedView() {
-    AD_CONTRACT_CHECK(isClean());
-    auto mid = elements_.begin() + numItemsLargePart_;
-    return ZipMergeUniqueView(ql::ranges::subrange(elements_.begin(), mid),
-                              ql::ranges::subrange(mid, elements_.end()), comp_,
-                              proj_);
-  }
-  auto getSortedView() const {
-    AD_CONTRACT_CHECK(isClean());
-    auto mid = elements_.begin() + numItemsLargePart_;
-    return ZipMergeUniqueView(ql::ranges::subrange(elements_.begin(), mid),
-                              ql::ranges::subrange(mid, elements_.end()), comp_,
-                              proj_);
+ private:
+  // Helper for the overloads of `getSortedView`.
+  auto getSortedViewImpl(auto& Self) const {
+    AD_CONTRACT_CHECK(Self.isConsolidated());
+    auto mid = Self.elements_.begin() + Self.numItemsLargePart_;
+    return ZipMergeUniqueView(ql::ranges::subrange(Self.elements_.begin(), mid),
+                              ql::ranges::subrange(mid, Self.elements_.end()),
+                              Self.comp_, Self.proj_);
   }
 
+ public:
+  // Return of the sorted and deduplicated elements in this container. Requires
+  // `isConsolidated` to be true.
+  auto getSortedView() & { return getSortedViewImpl(*this); }
+  auto getSortedView() const& { return getSortedViewImpl(*this); }
+  void getSortedView() && = delete;
+  void getSortedView() const&& = delete;
+
+  // Return a reference to the last element. Requires the container to not be
+  // empty and `isConsolidated` to be true.
   const ValueType& back() const {
     AD_CONTRACT_CHECK(!empty());
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     if (numItemsLargePart_ == elements_.size()) {
       return elements_.back();
     }
@@ -190,13 +214,17 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     return comp_(proj_(lastSmallPart), proj_(lastLargePart)) ? lastLargePart
                                                              : lastSmallPart;
   }
+  // Return a reference to the last element. Requires the container to not be
+  // empty and `isConsolidated` to be true.
   ValueType& back() {
     return const_cast<ValueType&>(std::as_const(*this).back());
   }
 
+  // Return a reference to the first element. Requires the container to not be
+  // empty and `isConsolidated` to be true.
   const ValueType& front() const {
     AD_CONTRACT_CHECK(!empty());
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     if (numItemsLargePart_ == elements_.size()) {
       return elements_.front();
     }
@@ -205,65 +233,79 @@ CPP_template(typename ValueType, typename Compare = std::less<>,
     return comp_(proj_(firstSmallpart), proj_(firstLargePart)) ? firstLargePart
                                                                : firstSmallpart;
   }
+  // Return a reference to the first element. Requires the container to not be
+  // empty and `isConsolidated` to be true.
   ValueType& front() {
     return const_cast<ValueType&>(std::as_const(*this).front());
   }
 
-  // Erase a single or multiple elements.
+  // Erase a single element. When deleting multiple elements use `eraseUnsorted`
+  // or `eraseSorted`. This is expensive and preserves `isConsolidated`.
   void erase(const ValueType& elem) {
-    // TODO: the semantics are wonky here. The single element `erase` erases by
-    // the whole element while the multi element overloads identify by
-    // the projected elements
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     auto deleteInRange = [this, &elem](auto subrange) {
-      auto iter = ql::ranges::lower_bound(subrange, elem);
-      if (iter == ql::ranges::end(subrange) || *iter != elem) {
+      auto iter = ql::ranges::lower_bound(subrange, proj_(elem), comp_, proj_);
+      // From lower_bound we get `!comp_(proj_(*iter), proj_(elem))`. If the
+      // comparison below is also false the elements are equivalent under proj_
+      // and comp_.
+      if (iter == ql::ranges::end(subrange) ||
+          comp_(proj_(elem), proj_(*iter))) {
         return 0;
       }
       elements_.erase(iter);
       return 1;
     };
-    numItemsLargePart_ -= deleteInRange(largePart());
     deleteInRange(smallPart());
+    numItemsLargePart_ -= deleteInRange(largePart());
   }
+  //  Erase multiple elements. If the elements to delete are already sorted use
+  //  `eraseSorted`. This is expensive and preserves `isConsolidated`.
   void eraseUnsorted(std::vector<ValueType> toDelete) {
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     ql::ranges::sort(toDelete, comp_, proj_);
     eraseSorted(ql::span(toDelete));
   }
-  // Erase multiple elements that are already sorted.
+  // Erase multiple elements that are already sorted. This is expensive and
+  // preserves `isConsolidated`.
   void eraseSorted(ql::span<ValueType> sortedElems) {
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElems, comp_, proj_));
+    eraseSortedSubRange(elements_, smallPart(), sortedElems);
     numItemsLargePart_ -=
         eraseSortedSubRange(elements_, largePart(), sortedElems);
-    eraseSortedSubRange(elements_, smallPart(), sortedElems);
   }
 
-  // Returns an upper bound of the size. Without actually reading all items the
-  // size is not known because items might be duplicated between the small and
-  // large parts.
+  // Return an upper bound of the size. Requires `isConsolidated` to be true.
+  // Without actually reading all items the size is not known because items
+  // might be duplicated between the small and large parts.
   size_t sizeUpperBound() const {
-    AD_CONTRACT_CHECK(isClean());
+    AD_CONTRACT_CHECK(isConsolidated());
     return elements_.size();
   }
-  // Returns an exact size but reads the whole vector for this.
+  // Return an exact size but reads the whole vector for this. Requires
+  // `isConsolidated` to be true.
   size_t sizeForTesting() const {
+    AD_CONTRACT_CHECK(isConsolidated());
     auto sorted = getSortedView();
     return ql::ranges::distance(sorted.begin(), sorted.end());
   }
 
+  // Return whether the container is empty. Can be called even when
+  // `isConsolidated` is `false`.
   bool empty() const {
     // No need to ensure that items are sorted, because it keeps one element for
     // each projected key. So the elements cannot get empty through sorting.
     return elements_.empty();
   }
+  // Clear the elements.
   void clear() {
     elements_.clear();
     numItemsLargePart_ = 0;
     smallPartIsSorted_ = true;
   }
 
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const SortedVector& sv) {
     os << "{ ";
     ql::ranges::copy(sv.getSortedView(),

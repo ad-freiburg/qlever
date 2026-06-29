@@ -64,7 +64,7 @@ auto SizesAre = [](size_t sizeUpperBound, size_t sizeForTesting) {
 auto AssertionFailed = [](const std::string& assertion) {
   return HasSubstr("Assertion `" + assertion + "` failed");
 };
-auto NotClean = AssertionFailed("isClean()");
+auto NotConsolidated = AssertionFailed("isConsolidated()");
 auto IsEmpty = AD_PROPERTY(SV, empty, Eq(true));
 auto IsNotEmpty = AD_PROPERTY(SV, empty, Not(Eq(true)));
 
@@ -181,8 +181,8 @@ TEST(SortedVectorTest, size) {
   {
     SV s{};
     s.insert(p10);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeUpperBound(), NotClean);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeUpperBound(), NotConsolidated);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotConsolidated);
   }
   {
     SV s{};
@@ -198,17 +198,18 @@ TEST(SortedVectorTest, size) {
     s.insert(p60);
     s.consolidate();
     EXPECT_THAT(s, SizesAre(6, 6));
-    // Due to the relative sizes of the two parts both `p1` and `p1I` exist in
-    // the internal storage. When iterating only `p1I` will be returned.
+    // Due to the relative sizes of the two parts both `p10` and `p11` exist in
+    // the internal storage. When iterating only `p11` will be returned.
     s.insert(p11);
     s.consolidate();
     EXPECT_THAT(s, SizesAre(7, 6));
     s.erase(p20);
     EXPECT_THAT(s, SizesAre(6, 5));
-    // `p10` is shadowed by `p11` but kept because the two parts are not merged.
-    // Removing it resolves the discrepancy between `size` and `sizeForTesting`.
+    // `p10` and `p11` are equivalent under the comparison and projection.
+    // Removing `p10` deletes both, resolving the discrepancy between `size` and
+    // `sizeForTesting`.
     s.erase(p10);
-    EXPECT_THAT(s, SizesAre(5, 5));
+    EXPECT_THAT(s, SizesAre(4, 4));
     s.clear();
     EXPECT_THAT(s, SizesAre(0, 0));
   }
@@ -268,8 +269,9 @@ TEST(SortedVectorTest, back) {
     // The small part is non-empty but the large part has the largest element.
     testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p50); });
     s.insert(p51);  // `p5I` will be in the small part
-    testConstOverloads(
-        s, [](auto& s) { AD_EXPECT_THROW_WITH_MESSAGE(s.back(), NotClean); });
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.back(), NotConsolidated);
+    });
     s.consolidate();
     testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p51); });
     s.insert(p60);  // `p6` will be in the small part
@@ -307,12 +309,13 @@ TEST(SortedVectorTest, iteration) {
     expectElements(s, {});
   }
   {
+    auto NotConsolidated = AssertionFailed("Self.isConsolidated()");
     SV s{};
     s.insert(p10);
     // `begin()` and `end()` are implemented using a static impl function which
     // results in a slightly different assertion message.
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotClean);
+    testConstOverloads(s, [&NotConsolidated](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotConsolidated);
     });
   }
 }
@@ -327,7 +330,7 @@ TEST(SortedVectorTest, erase) {
     s.erase(p10);
     EXPECT_THAT(s.getSortedView(), ElementsAre(p30));
     s.insert(p20);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(p30), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(p30), NotConsolidated);
     s.consolidate();
     s.erase(p30);
     EXPECT_THAT(s.getSortedView(), ElementsAre(p20));
@@ -343,7 +346,7 @@ TEST(SortedVectorTest, erase) {
     s.insert(p10);
     // this `erase` overload sorts the elements
     AD_EXPECT_THROW_WITH_MESSAGE(s.eraseUnsorted({p60, p30, p50, p10}),
-                                 NotClean);
+                                 NotConsolidated);
     s.consolidate();
     s.eraseUnsorted(std::vector{p60, p30, p50, p10});
     EXPECT_THAT(s.getSortedView(), ElementsAre());
@@ -358,7 +361,7 @@ TEST(SortedVectorTest, erase) {
     erase({p20, p40});
     EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p50, p60));
     s.insert(p40);
-    AD_EXPECT_THROW_WITH_MESSAGE(erase({p10, p20, p40}), NotClean);
+    AD_EXPECT_THROW_WITH_MESSAGE(erase({p10, p20, p40}), NotConsolidated);
     s.consolidate();
     erase({p10, p20, p40});  // `p2` is no longer contained.
     EXPECT_THAT(s.getSortedView(), ElementsAre(p30, p50, p60));
