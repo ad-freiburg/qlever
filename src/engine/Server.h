@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -47,7 +48,9 @@ struct SimulateHttpRequest;
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
+  using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
@@ -65,8 +68,12 @@ class Server {
   // processing. This method never returns except when throwing an exception.
   void run();
 
+  // Open `path` and register start/end callbacks on the query registry that
+  // write one JSONL line per query event to it. Call once, after construction.
+  void configureQueryEventLog(const std::filesystem::path& path);
+
   // Get server statistics.
-  json composeStatsJson() const;
+  static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
   // Helper struct bundling a parsed query with a query execution tree.
@@ -212,7 +219,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -232,12 +239,14 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Prepare the execution of an operation
-  auto prepareOperation(std::string_view operationName,
+  //  Prepare the execution of an operation.
+  auto prepareOperation(SharedIndexAndView indexAndViews,
+                        std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk);
+                        TimeLimit timeLimit, bool accessTokenOk,
+                        std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -264,11 +273,12 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation);
+          const RequestT& request, std::string_view operation,
+          std::string_view clientIp = {});
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
+      const Index& index, const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
@@ -303,7 +313,8 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
-      getQueryId(const RequestT& request, std::string_view query);
+      getQueryId(const RequestT& request, std::string_view query,
+                 std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
@@ -374,12 +385,6 @@ class Server {
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
 
-  Index& index() { return qlever().index(); }
-  const Index& index() const { return qlever().index(); }
-  std::shared_ptr<const Index> sharedIndex() const {
-    return qlever().sharedIndex();
-  }
-
   QueryResultCache& cache() { return qlever().cache(); }
   const QueryResultCache& cache() const { return qlever().cache(); }
   ad_utility::AllocatorWithLimit<Id>& allocator() {
@@ -398,8 +403,13 @@ class Server {
   const NamedResultCache& namedResultCache() const {
     return qlever().namedResultCache();
   }
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    return qlever().materializedViewsManager();
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  SharedIndexAndView indexAndViewsSnapshot() const {
+    return qlever().indexAndViewsSnapshot();
   }
 };
 
