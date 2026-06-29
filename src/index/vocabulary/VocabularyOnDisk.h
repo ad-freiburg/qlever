@@ -91,7 +91,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // Streaming variant of lookupBatch: accepts a lazy stream of batches and
   // returns a lazy stream of results.
-  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+  VocabLookupOutput lookupBatchesStreamed(
+      VocabLookupInput rangeOfIndexBatches) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }
