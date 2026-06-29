@@ -1,6 +1,7 @@
 //  Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 //  2015 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+//  2018 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -81,26 +82,26 @@ class IndexMetaData {
 
   // Write the metadata to the file `filename` (for the per-block metadata,
   // which is appended to the end of the file) and to `filename +
-  // MMAP_FILE_SUFFIX` (for the per-relation metadata). Existing contents are
+  // META_FILE_SUFFIX` (for the per-relation metadata). Existing contents are
   // overwritten.
   void writeToFile(const std::string& filename) const;
 
   // Append the per-block metadata to the end of `permutationFile` (moving its
   // file pointer to the end) and write the per-relation metadata to
   // `metaFile` (overwriting it).
-  void appendToFile(ad_utility::File* permutationFile,
-                    ad_utility::File* metaFile) const;
+  void appendToFile(ad_utility::File& permutationFile,
+                    ad_utility::File& metaFile) const;
 
   // Read the metadata written by `writeToFile` from `filename` and `filename +
-  // MMAP_FILE_SUFFIX`.
+  // META_FILE_SUFFIX`.
   void readFromFile(const std::string& filename);
 
   // Read the metadata, assuming that `permutationFile` is already open and has
   // valid per-block metadata at its end, and that `metaFile` holds the
   // per-relation metadata. The call will change the position in
-  // `permutationFile`.
-  void readFromFile(ad_utility::File* permutationFile,
-                    ad_utility::File* metaFile);
+  // `permutationFile`. This ensures the format is backwards compatible.
+  void readFromFile(ad_utility::File& permutationFile,
+                    ad_utility::File& metaFile);
 
   // Calculate and save statistics that are expensive to calculate so we only
   // have to do this once during the index build and not at server start.

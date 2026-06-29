@@ -1,6 +1,7 @@
 //  Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 //  2015 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+//  2018 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -263,6 +264,6 @@ TEST(IndexMetaDataTest, appendToFileRejectsClosedFile) {
   ad_utility::File metaFile;
   ASSERT_FALSE(permutationFile.isOpen());
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      imd.appendToFile(&permutationFile, &metaFile),
+      imd.appendToFile(permutationFile, metaFile),
       ::testing::HasSubstr("isOpen"), ad_utility::Exception);
 }

@@ -1,7 +1,7 @@
 //  Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 //  2015 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
-//  2015 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//  2018 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -33,43 +33,42 @@ std::optional<CompressedRelationMetadata> IndexMetaData::getMetaDataIfPresent(
 void IndexMetaData::writeToFile(const std::string& filename) const {
   ad_utility::File permutationFile{filename, "w"};
   ad_utility::File metaFile{filename + META_FILE_SUFFIX, "w"};
-  appendToFile(&permutationFile, &metaFile);
+  appendToFile(permutationFile, metaFile);
 }
 
 // ____________________________________________________________________________
-void IndexMetaData::appendToFile(ad_utility::File* permutationFile,
-                                 ad_utility::File* metaFile) const {
-  AD_CONTRACT_CHECK(permutationFile->isOpen());
+void IndexMetaData::appendToFile(ad_utility::File& permutationFile,
+                                 ad_utility::File& metaFile) const {
+  AD_CONTRACT_CHECK(permutationFile.isOpen());
   // Write the per-relation metadata to its own file.
-  data_.writeToFile(*metaFile);
+  data_.writeToFile(metaFile);
   // Append the per-block metadata to the end of the permutation file.
-  permutationFile->seek(0, SEEK_END);
-  off_t startOfMeta = permutationFile->tell();
+  permutationFile.seek(0, SEEK_END);
+  off_t startOfMeta = permutationFile.tell();
   ad_utility::serialization::FileWriteSerializer serializer{
-      std::move(*permutationFile)};
+      std::move(permutationFile)};
   serializer << *this;
-  *permutationFile = std::move(serializer).file();
-  permutationFile->write(&startOfMeta, sizeof(startOfMeta));
+  permutationFile = std::move(serializer).file();
+  permutationFile.write(&startOfMeta, sizeof(startOfMeta));
 }
 
 // _________________________________________________________________________
 void IndexMetaData::readFromFile(const std::string& filename) {
   ad_utility::File permutationFile{filename, "r"};
   ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
-  readFromFile(&permutationFile, &metaFile);
+  readFromFile(permutationFile, metaFile);
 }
 
 // _________________________________________________________________________
-void IndexMetaData::readFromFile(ad_utility::File* permutationFile,
-                                 ad_utility::File* metaFile) {
+void IndexMetaData::readFromFile(ad_utility::File& permutationFile,
+                                 ad_utility::File& metaFile) {
   // Read the per-relation metadata from its own file.
-  data_.readFromFile(*metaFile);
+  data_.readFromFile(metaFile);
   // Read the per-block metadata from the end of the permutation file.
-  off_t metaFrom;
-  off_t metaTo = permutationFile->getLastOffset(&metaFrom);
+  auto [metaTo, metaFrom] = permutationFile.getLastOffset();
   std::vector<char> buf(metaTo - metaFrom);
-  permutationFile->read(buf.data(), static_cast<size_t>(metaTo - metaFrom),
-                        metaFrom);
+  permutationFile.read(buf.data(), static_cast<size_t>(metaTo - metaFrom),
+                       metaFrom);
 
   ad_utility::serialization::ByteBufferReadSerializer serializer{
       std::move(buf)};
@@ -92,11 +91,9 @@ std::string IndexMetaData::statistics() const {
 
 // __________________________________________________________________
 void IndexMetaData::calculateStatistics(size_t numDistinctCol0) {
-  totalElements_ = 0;
   numDistinctCol0_ = numDistinctCol0;
-  for (const auto& block : blockData()) {
-    totalElements_ += block.numRows_;
-  }
+  totalElements_ = ::ranges::accumulate(blockData(), 0, {},
+                                        &CompressedBlockMetadata::numRows_);
 }
 
 // _____________________________________________________________________________

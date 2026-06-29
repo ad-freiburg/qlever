@@ -22,7 +22,7 @@
 // a single permutation. The objects are kept in a `std::vector` that is sorted
 // by `col0Id_`, which allows for binary search by `col0Id_`. The metadata of a
 // permutation is small enough to be held completely in RAM. It is stored in a
-// separate file next to the permutation (see `MMAP_FILE_SUFFIX`) via
+// separate file next to the permutation (see `META_FILE_SUFFIX`) via
 // `readFromFile` and `writeToFile`. For backwards compatibility, that file uses
 // the exact same on-disk layout that `ad_utility::MmapVector` uses: the array
 // of metadata objects, followed by an `ad_utility::MmapVectorMetaData` trailer

@@ -937,7 +937,7 @@ void IndexImpl::writeMetaData(IndexMetaData& metaData,
   metaData.setName(getKbName());
   ad_utility::File f(filename, "r+");
   ad_utility::File metaFile(filename + META_FILE_SUFFIX, "w");
-  metaData.appendToFile(&f, &metaFile);
+  metaData.appendToFile(f, metaFile);
 }
 
 // _____________________________________________________________________________

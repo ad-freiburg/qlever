@@ -64,7 +64,7 @@ void Permutation::loadFromDisk(
              e.what());
   }
   ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
-  meta_.readFromFile(&file, &metaFile);
+  meta_.readFromFile(file, metaFile);
   // Materialized views never use graph post-processing, while normal and
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
