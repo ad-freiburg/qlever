@@ -447,7 +447,8 @@ MATCHER_P(StatusIs, status,
 using namespace serverTestHelpers;
 
 // A minimal MetricsReader that returns a fixed Prometheus-format string.
-// Used for testing the /metrics endpoint routing without a real OTEL provider.
+// Used for testing the `/metrics` endpoint routing without a real OTEL
+// provider.
 class FakeMetricsReader : public ad_utility::metrics::MetricsReader {
  public:
   std::string getMetricsText() const override {

@@ -10,12 +10,12 @@
 #ifndef QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
 #define QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
 
+#include <absl/functional/any_invocable.h>
 #include <opentelemetry/metrics/async_instruments.h>
 #include <opentelemetry/metrics/sync_instruments.h>
 
 #include <memory>
 
-#include "absl/functional/any_invocable.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on

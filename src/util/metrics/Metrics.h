@@ -36,7 +36,9 @@ std::shared_ptr<MetricsReader> initialize(bool enabled);
 // RAII guard: increments the given counter on construction, decrements on
 // destruction. Safe to use in coroutines — the frame destructor fires on
 // both normal completion and cancellation.
-class [[nodiscard]] ActiveCounterGuard {
+class [[nodiscard(
+    "The counter is only incremented while this guard is alive. Store it in a "
+    "variable.")]] ActiveCounterGuard {
  public:
   explicit ActiveCounterGuard(
       opentelemetry::metrics::UpDownCounter<int64_t>& counter,
@@ -67,7 +69,7 @@ constexpr std::pair<std::string_view, std::string_view> makeAttr(
 }
 
 // Exception types during request handling before the request has been parsed as
-// SPARQL
+// SPARQL.
 struct HttpErrorType {
  private:
   static constexpr std::string_view key = "type";
@@ -78,7 +80,7 @@ struct HttpErrorType {
 };
 
 // Type of the SPARQL operation. Graph Store Protocol is not listed here because
-// we translate it to a Query or Update as which it is then counted
+// we translate it to a Query or Update as which it is then counted.
 struct OperationType {
  private:
   static constexpr std::string_view key = "operation";
@@ -88,7 +90,7 @@ struct OperationType {
   static constexpr auto update = makeAttr(key, "update");
 };
 
-// Exception types during the execution of a SPARQL operation
+// Exception types during the execution of a SPARQL operation.
 struct SparqlErrorType {
  private:
   static constexpr std::string_view key = "type";
