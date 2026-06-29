@@ -12,7 +12,6 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
 #include "index/Index.h"
@@ -607,7 +606,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};

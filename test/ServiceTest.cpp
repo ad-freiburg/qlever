@@ -319,8 +319,8 @@ TEST_F(ServiceTest, computeResult) {
         getResultFunctionFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
-            std::make_exception_ptr(
-                ad_utility::CancellationException("Mock Cancellation")))};
+            std::make_exception_ptr(ad_utility::CancellationException(
+                ad_utility::CancellationState::MANUAL, "Mock Cancellation")))};
 
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         serviceSilent.computeResultOnlyForTesting(),

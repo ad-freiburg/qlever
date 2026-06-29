@@ -1071,7 +1071,8 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    graphNameManagerStateFile_ = onDiskBase + ".allocated-graphs-state";
+    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
+        onDiskBase + ".allocated-graphs-state");
   }
 }
 
@@ -1429,9 +1430,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1685,18 +1685,6 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
     default:
       AD_FAIL();
   }
-}
-
-// ___________________________________________________________________________
-size_t IndexImpl::getCardinality(
-    Id id, Permutation::Enum permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesState);
-      meta.has_value()) {
-    return meta.value().numRows_;
-  }
-  return 0;
 }
 
 // ___________________________________________________________________________
@@ -1982,10 +1970,9 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    auto tables = permutation.lazyScan(
+    auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        std::nullopt, additionalColumns, cancellationHandle,
-        *locatedTriplesSharedState);
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);

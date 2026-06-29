@@ -251,8 +251,8 @@ Result Union::computeResult(bool requestLaziness) {
 
   AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
 
-  IdTable idTable =
-      computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
+  IdTable idTable = computeUnion(subRes1->idTableView(), subRes2->idTableView(),
+                                 _columnOrigins);
 
   AD_LOG_DEBUG << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -263,7 +263,7 @@ Result Union::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 IdTable Union::computeUnion(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) const {
   IdTable res{getResultWidth(), getExecutionContext()->getAllocator()};
   res.resize(left.size() + right.size());
@@ -363,7 +363,7 @@ Result::LazyResult Union::computeResultLazily(
       return InputRangeTypeErased(
           lazySingleValueRange([transform = transformFactory(permutation),
                                 result = std::move(result)]() {
-            return transform(result->idTable().clone(),
+            return transform(result->cloneIdTable(),
                              result->getCopyOfLocalVocab());
           }));
     }
@@ -406,7 +406,7 @@ Result::LazyResult Union::computeResultKeepOrder(
   auto toRange = [](const auto& result) {
     return result->isFullyMaterialized()
                ? Range{std::array{
-                     Wrapper{result->idTable(), result->localVocab()}}}
+                     Wrapper{result->idTableView(), result->localVocab()}}}
                : Range{std::move(result->idTables())};
   };
   Range leftRange = toRange(result1);

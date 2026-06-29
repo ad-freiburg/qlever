@@ -162,15 +162,23 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  auto additionalVars = absl::StrJoin(
-      additionalVariables_ |
+  auto isNotStripped = [this](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto triple = ::ranges::views::concat(ql::ranges::views::single(subject_),
+                                        ql::ranges::views::single(predicate_),
+                                        ql::ranges::views::single(object_));
+  auto components = ::ranges::views::concat(
+      // All IRIs/literals and non-stripped variables from the scan triple.
+      triple | ql::views::filter([&isNotStripped](const TripleComponent& tc) {
+        return !tc.isVariable() || isNotStripped(tc.getVariable());
+      }) | ql::views::transform(&TripleComponent::toString),
+      // All non-stripped additional variables.
+      additionalVariables_ | ql::views::filter(isNotStripped) |
           ql::views::transform(
-              [](const auto& var) -> decltype(auto) { return var.name(); }),
-      " ");
+              [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
-                      subject_.toString(), " ", predicate_.toString(), " ",
-                      object_.toString(), additionalVars.empty() ? "" : " ",
-                      additionalVars);
+                      absl::StrJoin(components.begin(), components.end(), " "));
 }
 
 // _____________________________________________________________________________
@@ -489,11 +497,23 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
     AD_CORRECTNESS_CHECK(numVars <= 3);
     size_t indexOfFirstVar = 3 - numVars;
     ad_utility::HashSet<Variable> otherVars;
+    auto addOtherVar = [&otherVars, &scan](const Variable& el) {
+      // Variables that get stripped immediately by `scan` should not be
+      // taken into account as they are not part of the result (and will not
+      // be joined on).
+      if (!scan.varsToKeep_.has_value() ||
+          scan.varsToKeep_.value().contains(el)) {
+        otherVars.insert(el);
+      }
+    };
     for (size_t i = indexOfFirstVar + 1; i < 3; ++i) {
       const auto& el = *scan.getPermutedTriple()[i];
       if (el.isVariable()) {
-        otherVars.insert(el.getVariable());
+        addOtherVar(el.getVariable());
       }
+    }
+    for (const auto& var : scan.additionalVariables()) {
+      addOtherVar(var);
     }
     return std::pair{*scan.getPermutedTriple()[3 - numVars],
                      std::move(otherVars)};
@@ -507,7 +527,9 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   for (auto& var : other1) {
     other2.insert(var);
   }
-  AD_CONTRACT_CHECK(other2.size() == numTotal);
+  AD_CONTRACT_CHECK(other2.size() == numTotal,
+                    "The two IndexScans for a lazy single-column join have "
+                    "more than one column in common.");
 
   auto metaBlocks1 = s1.getMetadataForScan();
   auto metaBlocks2 = s2.getMetadataForScan();

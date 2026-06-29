@@ -89,6 +89,23 @@ DayTimeDuration DayTimeDuration::operator-(const DayTimeDuration& rhs) const {
 }
 
 //______________________________________________________________________________
+DayTimeDuration DayTimeDuration::operator+(const DayTimeDuration& rhs) const {
+  auto totalMilliseconds1 = getTotalMilliseconds();
+  auto totalMilliseconds2 = rhs.getTotalMilliseconds();
+  auto sum = totalMilliseconds1 + totalMilliseconds2;
+  DayTimeDuration::Type durationType = sum < 0
+                                           ? DayTimeDuration::Type::Negative
+                                           : DayTimeDuration::Type::Positive;
+  sum = std::abs(sum);
+  // A `DayTimeDuration` can be constructed with the total amount of seconds.
+  // Therefore convert from milliseconds to seconds. The constructor itself will
+  // break down the total seconds into days, hours, minutes and seconds
+  // internally.
+  return DayTimeDuration{durationType, 0, 0, 0,
+                         static_cast<double>(sum) / 1000.0};
+}
+
+//______________________________________________________________________________
 DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
     std::string_view dayTimeDurationStr) {
   // Try to match the given pattern with the provided string. If the matching
