@@ -45,6 +45,7 @@ struct PlannedQuery {
   }
 
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+  ParsedQuery& parsedQuery() { return parsedQuery_; }
 
   const QueryExecutionTree& queryExecutionTree() const {
     return *queryExecutionTree_;
