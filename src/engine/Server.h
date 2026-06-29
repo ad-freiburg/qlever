@@ -15,11 +15,13 @@
 #include <string>
 #include <vector>
 
+#include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/QleverTypes.h"
@@ -27,8 +29,10 @@
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/streamable_body.h"
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
+#include "util/json.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =

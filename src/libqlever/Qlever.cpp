@@ -17,6 +17,7 @@
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/http/UrlParser.h"
 
 namespace qlever {
 
