@@ -71,6 +71,9 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   for (const auto& [rowInBatch, id] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
+      // A hit can never be a `LocalVocabIndex` Id (see the comment in Phase 2
+      // for why such Ids are not inserted into `idCache`).
+      AD_EXPENSIVE_CHECK(id.getDatatype() != Datatype::LocalVocabIndex);
       result[rowInBatch] = cached.value();
     } else if (!missIds.empty() && missIds.back() == id) {
       missRows.back().push_back(static_cast<size_t>(rowInBatch));
@@ -87,7 +90,9 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // `LocalVocabEntry` they point to is owned by the current result block's
   // `LocalVocab` and would dangle once the export advances to the next block,
   // making a later hash-colliding lookup compare against freed memory
-  // (heap-use-after-free in `LocalVocabEntry::compareThreeWay`).
+  // (heap-use-after-free in `LocalVocabEntry::compareThreeWay`). Resolving
+  // them per block is fine performance-wise: `LocalVocabEntry`s live in RAM,
+  // so there is no disk I/O to amortize across batches.
   auto missResolved =
       ql::exportIds::idsToStringAndType(index, missIds, localVocab);
   for (auto&& [id, resolved, rows] :
