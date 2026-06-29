@@ -234,7 +234,7 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   EXPECT_EQ((*results[0])[1], "a");
   ASSERT_EQ(results[1]->size(), 0);
   ASSERT_EQ(results[2]->size(), 1);
-  EXPECT_EQ((*results[1])[0], "car");
+  EXPECT_EQ((*results[2])[0], "car");
 
   // Empty input stream -> no results.
   std::vector<std::vector<size_t>> noBatches;
