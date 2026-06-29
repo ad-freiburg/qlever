@@ -98,12 +98,10 @@ Result Sort::computeResult(bool requestLaziness) {
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      // We deliberately use `idTable()` (not `idTableView()`) here:
-      // `computeResultExternal` requires a `ql::span<const IdTable>`.
-      const IdTable& inputTable = input->idTable();
-      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
+      const IdTableView<0>& inputView = input->idTableView();
+      ql::span<const IdTableView<0>> inputViewSpan{&inputView, 1};
       return computeResultExternal({}, std::move(localVocab),
-                                   inputTableSpan.begin(), inputTableSpan.end(),
+                                   inputViewSpan.begin(), inputViewSpan.end(),
                                    std::move(input), requestLaziness);
     }
   }
@@ -202,6 +200,12 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
+    } else if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
+                                               IdTableView<0>>) {
+      // `pushBlock` only accepts `const IdTable&`, but the iterator yields
+      // views. Push rows one at a time to avoid a full clone of the table.
+      ql::ranges::for_each(*it,
+                           [&sorter](const auto& row) { sorter->push(row); });
     } else {
       // NOTE: `pushBlock` with a const reference iterates over the rows and
       // calls `push` for each, which buffers rows and flushes to disk when the

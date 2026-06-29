@@ -312,14 +312,13 @@ class IndexNestedLoopJoin {
                                       matchTracker.matchTracker_);
           };
           if (leftResult_->isFullyMaterialized()) {
-            // NOTE: We deliberately pass the owning `idTable()` (and not
-            // `idTableView()`) here: the `transformationFunc` of `Minus` only
-            // reads the table (no copy), whereas the one of `ExistsJoin` needs
-            // to take ownership via `moveOrClone()`. Passing the owning
-            // reference lets `Minus` avoid a copy while `ExistsJoin` clones
-            // only when it actually has to.
-            return Result::LazyResult{std::array{matchHelper(
-                leftResult_->idTable(), leftResult_->getCopyOfLocalVocab())}};
+            // `moveOrClone()` on an `IdTableView<0>` always clones (identical
+            // cost to cloning a `const IdTable&` l-value), so passing the view
+            // here has no extra overhead for `ExistsJoin`. `Minus` only reads
+            // the table and is also unaffected.
+            return Result::LazyResult{
+                std::array{matchHelper(leftResult_->idTableView(),
+                                       leftResult_->getCopyOfLocalVocab())}};
           }
           return Result::LazyResult{ad_utility::CachingTransformInputRange{
               leftResult_->idTables(),

@@ -265,20 +265,19 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   auto scan = makePatternScan(
       getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
   auto result = scan->getResult(true);
-  // The `callback` is invoked with a single-value span of the `idTable` if the
-  // result is fully materialized, because it expects a range of `IdTable`s.
-  // Because of caching we can potentially get a fully materialized result here.
+  // The `callback` is invoked with a single-value span of the `idTableView`
+  // if the result is fully materialized. Because of caching we can potentially
+  // get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
-      return std::invoke(callback, ql::span{&result->idTable(), 1});
+      return std::invoke(callback, ql::span{&result->idTableView(), 1});
     }
     auto idTables = result->idTables();
     return std::invoke(
         callback,
-        idTables | ql::views::transform(
-                       [](Result::IdTableVocabPair& pair) -> const auto& {
-                         return pair.idTable_;
-                       }));
+        idTables | ql::views::transform([](Result::IdTableVocabPair& pair) {
+          return pair.idTable_.asStaticView<0>();
+        }));
   };
 
   auto getId = [this](const TripleComponent tc) {
