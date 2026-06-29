@@ -19,9 +19,7 @@
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
-#include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
-#include "util/json.h"
 
 using nlohmann::json;
 

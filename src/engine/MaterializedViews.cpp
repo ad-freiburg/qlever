@@ -17,15 +17,10 @@
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/DeltaTriples.h"
-#include "index/ExternalSortFunctors.h"
-#include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"

@@ -335,12 +335,12 @@ TEST(LibQlever, externallySpecifiedValues) {
 
   for (const auto& query : queries) {
     auto plan = engine.parseAndPlanQuery(query);
-    auto qet = plan.sharedQueryExecutionTree();
+    auto& qet = plan.queryExecutionTree();
     auto& qec = plan.queryExecutionContext();
 
     // Collect the ExternalValues operations from the tree.
     std::vector<ExternalValues*> externalValues;
-    qet->getRootOperation()->getExternalValues(externalValues);
+    qet.getRootOperation()->getExternalValues(externalValues);
     ASSERT_EQ(externalValues.size(), 1u);
     EXPECT_EQ(externalValues[0]->getName(), "myValues");
     EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
@@ -353,13 +353,13 @@ TEST(LibQlever, externallySpecifiedValues) {
                          {TC::Iri::fromIriref("<s3>")}};
     externalValues[0]->updateValues(std::move(newValues));
 
-    auto res = qet->getResult();
+    auto res = qet.getResult();
     auto i = &Id::makeFromInt;
     auto getId = ad_utility::testing::makeGetId(qec.getIndex());
     // The order of the two columns `?x` and `?o` might not be deterministic.
     auto expected =
         makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});
-    if (qet->getVariableColumn(Variable{"?x"}) != 0) {
+    if (qet.getVariableColumn(Variable{"?x"}) != 0) {
       expected.swapColumns(0, 1);
     }
     EXPECT_THAT(res->idTableView(), matchesIdTable(expected));

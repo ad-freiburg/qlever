@@ -8,7 +8,6 @@
 #define QLEVER_SRC_LIBQLEVER_QLEVERTYPES_H
 
 #include <memory>
-#include <tuple>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -16,11 +15,6 @@
 
 // This module contains type aliases from `libqlever`, which need to be in a
 // separate file to break cyclic dependencies.
-
-// Forward declarations.
-class QueryExecutionTree;
-class QueryExecutionContext;
-class ParsedQuery;
 
 namespace qlever {
 
@@ -51,7 +45,6 @@ struct PlannedQuery {
   }
 
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
-  ParsedQuery& parsedQuery() { return parsedQuery_; }
 
   const QueryExecutionTree& queryExecutionTree() const {
     return *queryExecutionTree_;

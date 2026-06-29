@@ -6,7 +6,6 @@
 
 #include "libqlever/Qlever.h"
 
-#include <execution>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -18,7 +17,6 @@
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
-#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -177,9 +175,7 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
       [&result](std::string_view batch) { result.append(batch); }};
   ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      timer,
-      sharedCancellationHandle,
-      std::ref(yielder));
+      timer, sharedCancellationHandle, std::ref(yielder));
 
 #endif
   return result;

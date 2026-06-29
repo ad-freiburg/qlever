@@ -320,7 +320,7 @@ class MaterializedViewsManager {
       const parsedQuery::BasicGraphPattern& triples) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
-  // alphanumerics and hyphens) and a `queryPlan` to be executed. The query's
+  // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
   // result is written to the view.
   //
   // If a view with the same name is already loaded, it is unloaded before
@@ -328,9 +328,9 @@ class MaterializedViewsManager {
   //
   // The `memoryLimit` and `allocator` are used only for sorting the
   // permutation if the query result is not correctly sorted already. The
-  // `queryPlan` is executed with the normal query memory limit.
+  // `plannedQuery` is executed with the normal query memory limit.
   void writeViewToDisk(
-      std::string name, const qlever::PlannedQuery& queryPlan,
+      std::string name, const qlever::PlannedQuery& plannedQuery,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>()) const;
