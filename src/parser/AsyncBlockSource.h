@@ -56,11 +56,18 @@ class AsyncBlockSource {
 
   // Asynchronously deliver the next block of bytes. Accepts any Asio
   // completion token (e.g. `boost::asio::use_future`). The completion
-  // fires on the handler's associated executor; `void(std::optional<Block>)`
-  // carries the result and `void(std::exception_ptr)` carries errors.
+  // fires on the handler's associated executor.
+  //
+  // When Boost.Asio supports multiple completion signatures
+  // (`BOOST_ASIO_HAS_VARIADIC_TEMPLATES`), two separate signatures are used:
+  // `void(std::optional<Block>)` for the success case and
+  // `void(std::exception_ptr)` for errors. Older Boost.Asio versions fall back
+  // to a single `void(std::exception_ptr, std::optional<Block>)` signature,
+  // where a null `exception_ptr` indicates success.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
+#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
     return net::async_initiate<CompletionToken, void(std::optional<Block>),
                                void(std::exception_ptr)>(
         [this](auto handler) mutable {
@@ -81,6 +88,28 @@ class AsyncBlockSource {
           });
         },
         std::forward<CompletionToken>(token));
+#else
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr, std::optional<Block>)>(
+        [this](auto handler) mutable {
+          auto ex = net::get_associated_executor(handler, strand_);
+          net::post(strand_, [this, h = std::move(handler), ex]() mutable {
+            try {
+              auto block = getNextBlockImpl();
+              net::dispatch(
+                  ex, [h = std::move(h), block = std::move(block)]() mutable {
+                    std::move(h)(nullptr, std::move(block));
+                  });
+            } catch (...) {
+              net::dispatch(ex, [h = std::move(h),
+                                 ep = std::current_exception()]() mutable {
+                std::move(h)(ep, std::nullopt);
+              });
+            }
+          });
+        },
+        std::forward<CompletionToken>(token));
+#endif
   }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
@@ -154,10 +183,13 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
 }  // namespace qlever::parser
 
 // Specialization of `async_result` so that `boost::asio::use_future` works
-// with the two-signature `asyncGetNextBlock`. The success overload
-// `void(std::optional<T>)` stores the value in a `std::promise`, and the
-// error overload `void(std::exception_ptr)` stores the exception. The result
-// is always a `std::future<std::optional<T>>`.
+// with the two-signature `asyncGetNextBlock`. This is only needed (and only
+// valid) when Boost.Asio supports multiple completion signatures; older
+// versions use the single-signature fallback which `use_future` handles
+// natively. The success overload `void(std::optional<T>)` stores the value
+// in a `std::promise`, and the error overload `void(std::exception_ptr)`
+// stores the exception. The result is always a `std::future<std::optional<T>>`.
+#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
 namespace boost::asio {
 template <typename Allocator, typename T>
 class async_result<use_future_t<Allocator>, void(std::optional<T>),
@@ -188,5 +220,6 @@ class async_result<use_future_t<Allocator>, void(std::optional<T>),
   std::future<std::optional<T>> future_;
 };
 }  // namespace boost::asio
+#endif  // defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
 
 #endif  // QLEVER_SRC_PARSER_ASYNCBLOCKSOURCE_H
