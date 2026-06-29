@@ -508,6 +508,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)
+
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
