@@ -9,6 +9,7 @@
 #include <deque>
 #include <fstream>
 
+#include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
 #include "util/StringUtils.h"
@@ -149,15 +150,19 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
         : self_{self}, manager_{self->ioManagers_->pop().value()} {}
 
     ~PipelineState() {
-      for (const auto& b : pipeline_) {
-        if (b.stage_ == PipelineBatch::Stage::PHASE1_SUBMITTED) {
-          manager_->wait(b.phase1Handle_);
-        }
-        if (b.stage_ == PipelineBatch::Stage::PHASE2_SUBMITTED) {
-          manager_->wait(b.phase2Handle_);
-        }
-      }
-      self_->ioManagers_->push(std::move(manager_));
+      ad_utility::terminateIfThrows(
+          [this]() {
+            for (const auto& b : pipeline_) {
+              if (b.stage_ == PipelineBatch::Stage::PHASE1_SUBMITTED) {
+                manager_->wait(b.phase1Handle_);
+              }
+              if (b.stage_ == PipelineBatch::Stage::PHASE2_SUBMITTED) {
+                manager_->wait(b.phase2Handle_);
+              }
+            }
+            self_->ioManagers_->push(std::move(manager_));
+          },
+          "Error while draining the I/O pipeline in ~PipelineState");
     }
   };
 
