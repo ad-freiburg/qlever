@@ -1,22 +1,24 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//   2026      Mark Veser (mark.veser87@gmail.com)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+
+// 2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// 2018-2026 Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de), UFR
+// 2026 Mark Veser (mark.veser87@gmail.com)
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
 #include <memory>
 
-#include "backports/concepts.h"
+//
 #include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 
-// This is a class that follows the PIMPL idiom and wraps the actual
-// `JoinImpl` class. It exposes only the constructors and virtual member
-// functions.
+// This Operation implements ordinary joins with a single join column. It is
+// implemented via the PIMPL idiom, for details see JoinImpl.h
 
 // Forward declaration of the impl class
 class JoinImpl;
