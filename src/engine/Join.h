@@ -14,7 +14,8 @@
 
 #include <memory>
 
-//
+// `Join` adds no members beyond the Pimpl handle, so all dependencies are
+// pulled in transitively via the `Operation` base class.
 #include "engine/Operation.h"
 
 // This Operation implements ordinary joins with a single join column. It is
