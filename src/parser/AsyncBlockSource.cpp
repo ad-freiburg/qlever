@@ -24,7 +24,8 @@ namespace qlever::parser {
 namespace net = boost::asio;
 
 // ____________________________________________________________________________
-AsyncBlockSource::AsyncBlockSource(net::any_io_executor exec, size_t blocksize)
+AsyncBlockSource::AsyncBlockSource(const net::any_io_executor& exec,
+                                   ad_utility::MemorySize blocksize)
     : strand_{net::make_strand(exec)}, blocksize_{blocksize} {}
 
 // ____________________________________________________________________________
@@ -42,8 +43,8 @@ void AsyncBlockSource::asyncGetNextBlock(Handler handler) {
 }
 
 // ____________________________________________________________________________
-AsyncFileBlockSource::AsyncFileBlockSource(net::any_io_executor exec,
-                                           size_t blocksize,
+AsyncFileBlockSource::AsyncFileBlockSource(const net::any_io_executor& exec,
+                                           ad_utility::MemorySize blocksize,
                                            const std::string& filename)
     : AsyncBlockSource{exec, blocksize} {
   file_.open(filename, "r");
@@ -51,10 +52,12 @@ AsyncFileBlockSource::AsyncFileBlockSource(net::any_io_executor exec,
 
 // ____________________________________________________________________________
 std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
-  if (eof_ || !file_.isOpen()) return std::nullopt;
+  if (eof_ || !file_.isOpen()) {
+    return std::nullopt;
+  }
   Block buf;
-  buf.resize(getBlocksize());
-  size_t n = file_.read(buf.data(), getBlocksize());
+  buf.resize(getBlocksize().getBytes());
+  size_t n = file_.read(buf.data(), getBlocksize().getBytes());
   if (n == 0) {
     eof_ = true;
     return std::nullopt;
@@ -65,7 +68,7 @@ std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
 
 // ____________________________________________________________________________
 AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
-    net::any_io_executor exec, std::unique_ptr<AsyncBlockSource> inner,
+    const net::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
     std::string endRegex)
     : AsyncBlockSource{exec, inner->getBlocksize()},
       inner_{std::move(inner)},
@@ -95,36 +98,37 @@ std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
 
 // ____________________________________________________________________________
 std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
-  if (exhausted_) {
-    if (remainder_.empty()) return std::nullopt;
-    Block result = std::move(remainder_);
-    remainder_.clear();
-    return result;
-  }
-
-  // Fetch the next raw block from the inner source.
-  auto rawOpt = nextBlockFrom(*inner_);
-  if (!rawOpt) {
-    // Inner source is exhausted.
+  // Mark the source exhausted and return whatever is left in `remainder_`.
+  auto returnRemainder = [this]() -> std::optional<ByteBlock> {
     exhausted_ = true;
     if (remainder_.empty()) return std::nullopt;
     Block result = std::move(remainder_);
     remainder_.clear();
     return result;
+  };
+
+  if (exhausted_) {
+    return returnRemainder();
+  }
+
+  // Fetch the next raw block from the inner source.
+  auto rawOpt = nextBlockFrom(*inner_);
+  if (!rawOpt) {
+    return returnRemainder();
   }
   Block rawInput = std::move(*rawOpt);
 
   // Search for the regex near the end of the raw block.
   auto endPosition = findRegexNearEnd(rawInput, endRegex_);
-  if (endPosition) {
-    // Regex found: return remainder_ + rawInput[0..*endPosition].
+  if (endPosition.has_value()) {
+    // Regex found: return remainder_ + rawInput[0..endPosition).
     Block result;
-    result.reserve(remainder_.size() + *endPosition);
+    result.reserve(remainder_.size() + endPosition.value());
     result.insert(result.end(), remainder_.begin(), remainder_.end());
     result.insert(result.end(), rawInput.begin(),
-                  rawInput.begin() + *endPosition);
+                  rawInput.begin() + endPosition.value());
     remainder_.clear();
-    remainder_.insert(remainder_.end(), rawInput.begin() + *endPosition,
+    remainder_.insert(remainder_.end(), rawInput.begin() + endPosition.value(),
                       rawInput.end());
     return result;
   }

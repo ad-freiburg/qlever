@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "parser/AsyncBlockSource.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace qlever {
 
@@ -29,11 +30,12 @@ enum class Filetype { Turtle, NQuad };
 struct InputFileSpecification {
   // A factory that, when called, creates a ready-to-use `AsyncBlockSource`.
   // The `any_io_executor` is the executor on which I/O will be dispatched, the
-  // `size_t` is the preferred blocksize, and the `string_view` is a descriptor
-  // of the resource used for logging and debugging.
+  // `MemorySize` is the preferred blocksize, and the `string_view` is a
+  // descriptor of the resource used for logging and debugging.
   using AsyncBlockSourceFactory =
       std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
-          boost::asio::any_io_executor, size_t, std::string_view)>;
+          const boost::asio::any_io_executor&, ad_utility::MemorySize,
+          std::string_view)>;
 
   struct BufferFactoryAndDescription {
     AsyncBlockSourceFactory bufferFactory_;
@@ -76,7 +78,8 @@ struct InputFileSpecification {
   // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
   // returned. For factory-based specs, the factory is called.
   std::unique_ptr<qlever::parser::AsyncBlockSource> makeAsyncBlockSource(
-      boost::asio::any_io_executor exec, size_t blocksize) const {
+      const boost::asio::any_io_executor& exec,
+      ad_utility::MemorySize blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
       return std::make_unique<qlever::parser::AsyncFileBlockSource>(
           exec, blocksize, std::get<std::string>(source_));

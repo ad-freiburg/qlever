@@ -21,10 +21,12 @@
 #include "../util/GTestHelpers.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/File.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace {
 
 namespace qp = qlever::parser;
+using namespace ad_utility::memory_literals;
 
 // Synchronously drive an `AsyncBlockSource` until EOF and return all blocks
 // in order. Throws if the source signals an error.
@@ -57,7 +59,7 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
   of.close();
 
   boost::asio::thread_pool pool{1};
-  size_t blocksize = 4;
+  ad_utility::MemorySize blocksize = 4_B;
   qp::AsyncFileBlockSource buf(pool.get_executor(), blocksize, filename);
   EXPECT_EQ(buf.getBlocksize(), blocksize);
   std::vector<qp::ByteBlock> expected{
@@ -76,7 +78,7 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
   of.close();
 
   boost::asio::thread_pool pool{1};
-  size_t blocksize = 5;
+  ad_utility::MemorySize blocksize = 5_B;
   {
     // We will always have blocks that end with a number that is followed by
     // a letter. The numbers must be at most 5 positions apart from each
@@ -111,7 +113,7 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // can never be found.
     qp::AsyncEndRegexBlockSource buf(pool.get_executor(),
                                      std::make_unique<qp::AsyncFileBlockSource>(
-                                         pool.get_executor(), 100, filename),
+                                         pool.get_executor(), 100_B, filename),
                                      "([x-z])");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
@@ -133,7 +135,7 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
   of.close();
 
   boost::asio::thread_pool pool{1};
-  size_t blocksize = 2000;
+  ad_utility::MemorySize blocksize = 2000_B;
   {
     qp::AsyncEndRegexBlockSource buf(
         pool.get_executor(),

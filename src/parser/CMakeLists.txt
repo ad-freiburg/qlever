@@ -10,6 +10,7 @@ add_library(parser
         Tokenizer.cpp
         WordsAndDocsFileParser.cpp
         AsyncBlockSource.cpp
+        AsyncFileBlockDriver.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
         GraphPatternOperation.cpp

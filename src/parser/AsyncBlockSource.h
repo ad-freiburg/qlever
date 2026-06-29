@@ -21,6 +21,7 @@
 #include <string>
 
 #include "util/File.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/UninitializedAllocator.h"
 
 namespace qlever::parser {
@@ -44,15 +45,16 @@ class AsyncBlockSource {
   using Block = ByteBlock;
   using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
 
-  explicit AsyncBlockSource(boost::asio::any_io_executor exec,
-                            size_t blocksize);
+  explicit AsyncBlockSource(const boost::asio::any_io_executor& exec,
+                            ad_utility::MemorySize blocksize);
   virtual ~AsyncBlockSource() = default;
 
-  // Asynchronously deliver the next block of bytes. The handler is invoked
-  // on the internal strand.
+  // Asynchronously deliver the next block of bytes. The `handler` is invoked
+  // on the internal strand, meaning that handlers are never called
+  // concurrently.
   void asyncGetNextBlock(Handler handler);
 
-  size_t getBlocksize() const { return blocksize_; }
+  ad_utility::MemorySize getBlocksize() const { return blocksize_; }
 
  protected:
   // Synchronously produce the next block of bytes. Called from within the
@@ -70,18 +72,17 @@ class AsyncBlockSource {
 
  private:
   boost::asio::strand<boost::asio::any_io_executor> strand_;
-  size_t blocksize_;
+  ad_utility::MemorySize blocksize_;
 };
 
-// Read bytes from a file on disk. Replaces `ParallelFileBuffer`. There is no
-// internal prefetching thread; the "next block read in parallel with parsing"
-// overlap is achieved by the caller (typically a parser) arming the next
-// `asyncGetNextBlock` request immediately, on the same executor.
+// An `AsyncBlockSource` (see above) that reads blocks sequentially from a
+// given file.
 class AsyncFileBlockSource : public AsyncBlockSource {
  public:
-  // Opens `filename` immediately and prepares to deliver `blocksize`-sized
+  // Open `filename` immediately and prepare to deliver `blocksize`-sized
   // blocks. Throws if the file cannot be opened.
-  AsyncFileBlockSource(boost::asio::any_io_executor exec, size_t blocksize,
+  AsyncFileBlockSource(const boost::asio::any_io_executor& exec,
+                       ad_utility::MemorySize blocksize,
                        const std::string& filename);
 
  protected:
@@ -92,28 +93,15 @@ class AsyncFileBlockSource : public AsyncBlockSource {
   bool eof_ = false;
 };
 
-// Cut blocks at statement boundaries. Replaces `ParallelBufferWithEndRegex`.
-// Wraps any `AsyncBlockSource` as the underlying byte source; for each
-// produced block, searches for the last match of `endRegex` (typically the
-// `.` that ends a Turtle statement) and returns the part of the block up to
-// and including that match, prepending any tail carried over from the previous
-// block. Single-flight: the consumer must wait for the handler before calling
-// `asyncGetNextBlock` again.
-//
-// The non-parallel turtle parser wraps its byte source with this class using
-// the regex `"([\\r\\n]+)"` to ensure every delivered block ends at a
-// newline. This is important for two reasons:
-//
-// 1. A block must not end in the middle of a comment; otherwise the remaining
-//    comment text, prepended to the next block, is not recognized as a
-//    comment.
-//
-// 2. A block must not end with a `.` without a subsequent newline, because at
-//    that point it is ambiguous whether the `.` ends a statement or continues
-//    a `PN_LOCAL` token that spans blocks.
+// Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
+// block produced by the inner source, search for the last match of `endRegex`
+// and return the part of the block up to and including that match, prepending
+// any tail carried over from the previous block. Single-flight: the consumer
+// must wait for the handler before calling `asyncGetNextBlock` again.
 class AsyncEndRegexBlockSource : public AsyncBlockSource {
  public:
-  AsyncEndRegexBlockSource(boost::asio::any_io_executor exec,
+  // Wrap `inner` and cut its blocks at matches of `endRegex`.
+  AsyncEndRegexBlockSource(const boost::asio::any_io_executor& exec,
                            std::unique_ptr<AsyncBlockSource> inner,
                            std::string endRegex);
 
