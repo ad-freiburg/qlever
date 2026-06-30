@@ -21,6 +21,7 @@
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Generator.h"
+#include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -32,6 +33,8 @@
 class IdTable;
 
 class LocatedTriplesPerBlock;
+class Permutation;
+struct LocatedTriplesState;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -972,6 +975,10 @@ class CompressedRelationReader {
                                     file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
+
+  ad_utility::HashSet<Id::T> computeUniqueGraphIds(
+    const Permutation& permutation,
+    const LocatedTriplesState& locatedTriplesState) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
