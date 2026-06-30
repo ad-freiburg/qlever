@@ -163,7 +163,6 @@ TEST(VocabularyInMemoryBinSearch, LookupBatch) {
   ASSERT_EQ(missingResult->size(), 1);
   EXPECT_FALSE((*missingResult)[0].has_value());
 
-  // Empty batch.
-  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
-  EXPECT_EQ(emptyResult->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }

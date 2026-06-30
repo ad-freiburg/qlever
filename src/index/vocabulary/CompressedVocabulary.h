@@ -68,6 +68,7 @@ CPP_template(typename UnderlyingVocabulary,
   // word is decompressed directly into memory allocated from a PMR
   // monotonic_buffer_resource, avoiding per-word heap allocations.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
     // Get all compressed words from the underlying vocabulary.
     auto compressedResult = underlyingVocabulary_.lookupBatch(indices);
     auto& compressedViews = *compressedResult;

@@ -59,6 +59,7 @@ class VocabularyInMemory
   /// Look up multiple words by their indices in a single batch call.
   /// The returned string_views point directly into the in-memory word storage.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
     auto data = std::make_shared<VocabBatchLookupData>();
     data->views().resize(indices.size());
     for (size_t i = 0; i < indices.size(); ++i) {

@@ -128,9 +128,8 @@ TEST(VocabularyInternalExternal, LookupBatch) {
   EXPECT_EQ((*result)[1], "alpha");
   EXPECT_EQ((*result)[2], "42");
 
-  // Empty batch.
-  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
-  EXPECT_EQ(emptyResult->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
 TEST(VocabularyInternalExternal, LookupBatchesStreamed) {
@@ -138,9 +137,8 @@ TEST(VocabularyInternalExternal, LookupBatchesStreamed) {
   VocabularyCreator creator{"LookupBatchesStreamed"};
   auto vocab = creator.createVocabulary(words);
 
-  // Batches spanning both the internal (RAM) and external (disk) parts, plus an
-  // empty batch.
-  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {}, {1}};
+  // Batches spanning both the internal (RAM) and external (disk) parts.
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}};
   auto streamedResults = vocab.lookupBatchesStreamed(
       VocabLookupInput{ad_utility::InputRangeTypeErased{batches}});
 
@@ -148,7 +146,7 @@ TEST(VocabularyInternalExternal, LookupBatchesStreamed) {
   for (auto& result : streamedResults) {
     results.push_back(std::move(result));
   }
-  ASSERT_EQ(results.size(), 3);
+  ASSERT_EQ(results.size(), 2);
 
   // Each streamed batch matches the corresponding eager `lookupBatch`.
   auto expectMatchesEager = [&vocab](const VocabBatchLookupResult& actual,
@@ -160,8 +158,22 @@ TEST(VocabularyInternalExternal, LookupBatchesStreamed) {
     }
   };
   expectMatchesEager(results[0], std::array<size_t, 3>{2, 0, 3});
-  expectMatchesEager(results[1], ql::span<const size_t>{});  // empty batch
-  expectMatchesEager(results[2], std::array<size_t, 1>{1});
+  expectMatchesEager(results[1], std::array<size_t, 1>{1});
+}
+
+TEST(VocabularyInternalExternal, LookupBatchesStreamedEmptyBatchThrows) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedEmptyBatch"};
+  auto vocab = creator.createVocabulary(words);
+
+  // An empty batch within the stream is invalid and must throw when pulled.
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {}, {1}};
+  auto streamedResults = vocab.lookupBatchesStreamed(
+      VocabLookupInput{ad_utility::InputRangeTypeErased{batches}});
+  EXPECT_ANY_THROW({
+    for ([[maybe_unused]] auto& result : streamedResults) {
+    }
+  });
 }
 
 TEST(VocavularyInternalExternal, LookupBatchesStreamedEmptyInput) {

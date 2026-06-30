@@ -53,6 +53,7 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
 // _____________________________________________________________________________
 std::shared_ptr<std::vector<std::optional<std::string_view>>>
 VocabularyInMemoryBinSearch::lookupBatch(ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
   auto result = std::make_shared<std::vector<std::optional<std::string_view>>>(
       indices.size());
   for (size_t i = 0; i < indices.size(); ++i) {

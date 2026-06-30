@@ -18,6 +18,7 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
   // Step 1: Look up all indices in the internal (RAM) vocabulary.
   auto internalResult = internalVocab_.lookupBatch(indices);
 

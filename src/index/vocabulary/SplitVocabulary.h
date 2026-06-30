@@ -105,7 +105,7 @@ class SplitVocabulary {
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
   // zero in all ValueId datatype bits.
-  static constexpr uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
+  static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
     return vocabIndex | (static_cast<uint64_t>(marker) << markerShift);
@@ -171,7 +171,7 @@ class SplitVocabulary {
   // on each underlying vocabulary, and merges results back in input order.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
-  // Streaming variant of lookupBatch.
+  // Streaming variant of `lookupBatch`.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying

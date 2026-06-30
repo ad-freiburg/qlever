@@ -224,9 +224,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
     EXPECT_EQ((*result)[1], "\"abc\"");
     EXPECT_EQ((*result)[2], "\"\"");
 
-    // Empty batch.
-    auto emptyResult = sv.lookupBatch(ql::span<const size_t>{});
-    EXPECT_EQ(emptyResult->size(), 0);
+    // An empty batch is an invalid request and must throw.
+    EXPECT_ANY_THROW(sv.lookupBatch(ql::span<const size_t>{}));
   }
 
   sv.close();
@@ -379,9 +378,8 @@ TEST(Vocabulary, SplitVocabularyLookupBatchThreeVocabsEmptyBucket) {
   EXPECT_EQ((*result)[1], "\"abc\"");
   EXPECT_EQ((*result)[2], "\"\"");
 
-  // empty batch.
-  auto emptyResult = sv.lookupBatch(ql::span<const size_t>{});
-  EXPECT_EQ(emptyResult->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(sv.lookupBatch(ql::span<const size_t>{}));
   sv.close();
 }
 
@@ -397,15 +395,14 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamedThreeVocabs) {
   ww->finish();
   sv.readFromFile(fileName);
 
-  // A batch spanning all three buckets, an empty batch mid-stream, and a batch
-  // touching only buckets 0 and 2.
+  // A batch spanning all three buckets, and a batch touching only buckets 0
+  // and 2.
   std::vector<std::vector<size_t>> batches{
       {
           static_cast<size_t>(sv.addMarker(0, 1)),  // vocab1 (example.com)
           static_cast<size_t>(sv.addMarker(0, 2)),  // vocab2 (blabliblu)
           static_cast<size_t>(sv.addMarker(0, 0)),  // main ("")
       },
-      {},
       {
           static_cast<size_t>(sv.addMarker(1, 0)),  // main ("abc")
           static_cast<size_t>(sv.addMarker(0, 2)),  // vocab2 (blabliblu)
@@ -416,28 +413,36 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamedThreeVocabs) {
   for (auto& r : streamed) {
     results.push_back(std::move(r));
   }
-  ASSERT_EQ(results.size(), 3);
+  ASSERT_EQ(results.size(), 2);
 
-  auto expectedMatchesEager = [&sv](const VocabularyBatchLookupResult& actual,
+  auto expectedMatchesEager = [&sv](const VocabBatchLookupResult& actual,
                                     ql::span<const size_t> indices) {
     auto expected = sv.lookupBatch(indices);
-    ASSERT_EQ(actual.size(), expected->size());
+    ASSERT_EQ(actual->size(), expected->size());
     for (size_t i = 0; i < expected->size(); ++i) {
       EXPECT_EQ((*actual)[i], (*expected)[i]);
     }
   };
   expectedMatchesEager(results[0], batches[0]);
   expectedMatchesEager(results[1], batches[1]);
-  expectedMatchesEager(results[2], batches[2]);
 
   ASSERT_EQ(results[0]->size(), 3);
   EXPECT_EQ((*results[0])[0], "\"xyz\"^^<http://example.com>");
   EXPECT_EQ((*results[0])[1], "\"xyz\"^^<blabliblu>");
   EXPECT_EQ((*results[0])[2], "\"\"");
-  EXPECT_EQ(results[1]->size(), 0);
-  ASSERT_EQ(results[2]->size(), 2);
-  EXPECT_EQ((*results[2])[0], "\"abc\"");
-  EXPECT_EQ((*results[2])[1], "\"xyz\"^^<blabliblu>");
+  ASSERT_EQ(results[1]->size(), 2);
+  EXPECT_EQ((*results[1])[0], "\"abc\"");
+  EXPECT_EQ((*results[1])[1], "\"xyz\"^^<blabliblu>");
+
+  // An empty batch within the stream is invalid and must throw when pulled.
+  std::vector<std::vector<size_t>> batchesWithEmpty{
+      {static_cast<size_t>(sv.addMarker(0, 0))}, {}};
+  auto streamedWithEmpty =
+      sv.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
+  EXPECT_ANY_THROW({
+    for ([[maybe_unused]] auto& r : streamedWithEmpty) {
+    }
+  });
 
   // empty input -> empty output stream
   std::vector<std::vector<size_t>> noBatches;
@@ -446,7 +451,7 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamedThreeVocabs) {
   for ([[maybe_unused]] auto& r : empty) {
     ++count;
   }
-  EXECT_EQ(count, 0);
+  EXPECT_EQ(count, 0);
   sv.close();
 }
 
@@ -498,13 +503,12 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamed) {
   ww->finish();
   sv.readFromFile("twoSplitVocabStreamed.dat");
 
-  // Three batches: a mixed one, an empty one in the middle, and another mixed
+  // Two batches, each mixing both vocabs.
   std::vector<std::vector<size_t>> batches{
       {
           static_cast<size_t>(sv.addMarker(1, 0)),  // "\"xyz\""
           static_cast<size_t>(sv.addMarker(0, 1)),  // "\"abc\""
       },
-      {},
       {
           static_cast<size_t>(sv.addMarker(0, 0)),  // "\"\""
           static_cast<size_t>(sv.addMarker(1, 1)),  // "\"axyz\""
@@ -515,7 +519,7 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamed) {
   for (auto& r : streamed) {
     results.push_back(std::move(r));
   }
-  ASSERT_EQ(results.size(), 3);
+  ASSERT_EQ(results.size(), 2);
 
   // Each streamed result must match the eager `lookupBatch` on the same batch.
   auto expectMatchesEager = [&sv](const VocabBatchLookupResult& actual,
@@ -527,14 +531,22 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesStreamed) {
     }
   };
   expectMatchesEager(results[0], batches[0]);
-  expectMatchesEager(results[1], batches[1]);  // empty batch -> size 0
-  expectMatchesEager(results[2], batches[2]);
+  expectMatchesEager(results[1], batches[1]);
 
   // Also assert exact contents of the first batch directly.
   ASSERT_EQ(results[0]->size(), 2);
   EXPECT_EQ((*results[0])[0], "\"xyz\"");
   EXPECT_EQ((*results[0])[1], "\"abc\"");
-  EXPECT_EQ(results[1]->size(), 0);
+
+  // An empty batch within the stream is invalid and must throw when pulled.
+  std::vector<std::vector<size_t>> batchesWithEmpty{
+      {static_cast<size_t>(sv.addMarker(1, 0))}, {}};
+  auto streamedWithEmpty =
+      sv.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
+  EXPECT_ANY_THROW({
+    for ([[maybe_unused]] auto& r : streamedWithEmpty) {
+    }
+  });
 
   sv.close();
 }

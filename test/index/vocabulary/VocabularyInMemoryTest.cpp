@@ -92,9 +92,8 @@ TEST(VocabularyInMemory, LookupBatch) {
   EXPECT_EQ((*result)[1], "alpha");
   EXPECT_EQ((*result)[2], "42");
 
-  // Empty batch.
-  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
-  EXPECT_EQ(emptyResult->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
 // _____________________________________________________________________________

@@ -42,11 +42,8 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
   const size_t numIndices = indices.size();
-  if (numIndices == 0) {
-    auto data = std::make_shared<VocabBatchLookupData>();
-    return VocabBatchLookupData::asResult(std::move(data));
-  }
 
   // Phase 1: Read offset pairs via io_uring from the .offsets file.
   // For each index i, read offsets_[i] and offsets_[i+1] (16 bytes) at file

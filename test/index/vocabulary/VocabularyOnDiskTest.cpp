@@ -159,9 +159,8 @@ TEST(VocabularyOnDisk, LookupBatch) {
   EXPECT_EQ((*result)[1], "alpha");
   EXPECT_EQ((*result)[2], "42");
 
-  // Empty batch.
-  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
-  EXPECT_EQ(emptyResult->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
 TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
@@ -244,24 +243,21 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
   });
 }
 
-TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatch) {
+// An empty batch within the stream is an invalid request and must throw when
+// the batch is pulled (an empty input *stream* with no batches is still valid,
+// see other tests).
+TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
   VocabularyCreator creator{"LookupBatchesStreamedEmpty"};
   auto vocab = creator.createVocabulary(words);
 
-  // Empty batch first, so it is yielded without reordering a queued batch.
-  std::vector<std::vector<size_t>> batches{{}, {2, 0}, {1}};
+  std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
-  std::vector<VocabBatchLookupResult> results;
-  for (auto& r : streamed) {
-    results.push_back(std::move(r));
-  }
-  ASSERT_EQ(results.size(), 3);
-  EXPECT_EQ(results[0]->size(), 0);
-  EXPECT_EQ(results[1]->size(), 2);
-  EXPECT_EQ(results[2]->size(), 1);
+  EXPECT_ANY_THROW({
+    for (auto& r : streamed) {
+      (void)r;
+    }
+  });
 }
-
-TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {}

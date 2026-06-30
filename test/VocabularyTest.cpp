@@ -181,8 +181,8 @@ TEST(VocabularyTest, LookupBatch) {
     EXPECT_EQ((*result)[i], v[VocabIndex::make(indices[i])]);
   }
 
-  // Empty batch -> empty result.
-  EXPECT_EQ(v.lookupBatch(ql::span<const size_t>{})->size(), 0);
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(v.lookupBatch(ql::span<const size_t>{}));
 
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
@@ -204,15 +204,15 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   auto filename = "vocTestLookupBatchesStreamed.dat";
   v.createFromSet(s, filename);
 
-  // Three batches: mixed, empty (mid-stream), single.
-  std::vector<std::vector<size_t>> batches{{2, 0}, {}, {3}};
+  // Two batches: mixed and single.
+  std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
   auto streamed = v.lookupBatchesStreamed(VocabLookupInput{batches});
 
   std::vector<VocabBatchLookupResult> results;
   for (auto& r : streamed) {
     results.push_back(std::move(r));
   }
-  ASSERT_EQ(results.size(), 3);
+  ASSERT_EQ(results.size(), 2);
 
   // Each streamed result must match the eager `lookupBatch`.
   auto expectedMatchesEager = [&v](const VocabBatchLookupResult& actual,
@@ -225,16 +225,22 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   };
   expectedMatchesEager(results[0], batches[0]);
   expectedMatchesEager(results[1], batches[1]);
-  expectedMatchesEager(results[2], batches[2]);
 
   // Exact contents
   ASSERT_EQ(results[0]->size(), 2);
   EXPECT_EQ((*results[0])[0], "ba");
   EXPECT_EQ((*results[0])[1], "a");
-  EXPECT_EQ((*results[0])[1], "a");
-  ASSERT_EQ(results[1]->size(), 0);
-  ASSERT_EQ(results[2]->size(), 1);
-  EXPECT_EQ((*results[2])[0], "car");
+  ASSERT_EQ(results[1]->size(), 1);
+  EXPECT_EQ((*results[1])[0], "car");
+
+  // An empty batch within the stream is invalid and must throw when pulled.
+  std::vector<std::vector<size_t>> batchesWithEmpty{{2, 0}, {}, {3}};
+  auto streamedWithEmpty =
+      v.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
+  EXPECT_ANY_THROW({
+    for ([[maybe_unused]] auto& r : streamedWithEmpty) {
+    }
+  });
 
   // Empty input stream -> no results.
   std::vector<std::vector<size_t>> noBatches;

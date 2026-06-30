@@ -116,6 +116,7 @@ QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
 VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
     ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
   // Partition indices by marker: for each marker, collect the vocabIndex
   // values and track original positions.
   std::array<std::vector<size_t>, numberOfVocabs> unmarkedIndicesPerVocab;

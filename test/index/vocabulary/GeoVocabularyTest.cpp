@@ -88,9 +88,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       EXPECT_EQ((*result)[0], testLiterals[1]);
       EXPECT_EQ((*result)[1], testLiterals[0]);
 
-      // Empty batch.
-      auto emptyResult = geoVocab.lookupBatch(ql::span<const size_t>{});
-      EXPECT_EQ(emptyResult->size(), 0);
+      // An empty batch is an invalid request and must throw.
+      EXPECT_ANY_THROW(geoVocab.lookupBatch(ql::span<const size_t>{}));
     }
 
     // Test `lookupBatchesStreamed`.
