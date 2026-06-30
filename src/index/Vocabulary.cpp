@@ -254,6 +254,33 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
 };
 
 // _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::MaybeOwnedVector> Vocabulary<S, C, I>::getEmbedding(
+    IndexType idx) const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesEmbedding<S>) {
+    return vocabulary_.getUnderlyingVocabulary().getEmbedding(idx.get());
+  } else {
+    static_assert(NeverProvidesEmbedding<S>);
+    return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::isEmbeddingAvailable() const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesEmbedding<S>) {
+    return vocabulary_.getUnderlyingVocabulary().isEmbeddingAvailable();
+  } else {
+    static_assert(NeverProvidesEmbedding<S>);
+    return false;
+  }
+};
+
+// _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,

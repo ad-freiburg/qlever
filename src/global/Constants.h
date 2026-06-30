@@ -267,6 +267,18 @@ constexpr inline std::string_view EMBEDDING_FP32_DATATYPE =
         QLEVER_EMBEDDINGS_PREFIX_URL,
         string_constants::detail::embeddings_fp32_vector>();
 
+// The trailing part of a serialized `emb:fp32Vector` literal, i.e. everything
+// after the closing quote of the body: `"^^<...fp32Vector>`. Mirrors
+// `GEO_LITERAL_SUFFIX` and is used to recognize/route a vector literal by its
+// full vocabulary-word form (e.g. in the `EmbeddingVocabulary` split function
+// and `parseFp32VectorLiteral`).
+static constexpr std::string_view EMBEDDING_FP32_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<
+        string_constants::detail::geo_literal_prefix,
+        QLEVER_EMBEDDINGS_PREFIX_URL,
+        string_constants::detail::embeddings_fp32_vector,
+        string_constants::detail::closeAngle>();
+
 // The embedding-type metadata vocabulary. An embedding node links to its type
 // via `emb:type`; the type IRI carries the metadata properties `emb:hasMetric`,
 // `emb:hasDimension` and `emb:hasPrecision`. The `EmbeddingTypeRegistry` scans

@@ -425,15 +425,16 @@ struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
 };
 
 // Value getter for embedding vectors, used by the `embf:distance` expression.
-// It resolves an operand to its decoded `std::vector<float>`, or `std::nullopt`
-// if the operand is not an embedding-vector literal (the caller turns that into
-// a strict query error). The vector literal lives in the regular vocabulary as
-// an ordinary typed literal; for a stored `VocabIndex`/`LocalVocabIndex` the
-// getter fetches the literal string and parses it on demand (mirroring
-// `GeometryInfoValueGetter`'s parse fallback). An inline query vector
-// (`"[…]"^^emb:fp32Vector` written in the query) is parsed directly.
+// It resolves an operand to its decoded vector (as a `MaybeOwnedVector`), or
+// `std::nullopt` if the operand is not an embedding-vector literal (the caller
+// turns that into a strict query error). For a stored `VocabIndex` the getter
+// borrows a zero-copy `span` from the `EmbeddingVocabulary` sidecar when an
+// embedding split is present; otherwise (no sidecar, or a `LocalVocabIndex`, or
+// an inline query vector `"[…]"^^emb:fp32Vector`) it fetches/parses the literal
+// string and returns an owned vector (mirroring `GeometryInfoValueGetter`'s
+// parse fallback).
 struct EmbeddingValueGetter : Mixin<EmbeddingValueGetter> {
-  using Value = std::optional<std::vector<float>>;
+  using Value = std::optional<ad_utility::MaybeOwnedVector>;
   using Mixin<EmbeddingValueGetter>::operator();
   Value operator()(ValueId id, const EvaluationContext*) const;
   Value operator()(const LiteralOrIri&, const EvaluationContext*) const;

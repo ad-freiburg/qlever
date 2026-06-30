@@ -12,9 +12,12 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/functional.h"
+#include "global/Constants.h"
 #include "global/ValueId.h"
+#include "index/vocabulary/EmbeddingVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/EmbeddingVector.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -289,6 +292,14 @@ class SplitVocabulary {
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
 
+  // Retrieve the decoded embedding vector from an underlying vocabulary, if it
+  // is an `EmbeddingVocabulary`.
+  std::optional<ad_utility::MaybeOwnedVector> getEmbedding(
+      uint64_t indexWithMarker) const;
+
+  // Checks if any of the underlying vocabularies is an `EmbeddingVocabulary`.
+  static bool isEmbeddingAvailable();
+
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(SplitVocabulary) {
     (void)serializer;
@@ -319,6 +330,51 @@ struct GeoFilenameFunc {
   }
 };
 
+// Split function for embedding-vector literals: all words are written to
+// vocabulary 0 except `emb:fp32Vector` literals, which go to vocabulary 1.
+struct EmbSplitFunc {
+  uint8_t operator()(std::string_view word) const {
+    return ql::starts_with(word, "\"") &&
+           ql::ends_with(word, EMBEDDING_FP32_LITERAL_SUFFIX);
+  }
+};
+
+// Split filename function for embedding-vector literals: vocabulary 0 uses the
+// base filename and embedding literals the suffix ".embedding".
+struct EmbFilenameFunc {
+  std::array<std::string, 2> operator()(std::string_view base) const {
+    return {std::string(base), absl::StrCat(base, ".embedding")};
+  }
+};
+
+// Split function for the combined "special" vocabulary: WKT geometry literals
+// go to vocabulary 1, embedding-vector literals to vocabulary 2, and everything
+// else (regular IRIs/literals) to vocabulary 0. The marker assignment is fixed
+// and part of the on-disk format: it must never be renumbered.
+struct SpecialSplitFunc {
+  uint8_t operator()(std::string_view word) const {
+    if (ql::starts_with(word, "\"")) {
+      if (ql::ends_with(word, GEO_LITERAL_SUFFIX)) {
+        return 1;
+      }
+      if (ql::ends_with(word, EMBEDDING_FP32_LITERAL_SUFFIX)) {
+        return 2;
+      }
+    }
+    return 0;
+  }
+};
+
+// Split filename function for the combined "special" vocabulary: vocabulary 0
+// uses the base filename, geometry literals the suffix ".geometry", and
+// embedding literals the suffix ".embedding".
+struct SpecialFilenameFunc {
+  std::array<std::string, 3> operator()(std::string_view base) const {
+    return {std::string(base), absl::StrCat(base, ".geometry"),
+            absl::StrCat(base, ".embedding")};
+  }
+};
+
 }  // namespace detail::splitVocabulary
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
@@ -328,5 +384,26 @@ using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
                     detail::splitVocabulary::GeoFilenameFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
+
+// A SplitEmbVocabulary splits only `emb:fp32Vector` literals into their own
+// `EmbeddingVocabulary` sidecar; all other words go to the main vocabulary.
+template <class UnderlyingVocabulary>
+using SplitEmbVocabulary =
+    SplitVocabulary<detail::splitVocabulary::EmbSplitFunc,
+                    detail::splitVocabulary::EmbFilenameFunc,
+                    UnderlyingVocabulary,
+                    EmbeddingVocabulary<UnderlyingVocabulary>>;
+
+// A SplitSpecialVocabulary is the combined split: it routes WKT geometry
+// literals to a `GeoVocabulary` (marker 1) and embedding-vector literals to an
+// `EmbeddingVocabulary` (marker 2), while all other words go to the main
+// vocabulary (marker 0). A single combined split lets geometry and embedding
+// features coexist in one index.
+template <class UnderlyingVocabulary>
+using SplitSpecialVocabulary =
+    SplitVocabulary<detail::splitVocabulary::SpecialSplitFunc,
+                    detail::splitVocabulary::SpecialFilenameFunc,
+                    UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>,
+                    EmbeddingVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

@@ -311,7 +311,7 @@ using NumericOrDateValueGetterTester =
                       sparqlExpression::detail::NumericOrDateValue>;
 using EmbeddingTester =
     ValueGetterTester<sparqlExpression::detail::EmbeddingValueGetter,
-                      std::vector<float>>;
+                      ad_utility::MaybeOwnedVector>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {

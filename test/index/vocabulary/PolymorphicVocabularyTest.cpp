@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
+#include "../../util/FileTestHelpers.h"
 
 using ad_utility::VocabularyType;
 
@@ -15,6 +16,8 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
+  auto cleanup =
+      ad_utility::testing::deleteFilesWithPrefixOnDestruction(filename);
 
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
@@ -48,8 +51,18 @@ void testForVocabType(VocabularyType::Enum vocabType) {
                  vocabConst.getUnderlyingVocabulary()),
       3);
 
-  EXPECT_EQ(vocab.isGeoInfoAvailable(),
-            vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
+  // Geometry info is available for any split that contains a `GeoVocabulary`.
+  bool hasGeoSplit =
+      vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit ||
+      vocabType == VocabularyType::Enum::OnDiskCompressedGeoEmbSplit;
+  EXPECT_EQ(vocab.isGeoInfoAvailable(), hasGeoSplit);
+
+  // Embedding vectors are available for any split that contains an
+  // `EmbeddingVocabulary`.
+  bool hasEmbSplit =
+      vocabType == VocabularyType::Enum::OnDiskCompressedEmbSplit ||
+      vocabType == VocabularyType::Enum::OnDiskCompressedGeoEmbSplit;
+  EXPECT_EQ(vocab.isEmbeddingAvailable(), hasEmbSplit);
 }
 }  // namespace
 

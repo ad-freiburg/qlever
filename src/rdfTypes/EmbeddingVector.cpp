@@ -11,6 +11,8 @@
 
 #include <cmath>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "global/Constants.h"
 #include "util/json.h"
 
 namespace ad_utility {
@@ -43,6 +45,19 @@ std::optional<std::vector<float>> parseFloatVectorArrayBody(
     result.push_back(value);
   }
   return result;
+}
+
+// ____________________________________________________________________________
+std::optional<std::vector<float>> parseFp32VectorLiteral(
+    std::string_view word) {
+  if (!ql::starts_with(word, "\"") ||
+      !ql::ends_with(word, EMBEDDING_FP32_LITERAL_SUFFIX)) {
+    return std::nullopt;
+  }
+  // `word` is `"` + body + `"^^<...fp32Vector>`; strip both ends to get `body`.
+  word.remove_prefix(1);
+  word.remove_suffix(EMBEDDING_FP32_LITERAL_SUFFIX.size());
+  return parseFloatVectorArrayBody(word);
 }
 
 }  // namespace ad_utility

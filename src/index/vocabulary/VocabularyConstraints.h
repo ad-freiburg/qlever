@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYCONSTRAINTS_H
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/EmbeddingVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -56,16 +57,47 @@ CPP_concept MaybeProvidesGeometryInfo =
 // GUARANTEED that this will be the case.
 // Note: Currently, this concept is identical with `HasDefaultGetPositionOfWord`
 // by coincidence. However, both concepts are semantically different.
+// Note: An `EmbeddingVocabulary` never provides `GeometryInfo`; it is listed
+// here because in a combined `SplitVocabulary` (`regular | geo | embedding`)
+// the `getGeoInfo` dispatch hits the embedding sub-vocabulary in its `else`
+// branch, whose `static_assert` requires this concept.
 template <typename T>
 CPP_concept NeverProvidesGeometryInfo =
     ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
                           CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>>;
+                          CompressedVocabulary<VocabularyInternalExternal>> ||
+    ad_utility::isInstantiation<T, EmbeddingVocabulary>;
 
 // A variadic version of `NeverProvidesGeometryInfo` that guarantees the
 // semantics of the named concept for all of its template parameters `Ts...`.
 template <typename... Ts>
 CPP_concept AllNeverProvideGeometryInfo =
     (... && NeverProvidesGeometryInfo<Ts>);
+
+// The embedding analogues of the `...GeometryInfo` concepts above, used for the
+// `getEmbedding` dispatch. `MaybeProvidesEmbedding` holds for vocabulary types
+// that might expose a `getEmbedding` method (because an underlying vocabulary
+// might be an `EmbeddingVocabulary`); such types must provide an
+// `isEmbeddingAvailable` method to determine for sure.
+template <typename T>
+CPP_concept MaybeProvidesEmbedding =
+    std::is_same_v<T, PolymorphicVocabulary> ||
+    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    ad_utility::isInstantiation<T, EmbeddingVocabulary>;
+
+// As a safeguard for the future: a vocabulary implementation that will never
+// provide embeddings. Note that a `GeoVocabulary` belongs here (it provides
+// geometry info, not embeddings), since in a combined `SplitVocabulary` the
+// `getEmbedding` dispatch hits it in its `else` branch.
+template <typename T>
+CPP_concept NeverProvidesEmbedding =
+    ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
+                          CompressedVocabulary<VocabularyInMemory>,
+                          CompressedVocabulary<VocabularyInternalExternal>> ||
+    ad_utility::isInstantiation<T, GeoVocabulary>;
+
+// A variadic version of `NeverProvidesEmbedding`.
+template <typename... Ts>
+CPP_concept AllNeverProvideEmbedding = (... && NeverProvidesEmbedding<Ts>);
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYCONSTRAINTS_H

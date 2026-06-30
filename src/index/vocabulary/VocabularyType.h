@@ -23,7 +23,9 @@ enum struct VocabularyTypeEnum {
   OnDiskUncompressed,
   InMemoryCompressed,
   OnDiskCompressed,
-  OnDiskCompressedGeoSplit
+  OnDiskCompressedGeoSplit,
+  OnDiskCompressedEmbSplit,
+  OnDiskCompressedGeoEmbSplit
 };
 
 }
@@ -33,18 +35,23 @@ class VocabularyType
   // The different vocabulary implementations.
   using Enum = detail::VocabularyTypeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+  static constexpr std::array<std::pair<Enum, std::string_view>, 7>
       descriptions_{
           {{Enum::InMemoryUncompressed, "in-memory-uncompressed"},
            {Enum::OnDiskUncompressed, "on-disk-uncompressed"},
            {Enum::InMemoryCompressed, "in-memory-compressed"},
            {Enum::OnDiskCompressed, "on-disk-compressed"},
-           {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"}}};
+           {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"},
+           {Enum::OnDiskCompressedEmbSplit, "on-disk-compressed-emb-split"},
+           {Enum::OnDiskCompressedGeoEmbSplit,
+            "on-disk-compressed-geo-emb-split"}}};
   static const VocabularyType InMemoryUncompressed;
   static const VocabularyType OnDiskUncompressed;
   static const VocabularyType InMemoryCompressed;
   static const VocabularyType OnDiskCompressed;
   static const VocabularyType OnDiskCompressedGeoSplit;
+  static const VocabularyType OnDiskCompressedEmbSplit;
+  static const VocabularyType OnDiskCompressedGeoEmbSplit;
 
   static constexpr std::string_view typeName() { return "vocabulary type"; }
 
@@ -61,6 +68,10 @@ const inline VocabularyType VocabularyType::OnDiskCompressed{
     VocabularyType::Enum::OnDiskCompressed};
 const inline VocabularyType VocabularyType::OnDiskCompressedGeoSplit{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
+const inline VocabularyType VocabularyType::OnDiskCompressedEmbSplit{
+    VocabularyType::Enum::OnDiskCompressedEmbSplit};
+const inline VocabularyType VocabularyType::OnDiskCompressedGeoEmbSplit{
+    VocabularyType::Enum::OnDiskCompressedGeoEmbSplit};
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H

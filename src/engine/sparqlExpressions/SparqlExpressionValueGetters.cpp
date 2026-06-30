@@ -467,11 +467,23 @@ EmbeddingValueGetter::Value EmbeddingValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
-    case VocabIndex:
+    case VocabIndex: {
+      // When an embedding split is present, the decoded vector lives in the
+      // `EmbeddingVocabulary` sidecar: borrow a zero-copy `span` into the
+      // memory map (this also strictly rejects non-embedding words, for which
+      // `getEmbedding` returns `std::nullopt`). Without a sidecar, fall back to
+      // fetching and parsing the literal string (cf.
+      // `GeometryInfoValueGetter`).
+      const auto& vocab = context->_qec.getIndex().getVocab();
+      if (vocab.isEmbeddingAvailable()) {
+        return vocab.getEmbedding(id.getVocabIndex());
+      }
+      auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return (*this)(lit, context);
+    }
     case LocalVocabIndex: {
-      // The vector literal is an ordinary typed literal in the regular
-      // vocabulary: fetch it and parse it on demand (this minimal build has no
-      // precomputed sidecar; cf. `GeometryInfoValueGetter`).
+      // Query-time strings are never in the on-disk sidecar; parse on demand.
       auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
           context->_qec.getIndex(), id, context->_localVocab);
       return (*this)(lit, context);
@@ -496,8 +508,11 @@ EmbeddingValueGetter::Value EmbeddingValueGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == EMBEDDING_FP32_DATATYPE) {
-    return ad_utility::parseFloatVectorArrayBody(
+    auto parsed = ad_utility::parseFloatVectorArrayBody(
         asStringViewUnsafe(litOrIri.getContent()));
+    if (parsed.has_value()) {
+      return ad_utility::MaybeOwnedVector{std::move(parsed).value()};
+    }
   }
   return std::nullopt;
 };

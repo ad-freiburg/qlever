@@ -7,6 +7,7 @@
 
 #include "backports/type_traits.h"
 #include "index/Vocabulary.h"
+#include "index/vocabulary/EmbeddingVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "util/Log.h"
@@ -159,6 +160,46 @@ bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
     // nested fashion). For more details and if it fails, see the definition of
     // this concept in `VocabularyConstraints.h`.
     static_assert(AllNeverProvideGeometryInfo<S...>);
+    return false;
+  }
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+std::optional<ad_utility::MaybeOwnedVector> SplitVocabulary<
+    SF, SFN, S...>::getEmbedding(uint64_t indexWithMarker) const {
+  // Visit the underlying vocabulary indicated by the marker and retrieve the
+  // requested embedding vector if it is an `EmbeddingVocabulary`.
+  const auto& vocab = underlying_[getMarker(indexWithMarker)];
+  return std::visit(
+      [&](const auto& v) -> std::optional<ad_utility::MaybeOwnedVector> {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (ad_utility::isInstantiation<T, EmbeddingVocabulary>) {
+          return v.getEmbedding(getVocabIndex(indexWithMarker));
+        } else {
+          static_assert(NeverProvidesEmbedding<T>);
+          return std::nullopt;
+        }
+      },
+      vocab);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+bool SplitVocabulary<SF, SFN, S...>::isEmbeddingAvailable() {
+  // If any of the underlying vocabularies is an `EmbeddingVocabulary`, then
+  // this `SplitVocabulary` is able to provide precomputed embedding vectors.
+  if constexpr (ad_utility::anyIsInstantiationOf<EmbeddingVocabulary, S...>) {
+    return true;
+  } else {
+    // This assertion guarantees that none of the underlying vocabularies are
+    // able to provide embeddings. For more details and if it fails, see the
+    // definition of this concept in `VocabularyConstraints.h`.
+    static_assert(AllNeverProvideEmbedding<S...>);
     return false;
   }
 }

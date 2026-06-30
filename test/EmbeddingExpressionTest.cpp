@@ -18,6 +18,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/EncodedIriManager.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "parser/SparqlParser.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
@@ -69,10 +70,15 @@ std::string makeKg(std::string_view metricLocalName) {
 constexpr std::string_view kPath = "emb:hasEmbedding/emb:asFp32Vector";
 
 // Run a SELECT `query` against the Turtle `kg` and return the result rows (CSV,
-// header dropped). Throws (propagating the query error) if execution fails.
-std::vector<std::string> runSelect(const std::string& kg,
-                                   const std::string& query) {
+// header dropped). Throws (propagating the query error) if execution fails. If
+// `vocabularyType` is given, the index is built with that exact vocabulary type
+// (e.g. to force the `EmbeddingVocabulary` sidecar path); otherwise a random
+// type is used.
+std::vector<std::string> runSelect(
+    const std::string& kg, const std::string& query,
+    std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt) {
   TestIndexConfig config{kg};
+  config.vocabularyType = vocabularyType;
   auto qec = getQec(std::move(config));
   qec->clearCacheUnpinnedOnly();
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -111,6 +117,25 @@ TEST(EmbeddingExpression, KnnOrdering) {
                              ", ex:T) AS ?d) } ORDER BY ASC(?d)"));
   EXPECT_THAT(rows,
               ElementsAre(HasSubstr("/a"), HasSubstr("/c"), HasSubstr("/b")));
+}
+
+// _____________________________________________________________________________
+TEST(EmbeddingExpression, KnnOrderingWithEmbeddingSplitSidecar) {
+  // Same kNN query as `KnnOrdering`, but force the combined geo+embedding split
+  // so the stored vectors come from the `EmbeddingVocabulary` sidecar (the
+  // zero-copy `getEmbedding` path) rather than being parsed on demand.
+  for (auto vocabType :
+       {ad_utility::VocabularyType::Enum::OnDiskCompressedEmbSplit,
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoEmbSplit}) {
+    auto rows =
+        runSelect(makeKg("cosine"),
+                  absl::StrCat(kPrefixes, "SELECT ?x { ?x ", kPath,
+                               " ?e . BIND(embf:distance(?e, ", vec("[1, 0]"),
+                               ", ex:T) AS ?d) } ORDER BY ASC(?d)"),
+                  ad_utility::VocabularyType{vocabType});
+    EXPECT_THAT(rows,
+                ElementsAre(HasSubstr("/a"), HasSubstr("/c"), HasSubstr("/b")));
+  }
 }
 
 // _____________________________________________________________________________

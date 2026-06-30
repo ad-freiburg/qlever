@@ -20,6 +20,7 @@
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "rdfTypes/EmbeddingVector.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -143,6 +144,17 @@ class Vocabulary {
   // `std::nullopt` for any input, because no precomputed `GeometryInfo` is
   // available.
   bool isGeoInfoAvailable() const;
+
+  // Retrieve the decoded embedding vector from the (possibly) underlying
+  // `EmbeddingVocabulary`. Returns a vector if and only if an
+  // `EmbeddingVocabulary` is used and the given index points to an embedding
+  // literal in it; otherwise `std::nullopt`. This is what lets the query layer
+  // strictly reject non-embedding arguments.
+  std::optional<ad_utility::MaybeOwnedVector> getEmbedding(IndexType idx) const;
+
+  // Analogous to `isGeoInfoAvailable`: returns `true` iff there is an
+  // underlying `EmbeddingVocabulary`.
+  bool isEmbeddingAvailable() const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.

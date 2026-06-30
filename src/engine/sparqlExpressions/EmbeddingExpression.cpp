@@ -29,7 +29,7 @@ namespace sparqlExpression {
 namespace {
 using namespace detail;
 
-using OptVector = std::optional<std::vector<float>>;
+using OptVector = std::optional<ad_utility::MaybeOwnedVector>;
 
 // Raw distance kernels, free of the metric/sign conventions. `double`
 // accumulation is used for numerical stability.
@@ -62,8 +62,8 @@ Id computeDistance(const EmbeddingTypeConfig& config, const OptVector& optA,
         "embf:distance: an argument is not an embedding vector literal of the "
         "type's precision (emb:fp32Vector)"};
   }
-  ql::span<const float> a{*optA};
-  ql::span<const float> b{*optB};
+  ql::span<const float> a = optA->span();
+  ql::span<const float> b = optB->span();
   if (a.size() != config.dimension_ || b.size() != config.dimension_) {
     throw std::runtime_error{absl::StrCat(
         "embf:distance: a vector's dimension (", a.size(), " resp. ", b.size(),

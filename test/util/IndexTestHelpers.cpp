@@ -4,6 +4,7 @@
 
 #include "IndexTestHelpers.h"
 
+#include "./FileTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -369,13 +370,16 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                      contextMap.size());
     contextMap.emplace(
         c, Context{TypeErasedCleanup{[testIndexBasename]() {
-                     for (const std::string& indexFilename :
-                          getAllIndexFilenames(testIndexBasename)) {
-                       // Don't log when a file can't be deleted,
-                       // because the logging might already be
-                       // destroyed.
-                       ad_utility::deleteFile(indexFilename, false);
-                     }
+                     // Delete every file whose name starts with the index
+                     // basename followed by a `.` (every index/sidecar file is
+                     // `basename + ".<suffix>"`). Using a prefix match (instead
+                     // of a hardcoded list of filenames) ensures that we also
+                     // clean up sidecar files of specialized vocabularies (e.g.
+                     // the embedding or geometry vocabularies) and any future
+                     // additions. The trailing `.` keeps basename `..._1` from
+                     // also matching `..._10`'s files.
+                     ad_utility::testing::deleteFilesWithPrefix(
+                         absl::StrCat(testIndexBasename, "."));
                    }},
                    std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                    std::make_unique<QueryResultCache>(),
