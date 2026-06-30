@@ -27,7 +27,7 @@ bool BasicGraphPatternsInvariantTo::operator()(
   return
       // There is exactly one row inside the `VALUES`.
       values.size() == 1 &&
-      // The `VALUES` doesn't bind to any of the `variables_`.
+      // Each `VALUES` variable appears at most once across the whole pattern.
       ql::ranges::all_of(variables, [this](const auto& var) {
         return variableAppearsAtMostOnce(var);
       });

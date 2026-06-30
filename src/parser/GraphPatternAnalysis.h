@@ -15,14 +15,17 @@
 // _____________________________________________________________________________
 namespace graphPatternAnalysis {
 
-// Check whether certain graph patterns can be ignored when we are only
-// interested in the bindings for variables from `variables_` as they do not
-// affect the result for these `variables_`.
+// Check whether a given `GraphPatternOperation` is invariant with respect to
+// the variable usage in the surrounding `GraphPattern`, meaning that removing
+// it would not affect the result of the query. The variable usage is counted
+// once up front (across the whole `GraphPattern`) into `variableCounts_`; a
+// later `operator()(op)` query then asks whether `op`'s variables appear at
+// most once in the pattern (i.e. only inside `op` itself).
 //
-// For example: A basic graph pattern (a list of triples) is invariant to a
-// `BIND` statement whose target variable is not contained in the basic graph
-// pattern, because the `BIND` only adds its own column, but neither adds nor
-// deletes result rows.
+// For example: a `BIND(... AS ?y)` is invariant when `?y` is not referenced
+// anywhere else in the pattern (the `BIND` only adds its own column without
+// adding or removing rows). A single-row `VALUES` clause is invariant when
+// none of its variables are referenced elsewhere.
 //
 // This is currently used for the `MaterializedViewsManager`'s
 // `QueryPatternCache`.
