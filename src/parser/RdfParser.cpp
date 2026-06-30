@@ -14,6 +14,7 @@
 #include <absl/strings/charconv.h>
 
 #include <cstring>
+#include <ctre-unicode.hpp>
 #include <exception>
 #include <optional>
 
@@ -31,6 +32,37 @@
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
+
+namespace {
+// CTRE regex patterns, defined as variables for C++17 compatibility. They are
+// written reversed because they are matched against the reversed input.
+constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
+constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
+
+// Run `search` against the reversed `sv`, and return the number of bytes up to
+// and including the rightmost match, or `std::nullopt` if there is no match.
+template <typename Search>
+std::optional<size_t> findEndOfLastMatch(const Search& search,
+                                         std::string_view sv) {
+  auto match = search(sv.rbegin(), sv.rend());
+  if (!match) {
+    return std::nullopt;
+  }
+  return match.begin().base() - sv.begin();
+}
+}  // namespace
+
+namespace detail {
+// _____________________________________________________________________________
+std::optional<size_t> findEndOfLastNewline(std::string_view input) {
+  return findEndOfLastMatch(ctre::search<newlineRegex>, input);
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> findEndOfLastStatement(std::string_view input) {
+  return findEndOfLastMatch(ctre::search<statementEndRegex>, input);
+}
+}  // namespace detail
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
@@ -1005,7 +1037,7 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "([\\r\\n]+)");
+      std::move(rawBuffer), detail::findEndOfLastNewline, "a newline");
   // Read the first block and initialize the tokenizer.
   if (auto res = fileBuffer_->getNextBlock(); res) {
     byteVec_ = std::move(res.value());
@@ -1202,7 +1234,8 @@ template <typename T>
 void RdfParallelParser<T>::initialize(
     std::unique_ptr<ParallelBuffer> rawBuffer) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
+      std::move(rawBuffer), detail::findEndOfLastStatement,
+      "a dot followed by a newline");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
