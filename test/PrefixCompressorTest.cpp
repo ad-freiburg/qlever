@@ -22,6 +22,29 @@ TEST(PrefixCompressor, CompressionPreservesWords) {
   }
 }
 
+TEST(PrefixCompressor, CompressionIntoCallerProvidedBufferPreservesWords) {
+  PrefixCompressor p;
+  p.buildCodebook(std::vector<std::string>{"alph", "alpha", "al"});
+
+  std::vector<std::string> words{
+      "a",     "al",       "alp",     "alph",
+      "alpha", "alphabet", "betabet", std::string{0, 0, 'a', 1}};
+
+  for (const auto& word : words) {
+    auto compressed = p.compress(word);
+    ASSERT_NE(compressed, word);
+
+    // `decompressInto` writes into a caller-provided buffer and returns the
+    // number of bytes written. Decompression is lossless, so the result has
+    // exactly `word.size()` bytes.
+    std::string buffer(word.size(), '\0');
+    size_t writtenSize =
+        p.decompressInto(compressed, buffer.data(), buffer.size());
+    ASSERT_EQ(writtenSize, word.size());
+    ASSERT_EQ(std::string_view(buffer.data(), writtenSize), word);
+  }
+}
+
 TEST(PrefixCompressor, OverlappingPrefixes) {
   PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alph", "alpha", "al"});
@@ -95,3 +118,6 @@ TEST(PrefixCompressor, prefixCompression) {
   EXPECT_THAT(calculatePrefixes(input, 127),
               Contains(ContainsRegex("\nabc\t\n")));
 }
+
+// _____________________________________________________________________________
+TEST(PrefixCompressor, decompressInto) {}
