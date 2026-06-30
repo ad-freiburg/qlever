@@ -353,6 +353,141 @@ TEST(Vocabulary, SplitVocabularyLookupBatchEdgeCases) {
 }
 
 // _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchThreeVocabsEmptyBucket) {
+  // A three-vocab batch that touches only buckest 0 and 2, leaving bucket 1's
+  // sub-result null.
+  ThreeSplitVocabulary sv;
+  std::string fileName = "threeSplitVocabularyBucket.dat";
+  auto ww = sv.makeDiskWriterPtr(fileName);
+  // Globally sorted insertion order
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"xyz\"^^<blabliblu>", true);
+  (*ww)("\"xyz\"^^<http://example.com>", true);
+  ww->finish();
+  sv.readFromFile(fileName);
+
+  // Indices only in buckets 0 and 2. bucket 1 stays empty.
+  std::array<size_t, 3> indices{
+      static_cast<size_t>(sv.addMarker(0, 2)),  // "\xyz\"^^blabliblu"
+      static_cast<size_t>(sv.addMarker(1, 0)),  // "\"abc\""
+      static_cast<size_t>(sv.addMarker(0, 0)),  // "\"\""
+  };
+  auto result = sv.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "\"xyz\"^^<blabliblu>");
+  EXPECT_EQ((*result)[1], "\"abc\"");
+  EXPECT_EQ((*result)[2], "\"\"");
+
+  // empty batch.
+  auto emptyResult = sv.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchesStreamedThreeVocabs) {
+  ThreeSplitVocabulary sv;
+  auto& fileName = "threeSplitVocabularyBucket.dat";
+  auto ww = sv.makeDiskWriterPtr(fileName);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"xyz\"^^<blabliblu>", true);
+  (*ww)("\"xyz\"^^<http://example.com>", true);
+  ww->finish();
+  sv.readFromFile(fileName);
+
+  // A batch spanning all three buckets, an empty batch mid-stream, and a batch
+  // touching only buckets 0 and 2.
+  std::vector<std::vector<size_t>> batches{
+      {
+          static_cast<size_t>(sv.addMarker(0, 1)),  // vocab1 (example.com)
+          static_cast<size_t>(sv.addMarker(0, 2)),  // vocab2 (blabliblu)
+          static_cast<size_t>(sv.addMarker(0, 0)),  // main ("")
+      },
+      {},
+      {
+          static_cast<size_t>(sv.addMarker(1, 0)),  // main ("abc")
+          static_cast<size_t>(sv.addMarker(0, 2)),  // vocab2 (blabliblu)
+      }};
+  auto streamed = sv.lookupBatchesStreamed(VocabLookupInput{batches});
+
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& r : streamed) {
+    results.push_back(std::move(r));
+  }
+  ASSERT_EQ(results.size(), 3);
+
+  auto expectedMatchesEager = [&sv](const VocabularyBatchLookupResult& actual,
+                                    ql::span<const size_t> indices) {
+    auto expected = sv.lookupBatch(indices);
+    ASSERT_EQ(actual.size(), expected->size());
+    for (size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*actual)[i], (*expected)[i]);
+    }
+  };
+  expectedMatchesEager(results[0], batches[0]);
+  expectedMatchesEager(results[1], batches[1]);
+  expectedMatchesEager(results[2], batches[2]);
+
+  ASSERT_EQ(results[0]->size(), 3);
+  EXPECT_EQ((*results[0])[0], "\"xyz\"^^<http://example.com>");
+  EXPECT_EQ((*results[0])[1], "\"xyz\"^^<blabliblu>");
+  EXPECT_EQ((*results[0])[2], "\"\"");
+  EXPECT_EQ(results[1]->size(), 0);
+  ASSERT_EQ(results[2]->size(), 2);
+  EXPECT_EQ((*results[2])[0], "\"abc\"");
+  EXPECT_EQ((*results[2])[1], "\"xyz\"^^<blabliblu>");
+
+  // empty input -> empty output stream
+  std::vector<std::vector<size_t>> noBatches;
+  auto empty = sv.lookupBatchesStreamed(VocabLookupInput{noBatches});
+  size_t count = 0;
+  for ([[maybe_unused]] auto& r : empty) {
+    ++count;
+  }
+  EXECT_EQ(count, 0);
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitGeoVocabularyLookupBatchPopulatesGeoBucket) {
+  // A `SplitGeoVocabulary` batch containing WKT literals populates the geo
+  // bucket (vocab 1), exercising the non-empty-geo-bucket path and the
+  // geo-side merge loop for the production geo-split instantiation.
+  SGV sv;
+  auto ww = sv.makeDiskWriterPtr("splitGeoVocabBatch.dat");
+  const std::string wktLine =
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  const std::string wktPoly =
+      "\"POLYGON((1 2, 3 4, 5 6, 1 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  // Globally sorted: '"L' < '"P' < '"a' < '"x'.
+  ASSERT_EQ((*ww)(wktLine, true), SGV::addMarker(0, 1));    // geo[0]
+  ASSERT_EQ((*ww)(wktPoly, true), SGV::addMarker(1, 1));    // geo[1]
+  ASSERT_EQ((*ww)("\"abc\"", true), SGV::addMarker(0, 0));  // main[0]
+  ASSERT_EQ((*ww)("\"xyz\"", true), SGV::addMarker(1, 0));  // main[1]
+  ww->finish();
+  sv.readFromFile("splitGeoVocabBatch.dat");
+
+  // Batch spanning both buckets, shuffled.
+  std::array<size_t, 4> indices{
+      static_cast<size_t>(SGV::addMarker(1, 1)),  // wktPoly (geo)
+      static_cast<size_t>(SGV::addMarker(0, 0)),  // "abc"   (main)
+      static_cast<size_t>(SGV::addMarker(0, 1)),  // wktLine (geo)
+      static_cast<size_t>(SGV::addMarker(1, 0)),  // "xyz"   (main)
+  };
+  auto result = sv.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 4);
+  EXPECT_EQ((*result)[0], wktPoly);
+  EXPECT_EQ((*result)[1], "\"abc\"");
+  EXPECT_EQ((*result)[2], wktLine);
+  EXPECT_EQ((*result)[3], "\"xyz\"");
+  sv.close();
+}
+
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyLookupBatchesStreamed) {
   TwoSplitVocabulary sv;
   auto ww = sv.makeDiskWriterPtr("twoSplitVocabStreamed.dat");
