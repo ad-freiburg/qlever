@@ -1077,7 +1077,7 @@ TEST_F(DeltaTriplesTest, remapId) {
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
   Id entryId = makeLocalVocabId(10101010);
   auto remap = [&idMapping](Id id) {
-    DeltaTriples::remapId(idMapping, id);
+    DeltaTriples::remapIdForTesting(idMapping, id);
     return id;
   };
 
