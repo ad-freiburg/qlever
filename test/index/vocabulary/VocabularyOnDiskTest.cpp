@@ -199,3 +199,23 @@ TEST(VocabularyOnDisk, LookupBatchesStreamed) {
     EXPECT_EQ((*results[1])[0], (*expected)[0]);
   }
 }
+
+// destroying the streamed-looup mid-iteration must drain the in-flight phase-1
+// (offset) reads in `~PipelineState` and return the I/O manager to the pool.
+TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedAbandoned"};
+  ;
+  auto vocab = creator.createVocabulary(words);
+
+  // We consume the first batch, leaving the rest submitted, so the destructor
+  // of `PipelineState` must drain the in-flight phase-1 read.
+  std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {3}};
+  auto streamedResults =
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+
+  auto first = streamedResults.get();
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ((*first)->size(), 2);
+  // `streamedResults` destroyed here with batches {1} and {3} still in flight.
+}
