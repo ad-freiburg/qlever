@@ -273,10 +273,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
           break;
         }
         auto indices = std::move(batchOfIndices.value());
-        if (indices.empty()) {
-          auto emptyData = std::make_shared<VocabBatchLookupData>();
-          return VocabBatchLookupData::asResult(std::move(emptyData));
-        }
+        AD_CONTRACT_CHECK(!indices.empty());
         auto batch =
             PipelineBatch::submitOffsetReads(indices, *self_, *manager_);
         totalSubmittedSQEs_ += batch.numIndices_;

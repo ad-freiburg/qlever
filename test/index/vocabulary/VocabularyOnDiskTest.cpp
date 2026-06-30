@@ -164,6 +164,14 @@ TEST(VocabularyOnDisk, LookupBatch) {
   EXPECT_EQ(emptyResult->size(), 0);
 }
 
+TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchOutOfRange"};
+  auto vocab = creator.createVocabulary(words);
+  std::array<size_t, 2> indices{0, 99};
+  EXPECT_ANY_THROW(vocab.lookupBatch(indices));
+}
+
 TEST(VocabularyOnDisk, LookupBatchesStreamed) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
   VocabularyCreator creator{"LookupBatchesStreamed"};
@@ -219,3 +227,41 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {
   EXPECT_EQ((*first)->size(), 2);
   // `streamedResults` destroyed here with batches {1} and {3} still in flight.
 }
+
+TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedOutOfRange"};
+  auto vocab = creator.createVocabulary(words);
+  std::vector<std::vector<size_t>> batches{{0, 99}};
+  auto streamed =
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+  // The contract check first fires when the batch's offset reads are submitted,
+  // i.e. while pulling the first result.
+  EXPECT_ANY_THROW({
+    for (auto& r : streamed) {
+      (void)r;
+    }
+  });
+}
+
+TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatch) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedEmpty"};
+  auto vocab = creator.createVocabulary(words);
+
+  // Empty batch first, so it is yielded without reordering a queued batch.
+  std::vector<std::vector<size_t>> batches{{}, {2, 0}, {1}};
+  auto streamed =
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& r : streamed) {
+    results.push_back(std::move(r));
+  }
+  ASSERT_EQ(results.size(), 3);
+  EXPECT_EQ(results[0]->size(), 0);
+  EXPECT_EQ(results[1]->size(), 2);
+  EXPECT_EQ(results[2]->size(), 1);
+}
+
+TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {}
