@@ -25,8 +25,9 @@ class RandomExpression : public SparqlExpression {
     result.reserve(numElements);
     ad_utility::RandomDoubleGenerator randDouble(0.0, 1.0);
 
-    // As part of a GROUP BY we only return one value per group.
-    if (context->_isPartOfGroupBy) {
+    // As part of a GROUP BY (and outside of an aggregate) we only return one
+    // value per group.
+    if (context->_isPartOfGroupBy && !isInsideAggregate()) {
       return Id::makeFromDouble(randDouble());
     }
 
