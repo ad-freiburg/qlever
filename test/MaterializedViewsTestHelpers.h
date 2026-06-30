@@ -121,7 +121,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
     // Compute the result and permute the `IdTable` as expected.
     auto res = qet->getResult(false);
-    auto idTable = res->idTable().clone();
+    auto idTable = res->cloneIdTable();
     idTable.setColumnSubset(columns);
     return idTable;
   }

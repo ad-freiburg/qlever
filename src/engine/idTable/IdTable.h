@@ -963,7 +963,8 @@ inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
     return false;
   }
   return ql::ranges::all_of(
-      ::ranges::views::zip(table.getColumns(), view.getColumns()),
+      ::ranges::views::zip(ad_utility::allView(table.getColumns()),
+                           ad_utility::allView(view.getColumns())),
       [](const auto& pair) {
         return ql::ranges::equal(pair.first, pair.second);
       });
