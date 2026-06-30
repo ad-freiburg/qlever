@@ -302,7 +302,7 @@ auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
 template <typename S, typename C, typename I>
 VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
     ql::span<const size_t> indices) const {
-  AD_CONTRACT_CHECK((!indices.empty());
+  AD_CONTRACT_CHECK(!indices.empty());
   return vocabulary_.lookupBatch(indices);
 }
 
