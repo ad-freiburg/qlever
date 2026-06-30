@@ -248,7 +248,7 @@ class Result {
   // was destroyed.
   LazyResult idTables() const;
 
-  // Const access to the columns by which the `idTable()` is sorted.
+  // Const access to the columns by which the `idTableView()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
