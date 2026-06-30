@@ -232,8 +232,6 @@ addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
-addLinkAndDiscoverTest(BatchedPipelineTest)
-
 addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(UriParserUriTest)
