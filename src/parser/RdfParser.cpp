@@ -954,7 +954,7 @@ template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
-  auto nextBytesOpt = driver_->getNextBlock();
+  auto nextBytesOpt = driver_.value().getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
     // do not alter any internal state.
@@ -1006,7 +1006,7 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
   // end of a statement.
   driver_.emplace(spec, blocksize, "([\\r\\n]+)");
   // Read the first block and initialize the tokenizer.
-  if (auto res = driver_->getNextBlock(); res.has_value()) {
+  if (auto res = driver_.value().getNextBlock(); res.has_value()) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
   } else {
@@ -1169,7 +1169,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        auto nextOptional = driver_->getNextBlock();
+        auto nextOptional = driver_.value().getNextBlock();
         if (!nextOptional) {
           return;
         }
@@ -1206,7 +1206,7 @@ void RdfParallelParser<T>::initialize(
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = driver_->getNextBlock()) {
+    if (auto batch = driver_.value().getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }

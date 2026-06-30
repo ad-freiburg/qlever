@@ -37,7 +37,8 @@ AsyncFileBlockSource::AsyncFileBlockSource(const net::any_io_executor& exec,
 
 // ____________________________________________________________________________
 std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
-  if (eof_ || !file_.isOpen()) {
+  AD_CORRECTNESS_CHECK(file_.isOpen());
+  if (eof_) {
     return std::nullopt;
   }
   Block buf;
@@ -73,8 +74,9 @@ std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
     auto regexInput = re2::StringPiece{vec.data() + startIdx, chunkSize};
 
     match = RE2::PartialMatch(regexInput, regex, &regexResult);
-    if (match) break;
-    if (chunkSize == inputSize) break;
+    if (match || chunkSize == inputSize) {
+      break;
+    }
     chunkSize = std::min(chunkSize * 2, inputSize);
   }
   if (!match) return std::nullopt;
@@ -103,19 +105,26 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
   }
   Block rawInput = std::move(*rawOpt);
 
+  // Return the next block which is assembled by concatenating the
+  // `remainder_` with `rawInput[0..endPosition]`. The rest of the
+  // `rawInput` becomes the new `remainder_` for the next iteration.
+  auto assembleResult = [this, &rawInput](auto endPosition) {
+    Block result;
+    result.reserve(remainder_.size() + endPosition);
+    result.insert(result.end(), remainder_.begin(), remainder_.end());
+    result.insert(result.end(), rawInput.begin(),
+                  rawInput.begin() + endPosition);
+    remainder_.clear();
+    remainder_.insert(remainder_.end(), rawInput.begin() + endPosition,
+                      rawInput.end());
+    return result;
+  };
+
   // Search for the regex near the end of the raw block.
   auto endPosition = findRegexNearEnd(rawInput, endRegex_);
   if (endPosition.has_value()) {
     // Regex found: return remainder_ + rawInput[0..endPosition).
-    Block result;
-    result.reserve(remainder_.size() + endPosition.value());
-    result.insert(result.end(), remainder_.begin(), remainder_.end());
-    result.insert(result.end(), rawInput.begin(),
-                  rawInput.begin() + endPosition.value());
-    remainder_.clear();
-    remainder_.insert(remainder_.end(), rawInput.begin() + endPosition.value(),
-                      rawInput.end());
-    return result;
+    return assembleResult(endPosition.value());
   }
 
   // No regex match. Peek at the next raw block to decide how to handle this:
@@ -135,15 +144,8 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
         "use `--parser-buffer-size` to increase the buffer size or "
         "use `--parallel-parsing false` to disable parallel parsing")};
   }
-
   // The current block is the last one: return remainder_ + rawInput.
   exhausted_ = true;
-  Block result;
-  result.reserve(remainder_.size() + rawInput.size());
-  result.insert(result.end(), remainder_.begin(), remainder_.end());
-  result.insert(result.end(), rawInput.begin(), rawInput.end());
-  remainder_.clear();
-  return result;
+  return assembleResult(rawInput.size());
 }
-
 }  // namespace qlever::parser

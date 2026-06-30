@@ -32,6 +32,9 @@ AsyncFileBlockDriver::~AsyncFileBlockDriver() {
   if (pendingBlock_.valid()) {
     pendingBlock_.wait();
   }
+  // To additionally be safe that the `fileBuffer_` is unused before it gets
+  // destroyed.
+  ioPool_.join();
 }
 
 // ____________________________________________________________________________

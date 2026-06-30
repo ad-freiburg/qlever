@@ -23,28 +23,29 @@
 
 namespace qlever::parser {
 
-// Encapsulate the I/O thread pool, `AsyncBlockSource`, and in-flight future
-// that both `RdfStreamParser` and `RdfParallelParser` previously duplicated.
-// Construct with an `InputFileSpecification`, a blocksize, and an end-regex;
-// then call `getNextBlock()` to retrieve blocks one at a time.
+// A small wrapper around an `AsyncBlockSource` that is required temporarily
+// while the rest of the index builder pipeline is not yet migrated to
+// Boost::Asio. It internally holds a `unique_ptr<AsyncEndRegexBlockSource>` and
+// schedules it on a thread pool with a single thread. The public interface is
+// a synchronous `getBlock()` function, the asynchronouse prefetching of the
+// next block is purely internal.
 class AsyncFileBlockDriver {
  public:
   // Open the file described by `spec`, wrap it in an `AsyncEndRegexBlockSource`
-  // with the given `endRegex`, and arm the first async read.
+  // with the given `endRegex`, and immediately start prefetching the first
+  // block.
   AsyncFileBlockDriver(const qlever::InputFileSpecification& spec,
                        ad_utility::MemorySize blocksize, std::string endRegex);
 
-  // Wait for the in-flight read, arm the next one if more data follows, and
-  // return the block. Returns `nullopt` at EOF or if no read is in flight;
-  // rethrows on error.
+  // Synchronously obtain the next block. This waits for the next block to
+  // become available and then immediately starts prefetching the next one.
   std::optional<ByteBlock> getNextBlock();
 
-  // Wait for any in-flight handler to prevent use-after-free of `fileBuffer_`.
   ~AsyncFileBlockDriver();
 
  private:
-  // Declared before `fileBuffer_` so that the I/O thread outlives the source
-  // it drives.
+  // `ioPool_` is declared before `fileBuffer_` so that the I/O thread outlives
+  // the source it drives.
   boost::asio::thread_pool ioPool_{1};
   std::unique_ptr<AsyncBlockSource> fileBuffer_;
   std::future<std::optional<ByteBlock>> pendingBlock_;

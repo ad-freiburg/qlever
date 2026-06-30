@@ -24,6 +24,7 @@
 #include <string>
 
 #include "util/File.h"
+#include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/UninitializedAllocator.h"
 
@@ -34,32 +35,42 @@ namespace qlever::parser {
 // here directly into `RdfStringParser::setInputStream`.
 using ByteBlock = ad_utility::UninitializedVector<char>;
 
-// Abstract async byte source. Replaces the old `ParallelBuffer` family. The
-// executor passed at construction owns an internal strand that serializes all
-// `getNextBlockImpl()` calls. Callers must not invoke `asyncGetNextBlock`
-// again before the previous handler has fired (single-flight contract).
-// The completion signature is `void(std::exception_ptr, std::optional<Block>)`:
-// a null `exception_ptr` with a non-null optional delivers the next block; a
-// null optional signals EOF; a non-null `exception_ptr` signals a fatal error.
+// Abstract base class for a source that produces `ByteBlock`s above
+// asynchronously. The base class provides the async interface (which internally
+// synchronizes via a `strand`, see `asyncGetNextBlock` for details.
 class AsyncBlockSource {
  public:
   using Block = ByteBlock;
 
+  // Construct from an executor (on which a strand will be created to
+  // synchronize the calls to `asyncGetNextBlock`, and which will also be the
+  // default executor for the provided completion tokens), and a `blocksize` for
+  // the blocks to be received (which is a common implementation detail of all
+  // the derived classes, and thus lives in the base class.
   explicit AsyncBlockSource(const boost::asio::any_io_executor& exec,
                             ad_utility::MemorySize blocksize);
   virtual ~AsyncBlockSource() = default;
 
   // Asynchronously deliver the next block of bytes. Accepts any Asio
   // completion token (e.g. `boost::asio::use_future`). The completion fires
-  // on the handler's associated executor with signature
-  // `void(std::exception_ptr, std::optional<Block>)`: a null `exception_ptr`
-  // signals success, a non-null one signals a fatal error.
+  // on the handler's associated executor, or on the `strand` managed by this
+  // `AsyncBlockSource`, if no executor is associated with the token. The
+  // completion signature is `void(std::exception_ptr, std::optional<Block>)`: a
+  // null `exception_ptr` signals success, a non-null one signals an exception
+  // that was thrown while retrieving the next block. A successful result with
+  // `std::nullopt` result means EOF (no more blocks available in this source).
+  // Note: the actual reading of blocks is always done single-threaded (via a
+  // `strand` and blocking (by calling the non-async impl function on the
+  // child classes). This is deliberate, because we have never seen the reading
+  // to be a bottleneck and to decrease complexity significantly.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
         [this](auto handler) mutable {
+          // Fall back to the `strand_` if the token/handler has no associated
+          // executor.
           auto ex = net::get_associated_executor(handler, strand_);
           net::post(strand_, [this, h = std::move(handler), ex]() mutable {
             try {
@@ -76,7 +87,7 @@ class AsyncBlockSource {
             }
           });
         },
-        std::forward<CompletionToken>(token));
+        AD_FWD(token));
   }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
@@ -84,7 +95,7 @@ class AsyncBlockSource {
  protected:
   // Synchronously produce the next block of bytes. Called from within the
   // internal strand — implementers do not need extra synchronization.
-  // Return `nullopt` to signal EOF.
+  // Return `nullopt` to signal EOF, throw exceptions on errors.
   virtual std::optional<ByteBlock> getNextBlockImpl() = 0;
 
   // Helper for `AsyncEndRegexBlockSource`: call `getNextBlockImpl()` on a
@@ -105,7 +116,7 @@ class AsyncBlockSource {
 class AsyncFileBlockSource : public AsyncBlockSource {
  public:
   // Open `filename` immediately and prepare to deliver `blocksize`-sized
-  // blocks. Throws if the file cannot be opened.
+  // blocks. Throw if the file cannot be opened.
   AsyncFileBlockSource(const boost::asio::any_io_executor& exec,
                        ad_utility::MemorySize blocksize,
                        const std::string& filename);
@@ -121,8 +132,9 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
 // block produced by the inner source, search for the last match of `endRegex`
 // and return the part of the block up to and including that match, prepending
-// any tail carried over from the previous block. Single-flight: the consumer
-// must wait for the handler before calling `asyncGetNextBlock` again.
+// any tail carried over from the previous block. If no statement boundary can
+// be found in a complete block, an exception is thrown with a message that
+// indicates possible mitigations for this error.
 class AsyncEndRegexBlockSource : public AsyncBlockSource {
  public:
   // Wrap `inner` and cut its blocks at matches of `endRegex`.
@@ -131,7 +143,7 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
                            std::string endRegex);
 
   // Search for `regex` near the end of `vec` in exponentially-growing chunks
-  // from the back. Returns the number of bytes in `vec` up to the end of the
+  // from the back. Return the number of bytes in `vec` up to the end of the
   // match, or `nullopt` if no match was found.
   static std::optional<size_t> findRegexNearEnd(const Block& vec,
                                                 const re2::RE2& regex);
