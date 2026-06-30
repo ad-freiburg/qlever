@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -35,7 +36,9 @@ std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
   std::vector<qp::ByteBlock> result;
   while (true) {
     auto opt = source.asyncGetNextBlock(boost::asio::use_future).get();
-    if (!opt) break;
+    if (!opt) {
+      break;
+    }
     result.push_back(std::move(*opt));
   }
   return result;
@@ -45,10 +48,11 @@ std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
 
 // ________________________________________________________
 TEST(AsyncFileBlockSource, ReadsInBlocks) {
-  std::string filename = "asyncFileBlockSourceTest.first.dat";
+  std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "abcdefghij";
   of.close();
+  absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 4_B;
@@ -58,25 +62,24 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
 
   auto actual = drainAllBlocks(buf);
-  ad_utility::deleteFile(filename);
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
 }
 
 // ________________________________________________________
 TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
-  std::string filename = "asyncEndRegexBlockSourceTest.dat";
+  std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "ab1cde23fgh";
   of.close();
+  absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 5_B;
   {
-    // We will always have blocks that end with a number that is followed by
-    // a letter. The numbers must be at most 5 positions apart from each
-    // other. Note: It is crucial that the regex contains exactly one
-    // capture group. The end of the capture group determines the end of
-    // the block.
+    // Blocks always end with a digit. The regex `([0-9])[a-z]` matches a
+    // digit followed by a letter; `RE2::PartialMatch` fills `regexResult`
+    // with the first capture group (the digit), so the block is cut after
+    // the digit — excluding the following letter from the current block.
     qp::AsyncEndRegexBlockSource buf(
         pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
@@ -112,19 +115,18 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
   }
-
-  ad_utility::deleteFile(filename);
 }
 
 // ________________________________________________________
 TEST(AsyncEndRegexBlockSource, LongLookahead) {
-  std::string filename = "asyncEndRegexBlockSourceLongLookahead.dat";
+  std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "abcdef1";
   for (size_t i = 0; i < 2000; ++i) {
     of << 'x';
   }
   of.close();
+  absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 2000_B;
@@ -139,15 +141,15 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
   }
-  ad_utility::deleteFile(filename);
 }
 
 // ________________________________________________________
 TEST(AsyncBlockSource, UseFutureToken) {
-  std::string filename = "asyncBlockSourceUseFuture.dat";
+  std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "ab1cd";
   of.close();
+  absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
   qp::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
@@ -163,6 +165,4 @@ TEST(AsyncBlockSource, UseFutureToken) {
 
   auto opt3 = buf.asyncGetNextBlock(boost::asio::use_future).get();
   EXPECT_FALSE(opt3.has_value());
-
-  ad_utility::deleteFile(filename);
 }

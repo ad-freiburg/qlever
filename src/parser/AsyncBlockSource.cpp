@@ -43,7 +43,7 @@ std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
   }
   Block buf;
   buf.resize(getBlocksize().getBytes());
-  size_t n = file_.read(buf.data(), getBlocksize().getBytes());
+  size_t n = file_.read(buf.data(), buf.size());
   if (n == 0) {
     eof_ = true;
     return std::nullopt;

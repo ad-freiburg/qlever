@@ -883,6 +883,8 @@ TEST(RdfParserTest, iriref) {
 // for parsing, else `getLine()` is used. The default size for the parse buffer
 // in the following tests is 1 kB (which is much less than the default value
 // `DEFAULT_PARSER_BUFFER_SIZE` defined in `src/global/Constants.h`).
+// `Filetype::Turtle` is hardcoded because all `Parser` instantiations used
+// below are Turtle-based.
 template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
