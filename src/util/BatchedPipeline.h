@@ -661,8 +661,8 @@ auto setupPipeline(size_t batchSize, Creator&& creator, Ts&&... transformers) {
  * signalizes the last value.
  */
 template <size_t... Parallelisms, typename Creator, typename... Ts>
-static auto setupParallelPipeline(size_t batchSize, Creator&& creator,
-                                  Ts&&... transformers) {
+auto setupParallelPipeline(size_t batchSize, Creator&& creator,
+                           Ts&&... transformers) {
   return detail::Interface::setupParallelPipeline<Parallelisms...>(
       batchSize, std::forward<Creator>(creator),
       std::forward<Ts>(transformers)...);

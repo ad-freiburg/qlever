@@ -16,6 +16,25 @@
 #include "util/Parameters.h"
 namespace ad_utility {
 
+// Shared body for the boost::program_options `validate` overloads whose only
+// per-type difference is how a single option string is converted to the target
+// type. `convertFromString(s)` must return the value to store in `v`.
+CPP_template(typename ConvertFromString)(
+    requires ql::concepts::invocable<
+        ConvertFromString,
+        const std::string&>) void validateFromString(boost::any& v,
+                                                     const std::vector<
+                                                         std::string>& values,
+                                                     ConvertFromString
+                                                         convertFromString) {
+  using namespace boost::program_options;
+  // Make sure no previous assignment to `v` was made.
+  validators::check_first_occurrence(v);
+  // Extract the single option string (throws if there is more than one).
+  const std::string& s = validators::get_single_string(values);
+  v = convertFromString(s);
+}
+
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
 // When using it as a target value in `boost::program_options` it will only
 // accept positive values because of the `validate` function below.
@@ -69,16 +88,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 // This function is required  to use `MemorySize` in `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
                      MemorySize*, int) {
-  using namespace boost::program_options;
-
-  // Make sure no previous assignment to 'v' was made.
-  validators::check_first_occurrence(v);
-  // Extract the first string from 'values'. If there is more than
-  // one string, it's an error, and exception will be thrown.
-  const std::string& s = validators::get_single_string(values);
-
-  // Convert the string to `MemorySize` and put it into the option.
-  v = MemorySize::parse(s);
+  validateFromString(v, values,
+                     [](const std::string& s) { return MemorySize::parse(s); });
 }
 
 /// Create `boost::program_options::value`s (command-line options) from
@@ -129,17 +140,20 @@ class ParameterToProgramOptionFactory {
 // `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
                      VocabularyType*, int) {
-  using namespace boost::program_options;
-
-  // Make sure no previous assignment to 'v' was made.
-  validators::check_first_occurrence(v);
-  // Extract the first string from 'values'. If there is more than
-  // one string, it's an error, and exception will be thrown.
-  const std::string& s = validators::get_single_string(values);
-
-  // Convert the string to `MemorySize` and put it into the option.
-  v = VocabularyType::fromString(s);
+  validateFromString(v, values, [](const std::string& s) {
+    return VocabularyType::fromString(s);
+  });
 }
+
+// This function is required to use `DeduplicationMode` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     DeduplicationMode*, int) {
+  validateFromString(v, values, [](const std::string& s) {
+    return DeduplicationModeFromString{}(s);
+  });
+}
+
 }  // namespace ad_utility
 
 namespace qlever {
@@ -147,16 +161,9 @@ namespace qlever {
 // `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
                      TextScoringMetric*, int) {
-  using namespace boost::program_options;
-
-  // Make sure no previous assignment to 'v' was made.
-  validators::check_first_occurrence(v);
-  // Extract the first string from 'values'. If there is more than
-  // one string, it's an error, and exception will be thrown.
-  const std::string& s = validators::get_single_string(values);
-
-  // Convert the string to `MemorySize` and put it into the option.
-  v = getTextScoringMetricFromString(s);
+  ad_utility::validateFromString(v, values, [](const std::string& s) {
+    return getTextScoringMetricFromString(s);
+  });
 }
 }  // namespace qlever
 
