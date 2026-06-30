@@ -106,7 +106,8 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : data_{IdTableSharedLocalVocabPair{
-          view, std::make_shared<const LocalVocab>(std::move(localVocab))}},
+          std::move(view),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
       sortedBy_{std::move(sortedBy)} {
   assertSortOrderIsRespected(idTableView(), sortedBy_);
 }
@@ -210,7 +211,9 @@ Result::IdTableSharedLocalVocabPair::IdTableSharedLocalVocabPair(
 // _____________________________________________________________________________
 Result::IdTableSharedLocalVocabPair::IdTableSharedLocalVocabPair(
     IdTableView<0> view, std::shared_ptr<const LocalVocab> localVocab)
-    : idTableOrPtr_{view}, localVocab_{std::move(localVocab)}, view_{view} {}
+    : idTableOrPtr_{view},
+      localVocab_{std::move(localVocab)},
+      view_{std::move(view)} {}
 
 // _____________________________________________________________________________
 void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
