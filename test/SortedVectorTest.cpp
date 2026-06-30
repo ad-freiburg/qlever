@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./ZipMergeUniqueViewTestHelpers.h"
 #include "index/LocatedTriples.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -31,13 +32,6 @@ void PrintTo(const SortedVector<V, Compare, Projection>& s, std::ostream* os) {
   *os << ']';
 }
 }  // namespace ad_utility
-
-namespace std {
-template <typename T, typename U>
-std::ostream& operator<<(std::ostream& os, const std::pair<T, U>& p) {
-  return os << '(' << p.first << ", " << p.second << ')';
-}
-}  // namespace std
 
 namespace ad_utility {
 namespace {
@@ -65,9 +59,11 @@ auto AssertionFailed = [](const std::string& assertion) {
   return HasSubstr("Assertion `" + assertion + "` failed");
 };
 auto NotConsolidated = AssertionFailed("isConsolidated()");
+auto NotConsolidatedOnSelf = AssertionFailed("self.isConsolidated()");
 auto IsEmpty = AD_PROPERTY(SV, empty, Eq(true));
 auto IsNotEmpty = AD_PROPERTY(SV, empty, Not(Eq(true)));
 
+// ____________________________________________________________________________
 auto testConstOverloads = [](SV& initial, auto testLambda,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   {
@@ -95,6 +91,7 @@ namespace {
 auto StateIs = SortedVectorPairsTestHelper::stateIs;
 }  // namespace
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, constructor) {
   {
     SV s{};
@@ -131,6 +128,7 @@ TEST(SortedVectorTest, constructor) {
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, empty) {
   auto insertInto = [](SV& sv, Pair p,
                        source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -177,12 +175,13 @@ TEST(SortedVectorTest, empty) {
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, size) {
   {
     SV s{};
     s.insert(p10);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeUpperBound(), NotConsolidated);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotConsolidated);
+    EXPECT_EQ(s.sizeUpperBound(), 1);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotConsolidatedOnSelf);
   }
   {
     SV s{};
@@ -215,6 +214,7 @@ TEST(SortedVectorTest, size) {
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, clear) {
   SV s{};
   EXPECT_THAT(s, IsEmpty);
@@ -229,6 +229,7 @@ TEST(SortedVectorTest, clear) {
   EXPECT_TRUE(s.empty());
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, insert) {
   SV s{};
   EXPECT_TRUE(s.smallPartIsSorted_);
@@ -253,6 +254,7 @@ TEST(SortedVectorTest, insert) {
   EXPECT_TRUE(s.smallPartIsSorted_);
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, back) {
   {
     SV s{};
@@ -280,6 +282,7 @@ TEST(SortedVectorTest, back) {
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, iteration) {
   auto expectElements = [&](SV& sv,
                             const std::vector<std::pair<int, int>>& expected,
@@ -308,18 +311,18 @@ TEST(SortedVectorTest, iteration) {
     s.clear();
     expectElements(s, {});
   }
+  // `begin()` and `end()` are implemented using a static impl function which
+  // results in a slightly different assertion message.
   {
-    auto NotConsolidated = AssertionFailed("Self.isConsolidated()");
     SV s{};
     s.insert(p10);
-    // `begin()` and `end()` are implemented using a static impl function which
-    // results in a slightly different assertion message.
-    testConstOverloads(s, [&NotConsolidated](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotConsolidated);
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotConsolidatedOnSelf);
     });
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, erase) {
   {
     SV s = SV::fromSorted({p10, p20, p30, p40});
@@ -375,6 +378,7 @@ TEST(SortedVectorTest, erase) {
   }
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, sortAndRemoveDuplicates) {
   using Pairs = std::vector<std::pair<int, int>>;
   auto expect = [](Pairs input, const auto& resultMatcher,
@@ -400,6 +404,7 @@ TEST(SortedVectorTest, sortAndRemoveDuplicates) {
   expect({p11, p20, p10, p21, p11}, ElementsAre(p10, p20, p21, p11), 0, 3);
 }
 
+// ____________________________________________________________________________
 TEST(SortedVectorTest, eraseSortedSubRange) {
   using Pairs = std::vector<std::pair<int, int>>;
 

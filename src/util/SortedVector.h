@@ -72,17 +72,18 @@ class SortedVector {
     smallPartIsSorted_ = true;
   }
 
-  // Whether the items are all sorted and deduplicated. Items can only be read
-  // if `isConsolidated` is true. `isConsolidated` is true iff no inserts have
-  // been made since the last call to `consolidate` or construction. Deletes
-  // keep this invariant true.
+  // Return true iff the items are all sorted and deduplicated. Items can only
+  // be read if `isConsolidated` is true. `isConsolidated` is true iff no
+  // inserts have been made since the last call to `consolidate` or
+  // construction. Deletes keep this invariant true.
   //
   // Note: Also enforces the class invariant that the boundary index
   // `numItemsLargePart_` lies within `elements_`; if it ever drifts out of
   // range, sorted-access methods fail this check rather than silently UB'ing
   // through `elements_.begin() + numItemsLargePart_`.
   bool isConsolidated() const {
-    return smallPartIsSorted_ && numItemsLargePart_ <= elements_.size();
+    AD_CORRECTNESS_CHECK(numItemsLargePart_ <= elements_.size());
+    return smallPartIsSorted_;
   }
 
   // For the range `rangeToSort` contained in `elements` sort it by the
@@ -110,10 +111,10 @@ class SortedVector {
     elements.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
-  // Let r1 be a sorted subrange of elements and r2 be an arbitrary sorted range
-  // not overlapping with r1. Delete all elements from r1 that are also
-  // contained in r2. Duplicates within r1/r2 are handled according to
-  // ql::ranges::set_difference, but never happen within this class (as we
+  // Let `r1` be a sorted subrange of elements and `r2` be an arbitrary sorted
+  // range not overlapping with `r1`. Delete all elements from `r1` that are
+  // also contained in `r2`. Duplicates within `r1`/`r2` are handled according
+  // to `ql::ranges::set_difference`, but never happen within this class (as we
   // always first deduplicate within the small/large part before calling this
   // function.
   CPP_template_2(typename R1, typename R2)(
@@ -185,12 +186,12 @@ class SortedVector {
 
  private:
   // Helper for the overloads of `getSortedView`.
-  auto getSortedViewImpl(auto& Self) const {
-    AD_CONTRACT_CHECK(Self.isConsolidated());
-    auto mid = Self.elements_.begin() + Self.numItemsLargePart_;
-    return ZipMergeUniqueView(ql::ranges::subrange(Self.elements_.begin(), mid),
-                              ql::ranges::subrange(mid, Self.elements_.end()),
-                              Self.comp_, Self.proj_);
+  auto getSortedViewImpl(auto& self) const {
+    AD_CONTRACT_CHECK(self.isConsolidated());
+    auto mid = self.elements_.begin() + self.numItemsLargePart_;
+    return ZipMergeUniqueView(ql::ranges::subrange(self.elements_.begin(), mid),
+                              ql::ranges::subrange(mid, self.elements_.end()),
+                              self.comp_, self.proj_);
   }
 
  public:
@@ -206,7 +207,9 @@ class SortedVector {
   const ValueType& back() const {
     AD_CONTRACT_CHECK(!empty());
     AD_CONTRACT_CHECK(isConsolidated());
-    if (numItemsLargePart_ == elements_.size()) {
+    // If we only have a single part directly return the back of that single
+    // sorted part.
+    if (numItemsLargePart_ == elements_.size() || numItemsLargePart_ == 0) {
       return elements_.back();
     }
     auto& lastLargePart = elements_.at(numItemsLargePart_ - 1);
@@ -225,7 +228,9 @@ class SortedVector {
   const ValueType& front() const {
     AD_CONTRACT_CHECK(!empty());
     AD_CONTRACT_CHECK(isConsolidated());
-    if (numItemsLargePart_ == elements_.size()) {
+    // If we only have a single part directly return the front of that single
+    // sorted part.
+    if (numItemsLargePart_ == elements_.size() || numItemsLargePart_ == 0) {
       return elements_.front();
     }
     auto& firstLargePart = elements_.front();
@@ -243,6 +248,8 @@ class SortedVector {
   // or `eraseSorted`. This is expensive and preserves `isConsolidated`.
   void erase(const ValueType& elem) {
     AD_CONTRACT_CHECK(isConsolidated());
+    // Delete `elem` in the range `subrange` (which is contained in `elements_`
+    // and return the number of deleted elements.
     auto deleteInRange = [this, &elem](auto subrange) {
       auto iter = ql::ranges::lower_bound(subrange, proj_(elem), comp_, proj_);
       // From lower_bound we get `!comp_(proj_(*iter), proj_(elem))`. If the
@@ -277,17 +284,13 @@ class SortedVector {
 
   // Return an upper bound of the size. Requires `isConsolidated` to be true.
   // Without actually reading all items the size is not known because items
-  // might be duplicated between the small and large parts.
-  size_t sizeUpperBound() const {
-    AD_CONTRACT_CHECK(isConsolidated());
-    return elements_.size();
-  }
-  // Return an exact size but reads the whole vector for this. Requires
+  // might be duplicated between the small and large parts and also inside the
+  // parts.
+  size_t sizeUpperBound() const { return elements_.size(); }
+  // Return an exact size but read the whole vector for this. Requires
   // `isConsolidated` to be true.
   size_t sizeForTesting() const {
-    AD_CONTRACT_CHECK(isConsolidated());
-    auto sorted = getSortedView();
-    return ql::ranges::distance(sorted.begin(), sorted.end());
+    return ql::ranges::distance(getSortedView());
   }
 
   // Return whether the container is empty. Can be called even when
@@ -305,7 +308,7 @@ class SortedVector {
   }
 
   // This operator is only for debugging and testing. It returns a
-  // human-readable representation.
+  // human-readable representation. Requires `isConsolidated` to be true.
   friend std::ostream& operator<<(std::ostream& os, const SortedVector& sv) {
     os << "{ ";
     ql::ranges::copy(sv.getSortedView(),
