@@ -372,7 +372,7 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
 // Test that data pushed via both `pushBlock` overloads appears correctly in the
 // sorted output.
 TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
-  std::string filename = "idTableCompressor.pushBlockOutput.dat";
+  std::string filename = gtestCurrentTestName();
   using namespace ad_utility::memory_literals;
   auto alloc = ad_utility::testing::makeAllocator();
 

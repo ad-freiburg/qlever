@@ -273,11 +273,11 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
       return std::invoke(callback, ql::span{&result->idTableView(), 1});
     }
     auto idTables = result->idTables();
-    return std::invoke(
-        callback,
-        idTables | ql::views::transform([](Result::IdTableVocabPair& pair) {
-          return pair.idTable_.asStaticView<0>();
-        }));
+    return std::invoke(callback,
+                       idTables | ql::views::transform(
+                                      [](const Result::IdTableVocabPair& pair) {
+                                        return pair.idTable_.asStaticView<0>();
+                                      }));
   };
 
   auto getId = [this](const TripleComponent tc) {
