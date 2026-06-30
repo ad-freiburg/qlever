@@ -359,4 +359,12 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   EXPECT_NO_THROW(erased.pushBlock(t1));
   EXPECT_NO_THROW(t1.setNumColumns(NUM_COLS + 1));
   EXPECT_ANY_THROW(erased.pushBlock(t1));
+
+  // Also test `pushBlock` with an `IdTableView<0>`.
+  IdTableStatic<0> t2{NUM_COLS, alloc};
+  IdTableView<0> v2 = t2.asStaticView<0>();
+  EXPECT_NO_THROW(erased.pushBlock(v2));
+  IdTableStatic<0> t3{NUM_COLS + 1, alloc};
+  IdTableView<0> v3 = t3.asStaticView<0>();
+  EXPECT_ANY_THROW(erased.pushBlock(v3));
 }

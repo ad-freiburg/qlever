@@ -117,7 +117,7 @@ class Result {
     LocalVocabPtr localVocabPtr() const { return localVocab_; }
 
     // Resize/replace the internal `IdTable` according to `limitOffset` and
-    // refresh `view_`. For the view case, sub-ranges the view without copying.
+    // refresh `view_`.
     void applyLimitOffset(const LimitOffsetClause& limitOffset);
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
@@ -178,6 +178,7 @@ class Result {
          LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
          std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+
   // Construct from a non-owning view. The caller is responsible for ensuring
   // that the underlying data outlives this `Result`.
   Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
@@ -229,15 +230,14 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Returns a non-owning view of the materialized table. Throw if not fully
+  // Return a non-owning view of the materialized table. Throw if not fully
   // materialized. The reference is stable for the lifetime of this `Result`;
   // `applyLimitOffset()` refreshes the view in place, so copies of the view
   // value taken before that call should not be reused afterwards.
   const IdTableView<0>& idTableView() const;
 
-  // Returns a clone of the materialized `idTable()`. Throw if not fully
-  // materialized. This operation is potentially expensive as it copies all
-  // data.
+  // Return a clone of the materialized table. Throw if not fully materialized.
+  // This operation is potentially expensive as it copies all data.
   IdTable cloneIdTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`

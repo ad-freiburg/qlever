@@ -177,15 +177,15 @@ IdTableView<0> Result::IdTableSharedLocalVocabPair::makeView(
         idTableOrPtr) {
   return std::visit(
       [](const auto& arg) -> IdTableView<0> {
-        if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, IdTable>) {
           return arg.template asStaticView<0>();
-        } else if constexpr (ad_utility::isSimilar<
-                                 decltype(arg),
-                                 std::shared_ptr<const IdTable>>) {
+        } else if constexpr (std::is_same_v<T,
+                                            std::shared_ptr<const IdTable>>) {
           AD_CONTRACT_CHECK(arg != nullptr);
           return arg->template asStaticView<0>();
         } else {
-          static_assert(ad_utility::isSimilar<decltype(arg), IdTableView<0>>);
+          static_assert(std::is_same_v<T, IdTableView<0>>);
           return arg;
         }
       },
@@ -217,24 +217,22 @@ void Result::IdTableSharedLocalVocabPair::applyLimitOffset(
     const LimitOffsetClause& limitOffset) {
   std::visit(
       [&limitOffset](auto& arg) {
-        if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, IdTable>) {
           resizeIdTable(arg, limitOffset);
-        } else if constexpr (ad_utility::isSimilar<
-                                 decltype(arg),
-                                 std::shared_ptr<const IdTable>>) {
+        } else if constexpr (std::is_same_v<T,
+                                            std::shared_ptr<const IdTable>>) {
           arg = std::make_shared<const IdTable>(
               makeResizedClone(*arg, limitOffset));
         } else {
-          static_assert(ad_utility::isSimilar<decltype(arg), IdTableView<0>>);
-          // Sub-range the view in place without copying the underlying data.
+          static_assert(std::is_same_v<T, IdTableView<0>>);
           size_t offset = limitOffset.actualOffset(arg.numRows());
           size_t size = limitOffset.actualSize(arg.numRows());
           arg = arg.subView(offset, size);
         }
       },
       idTableOrPtr_);
-  // Refresh the view: the underlying data has moved (in-place resize), the
-  // pointer has been replaced, or the view has been sub-ranged.
+  // Refresh the view: the underlying data has changed.
   view_ = makeView(idTableOrPtr_);
 }
 

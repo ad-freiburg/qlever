@@ -604,17 +604,17 @@ class IdTable {
         std::move(viewSpans), numColumns_, numRows_, allocator_};
   }
 
-  // Returns a non-owning view of the rows [offset, offset + size). Only
-  // callable on views. Requires `offset + size <= numRows()`.
-  CPP_template(typename = void)(requires isView)
-      IdTable<T, NumColumns, ColumnStorage, IsView::True> subView(
-          size_t offset, size_t size) const {
+  // Return a non-owning view of the rows [offset, offset + size). Requires
+  // `offset + size <= numRows()`.
+  IdTable<T, NumColumns, ColumnStorage, IsView::True> subView(
+      size_t offset, size_t size) const {
     AD_CONTRACT_CHECK(offset + size <= numRows_);
-    ViewSpans viewSpans;
-    viewSpans.reserve(numColumns_);
-    for (size_t i = 0; i < numColumns_; ++i) {
-      viewSpans.push_back(getColumn(i).subspan(offset, size));
-    }
+    auto viewSpans = ::ranges::to<ViewSpans>(
+        getColumns() |
+        ql::views::transform(
+            [offset, size](const auto& col) -> ql::span<const T> {
+              return col.subspan(offset, size);
+            }));
     return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
         std::move(viewSpans), numColumns_, size, allocator_};
   }

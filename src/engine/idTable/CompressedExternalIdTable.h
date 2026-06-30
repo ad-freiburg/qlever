@@ -564,6 +564,8 @@ class CompressedExternalIdTableSorterTypeErased {
  public:
   // Push a complete block at once.
   virtual void pushBlock(const IdTableStatic<0>& block) = 0;
+  // Push a complete block given as a non-owning view at once.
+  virtual void pushBlock(const IdTableView<0>& block) = 0;
   // Get the sorted output after all blocks have been pushed. If `blocksize ==
   // nullopt`, the size of the returned blocks will be chosen automatically.
   virtual ad_utility::InputRangeTypeErased<IdTableStatic<0>> getSortedOutput(
@@ -709,6 +711,14 @@ class CompressedExternalIdTableSorter
   // The implementation of the type-erased interface. Push a complete block at
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
+    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
+    ql::ranges::for_each(block,
+                         [ptr = this](const auto& row) { ptr->push(row); });
+  }
+
+  // The implementation of the type-erased interface. Push a complete block
+  // given as a non-owning view at once.
+  void pushBlock(const IdTableView<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
     ql::ranges::for_each(block,
                          [ptr = this](const auto& row) { ptr->push(row); });
