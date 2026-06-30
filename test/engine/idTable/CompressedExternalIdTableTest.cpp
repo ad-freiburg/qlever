@@ -368,3 +368,42 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   IdTableView<0> v3 = t3.asStaticView<0>();
   EXPECT_ANY_THROW(erased.pushBlock(v3));
 }
+
+// Test that data pushed via both `pushBlock` overloads appears correctly in the
+// sorted output.
+TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
+  std::string filename = "idTableCompressor.pushBlockOutput.dat";
+  using namespace ad_utility::memory_literals;
+  auto alloc = ad_utility::testing::makeAllocator();
+
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
+      filename, NUM_COLS, 1_MB, alloc};
+  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+
+  // Create two blocks of random data.
+  IdTable block1 = createRandomlyFilledIdTable(30, NUM_COLS);
+  IdTable block2 = createRandomlyFilledIdTable(30, NUM_COLS);
+
+  // Build the expected result: all rows from both blocks sorted by OSP.
+  CopyableIdTable<0> expected(NUM_COLS, alloc);
+  for (const auto& row : block1) {
+    expected.push_back(row);
+  }
+  for (const auto& row : block2) {
+    expected.push_back(row);
+  }
+  ql::ranges::sort(expected, SortByOSP{});
+
+  // Push via `IdTableStatic<0>` (first overload) and `IdTableView<0>` (second).
+  erased.pushBlock(block1);
+  IdTableView<0> view2 = block2.asStaticView<0>();
+  erased.pushBlock(view2);
+
+  // Collect the sorted output and verify it matches the expectation.
+  auto generator = erased.getSortedOutput();
+  auto result = idTableFromBlockGenerator(generator);
+
+  using namespace ::testing;
+  EXPECT_THAT(result, ElementsAreArray(expected));
+}

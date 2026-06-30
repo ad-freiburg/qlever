@@ -1252,8 +1252,7 @@ TEST(IdTable, moveOrCloneOnView) {
 
 // ____________________________________________________________________________
 // Typed test fixture for `subView`, covering both owned `IdTable` and
-// `IdTableView<0>` (since `subView` works for both after removing the
-// `requires isView` constraint).
+// `IdTableView<0>`.
 template <typename T>
 class IdTableSubViewTest : public testing::Test {};
 using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
