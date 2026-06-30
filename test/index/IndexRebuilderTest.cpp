@@ -576,11 +576,20 @@ namespace {
 // Get rid of previous files with the specified prefix.
 void cleanFilesWithPrefix(std::string_view prefix) {
   namespace fs = std::filesystem;
-  for (const auto& entry : fs::directory_iterator(".")) {
-    std::string name = entry.path().filename().string();
-    if (ql::starts_with(name, prefix)) {
-      ad_utility::deleteFile(name);
-    }
+  // Collect the matching entries first and delete them only afterwards.
+  // Deleting entries while iterating the directory is unspecified behavior and
+  // can cause entries to be skipped on some platforms (observed on macOS),
+  // leaving leftover files behind.
+  std::vector<fs::directory_entry> toDelete;
+  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
+                      [prefix](const auto& e) {
+                        return ql::starts_with(e.path().filename().string(),
+                                               prefix);
+                      });
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
+      toDelete, static_cast<bool (*)(const fs::path&)>(&fs::is_regular_file)));
+  for (const auto& entry : toDelete) {
+    ad_utility::deleteFile(entry.path());
   }
 }
 }  // namespace
