@@ -93,17 +93,22 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       EXPECT_EQ(emptyResult->size(), 0);
     }
 
-    // Test `lookupBatchesStreamed1.
+    // Test `lookupBatchesStreamed`.
     {
-      std::array<size_t, 2> indices{1, 0};
-      auto result = geoVocab.lookupBatch(indices);
-      ASSERT_EQ(result->size(), 2);
-      EXPECT_EQ((*result)[0], testLiterals[1]);
-      EXPECT_EQ((*result)[1], testLiterals[0]);
+      std::vector<std::vector<size_t>> batches{{1, 0}, {2}};
+      auto streamedResults =
+          geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
-      // Empty batch.
-      auto emptyResult = geoVocab.lookupBatch(ql::span<const size_t>{});
-      EXPECT_EQ(emptyResult->size(), 0);
+      std::vector<VocabBatchLookupResult> results;
+      for (auto& r : streamedResults) {
+        results.push_back(std::move(r));
+      }
+      ASSERT_EQ(results.size(), 2);
+      ASSERT_EQ(results[0]->size(), 2);
+      EXPECT_EQ((*results[0])[0], testLiterals[1]);
+      EXPECT_EQ((*results[0])[1], testLiterals[0]);
+      ASSERT_EQ(results[1]->size(), 1);
+      EXPECT_EQ((*results[1])[0], testLiterals[2]);
     }
 
     // Test further methods
