@@ -7,6 +7,7 @@
 #include "index/CompressedRelation.h"
 
 #include <thread>
+#include <algorithm>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -14,14 +15,18 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
+#include "index/LocatedTriples.h"
 #include "index/GraphComputation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+
 
 using namespace std::chrono_literals;
 
@@ -1404,6 +1409,43 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 }
 
 // ____________________________________________________________________________
+ad_utility::HashSet<Id::T> CompressedRelationReader::computeUniqueGraphIds(
+  const Permutation& permutation,
+  const LocatedTriplesState& locatedTriplesState) const
+{
+  ad_utility::HashSet<Id::T> graphIds;
+  AD_LOG_DEBUG << "[CompressedRelationReader::computeUniqueGraphIds] cp 1" << std::endl;
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+  const LocatedTriplesPerBlock& ltpb =
+      permutation.getLocatedTriplesForPermutation(locatedTriplesState);
+  const auto scanConfig = CompressedRelationReader::getScanConfig(
+    ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, 
+    additionalColumns, ltpb);
+
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
+  ScanSpecAndBlocks scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
+    ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+    locatedTriplesState);
+
+  int i = 0;
+  for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()){
+    bool hasNewGraphId = ql::ranges::any_of(metadata.graphInfo_.value(), 
+      [&graphIds](Id id){return !graphIds.contains(id.getBits()); }
+    );
+    AD_LOG_DEBUG << "[CompressedRelationReader::computeUniqueGraphIds] cp for:" << i << std::endl;
+    i++;
+    bool shouldScan = !metadata.graphInfo_ || hasNewGraphId;
+    if (shouldScan) {
+      auto block = this->readAndDecompressBlock(metadata, scanConfig);
+      AD_CORRECTNESS_CHECK(block.has_value());
+      for(Id id: block->block_.getColumn(3)){
+        graphIds.insert(id.getBits());
+      }
+    }   
+  }
+  return graphIds;
+}
+// ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     std::initializer_list<ColumnIndex> baseColumns,
     ColumnIndicesRef additionalColumns) {
@@ -1886,3 +1928,4 @@ void CompressedRelationReader::LazyScanMetadata::aggregate(
   numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
   numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
 }
+
