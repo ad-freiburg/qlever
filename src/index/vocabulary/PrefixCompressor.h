@@ -87,7 +87,6 @@ class PrefixCompressor {
                         size_t outputCapacity,
                         [[maybe_unused]] char* scratch = nullptr,
                         [[maybe_unused]] size_t scratchCapacity = 0) const {
-    AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     std::string_view suffix = compressedWord.substr(1);
     std::string_view prefix;
