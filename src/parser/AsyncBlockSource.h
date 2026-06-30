@@ -51,7 +51,7 @@ class AsyncBlockSource {
                             ad_utility::MemorySize blocksize);
   virtual ~AsyncBlockSource() = default;
 
-  // Asynchronously deliver the next block of bytes. Accepts any Asio
+  // Asynchronously deliver the next block of bytes. Accept any Asio
   // completion token (e.g. `boost::asio::use_future`). The completion fires
   // on the handler's associated executor, or on the `strand` managed by this
   // `AsyncBlockSource`, if no executor is associated with the token. The
@@ -62,7 +62,10 @@ class AsyncBlockSource {
   // Note: the actual reading of blocks is always done single-threaded (via a
   // `strand` and blocking (by calling the non-async impl function on the
   // child classes). This is deliberate, because we have never seen the reading
-  // to be a bottleneck and to decrease complexity significantly.
+  // to be a bottleneck and to decrease complexity significantly. Additionally,
+  // asynchronous file IO using `Boost::Asio` requires `io_uring` support on
+  // Linux, and we don't have a good fallback for systems without `io_uring`
+  // that is worth the complexity.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
@@ -131,10 +134,11 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
 // block produced by the inner source, search for the last match of `endRegex`
-// and return the part of the block up to and including that match, prepending
-// any tail carried over from the previous block. If no statement boundary can
-// be found in a complete block, an exception is thrown with a message that
-// indicates possible mitigations for this error.
+// and return the part of the block up to and including the first capture group
+// in that regex match, prepending any tail carried over from the previous
+// block. If no statement boundary can be found in a complete block, an
+// exception is thrown with a message that indicates possible mitigations for
+// this error.
 class AsyncEndRegexBlockSource : public AsyncBlockSource {
  public:
   // Wrap `inner` and cut its blocks at matches of `endRegex`.

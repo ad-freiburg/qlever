@@ -77,9 +77,9 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
   ad_utility::MemorySize blocksize = 5_B;
   {
     // Blocks always end with a digit. The regex `([0-9])[a-z]` matches a
-    // digit followed by a letter; `RE2::PartialMatch` fills `regexResult`
-    // with the first capture group (the digit), so the block is cut after
-    // the digit — excluding the following letter from the current block.
+    // digit followed by a letter, the `AsyncEndRegexBlockSource` always cuts
+    // after the first capture group in the regex, so after the number that
+    // precedes a letter.
     qp::AsyncEndRegexBlockSource buf(
         pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),

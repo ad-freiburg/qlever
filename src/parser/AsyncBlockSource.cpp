@@ -79,7 +79,9 @@ std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
     }
     chunkSize = std::min(chunkSize * 2, inputSize);
   }
-  if (!match) return std::nullopt;
+  if (!match) {
+    return std::nullopt;
+  }
   return regexResult.data() + regexResult.size() - vec.data();
 }
 
@@ -88,10 +90,10 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
   // Mark the source exhausted and return whatever is left in `remainder_`.
   auto returnRemainder = [this]() -> std::optional<ByteBlock> {
     exhausted_ = true;
-    if (remainder_.empty()) return std::nullopt;
-    Block result = std::move(remainder_);
-    remainder_.clear();
-    return result;
+    if (remainder_.empty()) {
+      return std::nullopt;
+    }
+    return std::exchange(remainder_, Block{});
   };
 
   if (exhausted_) {
