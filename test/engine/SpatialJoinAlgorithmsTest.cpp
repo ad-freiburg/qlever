@@ -1758,7 +1758,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
 
-  // plain base (no full path) is the default
+  // A plain base (no full path) is the default.
   auto qec = ad_utility::testing::getQec(std::move(idxConfig));
 
   auto leftChild =
@@ -1775,7 +1775,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
 
-  // nothing intersects...
+  // Each area only intersects itself, so the result has two rows.
   EXPECT_EQ(res.idTable().numRows(), 2);
 }
 
@@ -1809,7 +1809,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
 
-  // nothing intersects...
+  // Each area only intersects itself, so the result has two rows.
   EXPECT_EQ(res.idTable().numRows(), 2);
 }
 
