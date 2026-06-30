@@ -264,15 +264,16 @@ class SortedVector {
     deleteInRange(smallPart());
     numItemsLargePart_ -= deleteInRange(largePart());
   }
-  //  Erase multiple elements. If the elements to delete are already sorted use
-  //  `eraseSorted`. This is expensive and preserves `isConsolidated`.
+  //  Erase multiple elements that may contain duplicates. If the elements to
+  //  delete are already sorted use `eraseSorted`. This is expensive and
+  //  preserves `isConsolidated`.
   void eraseUnsorted(std::vector<ValueType> toDelete) {
     AD_CONTRACT_CHECK(isConsolidated());
     ql::ranges::sort(toDelete, comp_, proj_);
     eraseSorted(ql::span(toDelete));
   }
-  // Erase multiple elements that are already sorted. This is expensive and
-  // preserves `isConsolidated`.
+  // Erase multiple elements that are already sorted but still may contain
+  // duplicates. This is expensive and preserves `isConsolidated`.
   void eraseSorted(ql::span<ValueType> sortedElems) {
     AD_CONTRACT_CHECK(isConsolidated());
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElems, comp_, proj_));

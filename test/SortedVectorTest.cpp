@@ -31,9 +31,7 @@ void PrintTo(const SortedVector<V, Compare, Projection>& s, std::ostream* os) {
               ",");
   *os << ']';
 }
-}  // namespace ad_utility
 
-namespace ad_utility {
 namespace {
 
 using namespace ::testing;
@@ -78,6 +76,7 @@ auto testConstOverloads = [](SV& initial, auto testLambda,
 };
 }  // namespace
 
+// ____________________________________________________________________________
 struct SortedVectorPairsTestHelper {
   static auto stateIs(const std::vector<Pair>& elements,
                       size_t numElementsLargePart, bool smallPartIsSorted) {
@@ -283,6 +282,26 @@ TEST(SortedVectorTest, back) {
 }
 
 // ____________________________________________________________________________
+TEST(SortedVectorTest, consolidate) {
+  {
+    SV s = SV::fromSorted({p10, p20, p31, p40, p51});
+    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
+    // `consolidate` does nothing when everything is already sorted.
+    s.consolidate();
+    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
+    s.insert(p11);
+    // Only the (one element) small part is sorted because the threshold for
+    // merging is not reached.
+    s.consolidate();
+    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51, p11}, 5, true));
+    s.insert(p60);
+    // The threshold for merging the two parts is surpassed.
+    s.consolidate();
+    EXPECT_THAT(s, StateIs({p11, p20, p31, p40, p51, p60}, 6, true));
+  }
+}
+
+// ____________________________________________________________________________
 TEST(SortedVectorTest, iteration) {
   auto expectElements = [&](SV& sv,
                             const std::vector<std::pair<int, int>>& expected,
@@ -373,7 +392,9 @@ TEST(SortedVectorTest, erase) {
           erase({p60, p30, p50}),
           AssertionFailed("ql::ranges::is_sorted(sortedElems, comp_, proj_)"));
     }
-    erase({p30, p50, p60});
+    erase({p30, p30, p30, p50, p50});
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p60));
+    erase({p60});
     EXPECT_THAT(s.getSortedView(), ElementsAre());
   }
 }
