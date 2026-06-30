@@ -46,21 +46,48 @@
 
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
+using namespace ad_utility::metrics;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
-               const qlever::EngineConfig& config, bool noAccessCheck)
+Server::Server(
+    unsigned short port, size_t numThreads, std::string accessToken,
+    const qlever::EngineConfig& config, bool noAccessCheck,
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      queryThreadPool_{numThreads} {
+      queryThreadPool_{numThreads},
+      metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
+
+  metrics_ = std::make_unique<ServerMetrics>(
+      [this]() -> int64_t {
+        return this->indexAndViewsSnapshot()
+            ->index_.deltaTriplesManager()
+            .getCurrentLocatedTriplesSharedState()
+            ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
+            .numTriples();
+      },
+      [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
+      [this]() -> int64_t {
+        return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
+      },
+      config.memoryLimit_.value_or(ad_utility::MemorySize::max()));
+  metrics_->registerCallbacks();
+  // Re-register the cache-size action to also record the metric going forward.
+  // This triggers immediately, recording the current cache limit as the initial
+  // value.
+  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
+      [this](ad_utility::MemorySize newValue) {
+        cache().setMaxSize(newValue);
+        metrics_->memoryCacheLimit_->Record(newValue.getBytes());
+      });
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
@@ -131,8 +158,10 @@ void Server::run() {
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
+      metrics_->httpErrors_->Add(1, {HttpErrorType::http});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
+      metrics_->httpErrors_->Add(1, {HttpErrorType::internal});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -572,6 +601,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                                 request, MediaType::textPlain);
   }
 
+  // Prometheus metrics scrape endpoint.
+  if (parsedHttpRequest.path_ == "/metrics") {
+    requireValidAccessToken("metrics");
+    if (!metricsReader_) {
+      response = createNotFoundResponse(
+          "Metrics not enabled (use --enable-metrics)", request);
+    } else {
+      response = createOkResponse(metricsReader_->getMetricsText(), request,
+                                  MediaType::textPlain);
+    }
+  }
+
   // Set description of KB index.
   if (auto description = checkParameter("index-description", std::nullopt)) {
     requireValidAccessToken("index-description");
@@ -641,6 +682,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             msg, ad_utility::truncateOperationString(operationString)));
       }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
         co_await processUpdate(indexAndViews, std::move(operations),
                                requestTimer, tracer, cancellationHandle, qec,
                                std::move(request), send, timeLimit.value(),
@@ -650,6 +692,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ParsedQuery query = std::move(operations[0]);
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::query});
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, qec, std::move(request), send,
                               timeLimit.value(), plannedQuery);
@@ -904,6 +947,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::systemError});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -920,6 +964,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::sendStreamableResponse});
   }
 }
 
@@ -1024,6 +1069,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
+  ad_utility::metrics::ActiveCounterGuard queryGuard{
+      *metrics_->runningSparqlOperations_, "query"};
 
   auto mediaTypes = determineMediaTypes(params, request);
   AD_LOG_INFO << "Requested media types of the result are: "
@@ -1079,6 +1126,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
+  metrics_->sparqlOperationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {OperationType::query});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::query});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1184,6 +1235,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   auto& index = indexAndViews->index_;
   outerTracer->beginTrace("waitingForUpdateThread");
+  ad_utility::metrics::ActiveCounterGuard updateGuard{
+      *metrics_->runningSparqlOperations_, "update"};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1261,6 +1314,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
+  metrics_->sparqlOperationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {OperationType::update});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1318,22 +1375,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::protocol});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::syntax});
   } catch (const QueryAlreadyInUseError& e) {
     // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::inUse});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::timeout});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
+    // TODO<qup42> this includes missing/wrong access token which should be 403
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic

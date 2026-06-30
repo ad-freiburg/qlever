@@ -10,4 +10,4 @@ add_library(index
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
         CompressedExternalIdTableSorterInstantiations.cpp)
-qlever_target_link_libraries(index util parser vocabulary global)
+qlever_target_link_libraries(index qlever_util parser vocabulary global)

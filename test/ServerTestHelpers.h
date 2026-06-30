@@ -16,6 +16,7 @@
 #include "engine/Server.h"
 #include "libqlever/Qlever.h"
 #include "util/IndexTestHelpers.h"
+#include "util/metrics/Metrics.h"
 
 namespace serverTestHelpers {
 
@@ -30,6 +31,9 @@ struct SimulateHttpRequest {
   // Optional: write the server's query start/end events to this file so a test
   // can read them back. Empty leaves the event log unconfigured.
   std::optional<std::filesystem::path> eventLogPath_ = std::nullopt;
+  // Optional MetricsReader injected into the Server. Defaults to nullptr
+  // (metrics disabled), matching the behaviour of all existing tests.
+  std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_ = nullptr;
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
@@ -47,13 +51,13 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName, auto eventLogPath,
+        [](auto request, auto indexName, auto eventLogPath, auto metricsReader,
            auto& io) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           qlever::EngineConfig config;
           config.persistUpdates_ = false;
           config.baseName_ = indexName;
-          Server server{4321, 1, "accessToken", config};
+          Server server{4321, 1, "accessToken", config, false, metricsReader};
 
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
@@ -68,7 +72,7 @@ struct SimulateHttpRequest {
                   .template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, eventLogPath_, io),
+        }(request, indexBaseName_, eventLogPath_, metricsReader_, io),
         boost::asio::use_future);
     io.run();
     return fut.get();
