@@ -18,6 +18,7 @@
 #include "backports/concepts.h"
 #include "backports/functional.h"
 #include "backports/span.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/views/ZipMergeUniqueView.h"
 
@@ -114,18 +115,16 @@ class SortedVector {
   // Let `r1` be a sorted subrange of elements and `r2` be an arbitrary sorted
   // range not overlapping with `r1`. Delete all elements from `r1` that are
   // also contained in `r2`. Duplicates within `r1`/`r2` are handled according
-  // to `ql::ranges::set_difference`, but never happen within this class (as we
-  // always first deduplicate within the small/large part before calling this
-  // function.
+  // to `ad_utility::inplace_set_difference`, but never happen within this class
+  // (as we always first deduplicate within the small/large part before calling
+  // this function.
   CPP_template_2(typename R1, typename R2)(
       requires ql::ranges::forward_range<R1> CPP_and_2
           ql::ranges::output_range<R1, ValueType>
               CPP_and_2 ql::ranges::input_range<R2>) static size_t
       eraseSortedSubRange(Storage& elements, R1&& r1, R2&& r2) {
-    // TODO<qup42> this is undefined because the output range overlaps with one
-    // of the input ranges
-    auto [_, newEndOfSubrange] = ql::ranges::set_difference(
-        r1, r2, ql::ranges::begin(r1), Compare{}, Projection{}, Projection{});
+    auto newEndOfSubrange = ad_utility::inplace_set_difference(
+        r1, r2, Compare{}, Projection{}, Projection{});
     auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
     elements.erase(newEndOfSubrange, ql::ranges::end(r1));
     return numItemsErased;
