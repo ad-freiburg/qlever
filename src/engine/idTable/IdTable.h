@@ -610,7 +610,7 @@ class IdTable {
       size_t offset, size_t size) const {
     AD_CONTRACT_CHECK(offset + size <= numRows_);
     auto viewSpans = ::ranges::to<ViewSpans>(
-        getColumns() |
+        ad_utility::allView(getColumns()) |
         ql::views::transform(
             [offset, size](const auto& col) -> ql::span<const T> {
               return col.subspan(offset, size);
