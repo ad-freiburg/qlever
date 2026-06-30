@@ -66,11 +66,19 @@ LocatedTriplesPerBlock::getUpdatesIfPresent(size_t blockIndex) const {
 }
 
 // ____________________________________________________________________________
+void LocatedTriplesPerBlock::consolidateAllBlocks() {
+  for (auto& locatedTriples : map_ | ql::views::values) {
+    locatedTriples.consolidate();
+  }
+}
+
+// ____________________________________________________________________________
 NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   if (auto blockUpdateTriples = getUpdatesIfPresent(blockIndex)) {
     // Simply return the number of located triples twice. See the comment in the
     // header file for the reasons and potential improvements.
-    return {blockUpdateTriples->size(), blockUpdateTriples->size()};
+    return {blockUpdateTriples->sizeUpperBound(),
+            blockUpdateTriples->sizeUpperBound()};
   }
   return {0, 0};
 }
@@ -159,7 +167,8 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   };
 
   auto rowIt = block.begin();
-  auto locatedTripleIt = locatedTriples.begin();
+  auto sortedLocatedTriples = locatedTriples.getSortedView();
+  auto locatedTripleIt = sortedLocatedTriples.begin();
   auto resultIt = result.begin();
 
   // Write the given `locatedTriple` to `result` at position `resultIt` and
@@ -182,7 +191,8 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     resultIt++;
   };
 
-  while (rowIt != block.end() && locatedTripleIt != locatedTriples.end()) {
+  while (rowIt != block.end() &&
+         locatedTripleIt != sortedLocatedTriples.end()) {
     if (lessThan(locatedTripleIt, *rowIt)) {
       if (locatedTripleIt->insertOrDelete_) {
         // Insertion of a non-existent triple.
@@ -201,15 +211,15 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     }
   }
 
-  if (locatedTripleIt != locatedTriples.end()) {
+  if (locatedTripleIt != sortedLocatedTriples.end()) {
     AD_CORRECTNESS_CHECK(rowIt == block.end());
     ql::ranges::for_each(
-        ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
+        ql::ranges::subrange(locatedTripleIt, sortedLocatedTriples.end()) |
             ql::views::filter(&LocatedTriple::insertOrDelete_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
-    AD_CORRECTNESS_CHECK(locatedTripleIt == locatedTriples.end());
+    AD_CORRECTNESS_CHECK(locatedTripleIt == sortedLocatedTriples.end());
     while (rowIt != block.end()) {
       *resultIt++ = *rowIt++;
     }
@@ -273,7 +283,7 @@ VacuumStatistics processBlockForVacuum(
 
   auto rowsAsTuple = idTable | ql::views::transform(rowProj);
   auto filteredTriples = [&](bool isInsertion) {
-    return locatedTriples |
+    return locatedTriples.getSortedView() |
            ql::views::filter([isInsertion](const LocatedTriple& lt) {
              return lt.insertOrDelete_ == isInsertion;
            }) |
@@ -293,9 +303,11 @@ VacuumStatistics processBlockForVacuum(
   auto deletionsRemovedInBlock =
       processTriples(false, ql::ranges::set_difference, allDeletionsToRemove);
 
-  auto insertionsInBlock =
-      ql::ranges::count_if(locatedTriples, &LocatedTriple::insertOrDelete_);
-  auto deletionsInBlock = locatedTriples.size() - insertionsInBlock;
+  // TODO: `sizeUpperBound` is wrong here, but we can also get both counts from
+  // the scan below
+  auto insertionsInBlock = ql::ranges::count_if(
+      locatedTriples.getSortedView(), &LocatedTriple::insertOrDelete_);
+  auto deletionsInBlock = locatedTriples.sizeUpperBound() - insertionsInBlock;
 
   return {deletionsRemovedInBlock, insertionsRemovedInBlock,
           deletionsInBlock - deletionsRemovedInBlock,
@@ -311,7 +323,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
       getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>();
   auto blocksToVacuum = map_ |
                         ql::views::filter([minimumBlockSize](const auto& e) {
-                          return e.second.size() >= minimumBlockSize;
+                          return e.second.sizeUpperBound() >= minimumBlockSize;
                         }) |
                         ql::views::keys;
 
@@ -359,37 +371,60 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 }
 
 // ____________________________________________________________________________
-std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    ql::span<const LocatedTriple> locatedTriples,
-    ad_utility::timer::TimeTracer& tracer) {
+void LocatedTriplesPerBlock::add(std::vector<LocatedTriple> locatedTriples,
+                                 ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("adding");
-  std::vector<LocatedTriples::iterator> handles;
-  handles.reserve(locatedTriples.size());
-  for (auto triple : locatedTriples) {
-    LocatedTriples& locatedTriplesInBlock = map_[triple.blockIndex_];
-    auto [handle, wasInserted] = locatedTriplesInBlock.emplace(triple);
-    AD_CORRECTNESS_CHECK(wasInserted == true);
-    AD_CORRECTNESS_CHECK(handle != locatedTriplesInBlock.end());
-    ++numTriples_;
-    handles.emplace_back(handle);
+  for (auto& locatedTriple : locatedTriples) {
+    map_[locatedTriple.blockIndex_].insert(std::move(locatedTriple));
   }
-
   tracer.endTrace("adding");
-  return handles;
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::erase(size_t blockIndex,
-                                   LocatedTriples::iterator iter) {
+void LocatedTriplesPerBlock::erase(size_t blockIndex, const LocatedTriple& lt) {
   auto blockIter = map_.find(blockIndex);
   AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                     " is not contained");
   auto& block = blockIter->second;
-  block.erase(iter);
-  numTriples_--;
+  block.erase(lt);
   if (block.empty()) {
     map_.erase(blockIndex);
   }
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::erase(ql::span<LocatedTriple> sortedTriples) {
+  AD_CORRECTNESS_CHECK(
+      ql::ranges::is_sorted(sortedTriples, {}, &LocatedTriple::triple_));
+
+  auto it = sortedTriples.begin();
+  while (it != sortedTriples.end()) {
+    size_t blockIndex = it->blockIndex_;
+    auto groupEnd = std::find_if_not(it, sortedTriples.end(),
+                                     [blockIndex](const LocatedTriple& lt) {
+                                       return lt.blockIndex_ == blockIndex;
+                                     });
+
+    auto blockIter = map_.find(blockIndex);
+    AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
+                      " is not contained");
+    auto& block = blockIter->second;
+    block.eraseSorted(ql::span(it, groupEnd));
+    if (block.empty()) {
+      map_.erase(blockIndex);
+    }
+
+    it = groupEnd;
+  }
+}
+
+// ____________________________________________________________________________
+size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
+  auto sizes =
+      map_ | ql::views::values | ql::views::transform([](const auto& block) {
+        return block.sizeForTesting();
+      });
+  return std::accumulate(sizes.begin(), sizes.end(), 0UL);
 }
 
 // ____________________________________________________________________________
@@ -410,7 +445,8 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
   // `nullopt`, then it will stay `nullopt`.
   if (graphs.has_value()) {
     graphs = computeDistinctGraphs(
-        locatedTriples | ql::views::filter(&LocatedTriple::insertOrDelete_) |
+        locatedTriples.getSortedView() |
+            ql::views::filter(&LocatedTriple::insertOrDelete_) |
             ql::views::transform([](const LocatedTriple& lt) {
               return lt.triple_.ids().at(ADDITIONAL_COLUMN_GRAPH_ID);
             }),
@@ -422,8 +458,8 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
     // also cannot know if the `locatedTriples` introduces duplicates. We thus
     // have to be conservative and assume that there are duplicates when data
     // was inserted.
-    blockMetadata.containsDuplicatesWithDifferentGraphs_ |=
-        ql::ranges::any_of(locatedTriples, &LocatedTriple::insertOrDelete_);
+    blockMetadata.containsDuplicatesWithDifferentGraphs_ |= ql::ranges::any_of(
+        locatedTriples.getSortedView(), &LocatedTriple::insertOrDelete_);
   }
 }
 
@@ -443,10 +479,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
       blockMetadata.firstTriple_ =
           std::min(blockMetadata.firstTriple_,
-                   blockUpdates->begin()->triple_.toPermutedTriple());
+                   blockUpdates->front().triple_.toPermutedTriple());
       blockMetadata.lastTriple_ =
           std::max(blockMetadata.lastTriple_,
-                   blockUpdates->rbegin()->triple_.toPermutedTriple());
+                   blockUpdates->back().triple_.toPermutedTriple());
       updateGraphMetadata(blockMetadata, *blockUpdates);
     }
     blockIndex++;
@@ -454,8 +490,8 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // Also account for the last block that contains the triples that are larger
   // than all the inserted triples.
   if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
-    auto firstTriple = blockUpdates->begin()->triple_.toPermutedTriple();
-    auto lastTriple = blockUpdates->rbegin()->triple_.toPermutedTriple();
+    auto firstTriple = blockUpdates->front().triple_.toPermutedTriple();
+    auto lastTriple = blockUpdates->back().triple_.toPermutedTriple();
 
     // The first `std::nullopt` means that this block contains only
     // `LocatedTriple`s.
@@ -483,14 +519,6 @@ void to_json(nlohmann::json& j, const VacuumStatistics& stats) {
 }
 
 // ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
-  os << "{ ";
-  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
-  os << "}";
-  return os;
-}
-
-// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
   ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
@@ -503,7 +531,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
                                                  size_t blockIndex) {
     LocatedTriple locatedTriple{blockIndex, triple, insertOrDelete};
     locatedTriple.blockIndex_ = blockIndex;
-    return ad_utility::contains(lt, locatedTriple);
+    return ad_utility::contains(lt.getSortedView(), locatedTriple);
   };
 
   return ql::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
@@ -522,11 +550,13 @@ std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
 
   for (const auto& [blockIndex, locatedTriples] : map_) {
     auto it = oldBlocks.map_.find(blockIndex);
-    LocatedTriples empty;
-    const auto& set = it != oldBlocks.map_.end() ? it->second : empty;
+    const LocatedTriples empty;
+    const auto& set = it != oldBlocks.map_.end() ? it->second.getSortedView()
+                                                 : empty.getSortedView();
     ql::ranges::for_each(
-        locatedTriples, [&addTriple, &set](const LocatedTriple& lt) {
-          auto it = set.find(lt);
+        locatedTriples.getSortedView(),
+        [&addTriple, &set](const LocatedTriple& lt) {
+          auto it = ql::ranges::lower_bound(set, lt);
           if (it == set.end() || it->insertOrDelete_ != lt.insertOrDelete_) {
             addTriple(lt.triple_, lt.insertOrDelete_);
           }

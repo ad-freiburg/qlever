@@ -146,27 +146,18 @@ class DeltaTriples {
   // Generic state wrapper to avoid code duplication for internal and regular
   // triples.
   template <bool isInternal>
-  struct TriplesToHandles {
-    // Each delta triple needs to know where it is stored in each of the six
-    // `LocatedTriplesPerBlock` above.
-    struct LocatedTripleHandles {
-      using It = LocatedTriples::iterator;
-      std::array<It, Permutation::all<isInternal>().size()> handles_;
-
-      LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
-    };
-    using TriplesToHandlesMap =
-        ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>;
+  struct TriplesSets {
+    using TriplesSet = ad_utility::HashSet<IdTriple<0>>;
     // The sets of triples added to and subtracted from the original index. Any
     // triple can be at most in one of the sets. The information whether a
     // triple is in the index is missing. This means that a triple that is in
     // the index may still be in the inserted set and vice versa.
-    TriplesToHandlesMap triplesInserted_;
-    TriplesToHandlesMap triplesDeleted_;
+    TriplesSet triplesInserted_;
+    TriplesSet triplesDeleted_;
   };
 
-  TriplesToHandles<false> triplesToHandlesNormal_;
-  TriplesToHandles<true> triplesToHandlesInternal_;
+  TriplesSets<false> triplesSetsNormal_;
+  TriplesSets<true> triplesSetsInternal_;
 
  public:
   // Construct for given index.
@@ -202,22 +193,19 @@ class DeltaTriples {
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesNormal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesInserted_.size());
   }
   int64_t numDeleted() const {
-    return static_cast<int64_t>(triplesToHandlesNormal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesDeleted_.size());
   }
   DeltaTriplesCount getCounts() const;
 
   // The number of internal delta triples added and subtracted.
   int64_t numInternalInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesInserted_.size());
   }
   int64_t numInternalDeleted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesDeleted_.size());
   }
 
   // From the triples that are explicitly being added to the index, compute a
@@ -286,6 +274,10 @@ class DeltaTriples {
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
       bool setInternalMetadata);
 
+  // Sort the located triples in all permutations. Must be called after a batch
+  // of insertTriples/deleteTriples, before any query access or metadata update.
+  void consolidateAll();
+
   // Update the block metadata.
   void updateAugmentedMetadata();
 
@@ -317,22 +309,21 @@ class DeltaTriples {
 
  private:
   // The proper state according to the template parameter. This will either
-  // return a reference to `triplesToHandlesInternal_` or
-  // `triplesToHandlesNormal_`.
+  // return a reference to `triplesSetsInternal_` or
+  // `triplesSetsNormal_`.
   template <bool isInternal>
-  TriplesToHandles<isInternal>& getState();
+  TriplesSets<isInternal>& getState();
 
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
   // When `insertOrDelete` is `true`, the triples are inserted, otherwise
-  // deleted. Return the iterators of where it was added (so that we can easily
-  // delete it again from these maps later).
+  // deleted.
   template <bool isInternal>
-  std::vector<typename TriplesToHandles<isInternal>::LocatedTripleHandles>
-  locateAndAddTriples(CancellationHandle cancellationHandle,
-                      ql::span<const IdTriple<0>> triples, bool insertOrDelete,
-                      ad_utility::timer::TimeTracer& tracer =
-                          ad_utility::timer::DEFAULT_TIME_TRACER);
+  void locateAndAddTriples(CancellationHandle cancellationHandle,
+                           ql::span<const IdTriple<0>> triples,
+                           bool insertOrDelete,
+                           ad_utility::timer::TimeTracer& tracer =
+                               ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Common implementation for `insertTriples` and `deleteTriples`. When
   // `insertOrDelete` is `true`, the triples are inserted, `targetMap` contains
@@ -363,8 +354,7 @@ class DeltaTriples {
   // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
   // which stores these iterators.
   template <bool isInternal>
-  void eraseTripleInAllPermutations(
-      typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
+  void eraseTripleInAllPermutations(const LocatedTriple& lt);
 
   // The difference between two `LocatedTriplesState` snapshots, split into
   // inserted/deleted and internal/external triples.
