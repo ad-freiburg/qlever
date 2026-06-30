@@ -15,6 +15,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <system_error>
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -467,6 +468,40 @@ void MaterializedViewsManager::unloadViewIfLoaded(
   }
   lock->queryPatternCache_.removeView(lock->views_.at(name));
   lock->views_.erase(name);
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::deleteView(const std::string& name) const {
+  MaterializedView::throwIfInvalidName(name);
+  auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
+  if (!std::filesystem::exists(absl::StrCat(filenameBase, ".viewinfo.json"))) {
+    throw std::runtime_error(
+        absl::StrCat("The materialized view '", name, "' does not exist."));
+  }
+
+  // Unload the view if it is currently loaded so that it no longer holds open
+  // file handles or its permutation's memory mapping.
+  unloadViewIfLoaded(name);
+
+  // Delete all files belonging to the view from disk. The `.spo-sorter.dat`
+  // file is a temporary file that should normally not exist anymore, but we
+  // remove it defensively in case a previous write was interrupted.
+  for (const auto* suffix :
+       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+    std::error_code ec;
+    std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    if (ec) {
+      throw std::runtime_error(absl::StrCat(
+          "Failed to delete file '", filenameBase, suffix,
+          "' while deleting materialized view '", name, "': ", ec.message()));
+    }
+  }
+  // Best-effort removal of the sorter temp file; it normally doesn't exist.
+  std::error_code ignoredError;
+  std::filesystem::remove(absl::StrCat(filenameBase, ".spo-sorter.dat"),
+                          ignoredError);
+
+  AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
 }
 
 // _____________________________________________________________________________
