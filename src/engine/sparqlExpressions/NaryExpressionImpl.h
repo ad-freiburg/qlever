@@ -46,6 +46,11 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  // Deterministic iff all children are deterministic.
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic(children_);
+  }
+
  private:
   // _________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
@@ -211,6 +216,11 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
       key += child->getCacheKey(varColMap);
     }
     return key;
+  }
+
+  // Deterministic iff all children are deterministic.
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic(children_);
   }
 
  private:

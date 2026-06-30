@@ -31,6 +31,8 @@ class NowDatetimeExpression : public SparqlExpression {
     return Id::makeFromDate(date_);
   }
 
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };

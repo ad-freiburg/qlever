@@ -59,6 +59,8 @@ class ExternalValues : private Values, virtual public Operation {
   // Override to ensure external values are never cached.
   bool canResultBeCachedImpl() const override { return false; }
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   // Override to ensure external values are never considered empty.
   bool knownEmptyResult() override { return false; }
 

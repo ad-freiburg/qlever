@@ -54,6 +54,10 @@ class RelationalExpression : public SparqlExpression {
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic(children_);
+  }
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
@@ -91,6 +95,10 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic(children_);
+  }
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;

@@ -41,6 +41,7 @@ class ExplicitIdTableOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   std::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;

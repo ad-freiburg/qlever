@@ -276,6 +276,8 @@ TEST_F(LoadTest, getCacheKey) {
 
 TEST_F(LoadTest, clone) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
+  // LOAD performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(load.isDeterministic());
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {
