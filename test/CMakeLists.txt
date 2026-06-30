@@ -207,8 +207,7 @@ addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
 addLinkAndDiscoverTest(MmapVectorTest)
 
-# BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTest(BufferedVectorTest)
+addLinkAndDiscoverTest(ExternalOverflowStorageTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
