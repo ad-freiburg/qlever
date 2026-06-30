@@ -269,9 +269,9 @@ TEST(VariableCounterTest, MagicServices) {
           "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
           "SELECT * {"
           "SERVICE view:myView {"
-          "_:config view:column-s ?s ;"
-          "view:column-p ?p . } }"),
-      counts({{V{"?s"}, 1}, {V{"?p"}, 1}}));
+          "_:config view:column-s ?x ;"
+          "view:column-p ?y . } }"),
+      counts({{V{"?x"}, 1}, {V{"?y"}, 1}}));
 
   // External values.
   EXPECT_THAT(
