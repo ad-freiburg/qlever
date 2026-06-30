@@ -16,6 +16,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
+#include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "index/ScanSpecification.h"
 #include "util/HashSet.h"
@@ -54,28 +55,10 @@ VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
       getIndex().getImpl().getPermutation(Permutation::Enum::SPO);
-  ad_utility::HashSet<Id::T> graphIds;
-
-  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
-  ScanSpecAndBlocks scanSpecAndBlocks = permutation.getScanSpecAndBlocks(ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, locatedTriplesState());
-  
-  for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()){
-    bool hasNewGraphId = ql::ranges::any_of(metadata.graphInfo_.value(), 
-      [&graphIds](Id id){return !graphIds.contains(id.getBits()); }
-    );
-    bool shouldScan = !metadata.graphInfo_ || hasNewGraphId;
-    if (shouldScan) {
-      auto lazyScanResult = permutation.lazyScan(
-          scanSpecAndBlocks, std::vector<CompressedBlockMetadata>{metadata},
-          std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
-          cancellationHandle_, locatedTriplesState());
-      for (auto& idTable : lazyScanResult) {
-        for (Id id : idTable.getColumn(3)) {
-          graphIds.insert(id.getBits());
-        }
-      }
-    }   
-  }
+  AD_LOG_DEBUG << "[DistinctGraphs::computeResult] before start of reader compute" << std::endl;
+  const auto& reader = permutation.reader();
+  ad_utility::HashSet<Id::T> graphIds =
+      reader.computeUniqueGraphIds(permutation, locatedTriplesState());
 
   auto treatDefaultGraphAsNamedGraph =
       getRuntimeParameter<&RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
