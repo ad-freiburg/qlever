@@ -114,19 +114,18 @@ class SortedVector {
 
   // Let `r1` be a sorted subrange of elements and `r2` be an arbitrary sorted
   // range not overlapping with `r1`. Delete all elements from `r1` that are
-  // also contained in `r2`. Duplicates within `r1`/`r2` are handled according
-  // to `ad_utility::inplace_set_difference`, but never happen within this class
-  // (as we always first deduplicate within the small/large part before calling
-  // this function.
+  // also contained in `r2`. Within this class, `r1` is always unique (elements
+  // are deduplicated before calling this function). Duplicates in `r2` make no
+  // difference.
   CPP_template_2(typename R1, typename R2)(
       requires ql::ranges::forward_range<R1> CPP_and_2
           ql::ranges::output_range<R1, ValueType>
-              CPP_and_2 ql::ranges::input_range<R2>) static size_t
-      eraseSortedSubRange(Storage& elements, R1&& r1, R2&& r2) {
-    auto newEndOfSubrange = ad_utility::inplace_set_difference(
-        r1, r2, Compare{}, Projection{}, Projection{});
+              CPP_and_2 ql::ranges::input_range<R2>) size_t
+      eraseSortedSubRange(R1&& r1, R2&& r2) {
+    auto newEndOfSubrange =
+        ad_utility::inplace_set_difference(r1, r2, comp_, proj_, proj_);
     auto numItemsErased = std::distance(newEndOfSubrange, ql::ranges::end(r1));
-    elements.erase(newEndOfSubrange, ql::ranges::end(r1));
+    elements_.erase(newEndOfSubrange, ql::ranges::end(r1));
     return numItemsErased;
   }
 
@@ -265,21 +264,23 @@ class SortedVector {
     numItemsLargePart_ -= deleteInRange(largePart());
   }
   //  Erase multiple elements that may contain duplicates. If the elements to
-  //  delete are already sorted use `eraseSorted`. This is expensive and
-  //  preserves `isConsolidated`.
+  //  delete are already sorted use `eraseSorted`.
+  //  Note: calling this function is expensive (O(n)) and preserves
+  //  `isConsolidated`.
   void eraseUnsorted(std::vector<ValueType> toDelete) {
     AD_CONTRACT_CHECK(isConsolidated());
     ql::ranges::sort(toDelete, comp_, proj_);
     eraseSorted(ql::span(toDelete));
   }
   // Erase multiple elements that are already sorted but still may contain
-  // duplicates. This is expensive and preserves `isConsolidated`.
+  // duplicates.
+  // Note: calling this function is expensive (O(n)) and preserves
+  // `isConsolidated`.
   void eraseSorted(ql::span<ValueType> sortedElems) {
     AD_CONTRACT_CHECK(isConsolidated());
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElems, comp_, proj_));
-    eraseSortedSubRange(elements_, smallPart(), sortedElems);
-    numItemsLargePart_ -=
-        eraseSortedSubRange(elements_, largePart(), sortedElems);
+    eraseSortedSubRange(smallPart(), sortedElems);
+    numItemsLargePart_ -= eraseSortedSubRange(largePart(), sortedElems);
   }
 
   // Return an upper bound of the size. Requires `isConsolidated` to be true.

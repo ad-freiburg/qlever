@@ -10,6 +10,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+// Provides `PrintTo<ZipMergeUniqueView>`, required for test printing of
+// `SortedVector`.
 #include "./ZipMergeUniqueViewTestHelpers.h"
 #include "index/LocatedTriples.h"
 #include "util/GTestHelpers.h"
@@ -76,10 +78,12 @@ auto testConstOverloads = [](SV& initial, auto testLambda,
 };
 }  // namespace
 
-// ____________________________________________________________________________
+// This matcher factory accesses private members of `SortedVector`, so it has
+// to be a `friend`. Friends cannot be in the anonymous namespace and also
+// cannot be a simple lambda.
 struct SortedVectorPairsTestHelper {
-  static auto stateIs(const std::vector<Pair>& elements,
-                      size_t numElementsLargePart, bool smallPartIsSorted) {
+  auto operator()(const std::vector<Pair>& elements,
+                  size_t numElementsLargePart, bool smallPartIsSorted) const {
     return AllOf(AD_FIELD(SV, elements_, ElementsAreArray(elements)),
                  AD_FIELD(SV, numItemsLargePart_, Eq(numElementsLargePart)),
                  AD_FIELD(SV, smallPartIsSorted_, Eq(smallPartIsSorted)));
@@ -87,7 +91,7 @@ struct SortedVectorPairsTestHelper {
 };
 
 namespace {
-auto StateIs = SortedVectorPairsTestHelper::stateIs;
+constexpr SortedVectorPairsTestHelper StateIs{};
 }  // namespace
 
 // ____________________________________________________________________________
@@ -287,16 +291,16 @@ TEST(SortedVectorTest, consolidate) {
     SV s = SV::fromSorted({p10, p20, p31, p40, p51});
     EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
     // `consolidate` does nothing when everything is already sorted.
-    s.consolidate();
+    s.consolidate(0.25);
     EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
     s.insert(p11);
     // Only the (one element) small part is sorted because the threshold for
-    // merging is not reached.
-    s.consolidate();
+    // merging is not reached (1/6 < 1/4).
+    s.consolidate(0.25);
     EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51, p11}, 5, true));
     s.insert(p60);
-    // The threshold for merging the two parts is surpassed.
-    s.consolidate();
+    // The threshold for merging the two parts is surpassed (2/7 > 1/4).
+    s.consolidate(0.25);
     EXPECT_THAT(s, StateIs({p11, p20, p31, p40, p51, p60}, 6, true));
   }
 }
@@ -330,8 +334,6 @@ TEST(SortedVectorTest, iteration) {
     s.clear();
     expectElements(s, {});
   }
-  // `begin()` and `end()` are implemented using a static impl function which
-  // results in a slightly different assertion message.
   {
     SV s{};
     s.insert(p10);
@@ -429,12 +431,14 @@ TEST(SortedVectorTest, sortAndRemoveDuplicates) {
 TEST(SortedVectorTest, eraseSortedSubRange) {
   using Pairs = std::vector<std::pair<int, int>>;
 
-  auto test = [](Pairs triples, Pairs toDelete, const Pairs& expected,
+  auto test = [](Pairs elements, Pairs toDelete, const Pairs& expected,
                  size_t numDeleted,
                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    EXPECT_EQ(SV::eraseSortedSubRange(triples, triples, toDelete), numDeleted);
-    EXPECT_EQ(triples, expected);
+    SV s;
+    s.elements_ = std::move(elements);
+    EXPECT_EQ(s.eraseSortedSubRange(s.elements_, toDelete), numDeleted);
+    EXPECT_EQ(s.elements_, expected);
   };
 
   test({}, {}, {}, 0);

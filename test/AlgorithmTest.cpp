@@ -275,6 +275,10 @@ TEST(AlgorithmTest, SetDifference) {
   testInplace({2, 3, 4}, {1, 5}, {2, 3, 4});
   testInplace({1, 2, 3, 4, 5}, {1}, {2, 3, 4, 5});
   testInplace({1, 2, 3, 4, 5}, {2, 3}, {1, 4, 5});
+  // Duplicates in `r1`: `std::set_difference` semantics, each `r2` element
+  // cancels one equivalent `r1` element.
+  testInplace({1, 1, 2}, {1}, {1, 2});
+  testInplace({1, 1, 2}, {1, 1}, {2});
 
   if (areExpensiveChecksEnabled) {
     auto assertionFailed = [](const std::string& assertion) {
@@ -306,4 +310,9 @@ TEST(AlgorithmTest, SetDifference) {
   testProj({{1, 0}, {2, 0}, {3, 0}}, {}, {{1, 0}, {2, 0}, {3, 0}});
   testProj({{1, 0}, {2, 0}, {3, 0}}, {{2, 9}}, {{1, 0}, {3, 0}});
   testProj({{1, 0}, {2, 0}, {3, 0}}, {{1, 9}, {2, 9}, {3, 9}}, {});
+  // Output contains only elements from `r1`, never from `r2`. Each `r2` element
+  // cancels one equivalent `r1` element.
+  testProj({{9, 1}, {9, 2}}, {}, {{9, 1}, {9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}}, {{9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}, {9, 4}}, {});
 }
