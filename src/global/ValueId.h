@@ -129,6 +129,11 @@ class ValueId {
   static constexpr std::array<Datatype, 2> stringTypes_{
       Datatype::VocabIndex, Datatype::LocalVocabIndex};
 
+  // A mapping that decides if a Datatype is bitwise comparable or not. See
+  // `canBeComparedBitwise()` below.
+  static constexpr std::array<bool, 12> isTypeBitwiseComparable_{
+      true, true, true, true, true, false, true, true, true, true, true, true};
+
   // Assert that the types in `stringTypes_` are directly adjacent. This is
   // required to make the comparison of IDs in `ValueIdComparators.h` work.
   static constexpr Datatype maxStringType_ = ql::ranges::max(stringTypes_);
@@ -226,7 +231,12 @@ class ValueId {
   // on the underlying bits, which allows much better code generation (e.g.
   // vectorization). In particular, this method should for example be used
   // during index building.
-  constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
+  auto compareWithoutLocalVocab(const ValueId& other) const {
+    // NOTE: If this static assertion is violated at some point, make sure to
+    // check all callers of this function if they are still correct.
+    static_assert(isOnlyLocalVocabNotBitwiseComparable);
+    AD_EXPENSIVE_CHECK(canBeComparedBitwise());
+    AD_EXPENSIVE_CHECK(other.canBeComparedBitwise());
     return ql::compareThreeWay(_bits, other._bits);
   }
 
@@ -392,6 +402,23 @@ class ValueId {
   // `isDatatypeTrivial` above).
   constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
 
+  // An `Id` is considered bitwise comparable if the mapping at
+  // `isTypeBitwiseComparable_` says so. This is currently the case for all
+  // datatypes except for the local vocab index.
+  constexpr bool canBeComparedBitwise() const {
+    static_assert(isOnlyLocalVocabNotBitwiseComparable);
+    return isTypeBitwiseComparable_.at(static_cast<size_t>(getDatatype()));
+  }
+
+  // Constant to be used in `static_assert` statements to indicate that
+  // behavior is relying on the local vocab entry to be the only datatype that
+  // is not bitwise comparable.
+  constexpr static bool isOnlyLocalVocabNotBitwiseComparable =
+      isTypeBitwiseComparable_.size() ==
+          static_cast<size_t>(Datatype::MaxValue) + 1 &&
+      !isTypeBitwiseComparable_.at(
+          static_cast<size_t>(Datatype::LocalVocabIndex));
+
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation
   constexpr static ValueId min() noexcept {
@@ -411,6 +438,7 @@ class ValueId {
     // of simpler values actually being hashed (here: bits or hash expansion of
     // the LocalVocabEntry).
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      static_assert(isOnlyLocalVocabNotBitwiseComparable);
       return H::combine(std::move(h), id._bits, 0);
     }
     auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
