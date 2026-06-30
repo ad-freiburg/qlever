@@ -95,20 +95,43 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     // Test `lookupBatchesStreamed`.
     {
-      std::vector<std::vector<size_t>> batches{{1, 0}, {2}};
-      auto streamedResults =
-          geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+      auto numInputBatchesPulled = std::make_shared<size_t>(0);
+      std::vector<std::vector<size_t>> batches{{1, 0}, {2}, {3}};
+
+      // an input range that records how many batches have been pulled so far.
+      auto input = VocabLookupInput{ad_utility::InputRangeFromGetCallable{
+          [numInputBatchesPulled, batches = std::move(batches),
+           next = size_t{0}]() mutable -> std::optional<std::vector<size_t>> {
+            if (next >= batches.size()) {
+              return std::nullopt;
+            }
+            ++(*numInputBatchesPulled);
+            return batches[next++];
+          }}};
+
+      auto streamedResults = geoVocab.lookupBatchesStreamed(std::move(input));
+
+      // Nothing is pulled before iteration begins.
+      EXPECT_EQ(*numInputBatchesPulled, 0);
 
       std::vector<VocabBatchLookupResult> results;
+      size_t expectedPulled = 0;
       for (auto& r : streamedResults) {
+        ++expectedPulled;
+        // On-demand: receiving the k-th result has pulled exactly k input
+        // batches. An eager implementation would already show all 3 here.
+        EXPECT_EQ(*numInputBatchesPulled, expectedPulled);
         results.push_back(std::move(r));
       }
-      ASSERT_EQ(results.size(), 2);
+
+      ASSERT_EQ(results.size(), 3);
       ASSERT_EQ(results[0]->size(), 2);
       EXPECT_EQ((*results[0])[0], testLiterals[1]);
       EXPECT_EQ((*results[0])[1], testLiterals[0]);
       ASSERT_EQ(results[1]->size(), 1);
       EXPECT_EQ((*results[1])[0], testLiterals[2]);
+      ASSERT_EQ(results[2]->size(), 1);
+      EXPECT_EQ((*results[2])[0], testLiterals[3]);
     }
 
     // Test further methods
