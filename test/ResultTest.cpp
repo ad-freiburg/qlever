@@ -65,7 +65,7 @@ void consumeGenerator(Result::LazyResult generator) {
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
   Result result{[]() -> Result::Generator { co_return; }(), {}};
   EXPECT_FALSE(result.isFullyMaterialized());
-  EXPECT_THROW(result.idTable(), ad_utility::Exception);
+  EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -95,7 +95,7 @@ TEST(Result, cloneIdTableReturnsCopy) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Verify it is a deep copy, not a reference to the same data.
-  EXPECT_NE(&cloned(0, 0), &result.idTable()(0, 0));
+  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
 }
 
 // _____________________________________________________________________________
@@ -373,7 +373,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
         },
         [&](Result aggregatedResult) {
           EXPECT_TRUE(aggregatedResult.isFullyMaterialized());
-          EXPECT_EQ(aggregatedResult.idTable(), idTable);
+          EXPECT_EQ(aggregatedResult.idTableView(), idTable);
           EXPECT_EQ(aggregatedResult.sortedBy(), std::vector<ColumnIndex>{0});
         });
   }
@@ -456,7 +456,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       Result result{idTable.clone(), {}, LocalVocab{}};
       result.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 1);
-      EXPECT_EQ(result.idTable(), comparisonTable);
+      EXPECT_EQ(result.idTableView(), comparisonTable);
     }
     {
       // Now test the limit offset application for shared results;
@@ -464,7 +464,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
           std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
-      EXPECT_EQ(result2.idTable(), comparisonTable);
+      EXPECT_EQ(result2.idTableView(), comparisonTable);
     }
   }
 

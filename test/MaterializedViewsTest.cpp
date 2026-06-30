@@ -123,7 +123,7 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
-    EXPECT_THAT(res->idTable(), matchesIdTable(expectedResult));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expectedResult));
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -162,7 +162,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       }
     )");
     auto res = qet->getResult(false);
-    EXPECT_EQ(res->idTable().numRows(), 1);
+    EXPECT_EQ(res->idTableView().numRows(), 1);
   }
 }
 
@@ -811,7 +811,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "SELECT ?s ?o { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
-    EXPECT_THAT(res->idTable(), matchesIdTable(expectedIdTable));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expectedIdTable));
   }
 
   // Write a materialized view through a simulated HTTP POST request.
@@ -975,7 +975,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto res = qet->getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
     auto col = qet->getVariableColumn(Variable{"?cnt"});
-    auto count = res->idTable().at(0, col);
+    auto count = res->idTableView()(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }

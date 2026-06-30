@@ -1744,6 +1744,73 @@ TEST(SpatialJoin, NumberOfThreads) {
   testNumberOfThreads(hardwareThreads + 5, hardwareThreads);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+
+  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  idxConfig.vocabularyType = vocabType;
+  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.parserBufferSize = 10_kB;
+
+  // A plain base (no full path) is the default.
+  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?area2"});
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
+      Variable{"?area2"}};
+  config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, config, leftChild, rightChild);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+  auto res = spatialJoin->computeResult(false);
+
+  // Each area only intersects itself, so the result has two rows.
+  EXPECT_EQ(res.idTable().numRows(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+
+  auto base = std::filesystem::current_path() / "_spatialjoinAbsTestIndex";
+
+  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  idxConfig.vocabularyType = vocabType;
+  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.parserBufferSize = 10_kB;
+
+  auto qec = ad_utility::testing::getQec(base.string(), std::move(idxConfig));
+
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?area2"});
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
+      Variable{"?area2"}};
+  config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, config, leftChild, rightChild);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+  auto res = spatialJoin->computeResult(false);
+
+  // Each area only intersects itself, so the result has two rows.
+  EXPECT_EQ(res.idTable().numRows(), 2);
+}
+
 }  // namespace runtimeParameters
 
 namespace parsing {

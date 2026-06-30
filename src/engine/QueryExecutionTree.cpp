@@ -138,7 +138,7 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
     AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
-    return cachedResult_->idTable().size() == 0;
+    return cachedResult_->idTableView().size() == 0;
   }
   return rootOperation_->knownEmptyResult();
 }

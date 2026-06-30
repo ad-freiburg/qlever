@@ -181,8 +181,8 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
   }
 
   AD_LOG_DEBUG << "Computing optional join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
   optionalJoin(leftResult->idTableView(), rightResult->idTableView(),
                _joinColumns, &idTable, implementation_);
@@ -554,12 +554,12 @@ Result OptionalJoin::optionalJoinWithIndexScan(
         auto firstJoinColLeft = _joinColumns.at(0).at(0);
         if constexpr (leftIsMaterialized) {
           auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
-              left->idTable().getColumn(firstJoinColLeft));
+              left->idTableView().getColumn(firstJoinColLeft));
           auto rightRange = convertGeneratorFromScan<numJoinCols>(
               std::move(rightBlocksInternal), *rightScan);
           auto permutationIdTable =
               ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
-                  left->idTable().asColumnSubsetView(
+                  left->idTableView().asColumnSubsetView(
                       joinColMap.permutationLeft()),
                   left->getCopyOfLocalVocab()};
           auto leftRange = std::array{std::move(permutationIdTable)};

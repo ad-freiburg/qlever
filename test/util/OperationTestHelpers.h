@@ -86,7 +86,7 @@ class ShallowParentOperation : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
-    return {childResult->idTable().clone(), resultSortedOn(),
+    return {childResult->cloneIdTable(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
   }
 
