@@ -579,6 +579,95 @@ TEST(PathSearchTest, numPathsPerTarget) {
 
 /**
  * Graph:
+ * 0 -> 1 -> 2 -> 3 -> 4
+ */
+TEST(PathSearchTest, maxDepthBlocksUnreachableTarget) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({});
+  expected.setNumColumns(4);
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 3};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+/**
+ * Graph:
+ * 0 -> 1 -> 2 -> 3 -> 4
+ */
+TEST(PathSearchTest, maxDepthZeroEmptyResult) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({});
+  expected.setNumColumns(4);
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(0), V(1)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 0};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+/**
+ * Graph:
+ * 0 -> 1 -> 2 -> 3 -> 4
+ */
+TEST(PathSearchTest, maxDepthAllowsReachableTarget) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0)},
+      {V(1), V(2), I(0), I(1)},
+  });
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(2)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 2};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+/**
+ * Graph:
  *  0       4
  *   \     /
  *    2-->3
