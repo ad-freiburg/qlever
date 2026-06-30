@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -190,15 +191,16 @@ class File {
     return sizeOfFile;
   }
 
-  // returns the byte offset of the last off_t
-  // the off_t itself is passed back by reference
-  off_t getLastOffset(off_t* lastOffset) {
-    assert(file_);
+  // Return the byte offset of the last offset and
+  // the offset itself.
+  std::pair<off_t, off_t> getLastOffset() {
+    AD_CONTRACT_CHECK(file_);
     // read the last off_t
     const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
-    read(lastOffset, sizeof(off_t), lastOffsetOffset);
+    off_t lastOffset;
+    read(&lastOffset, sizeof(off_t), lastOffsetOffset);
 
-    return lastOffsetOffset;
+    return {lastOffsetOffset, lastOffset};
   }
 };
 
