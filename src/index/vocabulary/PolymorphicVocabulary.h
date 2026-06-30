@@ -60,6 +60,11 @@ class PolymorphicVocabulary {
   // implementation according to the `type` without opening the vocabulary.
   void resetToType(VocabularyType type);
 
+  // Set the number of words per codebook on all underlying vocabularies that
+  // support it (the compressed vocabularies). For vocabularies that don't have
+  // codebooks this is a no-op.
+  void setNumWordsPerCodebook(size_t numWordsPerCodebook);
+
   // Same as the overload of `open` above, but expects that the correct
   // `VocabularyType` has already been set via `resetToType` above.
   void open(const std::string& filename);

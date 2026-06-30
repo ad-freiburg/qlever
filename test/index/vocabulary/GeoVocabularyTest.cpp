@@ -180,6 +180,21 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // _____________________________________________________________________________
+TEST(GeoVocabularyTest, SetNumWordsPerCodebook) {
+  // For a `GeoVocabulary` whose underlying literal vocabulary is a
+  // `CompressedVocabulary`, `setNumWordsPerCodebook` is forwarded to it.
+  using GV = GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
+  GV geoVocab;
+  geoVocab.setNumWordsPerCodebook(5);
+  EXPECT_EQ(geoVocab.getUnderlyingVocabulary().getNumWordsPerCodebook(), 5u);
+
+  // For an underlying vocabulary that has no codebooks, the call is a no-op
+  // (and must compile and not throw).
+  AnyGeoVocab nonCompressedGeoVocab;
+  EXPECT_NO_THROW(nonCompressedGeoVocab.setNumWordsPerCodebook(5));
+}
+
+// _____________________________________________________________________________
 TEST(GeoVocabularyTest, WordWriterDestructor) {
   const std::string lit =
       "\"LINESTRING(1 1, 2 2, 3 3)\""

@@ -59,6 +59,31 @@ TEST(PolymorphicVocabulary, basicTests) {
   ql::ranges::for_each(VocabularyType::all(), &testForVocabType);
 }
 
+// Test that `setNumWordsPerCodebook` is forwarded to the active underlying
+// vocabulary if it is a compressed one, and is a no-op otherwise.
+TEST(PolymorphicVocabulary, setNumWordsPerCodebook) {
+  PolymorphicVocabulary vocab;
+
+  // Compressed type: the value is forwarded to the underlying compressed
+  // vocabulary.
+  vocab.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
+  vocab.setNumWordsPerCodebook(13);
+  std::visit(
+      [](auto& v) {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (requires(T& vv) { vv.getNumWordsPerCodebook(); }) {
+          EXPECT_EQ(v.getNumWordsPerCodebook(), 13u);
+        } else {
+          FAIL();
+        }
+      },
+      vocab.getUnderlyingVocabulary());
+
+  // Uncompressed type: `setNumWordsPerCodebook` is a no-op (no codebooks).
+  vocab.resetToType(VocabularyType{VocabularyType::Enum::InMemoryUncompressed});
+  EXPECT_NO_THROW(vocab.setNumWordsPerCodebook(13));
+}
+
 // Test a corner case in a `switch` statement.
 TEST(PolymorphicVocabulary, invalidVocabularyType) {
   PolymorphicVocabulary vocab;

@@ -52,6 +52,18 @@ std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
 }
 
 // _____________________________________________________________________________
+void PolymorphicVocabulary::setNumWordsPerCodebook(size_t numWordsPerCodebook) {
+  std::visit(
+      [numWordsPerCodebook](auto& vocab) {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (SupportsNumWordsPerCodebook<T>) {
+          vocab.setNumWordsPerCodebook(numWordsPerCodebook);
+        }
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   // The names of the enum values are the same as the type aliases for the
