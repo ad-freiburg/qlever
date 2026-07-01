@@ -1513,7 +1513,8 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 // ____________________________________________________________________________
 ad_utility::HashSet<Id::T> CompressedRelationReader::computeUniqueGraphIds(
     const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle) const {
   ad_utility::HashSet<Id::T> graphIds;
   std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
   const auto scanConfig =
@@ -1528,6 +1529,7 @@ ad_utility::HashSet<Id::T> CompressedRelationReader::computeUniqueGraphIds(
         });
     if (shouldScan) {
       auto block = readAndDecompressBlock(metadata, scanConfig);
+      cancellationHandle->throwIfCancelled();
       AD_CORRECTNESS_CHECK(block.has_value());
       for (Id id : block->block_.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
         graphIds.insert(id.getBits());
