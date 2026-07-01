@@ -15,6 +15,7 @@
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
@@ -27,6 +28,21 @@ static constexpr std::string_view dummyTurtle = R"(
   <s1> <p2> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
   <s2> <p1> "xyz" .
   <s2> <p3> <http://example.com/> .
+)";
+
+static constexpr std::string_view cacheKeyRewriteDummyTurtle = R"(
+  @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+  <s1> <p1> "abc" .
+  <s1> <p3> "abc1" .
+  <s1> <p3> "abc2" .
+  <s1> <p3> "abc3" .
+  <s2> <p1> "xyz" .
+  <s1> <p2> "1"^^xsd:integer .
+  <s2> <p3> <s3> .
+  <s3> <p2> "7"^^xsd:integer .
+  <s2> <p3> <s4> .
+  <s3> <p2> "5"^^xsd:integer .
+  <s3> <p4> <http://example.com/> .
 )";
 
 // _____________________________________________________________________________
@@ -96,6 +112,11 @@ class MaterializedViewsTest : public ::testing::Test {
   }
 
   // ___________________________________________________________________________
+  std::shared_ptr<QueryExecutionContext> getQec() {
+    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+  }
+
+  // ___________________________________________________________________________
   void clearLog() { log_.str(""); }
 
   // Helper that evaluates a query on the test index and returns its result as
@@ -147,6 +168,14 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
 };
 
 // _____________________________________________________________________________
+class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
+ protected:
+  std::string getDummyTurtle() const override {
+    return std::string{cacheKeyRewriteDummyTurtle};
+  }
+};
+
+// _____________________________________________________________________________
 struct RewriteTestParams {
   // Query to write the test view.
   std::string writeQuery_;
@@ -188,6 +217,9 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
+  // For query planning to produce the expected results reliably, we need to
+  // clear the cache.
+  qlv.clearQueryResultCache();
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
   EXPECT_THAT(*qet, matcher);
 };
@@ -221,9 +253,11 @@ inline void expectNotSuitableForRewrite(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
-  auto view = manager.getView(viewName);
-  EXPECT_FALSE(qpc.analyzeView(view));
+  auto plan = qlv.parseAndPlanQuery(query);
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  manager.writeViewToDisk(viewName, plan);
+  auto view = manager.getView(viewName, qec);
+  EXPECT_FALSE(qpc.analyzeView(view, qec));
   manager.unloadViewIfLoaded(viewName);
 };
 

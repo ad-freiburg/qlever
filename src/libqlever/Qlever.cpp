@@ -69,7 +69,8 @@ Qlever::Qlever(const EngineConfig& config)
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      materializedViewsManager.loadView(viewName);
+      materializedViewsManager.loadView(
+          viewName, createQueryExecutionContext(indexAndViewsSnapshot()));
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -201,6 +202,9 @@ void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
 void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
 
 // _____________________________________________________________________________
+void Qlever::clearQueryResultCache() { cache_.clearAll(); }
+
+// _____________________________________________________________________________
 void Qlever::eraseResultWithName(std::string name) {
   namedResultCache_.erase(name);
 }
@@ -257,8 +261,14 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
+void Qlever::unloadMaterializedView(const std::string& name) const {
+  materializedViewsManager()->unloadViewIfLoaded(name);
+}
+
+// ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  materializedViewsManager()->loadView(name);
+  auto qec = createQueryExecutionContext(indexAndViewsSnapshot());
+  materializedViewsManager()->loadView(name, qec);
 }
 
 // ___________________________________________________________________________
