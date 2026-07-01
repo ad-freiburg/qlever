@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Mete tolga gonultas mg885@email.uni-freiburg.de, UFR
+// 2026 Mete Tolga Gonultas mg885@email.uni-freiburg.de, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <optional>
+
 #include "engine/Result.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
@@ -21,41 +22,45 @@
 #include "index/ScanSpecification.h"
 #include "util/HashSet.h"
 
-// Constructor needs qec and graph variable which isn't should be bound on the inner queries 
+// ____________________________________________________________________________
 DistinctGraphs::DistinctGraphs(QueryExecutionContext* qec,
                                Variable graphVariable)
     : Operation{qec}, graphVariable_{std::move(graphVariable)} {}
 
+// ____________________________________________________________________________
 std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
   return std::make_unique<DistinctGraphs>(_executionContext, graphVariable_);
 }
 
+// ____________________________________________________________________________
 VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
   return {{graphVariable_, makeAlwaysDefinedColumn(0)}};
 }
 
 /**
- * @brief Implements support for SPARQL queries of the form GRAPH ?g { ... } where ?g is an unbound variable.
- * * DistinctGraphs operation efficiently reads all distinct named graph IDs directly from 
- * the block metadata of the index, without a full table scan where possible.
- * * If distinct graph count <= MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA:
- * - Traverse through the graphInfo_;
+ * Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where ?g
+ * is an unbound variable.
+ * * DistinctGraphs operation efficiently reads all distinct named graph IDs
+ * directly from the block metadata of the index, without a full table scan
+ * where possible.
+ * * If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
+ * - Traverse through the `graphInfo_`;
  * - If a new graph Id is seen, decompress and read it to prove its existence.
  * Else:
  * - Decompress, read, and add all graph Ids to the result.
  *
- * Filters out the default graph IRI from the result when the treatDefaultGraphAsNamedGraph 
- * runtime parameter is off.
+ * Filters out the default graph IRI from the result when the
+ * `treatDefaultGraphAsNamedGraph` runtime parameter is off.
  *
- * @param requestLaziness If true, hints to the query engine that results can be evaluated lazily.
- * Currently marked as [[maybe_unused]].
+ * `requestLaziness` If true, hints to the query engine that results can be
+ * evaluated lazily. Currently marked as `[[maybe_unused]]`.
  *
- * @return A Result object containing a unique set of all matching named graph Ids.
+ * A Result object containing a unique set of all matching named graph Ids.
  */
+// ____________________________________________________________________________
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
       getIndex().getImpl().getPermutation(Permutation::Enum::SPO);
-  AD_LOG_DEBUG << "[DistinctGraphs::computeResult] before start of reader compute" << std::endl;
   const auto& reader = permutation.reader();
   ad_utility::HashSet<Id::T> graphIds =
       reader.computeUniqueGraphIds(permutation, locatedTriplesState());
@@ -72,8 +77,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
 
   IdTable idTable{1, getExecutionContext()->getAllocator()};
   idTable.resize(graphIds.size());
-  ql::ranges::transform(graphIds, idTable.getColumn(0).begin(),
-                        Id::fromBits);
+  ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBits);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
