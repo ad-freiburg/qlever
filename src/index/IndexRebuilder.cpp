@@ -175,22 +175,30 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
            insertionPositions[candidate] > value;
   };
 
-  // Check if the cached hint is still the upper_bound for `value`.
-  if (isUpperBound(hint)) [[likely]] {
-    if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
-      return applyOffset(value, hint);
+  // Update `hint` to the correct upper bound for `value`. Avoid writing `hint`
+  // in cases where that's not necessary.
+  [&hint, &isUpperBound, &value, &insertionPositions]() {
+    // Check if the cached hint is still the upper bound for `value`.
+    if (isUpperBound(hint)) [[likely]] {
+      // `hint` is an upper bound, so check if `hint - 1` is not an upper bound.
+      if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+        // `hint` still is the correct upper bound, so there is nothing to do.
+        return;
+      }
+    } else {
+      // Check if `hint + 1` is an upper bound. This is the case when we just
+      // move the hint forward by one position.
+      size_t next = hint + 1;
+      if (isUpperBound(next)) [[likely]] {
+        hint = next;
+        return;
+      }
     }
-  } else {
-    // Try the next index if we're no longer the upper bound.
-    size_t next = hint + 1;
-    if (isUpperBound(next)) [[likely]] {
-      hint = next;
-      return applyOffset(value, hint);
-    }
-  }
 
-  // Fallback and write the hint for the next iteration.
-  hint = computeIndexOffset(value, insertionPositions);
+    // Fallback and write the hint for the next iteration.
+    hint = computeIndexOffset(value, insertionPositions);
+  }();
+
   return applyOffset(value, hint);
 }
 
