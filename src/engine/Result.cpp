@@ -447,3 +447,27 @@ void Result::logResultSize() const {
     AD_LOG_INFO << "Result has unknown size (not computed yet)" << std::endl;
   }
 }
+
+// _____________________________________________________________________________
+// TODO 'using ...' for the awful typename?
+std::optional<std::array<std::array<int, static_cast<int>(Datatype::MaxValue) + 1>, IdTable::numStaticColumns>> Result::getStatistics() {
+  
+  if (!isFullyMaterialized()){
+    return std::nullopt;
+  }
+
+  const auto& table = std::get<IdTableSharedLocalVocabPair>(data_).idTable();
+  std::array<std::array<
+	  int, static_cast<int>(Datatype::MaxValue) + 1>, IdTable::numStaticColumns> counts{};
+  int columnIndex = 0;
+  for (const auto& column : table.getColumns()) {
+    // assumes columns are iterable like that
+    for (const ValueId& val : column)
+    {
+      counts[columnIndex][static_cast<int>(val.getDatatype())]++;
+    }
+    ++columnIndex;
+  }
+  return counts;
+}
+
