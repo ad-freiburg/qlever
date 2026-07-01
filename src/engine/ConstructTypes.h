@@ -16,6 +16,9 @@
 #include <variant>
 #include <vector>
 
+#include "global/ValueId.h"
+#include "index/LocalVocab.h"
+
 namespace qlever::constructExport {
 
 // Canonical representation of a resolved RDF term stored in the LRU cache.
@@ -36,6 +39,10 @@ namespace qlever::constructExport {
 struct EvaluatedTermData {
   std::string rdfTermString_;
   const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
+
+  EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
+      : rdfTermString_{std::move(rdfTermString)},
+        rdfTermDataType_{rdfTermDataType} {}
 };
 
 // Shared ownership of `EvaluatedTermData`. The shared_ptr allows cheap copying
@@ -47,6 +54,11 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
+  // The `ValueId` for this constant, used as its component of the full-triple
+  // deduplication key (`global` mode). Resolved once at preprocessing time by
+  // `ConstructTemplatePreprocessor` (see `resolveConstantDedupId`).
+  // Set to default undefined value here.
+  ValueId dedupId_ = ValueId::makeUndefined();
 };
 
 // After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
@@ -79,6 +91,14 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 // A single preprocessed CONSTRUCT template triple.
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
+// Result of instantiating a single template triple for a specific result table
+// row.
+struct EvaluatedTriple {
+  EvaluatedTerm subject_;
+  EvaluatedTerm predicate_;
+  EvaluatedTerm object_;
+};
+
 // Result of preprocessing all CONSTRUCT template triples. Contains the
 // preprocessed triples and the unique variable column indices (indices into the
 // `IdTable` that the variables in the construct template correspond to).
@@ -87,14 +107,22 @@ struct PreprocessedConstructTemplate {
   // The dedupicated set of `IdTable` column indices that appear in the template
   // triples, in order of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
-};
-
-// Result of instantiating a single template triple for a specific result table
-// row.
-struct EvaluatedTriple {
-  EvaluatedTerm subject_;
-  EvaluatedTerm predicate_;
-  EvaluatedTerm object_;
+  // index i contains the variables (identified by their column index in the
+  // `IdTable`) that are contained in template triple at index i.
+  std::vector<std::vector<size_t>> variableColumnsPerTriple_;
+  // For each template triple at index i, this flag is true if the triple
+  // contains at least one blank node term (either a user-defined blank-node
+  // term like `_:a` or an anonymous blank node `[]`).
+  std::vector<bool> tripleContainsBlankNode_;
+  // Ground (fully constant) template triples, pre-instantiated once at
+  // preprocessing time.
+  std::vector<EvaluatedTriple> groundTriples_;
+  // Owns the `LocalVocabEntry`s created while resolving literal (and
+  // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
+  // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
+  // entry living in this vocab, so the `LocalVocab` must outlive every use of
+  // those ids. Kept here so the lifetime is tied to the preprocessed template.
+  LocalVocab localVocabForConstants_;
 };
 
 }  // namespace qlever::constructExport

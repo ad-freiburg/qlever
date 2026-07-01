@@ -70,8 +70,11 @@ std::optional<std::string> evaluate(
   using namespace qlever::constructExport;
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
+  // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
+  LocalVocab localVocabForConstants;
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
-      term, position, exportCtx._variableColumns);
+      term, position, exportCtx._variableColumns, exportCtx._qecIndex,
+      localVocabForConstants);
   if (!preprocessed) return std::nullopt;
 
   BatchEvaluationResult batchResult;
@@ -244,14 +247,14 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Literal literal{"some literal"};
+  Literal literal{"\"some literal\""};
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   EXPECT_EQ(evaluate(literal, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{literal}, context, SUBJECT), std::nullopt);
 
-  auto expectedString = Optional("some literal"s);
+  auto expectedString = Optional("\"some literal\""s);
 
   EXPECT_THAT(evaluate(literal, context, OBJECT), expectedString);
   EXPECT_THAT(evaluate(GraphTerm{literal}, context, OBJECT), expectedString);
