@@ -31,16 +31,12 @@ class UnicodeVocabulary {
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
-  // Look up multiple words by index in a single batch call. Uses the generic
-  // sequential fallback (see `VocabularyTypes.h`).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    return _underlyingVocabulary.lookupBatch(indices);
   }
 
-  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    return ad_utility::vocabulary::sequentialLookupBatchesStreamed(
-        *this, std::move(input));
+    return _underlyingVocabulary.lookupBatchesStreamed(std::move(input));
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
