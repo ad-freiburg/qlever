@@ -249,7 +249,7 @@ TEST(ServerTest, createResponseMetadata) {
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
+  const qlever::PlannedQuery plannedQuery{std::move(pq), qet, *qec};
 
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
@@ -296,13 +296,13 @@ TEST(ServerTest, createResponseMetadata) {
 // _____________________________________________________________________________
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
+  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     auto* qec = ad_utility::testing::getQec();
     QueryExecutionTree qet =
         QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
             .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet), *qec};
+    return {std::move(parsed), qet, *qec};
   };
   auto expectExportLimit =
       [&makePlannedQuery](
