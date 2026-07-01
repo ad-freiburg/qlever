@@ -328,6 +328,25 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
+    # With LTO, GCC raises false positives that surface during the link-time
+    # optimization (`lto1`) phase and therefore cannot be suppressed via the
+    # in-source pragmas in CompilerWarnings.h. They all originate in inlined
+    # third-party code (abseil, s2) that is only stitched together during
+    # whole-program optimization:
+    #  * `stringop-overflow` while optimizing abseil's own translation units
+    #    (e.g. `str_cat.cc` inlined into `flag.cc`).
+    #  * `odr` on compiler-generated coroutine frame types (the `.Frame` structs
+    #    synthesized for `cppcoro::generator` and boost.asio awaitables): the
+    #    synthetic frame fields get different internal names across translation
+    #    units, which GCC misreports as an ODR violation.
+    #  * `maybe-uninitialized` in abseil's `inlined_vector` when inlined through
+    #    s2's `s2closest_point_query_base.h`.
+    #  * `stringop-overread` in s2's `compact_array.h` / `mutable_s2shape_index`.
+    # These are all emitted in the whole-program/`lto1` phase, where the
+    # governing warning flags are read from the link command line, so they are
+    # disabled via the link options (a compile-time suppression would not apply).
+    add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
+            -Wno-stringop-overread)
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
@@ -354,6 +373,26 @@ if (${ALLOW_SHUTDOWN})
 endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+
+# LTO noticeably increases build time, so it is off by default (e.g. for CI and
+# local builds). It is opted into explicitly for the published Docker image
+# built on `master` (see `Dockerfile` / `.github/workflows/docker-publish.yml`).
+option(ENABLE_LTO "Enable link-time optimization" OFF)
+if (ENABLE_LTO)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
+        # ordinary machine code. This lets the (non-shipped) test binaries link
+        # the shared libraries *without* LTO (via `-fno-lto`, see
+        # `test/CMakeLists.txt`): they reuse the embedded machine code instead of
+        # triggering an expensive whole-program optimization at link time, while
+        # the product binaries still link with `-flto` and get full LTO.
+        add_compile_options(-flto=auto -ffat-lto-objects)
+        add_link_options(-flto=auto)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        add_compile_options(-flto=thin -ffat-lto-objects)
+        add_link_options(-flto=thin)
+    endif()
+endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")

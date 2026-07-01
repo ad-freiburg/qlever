@@ -1,5 +1,17 @@
 include(GoogleTest)
 
+# The test binaries are not shipped, so there is no point in paying the (large)
+# cost of link-time optimizing them. When `ENABLE_LTO` is on, the shared
+# libraries are compiled with `-ffat-lto-objects` (see the top-level
+# `CMakeLists.txt`), so disabling LTO here via `-fno-lto` makes the test
+# binaries link against the embedded machine code instead of triggering a
+# whole-program optimization at link time. This must be set before any test
+# targets (including `testUtil` below) are created so that it applies to them.
+if (ENABLE_LTO)
+    add_compile_options(-fno-lto)
+    add_link_options(-fno-lto)
+endif()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
