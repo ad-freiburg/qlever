@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -103,6 +104,63 @@ struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 // allocations. Exposed as a `VocabBatchLookupResult` via `asResult()`.
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
 struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
+
+// Generic sequential fallback implementations of the batch-lookup interface,
+// used by all vocabularies that do not provide a specialized (e.g. io_uring)
+// implementation. They simply loop over the indices and issue the ordinary
+// single-word `operator[]` lookups one after another.
+namespace ad_utility::vocabulary {
+
+// Sequential fallback for `lookupBatch`: look up each index individually via
+// `vocab[idx]` and materialize the words back-to-back into a single contiguous
+// buffer, returning one `string_view` per index into that buffer. Works for any
+// vocabulary whose `operator[]` yields something convertible to `std::string`.
+template <typename Vocab>
+VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
+                                             ql::span<const size_t> indices) {
+  AD_CONTRACT_CHECK(!indices.empty());
+  // Materialize the words first: their sizes are not known up front and
+  // `operator[]` may return an owning `std::string`. Only afterward do we know
+  // the total size and can copy them into one buffer that will not be
+  // reallocated, so the resulting `string_view`s stay valid.
+  std::vector<std::string> words;
+  words.reserve(indices.size());
+  size_t totalSize = 0;
+  for (size_t idx : indices) {
+    words.emplace_back(vocab[idx]);
+    totalSize += words.back().size();
+  }
+
+  auto data = std::make_shared<VocabBatchLookupData>();
+  data->buffer().resize(totalSize);
+  data->views().resize(indices.size());
+  size_t offset = 0;
+  for (size_t i = 0; i < words.size(); ++i) {
+    char* dest = data->buffer().data() + offset;
+    std::memcpy(dest, words[i].data(), words[i].size());
+    data->views()[i] = std::string_view(dest, words[i].size());
+    offset += words[i].size();
+  }
+  return VocabBatchLookupData::asResult(std::move(data));
+}
+
+// Sequential fallback for `lookupBatchesStreamed`: lazily apply
+// `sequentialLookupBatch` to each batch of the (type-erased) input range. The
+// referenced `vocab` must outlive the returned range.
+template <typename Vocab>
+VocabLookupOutput sequentialLookupBatchesStreamed(const Vocab& vocab,
+                                                  VocabLookupInput input) {
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
+      [&vocab, input = std::move(
+                   input)]() mutable -> std::optional<VocabBatchLookupResult> {
+        if (auto batch = input.get()) {
+          return sequentialLookupBatch(vocab, *batch);
+        }
+        return std::nullopt;
+      })};
+}
+
+}  // namespace ad_utility::vocabulary
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`

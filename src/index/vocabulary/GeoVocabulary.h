@@ -70,6 +70,18 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
+  // Look up multiple words by index in a single batch call. Uses the generic
+  // sequential fallback (see `VocabularyTypes.h`).
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::sequentialLookupBatchesStreamed(
+        *this, std::move(input));
+  }
+
   // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 
