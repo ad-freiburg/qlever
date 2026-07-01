@@ -157,3 +157,99 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
   TextVocabulary v4;
   ASSERT_FALSE(v4.isGeoInfoAvailable());
 }
+
+// _____________________________________________________________________________
+TEST(VocabularyTest, LookupBatch) {
+  using ad_utility::VocabularyType;
+  RdfsVocabulary v;
+  v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
+  ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
+  auto filename = "vocTestLookupBatch.dat";
+  v.createFromSet(s, filename);
+
+  // Sorted order: a=0, ab=1, ba=2, car=3. Look up in shuffled order.
+  std::vector<size_t> indices{2, 0, 3, 1};
+  auto result = v.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 4);
+  EXPECT_EQ((*result)[0], "ba");
+  EXPECT_EQ((*result)[1], "a");
+  EXPECT_EQ((*result)[2], "car");
+  EXPECT_EQ((*result)[3], "ab");
+
+  // Each batch result must match the single-index `operator[]`.
+  for (size_t i = 0; i < indices.size(); ++i) {
+    EXPECT_EQ((*result)[i], v[VocabIndex::make(indices[i])]);
+  }
+
+  // An empty batch is an invalid request and must throw.
+  EXPECT_ANY_THROW(v.lookupBatch(ql::span<const size_t>{}));
+
+  // Duplicate indices: each position resolved independently.
+  std::vector<size_t> dup{1, 1, 0};
+  auto dupResult = v.lookupBatch(dup);
+  ASSERT_EQ(dupResult->size(), 3);
+  EXPECT_EQ((*dupResult)[0], "ab");
+  EXPECT_EQ((*dupResult)[1], "ab");
+  EXPECT_EQ((*dupResult)[2], "a");
+
+  ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTest, LookupBatchesStreamed) {
+  using ad_utility::VocabularyType;
+  RdfsVocabulary v;
+  v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
+  ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
+  auto filename = "vocTestLookupBatchesStreamed.dat";
+  v.createFromSet(s, filename);
+
+  // Two batches: mixed and single.
+  std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
+  auto streamed = v.lookupBatchesStreamed(VocabLookupInput{batches});
+
+  std::vector<VocabBatchLookupResult> results;
+  for (auto& r : streamed) {
+    results.push_back(std::move(r));
+  }
+  ASSERT_EQ(results.size(), 2);
+
+  // Each streamed result must match the eager `lookupBatch`.
+  auto expectedMatchesEager = [&v](const VocabBatchLookupResult& actual,
+                                   ql::span<const size_t> batchIndices) {
+    auto expected = v.lookupBatch(batchIndices);
+    ASSERT_EQ(actual->size(), expected->size());
+    for (size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*actual)[i], (*expected)[i]);
+    }
+  };
+  expectedMatchesEager(results[0], batches[0]);
+  expectedMatchesEager(results[1], batches[1]);
+
+  // Exact contents
+  ASSERT_EQ(results[0]->size(), 2);
+  EXPECT_EQ((*results[0])[0], "ba");
+  EXPECT_EQ((*results[0])[1], "a");
+  ASSERT_EQ(results[1]->size(), 1);
+  EXPECT_EQ((*results[1])[0], "car");
+
+  // An empty batch within the stream is invalid and must throw when pulled.
+  std::vector<std::vector<size_t>> batchesWithEmpty{{2, 0}, {}, {3}};
+  auto streamedWithEmpty =
+      v.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
+  EXPECT_ANY_THROW({
+    for ([[maybe_unused]] auto& r : streamedWithEmpty) {
+    }
+  });
+
+  // Empty input stream -> no results.
+  std::vector<std::vector<size_t>> noBatches;
+  auto empty = v.lookupBatchesStreamed(VocabLookupInput{noBatches});
+  size_t count = 0;
+  for ([[maybe_unused]] auto& r : empty) {
+    ++count;
+  }
+  EXPECT_EQ(count, 0);
+
+  ad_utility::deleteFile(filename);
+}
