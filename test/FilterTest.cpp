@@ -132,7 +132,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   ASSERT_TRUE(result->isFullyMaterialized());
 
   EXPECT_EQ(
-      result->idTable(),
+      result->idTableView(),
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }
 
@@ -163,7 +163,7 @@ TEST(Filter,
   ASSERT_TRUE(result->isFullyMaterialized());
 
   EXPECT_EQ(
-      result->idTable(),
+      result->idTableView(),
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }
 
@@ -241,7 +241,7 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
 
-  EXPECT_EQ(result->idTable(),
+  EXPECT_EQ(result->idTableView(),
             makeIdTableFromVector({{5}, {6}, {7}, {8}, {8}}, I));
 }
 
