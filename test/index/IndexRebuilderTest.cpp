@@ -575,6 +575,9 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 namespace {
 // Get rid of previous files with the specified prefix.
 void cleanFilesWithPrefix(std::string_view prefix) {
+  AD_CONTRACT_CHECK(!prefix.empty(),
+                    "This function is not meant to delete all files in the "
+                    "current directory. Please specify a prefix.");
   namespace fs = std::filesystem;
   // Collect the matching entries first and delete them only afterwards.
   // Deleting entries while iterating the directory is unspecified behavior and
@@ -587,7 +590,7 @@ void cleanFilesWithPrefix(std::string_view prefix) {
                                                prefix);
                       });
   AD_CONTRACT_CHECK(ql::ranges::all_of(
-      toDelete, static_cast<bool (*)(const fs::path&)>(&fs::is_regular_file)));
+      toDelete, [](const auto& entry) { return entry.is_regular_file(); }));
   for (const auto& entry : toDelete) {
     ad_utility::deleteFile(entry.path());
   }
