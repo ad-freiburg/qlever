@@ -482,6 +482,11 @@ bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
 }
 
 // _____________________________________________________________________________
+bool MaterializedViewsManager::hasLoadedViews() const {
+  return !loadedViews_.rlock()->views_.empty();
+}
+
+// _____________________________________________________________________________
 void MaterializedView::throwIfScanColumnMissing(
     const std::optional<TripleComponent>& s) const {
   // The scan column must be set.

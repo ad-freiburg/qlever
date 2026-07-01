@@ -135,6 +135,8 @@ class Server {
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
 
+  std::string originalBasename_;
+
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 

@@ -62,6 +62,12 @@ Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
       queryThreadPool_{numThreads} {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
+  // Remember the base name of the initially loaded index. A later index rebuild
+  // requires the new index to live in the same directory (see `rebuildIndex`).
+  // The actual index loading (including preloading of materialized views) is
+  // performed by the `Qlever` instance `qlever_`.
+  originalBasename_ = config.baseName_;
+
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
@@ -1488,15 +1494,13 @@ void Server::writeMaterializedView(
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
-  auto indexAndViews = indexAndViewsSnapshot();
-  auto& index = indexAndViews->index_;
   if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because there are already files with the same base name "
         "in the same directory")};
   }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, index.getOnDiskBase())) {
+  if (!qlever::util::isSubdirectoryOf(indexBaseName, originalBasename_)) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because it is not located in the same directory as the "
@@ -1504,21 +1508,80 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   }
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto& [index, oldManager] = *indexAndViews;
+  // Warn if state that won't carry over to the rebuilt index was previously
+  // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
+  // with a fresh, empty `MaterializedViewsManager`.
+  if (index.getNofTextRecords() > 0) {
+    AD_LOG_WARN << "A text index was loaded for the current index, but text "
+                   "search will no longer work after the rebuild completes. "
+                   "Restart the server using the original index to re-enable "
+                   "text search."
+                << std::endl;
+  }
+  if (oldManager.hasLoadedViews()) {
+    AD_LOG_WARN << "Materialized views were loaded for the current index, but "
+                   "they will no longer be available after the rebuild "
+                   "completes. Restart the server using the original index to "
+                   "reload them."
+                << std::endl;
+  }
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [&index, &handle, &indexBaseName] {
+      [this, &index, &handle, &indexBaseName]()
+          -> std::tuple<LocatedTriplesSharedState,
+                        qlever::indexRebuilder::IndexRebuildMapping,
+                        SharedIndexAndView> {
         auto logFileName = indexBaseName + ".rebuild-index-log.txt";
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
             index.deltaTriplesManager()
                 .getCurrentLocatedTriplesSharedStateWithVocab();
-        qlever::materializeToIndex(index.getImpl(), indexBaseName,
-                                   currentSnapshot, localVocabCopy, ownedBlocks,
-                                   handle, logFileName);
+        auto mapping = qlever::materializeToIndex(
+            index, indexBaseName, currentSnapshot, localVocabCopy, ownedBlocks,
+            handle, logFileName);
+        auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
+            Index{allocator()}, MaterializedViewsManager{});
+        auto& [newIndex, newManager] = *indexAndViews;
+        newIndex.usePatterns() = index.usePatterns();
+        newIndex.loadAllPermutations() = index.loadAllPermutations();
+        newIndex.createFromOnDiskIndex(indexBaseName,
+                                       index.deltaTriplesManager().persists());
+        newManager.setOnDiskBase(indexBaseName);
+        return {std::move(currentSnapshot), std::move(mapping),
+                std::move(indexAndViews)};
       },
       handle);
-  co_await std::move(coroutine);
+  auto [oldSnapshot, mapping, newIndexAndViews] = co_await std::move(coroutine);
+  auto swapRoutine = computeInNewThread(
+      updateThreadPool_,
+      [this, &oldIndex = index, newIndexAndViews = std::move(newIndexAndViews),
+       &handle, oldSnapshot = std::move(oldSnapshot),
+       mapping = std::move(mapping)]() mutable {
+        auto newSnapshot = oldIndex.deltaTriplesManager()
+                               .getCurrentLocatedTriplesSharedState();
+
+        // Calling this function also persists the remapped delta triples to
+        // disk so that they are not lost if the engine is later restarted on
+        // the rebuilt index. The triples that were persisted for the old index
+        // are not compatible with the freshly built index (their `Id`s refer to
+        // the old vocabulary), so they have to be regenerated.
+        newIndexAndViews->index_.deltaTriplesManager().modify<void>(
+            [&oldSnapshot, &newSnapshot, &mapping,
+             &handle](DeltaTriples& deltaTriples) {
+              ad_utility::timer::TimeTracer tracer{"swapIndex"};
+              deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot,
+                                               mapping, handle, tracer);
+            },
+            true);
+        // TODO<RobinTF> add this function
+        // oldIndex->removeOnDestruction();
+        qlever().swapIndexAndViews(std::move(newIndexAndViews));
+      },
+      handle);
+  co_await std::move(swapRoutine);
 }
 
 // For helper function `Server::onlyForTestingProcess`
