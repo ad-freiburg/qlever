@@ -7,6 +7,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -38,7 +39,7 @@ class UnicodeVocabulary {
   /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
-  /// `UnicodeComparator::SortKey`
+  /// a UTF-8 string.
   template <typename T>
   WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
@@ -52,7 +53,7 @@ class UnicodeVocabulary {
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
-  /// `UnicodeComparator::SortKey`
+  /// a UTF-8 string.
   template <typename T>
   WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
@@ -85,8 +86,6 @@ class UnicodeVocabulary {
   /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
   /// A value of `nullopt` in the entries means "the bound is higher than the
   /// largest word in the vocabulary".
-  /// TODO<joka921> Also support other levels, but this requires intrusive
-  /// hacking of ICU's SortKeys.
   [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
   prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {
@@ -94,10 +93,20 @@ class UnicodeVocabulary {
     }
 
     auto lb = lower_bound(prefix, SortLevel::PRIMARY);
-    auto transformed = _comparator.transformToFirstPossibleBiggerValue(
-        prefix, SortLevel::PRIMARY);
 
-    auto ub = lower_bound(transformed, SortLevel::PRIMARY);
+    const auto& locManager = _comparator.getLocaleManager();
+    size_t numPrimaryElements =
+        locManager.countPrimaryCollationElements(prefix);
+    auto truncate = [&locManager, numPrimaryElements](std::string_view s) {
+      return s.substr(
+          0, locManager.primaryCollationPrefixLength(s, numPrimaryElements));
+    };
+    auto truncatedComp = [this, &truncate](std::string_view a,
+                                           std::string_view b) {
+      AD_EXPENSIVE_CHECK(a == truncate(a));
+      return _comparator(a, truncate(b), SortLevel::PRIMARY);
+    };
+    auto ub = _underlyingVocabulary.upper_bound(prefix, truncatedComp);
 
     auto toOptionalIndex = [](const WordAndIndex& wi) {
       return wi.isEnd() ? std::nullopt : std::optional{wi.index()};
