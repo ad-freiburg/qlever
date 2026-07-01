@@ -1411,30 +1411,24 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 
 // ____________________________________________________________________________
 ad_utility::HashSet<Id::T> CompressedRelationReader::computeUniqueGraphIds(
-    const Permutation& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   ad_utility::HashSet<Id::T> graphIds;
   std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-  const LocatedTriplesPerBlock& ltpb =
-      permutation.getLocatedTriplesForPermutation(locatedTriplesState);
-  const auto scanConfig = CompressedRelationReader::getScanConfig(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
-      additionalColumns, ltpb);
-
-  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
-  ScanSpecAndBlocks scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
-      locatedTriplesState);
+  const auto scanConfig =
+      getScanConfig(ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+                    additionalColumns, locatedTriplesPerBlock);
 
   for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()) {
-    bool hasNewGraphId = ql::ranges::any_of(
-        metadata.graphInfo_.value(),
-        [&graphIds](Id id) { return !graphIds.contains(id.getBits()); });
-    bool shouldScan = !metadata.graphInfo_ || hasNewGraphId;
+    bool shouldScan =
+        !metadata.graphInfo_.has_value() ||
+        ql::ranges::any_of(metadata.graphInfo_.value(), [&graphIds](Id id) {
+          return !graphIds.contains(id.getBits());
+        });
     if (shouldScan) {
-      auto block = this->readAndDecompressBlock(metadata, scanConfig);
+      auto block = readAndDecompressBlock(metadata, scanConfig);
       AD_CORRECTNESS_CHECK(block.has_value());
-      for (Id id : block->block_.getColumn(3)) {
+      for (Id id : block->block_.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
         graphIds.insert(id.getBits());
       }
     }
