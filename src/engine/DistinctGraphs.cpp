@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Mete Tolga Gonultas mg885@email.uni-freiburg.de, UFR
+// 2026 Mete Tolga Gonultas <mg885@email.uni-freiburg.de>, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -61,9 +61,13 @@ VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
       getIndex().getImpl().getPermutation(Permutation::Enum::SPO);
-  const auto& reader = permutation.reader();
+  const LocatedTriplesPerBlock& ltpb =
+      permutation.getLocatedTriplesForPermutation(locatedTriplesState());
+  auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      locatedTriplesState());
   ad_utility::HashSet<Id::T> graphIds =
-      reader.computeUniqueGraphIds(permutation, locatedTriplesState());
+      permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb);
 
   auto treatDefaultGraphAsNamedGraph =
       getRuntimeParameter<&RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
