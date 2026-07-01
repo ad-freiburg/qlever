@@ -16,12 +16,9 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
-#include <type_traits>
-#include <utility>
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -34,8 +31,8 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
-#include "engine/ExternalValues.h"
 #include "engine/DistinctGraphs.h"
+#include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -80,7 +77,6 @@
 #include "rdfTypes/Variable.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
-#include "util/Log.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -3177,8 +3173,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
             innerCand = makeSubtreePlan<CartesianProductJoin>(
                 planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
                                    graphsCand._qet, innerCand._qet});
-          } 
-          // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g { <doesnotexist> } } } are not correctly handled.
+          }
+          // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
+          // { <doesnotexist> } } } are not correctly handled.
         }
       }
     }
