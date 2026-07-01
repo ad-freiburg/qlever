@@ -949,13 +949,12 @@ RdfStreamParser<T>::backupState() const {
   return b;
 }
 
-// _______________________________________________________________
+// ____________________________________________________________________________
 template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
-  AD_CORRECTNESS_CHECK(fileBuffer_);
-  auto nextBytesOpt = fileBuffer_->getNextBlock();
+  auto nextBytesOpt = driver_.value().getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
     // do not alter any internal state.
@@ -970,7 +969,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
   this->triples_.resize(b.numTriples_);
   this->tok_.reset(b.tokenizerPosition_, b.tokenizerSize_);
 
-  ParallelBuffer::BufferType buf;
+  qlever::parser::ByteBlock buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
@@ -991,7 +990,8 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
+void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
+                                    ad_utility::MemorySize blocksize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
@@ -1004,10 +1004,9 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // The reason is that with a `.` at the end, we cannot decide whether we are
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "([\\r\\n]+)");
+  driver_.emplace(spec, blocksize, "([\\r\\n]+)");
   // Read the first block and initialize the tokenizer.
-  if (auto res = fileBuffer_->getNextBlock(); res) {
+  if (auto res = driver_.value().getNextBlock(); res.has_value()) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
   } else {
@@ -1170,7 +1169,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        auto nextOptional = fileBuffer_->getNextBlock();
+        auto nextOptional = driver_.value().getNextBlock();
         if (!nextOptional) {
           return;
         }
@@ -1200,14 +1199,14 @@ void RdfParallelParser<T>::feedBatchesToParser(
 // _______________________________________________________________________
 template <typename T>
 void RdfParallelParser<T>::initialize(
-    std::unique_ptr<ParallelBuffer> rawBuffer) {
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
-  ParallelBuffer::BufferType remainingBatchFromInitialization;
+    const qlever::InputFileSpecification& spec,
+    ad_utility::MemorySize blocksize) {
+  driver_.emplace(spec, blocksize, "\\.[\\t ]*([\\r\\n]+)");
+  qlever::parser::ByteBlock remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = fileBuffer_->getNextBlock()) {
+    if (auto batch = driver_.value().getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
@@ -1324,8 +1323,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(
-            input.getParallelBuffer(bufferSize.getBytes()), ev, graph());
+        return std::make_unique<Parser>(input, bufferSize, ev, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
