@@ -49,6 +49,18 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
+  // Look up multiple words by index in a single batch call. Uses the generic
+  // sequential fallback (see `VocabularyTypes.h`).
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::sequentialLookupBatchesStreamed(
+        *this, std::move(input));
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in
