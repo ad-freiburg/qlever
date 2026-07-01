@@ -24,6 +24,7 @@
 #include "parser/TripleComponent.h"
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Timer.h"
 
 using std::string;
 using namespace std::literals;
@@ -894,9 +895,7 @@ std::vector<TurtleTriple> parseFromFile(
                     encodedIriManager(),
                     bufferSize};
     } else {
-      return Parser{
-          std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
-          encodedIriManager()};
+      return Parser{bufferSize.getBytes(), filename, encodedIriManager()};
     }
   }();
 
@@ -1249,9 +1248,8 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
                         encodedIriManager(),
                         40_B};
         } else {
-          return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
-                        encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
+          return Parser{40, filename, encodedIriManager(),
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI)};
         }
       }();
       timer.cont();
@@ -1704,8 +1702,7 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
-                encodedIriManager()};
+  Parser parser{50, filename, encodedIriManager()};
 
   TurtleTriple triple;
   EXPECT_THROW(parser.getLine(triple), TurtleParser<Tokenizer>::ParseException);
@@ -1746,8 +1743,7 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
-                encodedIriManager()};
+  Parser parser{50, filename, encodedIriManager()};
 
   TurtleTriple triple;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1784,9 +1780,7 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
   }};
   ad_utility::setGlobalLoggingStream(&logStream);
 
-  Parser parser{
-      std::make_unique<ParallelFileBuffer>((2_kB).getBytes(), filename),
-      encodedIriManager()};
+  Parser parser{(2_kB).getBytes(), filename, encodedIriManager()};
   TurtleTriple triple;
   ASSERT_TRUE(parser.getLine(triple));
   EXPECT_EQ(triple.subject_, iri("<a>"));
