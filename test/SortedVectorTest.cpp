@@ -349,6 +349,8 @@ TEST(SortedVectorTest, erase) {
     SV s = SV::fromSorted({p10, p20, p30, p40});
     s.erase(p20);
     EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p40));
+    s.erase(p20);
+    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p40));
     s.erase(p40);
     EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30));
     s.erase(p10);
