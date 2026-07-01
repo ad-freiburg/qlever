@@ -76,7 +76,7 @@ TEST(NamedResultCache, basicWorkflow) {
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
     auto op = cache.getOperation("query-1", qec);
-    EXPECT_THAT(op->computeResultOnlyForTesting().idTable(),
+    EXPECT_THAT(op->computeResultOnlyForTesting().idTableView(),
                 matchesIdTable(table2));
   }
 
@@ -139,7 +139,7 @@ TEST(NamedResultCache, E2E) {
           "<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
-  EXPECT_THAT(result->idTable(), matchesIdTable(expected));
+  EXPECT_THAT(result->idTableView(), matchesIdTable(expected));
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));

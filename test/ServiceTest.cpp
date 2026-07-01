@@ -319,8 +319,8 @@ TEST_F(ServiceTest, computeResult) {
         getResultFunctionFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
-            std::make_exception_ptr(
-                ad_utility::CancellationException("Mock Cancellation")))};
+            std::make_exception_ptr(ad_utility::CancellationException(
+                ad_utility::CancellationState::MANUAL, "Mock Cancellation")))};
 
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         serviceSilent.computeResultOnlyForTesting(),
@@ -360,7 +360,7 @@ TEST_F(ServiceTest, computeResult) {
     // value -> undefined value
     auto result3 = runComputeResult(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-    EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
+    EXPECT_TRUE(result3.idTableView()(1, 1).isUndefined());
 
     testQec->clearCacheUnpinnedOnly();
 
@@ -398,7 +398,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check that the result table corresponds to the contents of the JSON.
     IdTable expectedIdTable = makeIdTableFromVector(
         {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-    EXPECT_EQ(result.idTable(), expectedIdTable);
+    EXPECT_EQ(result.idTableView(), expectedIdTable);
 
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
@@ -820,7 +820,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
       Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+        return Result(Result::IdTableVocabPair(res.cloneIdTable(),
                                                res.localVocab().clone()),
                       res.sortedBy());
       }
@@ -835,7 +835,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   co_yield pair;
                   idt.clear();
                 }
-              }(res.idTable().clone()),
+              }(res.cloneIdTable()),
               res.sortedBy()};
     }
   };

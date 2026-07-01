@@ -128,7 +128,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // no column.
     return {Result::LazyResult{
                 ad_utility::OwningView{leftRes->idTables()} |
-                ql::views::transform([exists = !rightRes->idTable().empty(),
+                ql::views::transform([exists = !rightRes->idTableView().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -145,8 +145,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
                           requestLaziness);
   }
-  const auto& right = rightRes->idTable();
-  const auto& left = leftRes->idTable();
+  const auto& right = rightRes->idTableView();
+  const auto& left = leftRes->idTableView();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
   // callbacks: one for each matching pair of rows from `left` and `right`, and
@@ -254,6 +254,26 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
+    // Nudge the query planner into producing a tree that is already sorted
+    // the way `QueryExecutionTree::getJoinColumns` expects, so that
+    // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
+    pq._isInternalSort = IsInternalSort::True;
+    pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
+                  ql::views::filter([&visibleVars = pq.getVisibleVariables()](
+                                        const Variable& variable) {
+                    return ad_utility::contains(visibleVars, variable);
+                  }) |
+                  ql::views::transform([](const Variable& variable) {
+                    return VariableOrderKey{variable};
+                  }) |
+                  ::ranges::to<std::vector>;
+    // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
+    // would produce.
+    ql::ranges::sort(pq._orderBy, {},
+                     [&columns = subtree->getVariableColumns()](
+                         const VariableOrderKey& key) {
+                       return columns.at(key.variable_).columnIndex_;
+                     });
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
     // Hide non-visible variables in the subtree, so that they are not
@@ -294,7 +314,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->idTable().clone();
+  IdTable result = leftRes->cloneIdTable();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
@@ -375,8 +395,7 @@ struct LazyExistsJoinImpl
   // Store the ranges of the child results. The left result is owned, the right
   // is just a view to the wrapped `IdTable`s.
   ad_utility::InputRangeTypeErased<Result::IdTableVocabPair> leftRange_;
-  ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
-      rightRange_;
+  ad_utility::InputRangeTypeErased<IdTableView<0>> rightRange_;
 
   // Store the join columns.
   ColumnIndex leftJoinColumn_;
@@ -384,8 +403,7 @@ struct LazyExistsJoinImpl
 
   // Store the current result of the right child. This is a view to the current
   // `IdTable`.
-  std::optional<std::reference_wrapper<const IdTable>> currentRight_ =
-      std::nullopt;
+  std::optional<IdTableView<0>> currentRight_ = std::nullopt;
   // Store the current index in the right child that was last being checked.
   size_t currentRightIndex_ = 0;
 
@@ -402,23 +420,24 @@ struct LazyExistsJoinImpl
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          std::array{Result::IdTableVocabPair{result->idTable().clone(),
+          std::array{Result::IdTableVocabPair{result->cloneIdTable(),
                                               result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();
   }
 
   // Convert result to a view of `IdTable`s. This is used for the right side.
-  static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
-  toRangeView(const std::shared_ptr<const Result>& result) {
+  static ad_utility::InputRangeTypeErased<IdTableView<0>> toRangeView(
+      const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          std::array{std::cref(result->idTable())}};
+          std::array{result->idTableView()}};
     }
     return ad_utility::InputRangeTypeErased{
         ad_utility::CachingTransformInputRange{
-            result->idTables(),
-            [](const auto& pair) { return std::cref(pair.idTable_); }}};
+            result->idTables(), [](const auto& pair) {
+              return pair.idTable_.template asStaticView<0>();
+            }}};
   }
 
   // Construct an instance of `LazyExistsJoinImpl` with the given left and right
@@ -439,7 +458,7 @@ struct LazyExistsJoinImpl
   void fetchNextRightBlock() {
     do {
       currentRight_ = rightRange_.get();
-    } while (currentRight_.has_value() && currentRight_.value().get().empty());
+    } while (currentRight_.has_value() && currentRight_.value().empty());
   }
 
   // Increment `currentRightIndex_` by one, or fetch the next non-empty element
@@ -448,7 +467,7 @@ struct LazyExistsJoinImpl
     currentRightIndex_++;
     // Get the next block from the range if we couldn't find a matching value
     // in this one.
-    if (currentRightIndex_ == currentRight_.value().get().size()) {
+    if (currentRightIndex_ == currentRight_.value().size()) {
       fetchNextRightBlock();
       currentRightIndex_ = 0;
       // Optimization to copy all remaining blocks in one.
@@ -469,11 +488,9 @@ struct LazyExistsJoinImpl
     }
     // Search for the next match.
     while (currentRight_.has_value()) {
-      AD_CORRECTNESS_CHECK(currentRightIndex_ <
-                           currentRight_.value().get().size());
+      AD_CORRECTNESS_CHECK(currentRightIndex_ < currentRight_.value().size());
       auto comparison = ql::compareThreeWay(
-          currentRight_.value().get().at(currentRightIndex_, rightJoinColumn_),
-          id);
+          currentRight_.value().at(currentRightIndex_, rightJoinColumn_), id);
       if (comparison == 0) {
         return true;
       }
@@ -492,7 +509,7 @@ struct LazyExistsJoinImpl
         allRowsFromLeftExist_ == FastForwardState::Unknown) {
       fetchNextRightBlock();
       if (currentRight_.has_value()) {
-        if (currentRight_.value().get().at(0, rightJoinColumn_).isUndefined()) {
+        if (currentRight_.value().at(0, rightJoinColumn_).isUndefined()) {
           allRowsFromLeftExist_ = FastForwardState::Yes;
         }
       } else {

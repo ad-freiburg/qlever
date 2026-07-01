@@ -202,12 +202,12 @@ compressedRelationTestWriteCompressedRelations(
 }
 
 namespace {
-// Create a safe cleanup object, that automatically tries to delete the file at
-// the given `filename` when it is destroyed. This is used to delete the
-// persistent index files that are created for these tests.
-auto makeCleanup(std::string filename) {
-  return ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
+// Returns a unique filename for temporary files of a test and a safe cleanup
+// object, that automatically tries to delete the file when it is destroyed.
+auto testFilenameWithCleanup() {
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup{[filename]() { ad_utility::deleteFile(filename); }};
+  return std::make_pair(std::move(filename), std::move(cleanup));
 }
 
 // From the `inputs` delete each triple with probability `locatedProbab` and
@@ -268,12 +268,9 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 }
 
 // Run a set of tests on a permutation that is defined by the `inputs`. The
-// `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
-// a unique name for the required temporary files and for the implicit cache
-// of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
-// in which the permutation will be compressed and stored on disk.
+// `inputs` must be ordered wrt the `col0_`.  `blocksize` is the size of the
+// blocks in which the permutation will be compressed and stored on disk.
 void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
-                             std::string testCaseName,
                              ad_utility::MemorySize blocksize,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
@@ -282,8 +279,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   auto [inputsWithoutLocated, locatedTriplesInput] =
       makeLocatedTriplesFromPartOfInput(locatedTriplesProbability, inputs);
   DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
-  auto filename = testCaseName + ".dat";
-  auto cleanup = makeCleanup(filename);
+  auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocksOriginal, metaData, readerPtr] =
       writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -422,19 +418,14 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   }
 }
 
-// Run `testCompressedRelations` (see above) for the given `inputs` and
-// `testCaseName`, but with a set of different `blocksizes` (small and medium
-// size, powers of two and odd), to find subtle rounding bugs when creating the
-// blocks.
+// Run `testCompressedRelations` (see above) for the given `inputs`, but with a
+// set of different `blocksizes` (small and medium size, powers of two and odd),
+// to find subtle rounding bugs when creating the blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
-                                 std::string testCaseName,
                                  float locatedTriplesProbability = 0.5) {
-  testCompressedRelations(inputs, testCaseName, 19_B,
-                          locatedTriplesProbability);
-  testCompressedRelations(inputs, testCaseName, 237_B,
-                          locatedTriplesProbability);
-  testCompressedRelations(inputs, testCaseName, 4096_B,
-                          locatedTriplesProbability);
+  testCompressedRelations(inputs, 19_B, locatedTriplesProbability);
+  testCompressedRelations(inputs, 237_B, locatedTriplesProbability);
+  testCompressedRelations(inputs, 4096_B, locatedTriplesProbability);
 }
 }  // namespace
 
@@ -445,7 +436,7 @@ TEST(CompressedRelationWriter, SmallRelations) {
     inputs.push_back(
         RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
   }
-  testWithDifferentBlockSizes(inputs, "smallRelations");
+  testWithDifferentBlockSizes(inputs);
 }
 
 // Internal matchers for the following two tests.
@@ -581,7 +572,7 @@ TEST(CompressedRelationWriter, LargeRelationsDistinctCol1) {
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
-  testWithDifferentBlockSizes(inputs, "largeRelationsDistinctCol1");
+  testWithDifferentBlockSizes(inputs);
 }
 
 // Test for larger relations that span over several blocks. There are many
@@ -596,7 +587,7 @@ TEST(CompressedRelationWriter, LargeRelationsDuplicatesCol1) {
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
-  testWithDifferentBlockSizes(inputs, "largeRelationsDuplicatesCol1");
+  testWithDifferentBlockSizes(inputs);
 }
 
 // Test a permutation that consists of relations of different sizes and
@@ -629,7 +620,7 @@ TEST(CompressedRelationWriter, MixedSizes) {
       inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
     }
   }
-  testWithDifferentBlockSizes(inputs, "mixedSizes");
+  testWithDifferentBlockSizes(inputs);
 }
 
 TEST(CompressedRelationWriter, AdditionalColumns) {
@@ -669,7 +660,7 @@ TEST(CompressedRelationWriter, AdditionalColumns) {
   }
   // The additional columns don't yet work properly with located triples /
   // SPARQL UPDATE, so we have to disable the
-  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.0);
+  testWithDifferentBlockSizes(inputs, 0.0);
 }
 
 TEST(CompressedRelationWriter, MultiplicityCornerCases) {
@@ -1335,7 +1326,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 namespace ad_utility {
 std::pair<size_t, size_t> getThreadCountAndTaskSize(
     const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queueMaxSize_};
+  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
 }
 }  // namespace ad_utility
 
@@ -1346,22 +1337,22 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     GTEST_SKIP_("This test assumes that there are at least 2 threads.");
   }
   {
-    // Check if is is limited to actual threads.
+    // Check if it is limited to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
               threads * 2);
   }
   {
-    // Check if is is expanded to actual threads.
+    // Check if it is expanded to actual threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
               threads);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
@@ -1371,8 +1362,8 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     // Check if minimum of 4 tasks is honored.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1);
-    CompressedRelationWriter writer{
-        1, ad_utility::File{"/tmp/writer.out", "w+"}, 16_B};
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }

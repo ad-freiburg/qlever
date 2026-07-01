@@ -115,8 +115,9 @@ using AGG_EXP = AggregateExpression<
 template <typename NumericOperation>
 struct NumericExpressionForAggregate {
   template <typename... Args>
-  auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
-      requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
+  auto operator()(const Args&... args) const
+      -> CPP_ret(NumericValue)(
+          requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
