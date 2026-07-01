@@ -897,8 +897,8 @@ class CompressedRelationReader {
   }
 
   ad_utility::HashSet<Id::T> computeUniqueGraphIds(
-      const Permutation& permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
