@@ -414,9 +414,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
 // _____________________________________________________________________________
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed) {
-  BasicGraphPatternsInvariantTo invariantCheck{
-      getVariablesPresentInFirstBasicGraphPattern(
-          parsed._rootGraphPattern._graphPatterns)};
+  BasicGraphPatternsInvariantTo invariantCheck{parsed._rootGraphPattern};
 
   // Filter out graph patterns that do not change the result of the basic graph
   // pattern analyzed.
