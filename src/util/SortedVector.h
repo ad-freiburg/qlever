@@ -112,11 +112,11 @@ class SortedVector {
     elements.erase(ql::ranges::begin(rangeToSort), eraseEnd);
   }
 
-  // Let `r1` be a sorted subrange of elements and `r2` be an arbitrary sorted
-  // range not overlapping with `r1`. Delete all elements from `r1` that are
-  // also contained in `r2`. Within this class, `r1` is always unique (elements
-  // are deduplicated before calling this function). Duplicates in `r2` make no
-  // difference.
+  // Let `r1` be a sorted subrange of `elements_` and `r2` be an arbitrary
+  // sorted range not overlapping with `r1`. Delete all elements from `r1` that
+  // are also contained in `r2`. Within this class, `r1` is always unique
+  // (elements are deduplicated before calling this function). Duplicates in
+  // `r2` make no difference.
   CPP_template_2(typename R1, typename R2)(
       requires ql::ranges::forward_range<R1> CPP_and_2
           ql::ranges::output_range<R1, ValueType>
