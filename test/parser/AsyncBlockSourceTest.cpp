@@ -34,11 +34,7 @@ using namespace ad_utility::memory_literals;
 // in order. Throws if the source signals an error.
 std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
   std::vector<qp::ByteBlock> result;
-  while (true) {
-    auto opt = source.asyncGetNextBlock(boost::asio::use_future).get();
-    if (!opt) {
-      break;
-    }
+  while (auto opt = source.asyncGetNextBlock(boost::asio::use_future).get()) {
     result.push_back(std::move(*opt));
   }
   return result;
@@ -155,14 +151,9 @@ TEST(AsyncBlockSource, UseFutureToken) {
   qp::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
 
   // Retrieve blocks via `use_future` and verify success and EOF paths.
-  auto opt1 = buf.asyncGetNextBlock(boost::asio::use_future).get();
-  ASSERT_TRUE(opt1.has_value());
-  EXPECT_THAT(*opt1, ::testing::ElementsAre('a', 'b', '1'));
-
-  auto opt2 = buf.asyncGetNextBlock(boost::asio::use_future).get();
-  ASSERT_TRUE(opt2.has_value());
-  EXPECT_THAT(*opt2, ::testing::ElementsAre('c', 'd'));
-
-  auto opt3 = buf.asyncGetNextBlock(boost::asio::use_future).get();
-  EXPECT_FALSE(opt3.has_value());
+  EXPECT_THAT(buf.asyncGetNextBlock(boost::asio::use_future).get(),
+              ::testing::Optional(::testing::ElementsAre('a', 'b', '1')));
+  EXPECT_THAT(buf.asyncGetNextBlock(boost::asio::use_future).get(),
+              ::testing::Optional(::testing::ElementsAre('c', 'd')));
+  EXPECT_EQ(buf.asyncGetNextBlock(boost::asio::use_future).get(), std::nullopt);
 }

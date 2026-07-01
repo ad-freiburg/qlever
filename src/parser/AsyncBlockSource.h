@@ -35,18 +35,23 @@ namespace qlever::parser {
 // here directly into `RdfStringParser::setInputStream`.
 using ByteBlock = ad_utility::UninitializedVector<char>;
 
-// Abstract base class for a source that produces `ByteBlock`s above
-// asynchronously. The base class provides the async interface (which internally
-// synchronizes via a `strand`, see `asyncGetNextBlock` for details.
+// Abstract base class for a source that produces `ByteBlock`s asynchronously.
+// The base class provides the async interface (which internally synchronizes
+// via a `strand`, see `asyncGetNextBlock` for details).
 class AsyncBlockSource {
  public:
   using Block = ByteBlock;
 
+ private:
+  boost::asio::strand<boost::asio::any_io_executor> strand_;
+  ad_utility::MemorySize blocksize_;
+
+ public:
   // Construct from an executor (on which a strand will be created to
   // synchronize the calls to `asyncGetNextBlock`, and which will also be the
   // default executor for the provided completion tokens), and a `blocksize` for
   // the blocks to be received (which is a common implementation detail of all
-  // the derived classes, and thus lives in the base class.
+  // the derived classes, and thus lives in the base class).
   explicit AsyncBlockSource(const boost::asio::any_io_executor& exec,
                             ad_utility::MemorySize blocksize);
   virtual ~AsyncBlockSource() = default;
@@ -58,11 +63,11 @@ class AsyncBlockSource {
   // completion signature is `void(std::exception_ptr, std::optional<Block>)`: a
   // null `exception_ptr` signals success, a non-null one signals an exception
   // that was thrown while retrieving the next block. A successful result with
-  // `std::nullopt` result means EOF (no more blocks available in this source).
+  // `std::nullopt` means EOF (no more blocks available in this source).
   // Note: the actual reading of blocks is always done single-threaded (via a
-  // `strand` and blocking (by calling the non-async impl function on the
+  // `strand`) and blocking (by calling the non-async impl function on the
   // child classes). This is deliberate, because we have never seen the reading
-  // to be a bottleneck and to decrease complexity significantly. Additionally,
+  // to be a bottleneck and it decreases complexity significantly. Additionally,
   // asynchronous file IO using `Boost::Asio` requires `io_uring` support on
   // Linux, and we don't have a good fallback for systems without `io_uring`
   // that is worth the complexity.
@@ -72,7 +77,7 @@ class AsyncBlockSource {
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
         [this](auto handler) mutable {
-          // Fall back to the `strand_` if the token/handler has no associated
+          // Fall back to `strand_` if the token/handler has no associated
           // executor.
           auto ex = net::get_associated_executor(handler, strand_);
           net::post(strand_, [this, h = std::move(handler), ex]() mutable {
@@ -80,12 +85,15 @@ class AsyncBlockSource {
               auto block = getNextBlockImpl();
               net::dispatch(
                   ex, [h = std::move(h), block = std::move(block)]() mutable {
+                    // `std::move(h)` treats the handler as a one-shot,
+                    // move-only callable, which is the required Asio
+                    // convention for completion handlers.
                     std::move(h)(nullptr, std::move(block));
                   });
             } catch (...) {
               net::dispatch(ex, [h = std::move(h),
                                  ep = std::current_exception()]() mutable {
-                std::move(h)(ep, std::nullopt);
+                std::move(h)(ep, std::nullopt);  // See comment above.
               });
             }
           });
@@ -108,15 +116,15 @@ class AsyncBlockSource {
   static std::optional<ByteBlock> nextBlockFrom(AsyncBlockSource& src) {
     return src.getNextBlockImpl();
   }
-
- private:
-  boost::asio::strand<boost::asio::any_io_executor> strand_;
-  ad_utility::MemorySize blocksize_;
 };
 
 // An `AsyncBlockSource` (see above) that reads blocks sequentially from a
 // given file.
 class AsyncFileBlockSource : public AsyncBlockSource {
+ private:
+  ad_utility::File file_;
+  bool eof_ = false;
+
  public:
   // Open `filename` immediately and prepare to deliver `blocksize`-sized
   // blocks. Throw if the file cannot be opened.
@@ -126,10 +134,6 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 
  protected:
   std::optional<ByteBlock> getNextBlockImpl() override;
-
- private:
-  ad_utility::File file_;
-  bool eof_ = false;
 };
 
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
@@ -140,6 +144,13 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 // exception is thrown with a message that indicates possible mitigations for
 // this error.
 class AsyncEndRegexBlockSource : public AsyncBlockSource {
+ private:
+  std::unique_ptr<AsyncBlockSource> inner_;
+  Block remainder_;
+  re2::RE2 endRegex_;
+  std::string endRegexAsString_;
+  bool exhausted_ = false;
+
  public:
   // Wrap `inner` and cut its blocks at matches of `endRegex`.
   AsyncEndRegexBlockSource(const boost::asio::any_io_executor& exec,
@@ -154,13 +165,6 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
 
  protected:
   std::optional<ByteBlock> getNextBlockImpl() override;
-
- private:
-  std::unique_ptr<AsyncBlockSource> inner_;
-  Block remainder_;
-  re2::RE2 endRegex_;
-  std::string endRegexAsString_;
-  bool exhausted_ = false;
 };
 
 }  // namespace qlever::parser
