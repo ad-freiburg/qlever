@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
@@ -225,6 +226,42 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {
   ASSERT_TRUE(first.has_value());
   EXPECT_EQ((*first)->size(), 2);
   // `streamedResults` destroyed here with batches {1} and {3} still in flight.
+}
+
+// When the number of in-flight reads reaches the prefetch threshold,
+// `fillPipeline` stops submitting new offset reads and exits its loop on the
+// `totalSubmittedSQEs_ < kPrefetchThreshold` condition rather than because the
+// input was exhausted. Existing tests only feed a handful of indices, so this
+// throttling exit is never taken. Here we feed far more single-index batches
+// than the threshold (3 * 256 = 768) to exercise it, and verify that every
+// batch is still returned correctly and in order.
+TEST(VocabularyOnDisk, LookupBatchesStreamedPrefetchThrottling) {
+  constexpr size_t kNumWords = 1000;
+  std::vector<std::string> words;
+  words.reserve(kNumWords);
+  for (size_t i = 0; i < kNumWords; ++i) {
+    words.push_back(absl::StrCat("word", i));
+  }
+  VocabularyCreator creator{"LookupBatchesStreamedThrottling"};
+  auto vocab = creator.createVocabulary(words);
+
+  // One single-index batch per word, in order.
+  std::vector<std::vector<size_t>> batches;
+  batches.reserve(kNumWords);
+  for (size_t i = 0; i < kNumWords; ++i) {
+    batches.push_back({i});
+  }
+
+  auto streamed =
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+
+  size_t i = 0;
+  for (auto& r : streamed) {
+    ASSERT_EQ(r->size(), 1) << "at batch " << i;
+    EXPECT_EQ((*r)[0], words[i]) << "at batch " << i;
+    ++i;
+  }
+  EXPECT_EQ(i, kNumWords);
 }
 
 TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
