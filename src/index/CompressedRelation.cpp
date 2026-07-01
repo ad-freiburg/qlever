@@ -1603,11 +1603,14 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const PerBlockCallbacks& perBlockCallbacks) -> PermutationPairResult {
-  PermutationWriter<true> permutationWriter{
-      basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
-      std::move(permutation), perBlockCallbacks};
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+    ad_utility::MemorySize memoryForTwinSorter) -> PermutationPairResult {
+  PermutationWriter<true> permutationWriter{basename,
+                                            std::move(writerAndCallback1),
+                                            std::move(writerAndCallback2),
+                                            std::move(permutation),
+                                            perBlockCallbacks,
+                                            memoryForTwinSorter};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 
