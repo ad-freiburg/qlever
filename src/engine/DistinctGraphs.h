@@ -51,7 +51,7 @@ class DistinctGraphs : public Operation {
   // TODO: Could not find rationale
   size_t getCostEstimate() override { return 1; }
 
-  // The Result Table has varying col number and 1 column
+  // TODO: Could not find rationale
   float getMultiplicity(size_t col) override { return 1.0f * col; }
 
   bool knownEmptyResult() override { return false; }
