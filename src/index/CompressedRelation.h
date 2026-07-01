@@ -896,7 +896,7 @@ class CompressedRelationReader {
 
   ad_utility::HashSet<Id::T> computeUniqueGraphIds(
       const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock, 
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const CancellationHandle& cancellationHandle) const;
 
  private:

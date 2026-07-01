@@ -67,7 +67,8 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       locatedTriplesState());
   ad_utility::HashSet<Id::T> graphIds =
-      permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb, cancellationHandle_);
+      permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb,
+                                                 cancellationHandle_);
 
   auto treatDefaultGraphAsNamedGraph =
       getRuntimeParameter<&RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
