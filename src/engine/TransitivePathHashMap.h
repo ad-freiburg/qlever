@@ -78,7 +78,7 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
 
   // Initialize the map from the subresult.
   HashMapWrapper setupEdgesMap(
-      const IdTable& sub, const TransitivePathSide& startSide,
+      const IdTableView<0>& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
 };
 

@@ -145,7 +145,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
 
   // Check that we get back the same table
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_THAT(resultTable, matchesIdTable(*testTable_));
   // Check sorted columns are preserved
@@ -161,7 +161,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
   auto result = op.computeResult(true);
 
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_EQ(resultTable.numRows(), 3u);
   EXPECT_EQ(resultTable.numColumns(), 2u);
@@ -213,7 +213,8 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   auto originalResult = original.computeResult(false);
   auto clonedResult = clonedOp->computeResult(false);
 
-  EXPECT_THAT(clonedResult.idTable(), matchesIdTable(originalResult.idTable()));
+  EXPECT_THAT(clonedResult.idTableView(),
+              matchesIdTable(originalResult.idTableView()));
 
   // Test that local vocab is cloned properly
   const auto& originalLocalVocab = originalResult.localVocab();

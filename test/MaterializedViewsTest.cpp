@@ -11,12 +11,14 @@
 #include <gmock/gmock.h>
 
 #include <functional>
+#include <string_view>
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -29,6 +31,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
+#include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/SparqlTriple.h"
@@ -110,8 +113,9 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
-    EXPECT_THAT(qet->getRootOperation()->getDescriptor(),
-                ::testing::HasSubstr("?x"));
+    // The view's name is part of the descriptor and only the scanned columns.
+    EXPECT_EQ(qet->getRootOperation()->getDescriptor(),
+              "IndexScan testView1 ?s ?x");
     // For a full scan on a materialized view, the size estimate should be
     // exactly the number of rows in the view. This is also a regression test
     // for a bug introduced in #2680.
@@ -119,7 +123,7 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
-    EXPECT_THAT(res->idTable(), matchesIdTable(expectedResult));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expectedResult));
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -158,7 +162,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       }
     )");
     auto res = qet->getResult(false);
-    EXPECT_EQ(res->idTable().numRows(), 1);
+    EXPECT_EQ(res->idTableView().numRows(), 1);
   }
 }
 
@@ -679,7 +683,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Write fake view metadata with unsupported version.
       nlohmann::json viewInfo = {{"version", 0}};
       ad_utility::makeOfstream(
-          "_materializedViewsTestIndex.view.testView5.viewinfo.json")
+          absl::StrCat(testIndexBase_, ".view.testView5.viewinfo.json"))
           << viewInfo.dump() << std::endl;
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -697,7 +701,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // Remove the `query` key from the metadata JSON file.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView6.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("query");
       ad_utility::makeOfstream(metadataFilename)
@@ -719,7 +723,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       // file, in particular, no `UndefStatus`.
       nlohmann::json viewInfo;
       const std::string metadataFilename =
-          "_materializedViewsTestIndex.view.testView7.viewinfo.json";
+          absl::StrCat(testIndexBase_, ".view.testView7.viewinfo.json");
       ad_utility::makeIfstream(metadataFilename) >> viewInfo;
       viewInfo.erase("columns");
       viewInfo["columns"] = std::vector<std::string>{"?s", "?p", "?o", "?g"};
@@ -749,7 +753,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     Permutation testPermutation{Permutation::Enum::SPO,
                                 ad_utility::makeUnlimitedAllocator<Id>()};
     const std::string testView1Filename =
-        "_materializedViewsTestIndex.view.testView1";
+        absl::StrCat(testIndexBase_, ".view.testView1");
     // A materialized view permutation does not have a corresponding internal
     // permutation.
     EXPECT_ANY_THROW(testPermutation.loadFromDisk(
@@ -767,13 +771,14 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
+  qlever::EngineConfig config;
+  config.baseName_ = testIndexBase_;
 
   // Write a new materialized view using the `writeMaterializedView` method of
   // the `Server` class.
   {
     // Initialize but do not start a `Server` instance on our test index.
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false);
+    Server server{4321, 1, "accessToken", config};
 
     ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
@@ -787,11 +792,11 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 
   // Test the preloading of materialized views on server start.
   {
+    config.persistUpdates_ = false;
+    config.preloadMaterializedViews_ = {"testViewForServerPreload"};
     qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false, true, true, false,
-                      {"testViewForServerPreload"});
-    EXPECT_TRUE(server.materializedViewsManager_->isViewLoaded(
+    Server server{4321, 1, "accessToken", config};
+    EXPECT_TRUE(server.qlever_.materializedViewsManager()->isViewLoaded(
         "testViewForServerPreload"));
   }
 
@@ -806,7 +811,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "SELECT ?s ?o { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
-    EXPECT_THAT(res->idTable(), matchesIdTable(expectedIdTable));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expectedIdTable));
   }
 
   // Write a materialized view through a simulated HTTP POST request.
@@ -970,7 +975,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto res = qet->getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
     auto col = qet->getVariableColumn(Variable{"?cnt"});
-    auto count = res->idTable().at(0, col);
+    auto count = res->idTableView()(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }
@@ -1473,7 +1478,7 @@ constexpr std::string_view geoBoundingBoxesViewQuery = R"(
 
 // Automatic `BIND` push-down for bounding boxes in `SpatialJoin`.
 TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
-  const std::string onDiskBase = "_materializedViewRewriteSpatialJoin";
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "geoms";
 
   // Initialize engine on test index.
@@ -1587,7 +1592,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
       " <m2> <p2> <http://example.com/> . \n"
       " <m2> <p3> \"abc\" . \n"
       " <s2> <p3> <o3> . \n";
-  const std::string onDiskBase = "_materializedViewRewriteChain";
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewChain";
 
   // Initialized libqlever.
@@ -1720,4 +1725,123 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
             "The two IndexScans for a lazy single-column join have "
             "more than one column in common."));
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, GroupByOptimizations) {
+  // Test that the optimizations for `GROUP BY` do not return wrong results when
+  // grouping on materialized views. Regression test for #2918.
+  auto plan = qlv().parseAndPlanQuery(
+      // The test view contains only the first triple from the index.
+      R"(
+    SELECT ?s ?p ?o {
+      SELECT * {
+        ?s ?p ?o
+      } INTERNAL SORT BY ?s ?p ?o LIMIT 1
+    }
+  )");
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("groupByTestView", plan);
+
+  // Matcher for an `IdTable` containing a single integer.
+  auto expectCount = [](size_t count) {
+    return matchesIdTableFromVector({{Id::makeFromInt(count)}});
+  };
+
+  // Helpers to abbreviate redundant queries.
+  auto queryOnMainIndex = [this](std::string_view aggregate) {
+    return getQueryResultAsIdTable(
+        absl::StrCat("SELECT (", aggregate, " AS ?c) { ?s ?p ?o }"));
+  };
+  auto queryOnView = [this](std::string_view aggregate) {
+    return getQueryResultAsIdTable(absl::StrCat(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ()",
+                                                aggregate, R"( AS ?c)  WHERE {
+        SERVICE view:groupByTestView {
+          [
+            view:column-s ?s ;
+            view:column-p ?p ;
+            view:column-o ?o
+          ]
+        }
+      })"));
+  };
+
+  // Test that the optimization does not return the values from the main index
+  // for the `IndexScan` on the materialized view.
+  EXPECT_THAT(queryOnMainIndex("COUNT(?s)"), expectCount(4));
+  EXPECT_THAT(queryOnView("COUNT(?s)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?s)"), expectCount(2));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?s)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?p)"), expectCount(3));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?p)"), expectCount(1));
+
+  EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?o)"), expectCount(4));
+  EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
+
+  // Test the optimization of a join with an `IndexScan` on a materialized view.
+  EXPECT_THAT(
+      getQueryResultAsIdTable(R"(
+    SELECT (COUNT(?s) AS ?c) WHERE {
+      ?s <p1> ?p1 .
+      ?s ?p ?o
+    } GROUP BY ?s
+  )"),
+      matchesIdTableFromVector({{Id::makeFromInt(2)}, {Id::makeFromInt(2)}}));
+  EXPECT_THAT(getQueryResultAsIdTable(
+                  R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?s) AS ?c) WHERE {
+      ?s <p1> ?p1 .
+      SERVICE view:groupByTestView {
+        [
+          view:column-s ?s ;
+          view:column-p ?p ;
+          view:column-o ?o
+        ]
+      }
+    }
+    GROUP BY ?s
+  )"),
+              expectCount(1));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest,
+       GetPermutationForThreeVariableTripleMaterializedView) {
+  // Write and load a three-variable view.
+  auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("threeVarPermTestView", plan);
+  manager.loadView("threeVarPermTestView");
+
+  // Create a three-variable scan on the view binding all three columns.
+  using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
+  parsedQuery::MaterializedViewQuery viewQuery{
+      "threeVarPermTestView", RCols{{V{"?s"}, TripleComponent{V{"?s"}}},
+                                    {V{"?p"}, TripleComponent{V{"?p"}}},
+                                    {V{"?o"}, TripleComponent{V{"?o"}}}}};
+  auto* qec = std::get<1>(plan).get();
+  auto indexScanPtr = manager.makeIndexScan(qec, viewQuery);
+  auto scanTree = std::make_shared<QueryExecutionTree>(qec, indexScanPtr);
+
+  // Use a GroupByImpl as the holder for getPermutationForThreeVariableTriple.
+  GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
+
+  // Sort by subject: the materialized view case succeeds.
+  EXPECT_TRUE(
+      groupBy.getPermutationForThreeVariableTriple(*scanTree, V{"?s"}, V{"?s"})
+          .has_value());
+
+  // Sort by predicate: materialized view type but variableByWhichToSort is not
+  // the subject, so there's no matching permutation.
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *scanTree, V{"?p"}, V{"?s"}));
+
+  // Sort by object: same reasoning as predicate.
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *scanTree, V{"?o"}, V{"?s"}));
 }

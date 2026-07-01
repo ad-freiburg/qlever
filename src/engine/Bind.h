@@ -31,7 +31,7 @@ class Bind : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
-  bool supportsLimitOffset() const override;
+  LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:
@@ -49,7 +49,7 @@ class Bind : public Operation {
  private:
   Result computeResult(bool requestLaziness) override;
 
-  static IdTable cloneSubView(const IdTable& idTable,
+  static IdTable cloneSubView(const IdTableView<0>& idTable,
                               const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.

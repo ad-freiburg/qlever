@@ -36,6 +36,21 @@ enum class ComputationMode {
   LAZY_IF_SUPPORTED
 };
 
+enum class LimitOffsetHandling {
+  // The operation does not handle `LIMIT`/`OFFSET` itself; it must be applied
+  // externally on the result.
+  NONE,
+  // The operation propagates `LIMIT`/`OFFSET` to its children to reduce their
+  // work, but does not enforce it on its own output — an external apply is
+  // still required.
+  PARTIAL,
+  // The operation handles `LIMIT`/`OFFSET` end-to-end so that no external
+  // apply is needed. This can mean applying it during its own processing
+  // (e.g. `IndexScan` stops scanning after N rows), forwarding it to a child
+  // that handles it (e.g. `Bind`, `Sort`), or both.
+  FULL
+};
+
 class Operation {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -65,7 +80,7 @@ class Operation {
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimitOffset()`
+  //    efficient calculation of the limit (see also the `handlesLimitOffset()`
   //    function).
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
@@ -93,8 +108,8 @@ class Operation {
   mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
-  // True if this operation does not support limits/offsets natively and a
-  // limit/offset is applied post computation.
+  // True if this operation does not handle limits/offsets itself and the
+  // limit/offset is therefore applied post computation.
   bool externalLimitApplied_ = false;
 
   // See the documentation of the getter function below.
@@ -308,17 +323,21 @@ class Operation {
     return false;
   }
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
+  // Return how this operation handles `LIMIT` and `OFFSET`. See the docs of
+  // `LimitOffsetHandling` for the meaning of `NONE` / `PARTIAL` / `FULL`.
+  [[nodiscard]] virtual LimitOffsetHandling handlesLimitOffset() const {
+    return LimitOffsetHandling::NONE;
+  }
 
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
+  // way.
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
+    // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
+    // after the computation of the result. Make sure to also override
+    // `handlesLimitOffset()` if this function is overridden, otherwise the
+    // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
   // This function is called when the operation's result is requested to be
@@ -361,6 +380,16 @@ class Operation {
   }
 
   const auto& getLimitOffset() const { return limitOffset_; }
+
+  // Directly set the `limitOffset_` without merging and without calling
+  // `onLimitOffsetChanged`. The only intended use case is to restore a
+  // previously set limit/offset that was removed by a cloning/rewriting
+  // operation (e.g. column stripping). In almost all other cases, use
+  // `applyLimitOffset` instead.
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    limitOffset_ = limitOffsetClause;
+  }
 
  private:
   // Actual implementation of `clone()` without extra checks.
@@ -482,10 +511,10 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimitOffset() == true`, then the operation does
-  // already track the limit stats correctly and there's no need to keep track
-  // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
-  // be handled.
+  // operation. If `handlesLimitOffset() == LimitOffsetHandling::FULL`, then
+  // the operation already tracks the limit stats correctly and there's no
+  // need to keep track of both. Otherwise `externalLimitApplied_` decides how
+  // stat tracking should be handled.
   void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
                           std::chrono::microseconds duration) const;
 

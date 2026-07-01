@@ -31,7 +31,7 @@ jobs:
           repository: "ad-freiburg/sparql-conformance"
           path: qlever-test-suite
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
       - name: Install python dependencies
@@ -80,7 +80,7 @@ jobs:
           echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
           mv ${{ github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.event.pull_request.head.sha }}.json.bz2
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: conformance-report
           path: conformance-report/

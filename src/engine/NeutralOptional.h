@@ -36,7 +36,7 @@ class NeutralOptional : public Operation {
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool supportsLimitOffset() const override;
+  LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  protected:

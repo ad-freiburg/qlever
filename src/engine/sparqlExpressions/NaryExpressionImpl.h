@@ -290,7 +290,11 @@ struct TypeErasedNaryHelper;
 
 template <typename Func, typename... VGs>
 struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
-  using Res = std::invoke_result_t<Func, typename VGs::Value...>;
+  // `std::decay_t` ensures a value type, not a reference. Without this,
+  // expressions that use `ql:identity` as their functor, because the
+  // `ValueGetter`s do all the work would lead to dangling stack references.
+  // The strongly-typed path handles the same issue in `applyFunction`.
+  using Res = std::decay_t<std::invoke_result_t<Func, typename VGs::Value...>>;
   using BaseType = NaryExpressionTypeErasedImpl<Res, typename VGs::Value...>;
   static auto makeGetters() {
     return typename BaseType::Getters{TypeErasedValueGetter<VGs>{}...};

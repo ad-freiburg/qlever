@@ -92,7 +92,7 @@ TEST(ExternalValues, computeResult) {
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "result-test");
 
   auto result = valuesOperation.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
@@ -133,7 +133,7 @@ TEST(ExternalValues, updateValues) {
     EXPECT_EQ(externalValuesOp.getSizeEstimate(), 3u);
     if (cachingDisabled) {
       auto res = externalValuesOp.computeResultOnlyForTesting();
-      EXPECT_THAT(res.idTable(),
+      EXPECT_THAT(res.idTableView(),
                   matchesIdTableFromVector({{10, 20}, {30, 40}, {50, 60}},
                                            &Id::makeFromInt));
     } else {

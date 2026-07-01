@@ -65,7 +65,44 @@ void consumeGenerator(Result::LazyResult generator) {
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
   Result result{[]() -> Result::Generator { co_return; }(), {}};
   EXPECT_FALSE(result.isFullyMaterialized());
-  EXPECT_THROW(result.idTable(), ad_utility::Exception);
+  EXPECT_THROW(result.idTableView(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  ASSERT_TRUE(result.isFullyMaterialized());
+  IdTableView<0> view = result.idTableView();
+  EXPECT_EQ(view.numRows(), 2u);
+  EXPECT_EQ(view.numColumns(), 2u);
+  EXPECT_EQ(view(0, 0), idTable(0, 0));
+  EXPECT_EQ(view(1, 1), idTable(1, 1));
+}
+
+// _____________________________________________________________________________
+TEST(Result, idTableViewThrowsWhenActuallyLazy) {
+  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  EXPECT_FALSE(result.isFullyMaterialized());
+  EXPECT_THROW(result.idTableView(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, cloneIdTableReturnsCopy) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  ASSERT_TRUE(result.isFullyMaterialized());
+  IdTable cloned = result.cloneIdTable();
+  EXPECT_EQ(cloned, idTable);
+  // Verify it is a deep copy, not a reference to the same data.
+  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, cloneIdTableThrowsWhenActuallyLazy) {
+  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  EXPECT_FALSE(result.isFullyMaterialized());
+  EXPECT_THROW(result.cloneIdTable(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -253,6 +290,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
 TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
   Result result{[]() -> Result::Generator {
                   throw ad_utility::CancellationException{
+                      ad_utility::CancellationState::MANUAL,
                       "verifyRunOnNewChunkCallsFinishOnCancellation"};
                   co_return;
                 }(),
@@ -335,7 +373,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
         },
         [&](Result aggregatedResult) {
           EXPECT_TRUE(aggregatedResult.isFullyMaterialized());
-          EXPECT_EQ(aggregatedResult.idTable(), idTable);
+          EXPECT_EQ(aggregatedResult.idTableView(), idTable);
           EXPECT_EQ(aggregatedResult.sortedBy(), std::vector<ColumnIndex>{0});
         });
   }
@@ -418,7 +456,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       Result result{idTable.clone(), {}, LocalVocab{}};
       result.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 1);
-      EXPECT_EQ(result.idTable(), comparisonTable);
+      EXPECT_EQ(result.idTableView(), comparisonTable);
     }
     {
       // Now test the limit offset application for shared results;
@@ -426,7 +464,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
           std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
-      EXPECT_EQ(result2.idTable(), comparisonTable);
+      EXPECT_EQ(result2.idTableView(), comparisonTable);
     }
   }
 

@@ -91,7 +91,7 @@ TEST_F(LoadTest, computeResult) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
-      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.idTableView(), testing::IsEmpty());
       EXPECT_THAT(res.localVocab(), testing::IsEmpty());
     };
 
@@ -146,7 +146,7 @@ TEST_F(LoadTest, computeResult) {
                 responseBody, boost::beast::http::status::ok, contentType)};
         auto res = load.computeResultOnlyForTesting();
 
-        auto& idTable = res.idTable();
+        const auto& idTable = res.idTableView();
         auto& lv = res.localVocab();
 
         std::vector<std::vector<IntOrId>> idVector;

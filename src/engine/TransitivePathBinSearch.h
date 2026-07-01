@@ -90,7 +90,7 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
   // with either two columns (without graph variable) or three columns (with
   // graph variable).
   BinSearchMap setupEdgesMap(
-      const IdTable& edges, const TransitivePathSide& startSide,
+      const IdTableView<0>& edges, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
 
   // Alternative subtree sorted by (graph, target, source). This is used then
