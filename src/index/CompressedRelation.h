@@ -32,8 +32,6 @@
 class IdTable;
 
 class LocatedTriplesPerBlock;
-class Permutation;
-struct LocatedTriplesState;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -898,7 +896,8 @@ class CompressedRelationReader {
 
   ad_utility::HashSet<Id::T> computeUniqueGraphIds(
       const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock, 
+      const CancellationHandle& cancellationHandle) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
