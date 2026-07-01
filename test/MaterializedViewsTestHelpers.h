@@ -113,7 +113,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
   // ___________________________________________________________________________
   std::shared_ptr<QueryExecutionContext> getQec() {
-    return qlv_->createQueryExecutionContext();
+    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
   }
 
   // ___________________________________________________________________________
@@ -254,7 +254,7 @@ inline void expectNotSuitableForRewrite(
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
-  auto qec = qlv.createQueryExecutionContext();
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec);
   EXPECT_FALSE(qpc.analyzeView(view, qec));
