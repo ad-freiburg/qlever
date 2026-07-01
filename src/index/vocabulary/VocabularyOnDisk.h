@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,8 +13,11 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
+#include "util/Generator.h"
+#include "util/IoUringManager.h"
 #include "util/Iterators.h"
 #include "util/Serializer/Serializer.h"
+#include "util/ThreadSafeQueue.h"
 
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
@@ -34,6 +38,11 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
+
+  // Pool of persistent `BatchIoManager`s for `lookupBatch`.
+  mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
+      std::unique_ptr<ad_utility::BatchIoManager>>>
+      ioManagers_;
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
@@ -74,6 +83,18 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   std::string operator[](uint64_t idx) const;
 
   // Get the number of words in the vocabulary.
+  // Look up multiple words by index in a single batch. Returns a shared_ptr
+  // to a span of string_views, where result[i] = vocab[indices[i]]. The
+  // underlying buffer is kept alive by the shared_ptr. Reads are performed in
+  // file-offset order for sequential I/O, with optional io_uring support.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Streaming variant of lookupBatch: accepts a lazy stream of batches and
+  // returns a lazy stream of results.
+  VocabLookupOutput lookupBatchesStreamed(
+      VocabLookupInput rangeOfIndexBatches) const;
+
+  /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
   // Default constructor for an empty vocabulary.

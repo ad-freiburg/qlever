@@ -43,10 +43,10 @@ CPP_concept SplitFilenameFunctionT =
 class PolymorphicVocabulary;
 
 // A SplitVocabulary is a vocabulary layer that divides words into different
-// underlying vocabularies. It is templated on the UnderlyingVocabularies as
-// well as a SplitFunction that decides which underlying vocabulary is used for
-// each word and a SplitFilenameFunction that assigns filenames to underlying
-// vocabularies.
+// underlying vocabularies. It is templated on the `UnderlyingVocabularies` as
+// well as a `SplitFunction` that decides which underlying vocabulary is used
+// for each word and a `SplitFilenameFunction` that assigns filenames to
+// underlying vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
 QL_CONCEPT_OR_NOTHING(
@@ -120,7 +120,7 @@ class SplitVocabulary {
 
   // Use the SplitFunction to determine the marker for a given word (that is, in
   // which vocabulary this word would go)
-  static uint8_t getMarkerForWord(const std::string_view& word) {
+  static uint8_t getMarkerForWord(std::string_view word) {
     return splitFunction_(word);
   };
 
@@ -166,6 +166,14 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
+  // Look up multiple words by index in a single batch call. Indices must
+  // include marker bits. Partitions indices by marker, performs batch lookups
+  // on each underlying vocabulary, and merges results back in input order.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Streaming variant of `lookupBatch`.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
   // vocabularies.
   [[nodiscard]] uint64_t size() const {
@@ -178,7 +186,7 @@ class SplitVocabulary {
   }
 
   // Perform a search for upper or lower bound on the underlying vocabulary
-  // given by the marker parameter. By default this is the "main" vocabulary
+  // given by the marker parameter. By default, this is the "main" vocabulary
   // (first).
   template <typename InternalStringType, typename Comparator,
             bool getUpperBound>

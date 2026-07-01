@@ -1,11 +1,17 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022-2026 The QLever Authors, in particular:
+// 2022-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_PREFIXCOMPRESSOR_H
 #define QLEVER_PREFIXCOMPRESSOR_H
 
 #include <array>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -72,6 +78,26 @@ class PrefixCompressor {
     } else {
       return std::string(compressedWord.substr(1));
     }
+  }
+
+  // Decompress into a caller-provided buffer. Returns the number of bytes
+  // written. The scratch parameters are unused (accepted for interface
+  // uniformity with other decompressors).
+  size_t decompressInto(std::string_view compressedWord, char* output,
+                        size_t outputCapacity,
+                        [[maybe_unused]] char* scratch = nullptr,
+                        [[maybe_unused]] size_t scratchCapacity = 0) const {
+    auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
+    std::string_view suffix = compressedWord.substr(1);
+    std::string_view prefix;
+    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+      prefix = prefixToCode_[idx];
+    }
+    size_t totalSize = prefix.size() + suffix.size();
+    AD_CORRECTNESS_CHECK(totalSize <= outputCapacity);
+    std::memcpy(output, prefix.data(), prefix.size());
+    std::memcpy(output + prefix.size(), suffix.data(), suffix.size());
+    return totalSize;
   }
 
   // From the given list of prefixes, build the internal data structure for

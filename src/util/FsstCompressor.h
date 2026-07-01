@@ -63,6 +63,21 @@ class FsstDecoder {
     output.resize(size);
     return output;
   }
+
+  // Decompress into a caller-provided buffer. Returns the number of bytes
+  // written. The scratch parameters are unused (accepted for interface
+  // uniformity with FsstRepeatedDecoder).
+  size_t decompressInto(std::string_view str, char* output,
+                        size_t outputCapacity,
+                        [[maybe_unused]] char* scratch = nullptr,
+                        [[maybe_unused]] size_t scratchCapacity = 0) const {
+    auto cast = detail::castToUnsignedPtr;
+    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
+                                  outputCapacity, cast(output));
+    AD_CORRECTNESS_CHECK(size <= outputCapacity);
+    return size;
+  }
+
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
@@ -105,6 +120,26 @@ class FsstRepeatedDecoder {
     ql::ranges::for_each(ql::views::reverse(decoders_), decompressSingle);
     return result;
   }
+
+  // Decompress into a caller-provided buffer. Intermediate passes use the
+  // scratch buffer; the final pass writes to `output`. Returns the number of
+  // bytes written to `output`.
+  size_t decompressInto(std::string_view str, char* output,
+                        size_t outputCapacity, char* scratch,
+                        size_t scratchCapacity) const {
+    const char* currentInput = str.data();
+    size_t currentSize = str.size();
+    // All passes except the last write to scratch.
+    for (size_t pass = N; pass > 1; --pass) {
+      currentSize = decoders_[pass - 1].decompressInto(
+          {currentInput, currentSize}, scratch, scratchCapacity);
+      currentInput = scratch;
+    }
+    // Final pass writes to the output buffer.
+    return decoders_[0].decompressInto({currentInput, currentSize}, output,
+                                       outputCapacity);
+  }
+
   // Allow this type to be trivially serializable,
   CPP_template_2(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
