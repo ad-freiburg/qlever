@@ -52,12 +52,14 @@ void testForVocabType(VocabularyType::Enum vocabType) {
             vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
 
   // Test lookupBatch.
-  std::array<size_t, 3> indices{2, 0, 1};
-  auto result = vocab.lookupBatch(indices);
-  ASSERT_EQ(result->size(), 3);
-  EXPECT_EQ((*result)[0], "gamma");
-  EXPECT_EQ((*result)[1], "alpha");
-  EXPECT_EQ((*result)[2], "beta");
+  {
+    std::array<size_t, 3> indices{2, 0, 1};
+    auto result = vocab.lookupBatch(indices);
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_EQ((*result)[0], "gamma");
+    EXPECT_EQ((*result)[1], "alpha");
+    EXPECT_EQ((*result)[2], "beta");
+  }
 
   // `lookupBatch` edge cases: an empty batch (invalid -> throws), and a batch
   // with duplicate indices (each position must be resolved independently).
@@ -74,9 +76,7 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   }
 
   // Test lookupBatchesStreamed: a stream of batches, where each yielded result
-  // must match the eager `lookupBatch` on the same batch. The input is built
-  // from a plain container (no coroutine) so this also compiles in the C++17
-  // reduced-feature build.
+  // must match the eager `lookupBatch` on the same batch.
   {
     std::vector<std::vector<size_t>> batches{{2, 0}, {1}};
     auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{batches});
