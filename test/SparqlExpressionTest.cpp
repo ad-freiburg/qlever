@@ -636,7 +636,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
-                   std::optional<int> expectedEpoch = std::nullopt,
+                   std::optional<int64_t> expectedEpoch = std::nullopt,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
@@ -673,16 +673,16 @@ TEST(SparqlExpression, dateOperators) {
         std::nullopt, 9'590'400);
   check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt, std::nullopt,
         std::nullopt, 9'590'400);
-// TODO<yarox-1> Currently not working, but will be working after change of
-// `toEpoch` from Nanoseconds to Milliseconds.
-// check(D::parseXsdDate("0042-12-24"), 42, 12, 24, std::nullopt, std::nullopt,
-// std::nullopt, -852'768'000); check(D::parseXsdDate("-0099-07-01"), -99, 7, 1,
-// std::nullopt, std::nullopt, std::nullopt, -65'275'718'400);
-// check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt,
-// std::nullopt, std::nullopt, std::nullopt, -101'108'476'800);
-// check(D::parseXsdDate("0321-07-01"), 321, 7, 1, std::nullopt, std::nullopt,
-// std::nullopt, -52'021'785'600); check(D::parseXsdDate("2321-07-01"), 2321, 7,
-// 1, std::nullopt, std::nullopt, std::nullopt, 11'092'118'400);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24, std::nullopt, std::nullopt,
+        std::nullopt, -60'810'912'000);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -65'275'718'400);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt, std::nullopt,
+        std::nullopt, std::nullopt, -101'108'476'800);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -52'021'785'600);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, 11'092'118'400);
 #else
   AD_EXPECT_THROW_WITH_MESSAGE(
       check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
