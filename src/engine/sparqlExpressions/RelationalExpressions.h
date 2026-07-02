@@ -55,7 +55,7 @@ class RelationalExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
   [[nodiscard]] bool isDeterministic() const override {
-    return areChildrenDeterministic(children_);
+    return areChildrenDeterministic();
   }
 
  private:
@@ -97,7 +97,7 @@ class InExpression : public SparqlExpression {
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
   [[nodiscard]] bool isDeterministic() const override {
-    return areChildrenDeterministic(children_);
+    return areChildrenDeterministic();
   }
 
  private:

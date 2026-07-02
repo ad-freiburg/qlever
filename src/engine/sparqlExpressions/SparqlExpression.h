@@ -8,8 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "backports/concepts.h"
 #include "backports/span.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
@@ -76,8 +74,8 @@ class SparqlExpression {
   }
 
   // Return true iff this expression is guaranteed to produce the same result
-  // on every invocation (i.e. does not contain BNODE(), RAND(), UUID(), or
-  // STRUUID()). Every concrete subclass must implement this explicitly.
+  // on every invocation (i.e. does not contain `BNODE()`, `RAND()`, `UUID()`,
+  // or `STRUUID()`). Every concrete subclass must implement this explicitly.
   [[nodiscard]] virtual bool isDeterministic() const = 0;
 
   // Get a short, human-readable identifier for this expression.
@@ -182,17 +180,9 @@ class SparqlExpression {
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final;
 
-  // Helper for `isDeterministic()` in subclasses: return true iff every element
-  // in `children` (a range of `SparqlExpression::Ptr`) is deterministic.
-  CPP_template(typename Range)(
-      requires ql::ranges::input_range<Range>&& ql::concepts::same_as<
-          ql::ranges::range_value_t<Range>,
-          SparqlExpression::
-              Ptr>) static bool areChildrenDeterministic(const Range&
-                                                             children) {
-    return ql::ranges::all_of(
-        children, [](const Ptr& child) { return child->isDeterministic(); });
-  }
+  // Helper for `isDeterministic()` in subclasses: return true iff every direct
+  // child of this expression is deterministic.
+  bool areChildrenDeterministic() const;
 };
 }  // namespace sparqlExpression
 

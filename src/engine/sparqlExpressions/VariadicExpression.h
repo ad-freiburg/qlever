@@ -32,7 +32,7 @@ class VariadicExpression : public SparqlExpression {
 
   // Deterministic iff all children are deterministic.
   [[nodiscard]] bool isDeterministic() const override {
-    return areChildrenDeterministic(children_);
+    return areChildrenDeterministic();
   }
 
   // ___________________________________________________
