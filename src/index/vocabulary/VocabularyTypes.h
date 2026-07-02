@@ -151,9 +151,9 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
 template <typename Vocab>
 VocabLookupOutput sequentialLookupBatchesStreamed(const Vocab& vocab,
                                                   VocabLookupInput input) {
-  return ql::views::transform(
-      OwningView{std::move(input)},
-      [&vocab](const auto& indices) { vocab.lookupBatch(indices); });
+  return OwningView{std::move(input)} |
+         ql::views::transform(
+             [&vocab](const auto& indices) { vocab.lookupBatch(indices); });
 }
 
 }  // namespace ad_utility::vocabulary
