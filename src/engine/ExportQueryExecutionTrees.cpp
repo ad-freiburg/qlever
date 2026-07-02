@@ -453,13 +453,14 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum ad_utility::MediaType;
-  static constexpr std::array supportedFormats{octetStream, csv, tsv, turtle,
-                                               qleverJson};
+  static constexpr std::array supportedFormats{
+      octetStream, csv, tsv, turtle, ntriples, qleverJson};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   // TODO<joka921> Use a proper error message, or check that we get a more
   // reasonable error from upstream.
   AD_CONTRACT_CHECK(format != MediaType::turtle);
+  AD_CONTRACT_CHECK(format != MediaType::ntriples);
   AD_CONTRACT_CHECK(format != MediaType::qleverJson);
 
   // This call triggers the possibly expensive computation of the query result
