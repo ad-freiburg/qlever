@@ -94,7 +94,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   VocabLookupOutput lookupBatchesStreamed(
       VocabLookupInput rangeOfIndexBatches) const;
 
-  /// Get the number of words in the vocabulary.
+  // Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
   // Default constructor for an empty vocabulary.
