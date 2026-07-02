@@ -708,7 +708,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
       "\"4.012934858174e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal> "
       ".\n"
       "<s> <p> \"1e-10\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
-      "<s> <p> \"42.2\"^^<http://wwww.w3.org/2001/XMLSchema#decimal> .\n"
+      "<s> <p> \"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
       "<s> <p> \"100.0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
       "<s> <p> \"123456.0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
       "<s> <p> \"960000.06\"^^<http://www.w3.org/2001/XMLSchema#decimal> "
