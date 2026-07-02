@@ -998,6 +998,7 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     } else if (parsedQuery.hasSelectClause()) {
       supported = selectTypes;
     } else {
+      AD_CORRECTNESS_CHECK()
       supported = constructTypes;
     }
 
