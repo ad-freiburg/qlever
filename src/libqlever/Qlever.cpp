@@ -277,9 +277,29 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
-void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  materializedViewsManager()->writeViewToDisk(
-      std::move(name), parseAndPlanQuery(std::move(query)));
+void Qlever::writeMaterializedView(
+    std::string name, std::string query, const ad_utility::Timer& requestTimer,
+    const std::vector<DatasetClause>& datasetClauses,
+    SharedCancellationHandle cancellationHandle,
+    std::optional<TimeLimit> timeLimit,
+    std::optional<ad_utility::MemorySize> memoryLimit) const {
+  // Acquire the index and the manager via a single read lock so they are
+  // guaranteed to come from the same swap generation.
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto parsedQuery = SparqlParser::parseQuery(
+      &indexAndViews->index_.encodedIriManager(), query, datasetClauses);
+
+  auto qec = createQueryExecutionContext(indexAndViews);
+  auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
+                        std::move(cancellationHandle));
+
+  if (memoryLimit.has_value()) {
+    materializedViewsManager()->writeViewToDisk(
+        std::move(name), std::move(plan), memoryLimit.value());
+  } else {
+    materializedViewsManager()->writeViewToDisk(std::move(name),
+                                                std::move(plan));
+  }
 }
 
 // ___________________________________________________________________________

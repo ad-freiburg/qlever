@@ -1463,19 +1463,11 @@ void Server::writeMaterializedView(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
-  // Acquire the index and the manager via a single read lock so they are
-  // guaranteed to come from the same swap generation.
-  auto indexAndViews = indexAndViewsSnapshot();
-  auto parsedQuery =
-      SparqlParser::parseQuery(&indexAndViews->index_.encodedIriManager(),
-                               query.query_, query.datasetClauses_);
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
-  auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
-                        std::move(cancellationHandle));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  indexAndViews->materializedViewsManager_.writeViewToDisk(name, plan,
-                                                           memoryLimit);
+  qlever().writeMaterializedView(
+      name, query.query_, requestTimer, query.datasetClauses_,
+      std::move(cancellationHandle), timeLimit, memoryLimit);
 }
 
 // _____________________________________________________________________________

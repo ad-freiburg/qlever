@@ -348,7 +348,14 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const ad_utility::Timer& requestTimer,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      ad_utility::SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      std::optional<ad_utility::MemorySize> memoryLimit = std::nullopt) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
