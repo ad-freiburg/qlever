@@ -36,7 +36,7 @@ namespace ad_utility {
 // it is merged into the large part which is always sorted.
 template <typename ValueType, typename Compare = std::less<>,
           typename Projection = ql::identity>
-class SortedVector {
+class SortedRunsVector {
   using Storage = std::vector<ValueType>;
   Storage elements_ = {};
   size_t numItemsLargePart_ = 0;
@@ -129,23 +129,23 @@ class SortedVector {
     return numItemsErased;
   }
 
-  FRIEND_TEST(SortedVectorTest, eraseSortedSubRange);
-  FRIEND_TEST(SortedVectorTest, sortAndRemoveDuplicates);
-  FRIEND_TEST(SortedVectorTest, constructor);
-  FRIEND_TEST(SortedVectorTest, insert);
-  friend struct SortedVectorPairsTestHelper;
+  FRIEND_TEST(SortedRunsVectorTest, eraseSortedSubRange);
+  FRIEND_TEST(SortedRunsVectorTest, sortAndRemoveDuplicates);
+  FRIEND_TEST(SortedRunsVectorTest, constructor);
+  FRIEND_TEST(SortedRunsVectorTest, insert);
+  friend struct SortedRunsVectorPairsTestHelper;
 
  public:
-  SortedVector() = default;
+  SortedRunsVector() = default;
 
   // Create a `SortedVector` from a already sorted and deduplicated elements.
-  static SortedVector fromSorted(std::vector<ValueType> sortedElements,
-                                 Compare comp = {}, Projection proj = {}) {
+  static SortedRunsVector fromSorted(std::vector<ValueType> sortedElements,
+                                     Compare comp = {}, Projection proj = {}) {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElements, comp, proj));
     // No duplicate elements (elements with the same projected key).
     AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(sortedElements, {}, proj) ==
                        sortedElements.end());
-    SortedVector vec;
+    SortedRunsVector vec;
     vec.comp_ = std::move(comp);
     vec.proj_ = std::move(proj);
     vec.numItemsLargePart_ = sortedElements.size();
@@ -177,7 +177,7 @@ class SortedVector {
 
   // Insert an element. `consolidate` must be called before the next read
   // access.
-  void insert(ValueType elem) {
+  void push_back(ValueType elem) {
     elements_.push_back(std::move(elem));
     smallPartIsSorted_ = false;
   }
@@ -309,7 +309,8 @@ class SortedVector {
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation. Requires `isConsolidated` to be true.
-  friend std::ostream& operator<<(std::ostream& os, const SortedVector& sv) {
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const SortedRunsVector& sv) {
     os << "{ ";
     ql::ranges::copy(sv.getSortedView(),
                      std::ostream_iterator<ValueType>(os, " "));
