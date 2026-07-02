@@ -371,10 +371,10 @@ void VocabularyOnDisk::open(const std::string& filename) {
   size_ = numOffsets - 1;
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
-  static constexpr size_t kNumManagers = 8;
+  static constexpr size_t numManagers = 8;
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
-      std::unique_ptr<ad_utility::BatchIoManager>>>(kNumManagers);
-  for (size_t i = 0; i < kNumManagers; ++i) {
+      std::unique_ptr<ad_utility::BatchIoManager>>>(numManagers);
+  for (size_t i = 0; i < numManagers; ++i) {
     ioManagers_->push(std::make_unique<ad_utility::BatchIoManager>());
   }
 }
