@@ -2,24 +2,16 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-<<<<<<<<HEAD : src / index / Engine.cpp
-#include "index/Engine.h"
-        == == == ==
 #include "index/IdTableUtils.h"
-        >>>>>>>> master
-    : src /
-      index /
-      IdTableUtils.cpp
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
-      // The actual implementation of sorting an `IdTable` according to the
-      // `sortCols`.
-      void
-      IdTableUtils::sort(IdTable& idTable,
-                         const std::vector<ColumnIndex>& sortCols) {
+// The actual implementation of sorting an `IdTable` according to the
+// `sortCols`.
+void IdTableUtils::sort(IdTable& idTable,
+                        const std::vector<ColumnIndex>& sortCols) {
   size_t width = idTable.numColumns();
 
   // Instantiate specialized comparison lambdas for one and two sort columns
