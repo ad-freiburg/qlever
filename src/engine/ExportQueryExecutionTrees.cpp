@@ -904,8 +904,9 @@ ExportQueryExecutionTrees::computeResult(
   }(convertStreamGeneratorForChunkedTransfer(std::move(inner)));
 
 #else
-  ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                              sparqlJson, qleverJson>{}(compute, mediaType);
+  ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, ntriples,
+                              sparqlXml, sparqlJson, qleverJson>{}(compute,
+                                                                   mediaType);
 #endif
 }
 

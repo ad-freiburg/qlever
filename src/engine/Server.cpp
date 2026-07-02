@@ -986,8 +986,9 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
   if (!candidates.empty()) {
     using enum ad_utility::MediaType;
     static constexpr std::array askTypes{sparqlXml, sparqlJson, qleverJson};
-    static constexpr std::array selectTypes{octetStream, csv, tsv, qleverJson,
-                                            binaryQleverExport};
+    static constexpr std::array selectTypes{
+        octetStream,       csv, tsv, qleverJson, sparqlXml, sparqlJson,
+        binaryQleverExport};
     static constexpr std::array constructTypes{csv, tsv, qleverJson, turtle,
                                                ntriples};
 
