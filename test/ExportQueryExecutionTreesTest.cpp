@@ -410,9 +410,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
       "<s> <p> 42 .\n"
       "<s> <p> 4012934858173560 .\n",
       // NTriples
-      "<s> <p> -42019234865781 .\n"
-      "<s> <p> 42 .\n"
-      "<s> <p> 4012934858173560 .\n",
+      "<s> <p> \"-42019234865781\"^^\"http://www.w3.org/2001/XMLSchema#int\" "
+      ".\n"
+      "<s> <p> \"42\"^^\"http://www.w3.org/2001/XMLSchema#int\" .\n"
+      "<s> <p> \"4012934858173560\"^^\"www.w3.org/2001/XMLSchema#int\" .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
@@ -494,9 +495,9 @@ TEST(ExportQueryExecutionTrees, Bool) {
       "<s> <p> true .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       // Ntriples
-      "<s> <p> false .\n"
-      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
-      "<s> <p> true .\n"
+      "<s> <p> \"false\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
+      "<s2> <p2> \"0\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
+      "<s> <p> \"true\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
@@ -700,13 +701,18 @@ TEST(ExportQueryExecutionTrees, Floats) {
       "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       // N-Triples
       "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
-      "<s> <p> -42019234865780982022144.0 .\n"
-      "<s> <p> 4.012934858174e-12 .\n"
-      "<s> <p> 1e-10 .\n"
-      "<s> <p> 42.2 .\n"
-      "<s> <p> 100.0 .\n"
-      "<s> <p> 123456.0 .\n"
-      "<s> <p> 960000.06 .\n"
+      "<s> <p> "
+      "\"-42019234865780982022144.0\"^^\"<http://www.w3.org/2001/"
+      "XMLSchema#decimal>\" .\n"
+      "<s> <p> "
+      "\"4.012934858174e-12\"^^\"<http://www.w3.org/2001/XMLSchema#decimal>\" "
+      ".\n"
+      "<s> <p> \"1e-10\"^^\"<http://www.w3.org/2001/XMLSchema#decimal>\" .\n"
+      "<s> <p> \"42.2\"^^\"<http://wwww.w3.org/2001/XMLSchema#decimal>\" .\n"
+      "<s> <p> \"100.0\"^^\"<http://www.w3.org/2001/XMLSchema#decimal>\" .\n"
+      "<s> <p> \"123456.0\"^^\"<http://www.w3.org/2001/XMLSchema#decimal>\" .\n"
+      "<s> <p> \"960000.06\"^^\"<http://www.w3.org/2001/XMLSchema#decimal>\" "
+      ".\n"
       "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
