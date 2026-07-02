@@ -85,7 +85,14 @@ inline std::size_t findCountScalar(const T* keys, T query) noexcept {
       return [query](T k) noexcept { return k < query; };
     }
   }();
-  return static_cast<std::size_t>(ql::ranges::count_if(keys, keys + B, pred));
+  size_t res = 0;
+  auto end = keys + B;
+  for (; keys != end; ++keys) {
+    res += pred(*keys);
+  }
+  return res;
+  // return static_cast<std::size_t>(ql::ranges::count_if(keys, keys + B,
+  // pred));
 }
 
 // SIMD variant of `findCountScalar` using Google Highway.

@@ -243,6 +243,8 @@ void remapColumnChunked(ql::span<Id> col, VocabRemapBuffers& buf,
                         const BlankNodeBlocks& bnb, uint64_t minBni) {
   constexpr std::size_t CHUNK = INDEX_REBUILD_VOCAB_CHUNK_SIZE;
   constexpr std::size_t BATCH = INDEX_REBUILD_VOCAB_PREFETCH_BATCH;
+  size_t usecsTotalRemap = 0;
+  size_t numVocabEntries = 0;
   for (std::size_t chunkStart = 0; chunkStart < col.size();
        chunkStart += CHUNK) {
     const std::size_t chunkSize = std::min(CHUNK, col.size() - chunkStart);
@@ -276,11 +278,16 @@ void remapColumnChunked(ql::span<Id> col, VocabRemapBuffers& buf,
     }
     // Batch upper bound.
     std::size_t vi = 0;
-    tree.multiUpperBound<BATCH>(buf.vocabBuf, [&buf, &vi](std::size_t rank) {
-      buf.vocabResults.push_back(
-          Id::makeFromVocabIndex(VocabIndex::make(buf.vocabBuf[vi] + rank)));
-      ++vi;
-    });
+    if (!buf.vocabBuf.empty()) {
+      ad_utility::Timer t{ad_utility::Timer::Started};
+      tree.multiUpperBound<BATCH>(buf.vocabBuf, [&buf, &vi](std::size_t rank) {
+        buf.vocabResults.push_back(
+            Id::makeFromVocabIndex(VocabIndex::make(buf.vocabBuf[vi] + rank)));
+        ++vi;
+      });
+      usecsTotalRemap += t.value().count();
+      numVocabEntries += buf.vocabBuf.size();
+    }
     // Scatter pass: the ternary on `b` compiles to a branch-free CMOV.
     std::size_t vj = 0, nj = 0;
     for (std::size_t k = 0; k < chunkSize; ++k) {
@@ -289,6 +296,10 @@ void remapColumnChunked(ql::span<Id> col, VocabRemapBuffers& buf,
       vj += b;
       nj += static_cast<std::size_t>(!b);
     }
+  }
+  if (numVocabEntries > 0) {
+    AD_LOG_INFO << "looked up batches of total sizes " << numVocabEntries
+                << " in " << (usecsTotalRemap) << "usecs\n";
   }
 }
 
