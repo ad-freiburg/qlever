@@ -406,6 +406,22 @@ TEST(FormatTriple, TurtleLiteralObject) {
 }
 
 // _____________________________________________________________________________
+TEST(FormatTriple, NTriplesIriObject) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
+  EXPECT_EQ("<http://s> <http://p> <http://o> .\n",
+            formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+// _____________________________________________________________________________
+TEST(FormatTriple, NTriplesLiteralObject) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"hello\"")};
+  EXPECT_EQ("<http://s> <http://p> \"hello\" .\n",
+            formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+// _____________________________________________________________________________
 TEST(FormatTriple, CsvSimpleTerms) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};

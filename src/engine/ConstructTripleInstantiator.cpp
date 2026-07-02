@@ -89,19 +89,23 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
 
 // _____________________________________________________________________________
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
-                         const ad_utility::MediaType& format,
-                         bool includeDataType) {
+                         const ad_utility::MediaType& format) {
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 
+  bool includeDataType = false;
+  if (format == ntriples) {
+    includeDataType = true;
+  }
+
   std::string s = formatTerm(*subject, includeDataType);
   std::string p = formatTerm(*predicate, includeDataType);
   std::string o = formatTerm(*object, includeDataType);
 
-  if (format == turtle) {
+  if (format == turtle || format == ntriples) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
     // are used as-is, avoiding an unnecessary string copy.
     if (ql::starts_with(o, '"')) {
