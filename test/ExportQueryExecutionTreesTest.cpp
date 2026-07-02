@@ -410,10 +410,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
       "<s> <p> 42 .\n"
       "<s> <p> 4012934858173560 .\n",
       // NTriples
-      "<s> <p> \"-42019234865781\"^^\"http://www.w3.org/2001/XMLSchema#int\" "
+      "<s> <p> \"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int> "
       ".\n"
-      "<s> <p> \"42\"^^\"http://www.w3.org/2001/XMLSchema#int\" .\n"
-      "<s> <p> \"4012934858173560\"^^\"www.w3.org/2001/XMLSchema#int\" .\n",
+      "<s> <p> \"42\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+      "<s> <p> \"4012934858173560\"^^<www.w3.org/2001/XMLSchema#int> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
@@ -495,9 +495,9 @@ TEST(ExportQueryExecutionTrees, Bool) {
       "<s> <p> true .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       // Ntriples
-      "<s> <p> \"false\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
-      "<s2> <p2> \"0\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
-      "<s> <p> \"true\"^^\"<http://www.w3.org/2001/XMLSchema#boolean>\" .\n"
+      "<s> <p> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
