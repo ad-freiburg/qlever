@@ -361,6 +361,6 @@ TEST(LibQlever, externallySpecifiedValues) {
     if (qet->getVariableColumn(Variable{"?x"}) != 0) {
       expected.swapColumns(0, 1);
     }
-    EXPECT_THAT(res->idTable(), matchesIdTable(expected));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expected));
   }
 }
