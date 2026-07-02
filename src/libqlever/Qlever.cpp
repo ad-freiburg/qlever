@@ -206,14 +206,35 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
+PlannedQuery Qlever::planQuery(
+    ParsedQuery&& operation, std::optional<TimeLimit> timeLimit,
+    QueryExecutionContext& qec,
+    ad_utility::SharedCancellationHandle handle) const {
+  handle->throwIfCancelled();
+  QueryPlanner qp{&qec, handle};
+
+  qp.setEnablePatternTrick(enablePatternTrick_);
+  auto qet = qp.createExecutionTree(operation);
+  qet.isRoot() = true;
+  PlannedQuery plannedQuery = {std::move(operation), std::move(qet), qec};
+
+  auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
+  // Propagate the `cancellationHandle` and the `timeLimit` through the
+  // `queryExecutionTree`.
+  rootOperation.recursivelySetCancellationHandle(std::move(handle));
+  if (timeLimit.has_value()) {
+    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
+  }
+  return plannedQuery;
+}
+
+// ___________________________________________________________________________
 PlannedQuery Qlever::parseAndPlanQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
     ad_utility::SharedCancellationHandle handle,
     std::optional<TimeLimit> timeLimit,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
-  ad_utility::Timer planningTimer{ad_utility::Timer::InitialStatus::Started};
-
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
       pinResult, disableCaching_);
@@ -222,23 +243,7 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  QueryPlanner qp{qecPtr.get(), handle};
-
-  qp.setEnablePatternTrick(enablePatternTrick_);
-  auto qet = qp.createExecutionTree(parsedQuery);
-  qet.isRoot() = true;
-  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
-
-  handle->throwIfCancelled();
-  auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
-  // Propagate the `cancellationHandle` and the `timeLimit` through the
-  // `queryExecutionTree`.
-  rootOperation.recursivelySetCancellationHandle(std::move(handle));
-  if (timeLimit.has_value()) {
-    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
-  }
-
-  return plannedQuery;
+  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr, handle);
 }
 
 // ___________________________________________________________________________

@@ -763,20 +763,10 @@ Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
-  QueryPlanner qp(&qec, handle);
-  auto executionTree = qp.createExecutionTree(operation);
-  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree),
-                            qec};
-  handle->throwIfCancelled();
-  // Set some additional attributes on the `PlannedQuery`.
-  plannedQuery.queryExecutionTree()
-      .getRootOperation()
-      ->recursivelySetCancellationHandle(std::move(handle));
-  plannedQuery.queryExecutionTree()
-      .getRootOperation()
-      ->recursivelySetTimeConstraint(timeLimit);
+  PlannedQuery plannedQuery = qlever().planQuery(
+      std::move(operation), timeLimit, qec, std::move(handle));
+
   auto& qet = plannedQuery.queryExecutionTree();
-  qet.isRoot() = true;  // allow pinning of the final result
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();

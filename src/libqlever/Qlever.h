@@ -277,6 +277,12 @@ class Qlever {
   // class.
   using PlannedQuery = qlever::PlannedQuery;
 
+  // Plan a parsed query.
+  PlannedQuery planQuery(ParsedQuery&& operation,
+                         std::optional<TimeLimit> timeLimit,
+                         QueryExecutionContext& qec,
+                         SharedCancellationHandle handle) const;
+
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       ad_utility::SharedCancellationHandle handle =
