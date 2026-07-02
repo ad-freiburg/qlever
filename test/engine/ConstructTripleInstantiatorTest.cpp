@@ -524,6 +524,7 @@ TEST(FormatTriple, NTriplesIntegerObjectCarriesDatatype) {
       formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesBooleanObjectCarriesDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("true", XSD_BOOLEAN_TYPE)};
@@ -533,6 +534,7 @@ TEST(FormatTriple, NTriplesBooleanObjectCarriesDatatype) {
       formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesDecimalObjectCarriesDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("3.14", XSD_DECIMAL_TYPE)};
@@ -542,6 +544,7 @@ TEST(FormatTriple, NTriplesDecimalObjectCarriesDatatype) {
       formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesDoubleObjectCarriesDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("INF", XSD_DOUBLE_TYPE)};
@@ -551,6 +554,7 @@ TEST(FormatTriple, NTriplesDoubleObjectCarriesDatatype) {
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesDateObjectCarriesDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("2020-01-01", XSD_DATE_TYPE)};
@@ -560,6 +564,7 @@ TEST(FormatTriple, NTriplesDateObjectCarriesDatatype) {
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"")};
@@ -567,6 +572,7 @@ TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesLanguageTaggedObjectCarriesNoDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"@en")};
@@ -574,22 +580,13 @@ TEST(FormatTriple, NTriplesLanguageTaggedObjectCarriesNoDatatype) {
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesCustomDatatypeObjectPreservedVerbatim) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"blubb\"^^<http://example.org/dt>")};
   const std::string expected =
       "<http://s> <http://p> \"blubb\"^^<http://example.org/dt> .\n";
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// An xsd:string literal is a *simple literal*: it reaches `formatTriple`
-// already serialized with a null datatype pointer (xsd:string is the default
-// datatype and is normalized away), so no `^^<...#string>` is ever appended.
-TEST(FormatTriple, NTriplesXsdStringObjectHasNoDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("\"blubb\"")};
-  EXPECT_EQ("<http://s> <http://p> \"blubb\" .\n",
-            formatTriple(triple, ad_utility::MediaType::ntriples));
 }
 
 // Exhaustive check that N-Triples qualifies every literal that reaches
