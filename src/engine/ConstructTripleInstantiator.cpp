@@ -91,7 +91,7 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
                          const ad_utility::MediaType& format) {
   using enum ad_utility::MediaType;
-  static constexpr std::array supportedFormats{turtle, csv, tsv};
+  static constexpr std::array supportedFormats{turtle, csv, tsv, ntriples};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
   const auto& [subject, predicate, object] = evaluatedTriple;

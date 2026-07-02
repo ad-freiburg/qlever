@@ -512,4 +512,89 @@ TEST(CreateStringTriple, ReturnsFormattedTerms) {
   EXPECT_EQ(result.object_, "<http://o>");
 }
 
+//==============================================================================
+// N-TRIPLES FORMATTING VIA `formatTriple
+//==============================================================================
+// `formatTriple` selects the serialization from the media type. For `ntriples`
+// every literal whose datatype is not xsd:string must explicitly carry its
+// datatype IRI ("value"^^<datatype>); only string and language-tagged literals
+// are written without one.
+//
+// This follows from the W3C RDF N-Triples grammar: a literal with neither a
+// language tag (`@...`) nor a datatype IRI (`^^<...>`) is a *simple literal*
+// whose datatype is DEFINED to be xsd:string. Emitting a string which is not of
+// type xsd:string as a bare quoted value (e.g. "42") would lead to that literal
+// to be reinterpreted as a xsd:string. A string literal needs no annotation
+// because xsd:string is already that default.
+// A language-tagged literal is defined to be of datatype
+// http://www.w3.org/1999/02/22-rdf-syntax-ns#langString.
+
+// _____________________________________________________________________________
+TEST(FormatTriple, NTriplesIntegerObjectCarriesDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("42", XSD_INT_TYPE)};
+  EXPECT_EQ(
+      "<http://s> <http://p> \"42\"^^<http://www.w3.org/2001/XMLSchema#int> "
+      ".\n",
+      formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesBooleanObjectCarriesDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("true", XSD_BOOLEAN_TYPE)};
+  EXPECT_EQ(
+      "<http://s> <http://p> "
+      "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
+      formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesDecimalObjectCarriesDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("3.14", XSD_DECIMAL_TYPE)};
+  EXPECT_EQ(
+      "<http://s> <http://p> "
+      "\"3.14\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n",
+      formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesDoubleObjectCarriesDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("INF", XSD_DOUBLE_TYPE)};
+  const std::string expected =
+      "<http://s> <http://p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"
+      " .\n";
+  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesDateObjectCarriesDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("2020-01-01", XSD_DATE_TYPE)};
+  const std::string expected =
+      "<http://s> <http://p> "
+      "\"2020-01-01\"^^<http://www.w3.org/2001/XMLSchema#date> .\n";
+  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"hello\"")};
+  const std::string expected = "<http://s> <http://p> \"hello\" .\n";
+  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesLanguageTaggedObjectCarriesNoDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"hello\"@en")};
+  const std::string expected = "<http://s> <http://p> \"hello\"@en .\n";
+  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+TEST(FormatTriple, NTriplesCustomDatatypeObjectPreservedVerbatim) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"blubb\"^^<http://example.org/dt>")};
+  const std::string expected =
+      "<http://s> <http://p> \"blubb\"^^<http://example.org/dt> .\n";
+  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
 }  // namespace
