@@ -31,6 +31,7 @@ namespace ql::exportIds {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using LiteralOrIriView = ad_utility::triple_component::LiteralOrIriView;
 using Iri = ad_utility::triple_component::Iri;
+using IriView = ad_utility::triple_component::IriView;
 using Literal = ad_utility::triple_component::Literal;
 
 // Convert the `id` to a `Literal`. Datatypes are always stripped, so for
@@ -91,7 +92,7 @@ std::string replaceAnglesByQuotes(std::string iriString);
 
 // Return the blank-node string representation if `iri` is a blank-node IRI,
 // otherwise std::nullopt.
-std::optional<std::string> blankNodeIriToString(const Iri& iri);
+std::optional<std::string> blankNodeIriToString(const IriView& iri);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
 // is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
@@ -116,7 +117,7 @@ template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
 std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-    const LiteralOrIri& word,
+    const LiteralOrIriView& word,
     EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
