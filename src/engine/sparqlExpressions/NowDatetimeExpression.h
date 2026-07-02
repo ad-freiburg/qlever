@@ -33,7 +33,8 @@ class NowDatetimeExpression : public SparqlExpression {
   }
 
   // Since the result of `NOW()` is determined at construction time, it is
-  // deterministic.
+  // deterministic as long as the cache key is the same which depends on the
+  // time stored in `date_`.
   [[nodiscard]] bool isDeterministic() const override { return true; }
 
  private:

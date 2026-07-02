@@ -34,6 +34,7 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
 Bind makeBindForExpression(QueryExecutionContext* qec,
                            SparqlExpression::Ptr expression,
                            std::string descriptor) {
+  // This is a dummy value. It is not accessed by any of the tests.
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
@@ -245,44 +246,32 @@ INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
                          });
 
 // _____________________________________________________________________________
-TEST(Bind, isDeterministicWithDeterministicExpression) {
+TEST(Bind, isDeterministic) {
   auto* qec = ad_utility::testing::getQec();
+  auto isDeterministic = [qec](SparqlExpression::Ptr expression,
+                               std::string descriptor) {
+    return makeBindForExpression(qec, std::move(expression),
+                                 std::move(descriptor))
+        .isDeterministic();
+  };
+
   // A deterministic expression (a constant literal).
-  Bind bind = makeBindForExpression(
-      qec, std::make_unique<IdExpression>(Id::makeFromInt(42)), "42");
-  EXPECT_TRUE(bind.isDeterministic());
-}
+  EXPECT_TRUE(isDeterministic(
+      std::make_unique<IdExpression>(Id::makeFromInt(42)), "42"));
 
-// _____________________________________________________________________________
-TEST(Bind, isDeterministicWithBnodeExpression) {
-  auto* qec = ad_utility::testing::getQec();
-  // BNODE() is non-deterministic: clone() must not be called on this Bind.
-  Bind bind =
-      makeBindForExpression(qec, makeUniqueBlankNodeExpression(), "BNODE()");
-  EXPECT_FALSE(bind.isDeterministic());
-}
-
-// _____________________________________________________________________________
-TEST(Bind, isDeterministicWithRandExpression) {
-  auto* qec = ad_utility::testing::getQec();
-  Bind bind = makeBindForExpression(qec, std::make_unique<RandomExpression>(),
-                                    "RAND()");
-  EXPECT_FALSE(bind.isDeterministic());
-}
-
-// _____________________________________________________________________________
-TEST(Bind, isDeterministicWithUuidExpression) {
-  auto* qec = ad_utility::testing::getQec();
-  Bind bind =
-      makeBindForExpression(qec, std::make_unique<UuidExpression>(), "UUID()");
-  EXPECT_FALSE(bind.isDeterministic());
+  // `BNODE()`, `RAND()`, `STRUUID()` and `UUID()` are non-deterministic.
+  EXPECT_FALSE(isDeterministic(makeUniqueBlankNodeExpression(), "BNODE()"));
+  EXPECT_FALSE(isDeterministic(std::make_unique<RandomExpression>(), "RAND()"));
+  EXPECT_FALSE(isDeterministic(std::make_unique<UuidExpression>(), "UUID()"));
+  EXPECT_FALSE(
+      isDeterministic(std::make_unique<StrUuidExpression>(), "STRUUID()"));
 }
 
 // _____________________________________________________________________________
 // Cloning a non-deterministic Bind (e.g. with BNODE) must still succeed.
-// clone() is used internally for limit propagation and similar purposes.
-// Preventing the query planner from distributing such a Bind over a UNION is
-// handled separately (see
+// `clone()` is used internally for limit propagation and similar purposes.
+// Preventing the query planner from distributing such a `BIND` over a `UNION`
+// is handled separately (see
 // QueryPlannerTest.nondeterministicOperandNotDistributedOverUnion).
 TEST(Bind, cloneSucceedsForNondeterministicBind) {
   auto* qec = ad_utility::testing::getQec();
