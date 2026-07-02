@@ -1251,45 +1251,62 @@ TEST(IdTable, moveOrCloneOnView) {
 }
 
 // ____________________________________________________________________________
-TEST(IdTable, subView) {
+// Typed test fixture for `subView`, covering both owned `IdTable` and
+// `IdTableView<0>`.
+template <typename T>
+class IdTableSubViewTest : public testing::Test {};
+using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
+
+TYPED_TEST(IdTableSubViewTest, subView) {
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable table{2, alloc};
   for (int i = 0; i < 5; ++i) {
     table.push_back({V(i * 10), V(i * 10 + 1)});
   }
-  IdTableView<0> view = table.asStaticView<0>();
 
-  // Full range: `subView(0, numRows)` must equal the original view.
-  auto fullView = view.subView(0, 5);
-  EXPECT_EQ(fullView.numRows(), 5u);
-  EXPECT_EQ(fullView.numColumns(), 2u);
-  EXPECT_EQ(fullView, table);
+  // Shared test body: run all `subView` assertions on `target`, which is
+  // either the owned `table` itself or a view of it.
+  auto runTests = [&](auto& target) {
+    // Full range: `subView(0, numRows)` must equal the original table.
+    auto fullView = target.subView(0, 5);
+    EXPECT_EQ(fullView.numRows(), 5u);
+    EXPECT_EQ(fullView.numColumns(), 2u);
+    EXPECT_EQ(fullView, table);
 
-  // Empty sub-view: `subView(0, 0)` must have zero rows.
-  auto emptyView = view.subView(0, 0);
-  EXPECT_EQ(emptyView.numRows(), 0u);
-  EXPECT_EQ(emptyView.numColumns(), 2u);
+    // Empty sub-view: `subView(0, 0)` must have zero rows.
+    auto emptyView = target.subView(0, 0);
+    EXPECT_EQ(emptyView.numRows(), 0u);
+    EXPECT_EQ(emptyView.numColumns(), 2u);
 
-  // Suffix: rows [2, 5).
-  auto suffixView = view.subView(2, 3);
-  EXPECT_EQ(suffixView.numRows(), 3u);
-  EXPECT_EQ(suffixView(0, 0), V(20));
-  EXPECT_EQ(suffixView(0, 1), V(21));
-  EXPECT_EQ(suffixView(2, 0), V(40));
+    // Suffix: rows [2, 5).
+    auto suffixView = target.subView(2, 3);
+    EXPECT_EQ(suffixView.numRows(), 3u);
+    EXPECT_EQ(suffixView(0, 0), V(20));
+    EXPECT_EQ(suffixView(0, 1), V(21));
+    EXPECT_EQ(suffixView(2, 0), V(40));
 
-  // Interior slice: rows [1, 3).
-  auto sliceView = view.subView(1, 2);
-  EXPECT_EQ(sliceView.numRows(), 2u);
-  EXPECT_EQ(sliceView(0, 0), V(10));
-  EXPECT_EQ(sliceView(1, 0), V(20));
+    // Interior slice: rows [1, 3).
+    auto sliceView = target.subView(1, 2);
+    EXPECT_EQ(sliceView.numRows(), 2u);
+    EXPECT_EQ(sliceView(0, 0), V(10));
+    EXPECT_EQ(sliceView(1, 0), V(20));
 
-  // `subView` is non-owning: data pointers point into the original table.
-  EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
-  EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    // `subView` is non-owning: data pointers point into the original table.
+    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
+    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
 
-  // Out-of-range access must trigger a contract check.
-  EXPECT_ANY_THROW(view.subView(3, 3));  // offset + size > numRows.
-  EXPECT_ANY_THROW(view.subView(6, 0));  // offset > numRows.
+    // Out-of-range access must trigger a contract check.
+    EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.
+    EXPECT_ANY_THROW(target.subView(6, 0));  // offset > numRows.
+  };
+
+  if constexpr (std::is_same_v<TypeParam, IdTableView<0>>) {
+    auto view = table.asStaticView<0>();
+    runTests(view);
+  } else {
+    runTests(table);
+  }
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

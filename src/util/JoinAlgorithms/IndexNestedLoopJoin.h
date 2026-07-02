@@ -312,10 +312,6 @@ class IndexNestedLoopJoin {
                                       matchTracker.matchTracker_);
           };
           if (leftResult_->isFullyMaterialized()) {
-            // `moveOrClone()` on an `IdTableView<0>` always clones (identical
-            // cost to cloning a `const IdTable&` l-value), so passing the view
-            // here has no extra overhead for `ExistsJoin`. `Minus` only reads
-            // the table and is also unaffected.
             return Result::LazyResult{
                 std::array{matchHelper(leftResult_->idTableView(),
                                        leftResult_->getCopyOfLocalVocab())}};

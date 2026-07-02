@@ -690,3 +690,74 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(Result, assertionOnNullptrConstruction) {
   EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
 }
+
+// _____________________________________________________________________________
+// Tests for the `IdTableView<0>`-backed `Result` constructor and the
+// corresponding `if constexpr` branches in `makeView` and `applyLimitOffset`.
+
+TEST(Result, viewBackedResultIsFullyMaterialized) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}, {5, 6}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  Result result{view, {}, LocalVocab{}};
+  EXPECT_TRUE(result.isFullyMaterialized());
+  // The returned view must alias the original data, not a copy.
+  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
+  EXPECT_EQ(result.idTableView(), idTable);
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedResultCloneIdTable) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  Result result{view, {}, LocalVocab{}};
+  IdTable cloned = result.cloneIdTable();
+  EXPECT_EQ(cloned, idTable);
+  // Must be a deep copy, not an alias into the original data.
+  EXPECT_NE(&cloned(0, 0), &idTable(0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedResultThrowsOnIdTables) {
+  auto idTable = makeIdTableFromVector({{1, 2}});
+  Result result{idTable.asStaticView<0>(), {}, LocalVocab{}};
+  EXPECT_THROW(result.idTables(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedApplyLimitOffset) {
+  auto idTable =
+      makeIdTableFromVector({{0, 9}, {1, 8}, {2, 7}, {3, 6}, {4, 5}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  // Skip the first 2 rows, keep 2: expected rows are {{2, 7}, {3, 6}}.
+  LimitOffsetClause limitOffset{2, 2};
+  auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
+  uint32_t callCounter = 0;
+  Result result{view, {}, LocalVocab{}};
+  result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                           const IdTableView<0>& innerTable) {
+    EXPECT_EQ(innerTable, comparisonTable);
+    // The sub-view must alias the original data at offset 2 (no copy).
+    EXPECT_EQ(&innerTable(0, 0), &idTable(2, 0));
+    ++callCounter;
+  });
+  EXPECT_EQ(callCounter, 1);
+  EXPECT_EQ(result.idTableView(), comparisonTable);
+  // After the limit/offset the result view still aliases the original data.
+  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(2, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedSortOrderIsRespected) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
+  }
+  // Sorted by column 0 — must not throw.
+  auto idTable = makeIdTableFromVector({{1, 6}, {2, 5}, {3, 4}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  EXPECT_NO_THROW((Result{view, {0}, LocalVocab{}}));
+
+  // Not sorted by column 1 — must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE((Result{view, {1}, LocalVocab{}}),
+                                        HasSubstr("compareRowsBySortColumns"),
+                                        ad_utility::Exception);
+}
