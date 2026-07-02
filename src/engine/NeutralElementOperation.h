@@ -36,8 +36,6 @@ class NeutralElementOperation : public Operation {
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
-
   std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<NeutralElementOperation>(_executionContext);
   }
@@ -48,6 +46,8 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);

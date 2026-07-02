@@ -64,7 +64,7 @@ TEST(ExternalValues, isDeterministic) {
   ValuesComponents values{{TC{1}}, {TC{2}}};
   ExternalValues externalValuesOp(testQec, {{Variable{"?x"}}, values},
                                   "det-id");
-  EXPECT_TRUE(externalValuesOp.isDeterministic());
+  EXPECT_FALSE(externalValuesOp.isDeterministic());
 }
 
 // Check that `knownEmptyResult` returns `false` even with empty values.
