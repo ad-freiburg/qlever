@@ -45,7 +45,7 @@ using Literal = ad_utility::triple_component::Literal;
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
-    return !result->idTable().empty();
+    return !result->idTableView().empty();
   } else {
     return ql::ranges::any_of(result->idTables(), [](const auto& pair) {
       return !pair.idTable_.empty();
@@ -107,13 +107,14 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
     return InputRangeTypeErased(lazySingleValueRange([&result]() {
-      return TableConstRefWithVocab{result.idTable(), result.localVocab()};
+      return TableConstRefWithVocab{result.idTableView(), result.localVocab()};
     }));
   }
 
   return InputRangeTypeErased(CachingTransformInputRange(
       result.idTables(), [](const Result::IdTableVocabPair& pair) {
-        return TableConstRefWithVocab{pair.idTable_, pair.localVocab_};
+        return TableConstRefWithVocab{pair.idTable_.asStaticView<0>(),
+                                      pair.localVocab_};
       }));
 }
 
@@ -306,7 +307,8 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
 nlohmann::json idTableToQLeverJSONRow(
     const QueryExecutionTree& qet,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-    const LocalVocab& localVocab, const size_t rowIndex, const IdTable& data) {
+    const LocalVocab& localVocab, const size_t rowIndex,
+    const IdTableView<0>& data) {
   // We need the explicit `array` constructor for the special case of zero
   // variables.
   auto row = nlohmann::json::array();
@@ -845,7 +847,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.supportsLimitOffset()) {
+  if (qet.handlesLimitOffset() != LimitOffsetHandling::NONE) {
     limitOffsetClause._offset = 0;
   }
 }

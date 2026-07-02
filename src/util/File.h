@@ -97,6 +97,12 @@ class File {
   //! checks if the file is open.
   [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
+  //! Return the underlying file descriptor.
+  [[nodiscard]] int fd() const {
+    assert(file_);
+    return fileno(file_);
+  }
+
   //! Close file.
   bool close() {
     if (not isOpen()) {
@@ -112,6 +118,8 @@ class File {
   }
 
   bool empty() { return sizeOfFile() == 0; }
+
+  const std::string& name() const { return name_; }
 
   // read from current file pointer position
   // returns the number of bytes read

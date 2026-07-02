@@ -1475,10 +1475,10 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
   <result>
     <binding name="s"><uri>g</uri></binding>
   </result>)" + xmlTrailer;
-  // The `OrderBy` operation doesn't support the limit natively.
+  // The `OrderBy` operation does not handle the limit.
   std::string_view objectQuery0 =
       "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
-  // The `IndexScan` operation does support the limit natively.
+  // The `IndexScan` operation handles the limit.
   std::string_view objectQuery1 =
       "SELECT ?s WHERE { ?s ?p ?o } INTERNAL SORT BY ?s LIMIT 2 OFFSET 1";
   for (auto objectQuery : {objectQuery0, objectQuery1}) {

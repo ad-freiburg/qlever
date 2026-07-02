@@ -64,7 +64,7 @@ class MaterializedViewsTest : public ::testing::Test {
   std::shared_ptr<qlever::Qlever> qlv_;
 
  protected:
-  const std::string testIndexBase_ = "_materializedViewsTestIndex";
+  const std::string testIndexBase_ = gtestCurrentTestName();
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
 
@@ -121,7 +121,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
     // Compute the result and permute the `IdTable` as expected.
     auto res = qet->getResult(false);
-    auto idTable = res->idTable().clone();
+    auto idTable = res->cloneIdTable();
     idTable.setColumnSubset(columns);
     return idTable;
   }

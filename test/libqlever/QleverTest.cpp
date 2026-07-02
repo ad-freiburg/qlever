@@ -26,7 +26,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexForLibQlever";
+  c.baseName_ = "LibQlever.buildIndexAndRunQuery";
 
   // Test the activation of the memory limit
   c.memoryLimit_ = ad_utility::MemorySize::bytes(0);
@@ -128,7 +128,7 @@ TEST(LibQlever, fulltextIndex) {
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
   c.wordsfile_ = wordsfileName;
   c.docsfile_ = docsFileName;
-  c.baseName_ = "testIndexForLibQlever";
+  c.baseName_ = "LibQlever.fulltextIndex";
   EXPECT_NO_THROW(Qlever::buildIndex(c));
   {
     EngineConfig ec{c};
@@ -205,7 +205,7 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexWithoutPermutations";
+  c.baseName_ = "LibQlever.loadIndexWithoutPermutations";
   c.memoryLimit_ = std::nullopt;
 
   // Build the index normally.
@@ -218,7 +218,8 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 
   // Test that the `setKbName` function silently does nothing, if we have no
   // index.
-  EXPECT_NO_THROW(engine.index().setKbName("we have no triples!"));
+  EXPECT_NO_THROW(
+      engine.indexAndViewsSnapshot()->index_.setKbName("we have no triples!"));
 
   // Run a query that doesn't need to access permutations (constant expression).
   std::string query = "SELECT (3 + 5 AS ?result) {}";
@@ -243,7 +244,7 @@ TEST(LibQlever, disableCaching) {
 
   IndexBuilderConfig c;
   c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexWithoutPermutations";
+  c.baseName_ = "LibQlever.disableCaching";
   c.memoryLimit_ = std::nullopt;
 
   // Build the index normally.
@@ -360,6 +361,6 @@ TEST(LibQlever, externallySpecifiedValues) {
     if (qet->getVariableColumn(Variable{"?x"}) != 0) {
       expected.swapColumns(0, 1);
     }
-    EXPECT_THAT(res->idTable(), matchesIdTable(expected));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expected));
   }
 }
