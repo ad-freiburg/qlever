@@ -207,8 +207,8 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQuery&& operation, std::optional<TimeLimit> timeLimit,
-    QueryExecutionContext& qec,
+    ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
+    std::optional<TimeLimit> timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
@@ -225,6 +225,10 @@ PlannedQuery Qlever::planQuery(
   if (timeLimit.has_value()) {
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
+  auto timeForQueryPlanning = requestTimer.msecs();
+  auto& runtimeInfoWholeQuery =
+      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
   return plannedQuery;
 }
 

@@ -764,15 +764,14 @@ Server::PlannedQuery Server::planQuery(
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
   PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), timeLimit, qec, std::move(handle));
+      std::move(operation), requestTimer, timeLimit, qec, std::move(handle));
 
   auto& qet = plannedQuery.queryExecutionTree();
-  auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-  AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
-              << " ms" << std::endl;
+  AD_LOG_INFO << "Query planning done in "
+              << runtimeInfoWholeQuery.timeQueryPlanning.count() << " ms"
+              << std::endl;
   AD_LOG_TRACE << qet.getCacheKey() << std::endl;
   return plannedQuery;
 }
