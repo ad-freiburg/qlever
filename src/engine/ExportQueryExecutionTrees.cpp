@@ -762,8 +762,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
   static constexpr std::array supportedFormats{
-      octetStream, csv,        tsv,    sparqlXml,
-      sparqlJson,  qleverJson, turtle, binaryQleverExport};
+      octetStream, csv,    tsv,      sparqlXml,         sparqlJson,
+      qleverJson,  turtle, ntriples, binaryQleverExport};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   if constexpr (format == octetStream || format == binaryQleverExport) {
