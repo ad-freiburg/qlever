@@ -883,8 +883,8 @@ ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv,       tsv,        octetStream, turtle,
-      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
+      csv,        tsv,        octetStream,       turtle, ntriples, sparqlXml,
+      sparqlJson, qleverJson, binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
