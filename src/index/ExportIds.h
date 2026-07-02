@@ -232,10 +232,11 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   // expects raw `size_t` vocabulary indices and returns a span of
   // `string_view`s backed by memory kept alive by the returned shared_ptr.
   if (vocabBegin != vocabEnd) {
-    auto rawIndices = ::ranges::to<std::vector<size_t>>(
-        ql::ranges::subrange(vocabBegin, vocabEnd) |
-        ql::views::transform(
-            [](const Id& id) { return id.getVocabIndex().get(); }));
+    auto rawIndices =
+        ::ranges::to_vector(ql::ranges::subrange(vocabBegin, vocabEnd) |
+                            ql::views::transform([](const Id& id) {
+                              return id.getVocabIndex().get();
+                            }));
 
     auto batchResult = index.getImpl().getVocab().lookupBatch(rawIndices);
 
