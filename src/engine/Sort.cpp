@@ -15,7 +15,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
-#include "index/Engine.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
