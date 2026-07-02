@@ -1,7 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Mete Tolga Gonultas <mg885@email.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
@@ -37,26 +37,29 @@ VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
   return {{graphVariable_, makeAlwaysDefinedColumn(0)}};
 }
 
-/**
- * Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where ?g
- * is an unbound variable.
- * * DistinctGraphs operation efficiently reads all distinct named graph IDs
- * directly from the block metadata of the index, without a full table scan
- * where possible.
- * * If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
- * - Traverse through the `graphInfo_`;
- * - If a new graph Id is seen, decompress and read it to prove its existence.
- * Else:
- * - Decompress, read, and add all graph Ids to the result.
- *
- * Filters out the default graph IRI from the result when the
- * `treatDefaultGraphAsNamedGraph` runtime parameter is off.
- *
- * `requestLaziness` If true, hints to the query engine that results can be
- * evaluated lazily. Currently marked as `[[maybe_unused]]`.
- *
- * A Result object containing a unique set of all matching named graph Ids.
- */
+// ____________________________________________________________________________
+size_t DistinctGraphs::getCostEstimate() {
+  return getIndex()
+      .getImpl()
+      .getPermutation(Permutation::Enum::SPO)
+      .numTriples();
+}
+
+// Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where ?g
+// is an unbound variable.
+// * DistinctGraphs operation efficiently reads all distinct named graph IDs
+// directly from the block metadata of the index, without a full table scan
+// where possible.
+// * If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
+// - Traverse through the `graphInfo_`;
+// - If a new graph Id is seen, decompress and read it to prove its existence.
+// Else:
+// - Decompress, read, and add all graph Ids to the result.
+//
+// Filters out the default graph IRI from the result when the
+// `treatDefaultGraphAsNamedGraph` runtime parameter is off.
+//
+// A Result object containing a unique set of all matching named graph Ids.
 // ____________________________________________________________________________
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
@@ -83,6 +86,6 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{1, getExecutionContext()->getAllocator()};
   idTable.resize(graphIds.size());
   ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBits);
-
+  numOfDistinctGraphs = graphIds.size();
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }

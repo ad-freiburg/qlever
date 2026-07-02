@@ -1,7 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Mete Tolga Gonultas <mg885@email.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
@@ -10,14 +10,17 @@
 #ifndef QLEVER_SRC_ENGINE_DISTINCTGRAPHS_H
 #define QLEVER_SRC_ENGINE_DISTINCTGRAPHS_H
 
+#include <cstdint>
+#include <optional>
+
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "rdfTypes/Variable.h"
 
 // Operation that produces a single-column result containing all distinct
 // named graph IRIs present in the index. It is used to evaluate SPARQL
-// patterns of the form `GRAPH ?g { }` where `?g` is a variable that
-// is not already bound by the inner pattern.
+// patterns of the form `GRAPH ?g { }` where ?g is a variable that isn't
+// guaranteed to be an actual graph in the index.
 //
 // The implementation reads graph IDs directly from the block metadata of the
 // SPO permutation, falling back to a full block decompression only when a
@@ -27,8 +30,7 @@
 //
 //  SELECT ?g WHERE { GRAPH ?g { } } -> gives all distinct graphs in the dataset
 //  SELECT ?g WHERE { GRAPH ?g { VALUES ?x { <something> } } } -> cartesian
-//  product
-//    of all distinct graphs with all values of ?x
+//  product of all distinct graphs with all values of ?x
 //  TODO: SELECT ?g WHERE { GRAPH ?g { VALUES ?g { <something> } } } -> Not
 //  covered yet
 //
@@ -45,14 +47,14 @@ class DistinctGraphs : public Operation {
     return "Distinct Graphs";
   }
 
-  // The Result table has only 1 column
+  // The Result table has only 1 column.
   [[nodiscard]] size_t getResultWidth() const override { return 1; }
 
-  // TODO: Could not find rationale
-  size_t getCostEstimate() override { return 1; }
+  // At worst, every triplets might've checked for graph info.
+  size_t getCostEstimate() override;
 
-  // TODO: Could not find rationale
-  float getMultiplicity(size_t col) override { return 1.0f * col; }
+  // All values are distinct by design. There are no duplicates.
+  float getMultiplicity(size_t col) override { return 1.0f; }
 
   bool knownEmptyResult() override { return false; }
 
@@ -68,13 +70,21 @@ class DistinctGraphs : public Operation {
     return "DistinctGraphs";
   }
 
-  uint64_t getSizeEstimateBeforeLimit() override { return 1; }
+  // return last saved #distinctgraphs if valid, otherwise return an optimistic
+  // average (MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20)
+  uint64_t getSizeEstimateBeforeLimit() override {
+    return numOfDistinctGraphs.value_or(50);
+  }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // Single variable, single column
   Variable graphVariable_;
+
+  // Last saved number of distinct graphs
+  std::optional<uint64_t> numOfDistinctGraphs = std::nullopt;
 };
 
 #endif
