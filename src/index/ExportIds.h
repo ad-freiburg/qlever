@@ -29,6 +29,7 @@
 namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIriView = ad_utility::triple_component::LiteralOrIriView;
 using Iri = ad_utility::triple_component::Iri;
 using Literal = ad_utility::triple_component::Literal;
 
@@ -162,7 +163,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
   }
 
-  auto formatWord = [&escapeFunction](const LiteralOrIri& word) {
+  auto formatLiteralOrIri = [&escapeFunction](const LiteralOrIri& word) {
     return literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
                                        returnOnlyLiterals>(word,
                                                            escapeFunction);
@@ -175,10 +176,10 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
-      return formatWord(
+      return formatLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
-      return formatWord(encodedIdToLiteralOrIri(id, index.getImpl()));
+      return formatLiteralOrIri(encodedIdToLiteralOrIri(id, index.getImpl()));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -188,14 +189,15 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   }
 }
 
-// Batch variant of idToStringAndType.
-// Precondition: `ids` is sorted by `ValueId` (as `ConstructBatchEvaluator`
-// does before calling vocabulary lookups). Under this precondition, all
-// `VocabIndex` IDs form a single contiguous block that is already sorted by
-// vocabulary position, so they can be resolved last and in sequential order
-// for I/O-local access to the on-disk vocabulary. All other IDs are resolved
-// immediately since their values are either encoded in the id bits or stored
-// in the in-memory `LocalVocab`.
+// Batch variant of `idToStringAndType`.
+// Precondition: `ids` is sorted by `ValueId` (as `ConstructBatchEvaluator` does
+// before calling vocabulary lookups). Because the datatype tag occupies the 4
+// most significant bits of a `ValueId`, all `VocabIndex` IDs  therefore form a
+// single contiguous block that is already sorted by vocabulary position. We
+// resolve that block in one sequential `lookupBatch` call for I/O-local access
+// to the on-disk vocabulary. All other IDs are resolved immediately, since
+// their values are either encoded in the id bits or stored in the in-memory
+// `LocalVocab`.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -206,45 +208,48 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   std::vector<std::optional<std::pair<std::string, const char*>>> results(
       ids.size());
 
-  // `ids` is sorted by `ValueId`. Because the datatype tag occupies the 4 most
-  // significant bits of a `ValueId`, all `VocabIndex` IDs form a single
-  // contiguous block and are already sorted by vocabulary position within that
-  // block. We resolve all other datatypes immediately (in-memory lookups) and
-  // record where the `VocabIndex` block begins.
-  size_t vocabBegin = ids.size();
-  for (size_t i = 0; i < ids.size(); ++i) {
-    if (ids[i].getDatatype() != Datatype::VocabIndex) {
-      results[i] =
+  // Locate the single contiguous block of `VocabIndex` IDs.
+  auto isVocab = [](const Id& id) {
+    return id.getDatatype() == Datatype::VocabIndex;
+  };
+  auto vocabBegin = ql::ranges::find_if(ids, isVocab);
+  auto vocabEnd = ql::ranges::find_if_not(vocabBegin, ids.end(), isVocab);
+
+  // Resolve every non-`VocabIndex` ID immediately via in-memory lookups. These
+  // are exactly the IDs outside `[vocabBegin, vocabEnd)`, i.e. the ranges
+  // before and after the block.
+  auto resolveInMemory = [&](auto first, auto last) {
+    for (auto it = first; it != last; ++it) {
+      results[it - ids.begin()] =
           idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-              index, ids[i], localVocab, escapeFunction);
-    } else if (vocabBegin == ids.size()) {
-      vocabBegin = i;
+              index, *it, localVocab, escapeFunction);
     }
-  }
+  };
+  resolveInMemory(ids.begin(), vocabBegin);
+  resolveInMemory(vocabEnd, ids.end());
 
-  // Resolve the contiguous `VocabIndex` block in a single batch call.
-  // `lookupBatch` expects raw `size_t` indices and returns a span of
-  // `string_view`s backed by PMR memory kept alive by the returned shared_ptr.
-  size_t vocabEnd = vocabBegin;
-  while (vocabEnd < ids.size() &&
-         ids[vocabEnd].getDatatype() == Datatype::VocabIndex) {
-    ++vocabEnd;
-  }
-  if (vocabBegin < vocabEnd) {
-    std::vector<size_t> rawIndices;
-    rawIndices.reserve(vocabEnd - vocabBegin);
-
-    for (size_t i = vocabBegin; i < vocabEnd; ++i) {
-      rawIndices.push_back(ids[i].getVocabIndex().get());
-    }
+  // Resolve the `VocabIndex` block in a single batch call. `lookupBatch`
+  // expects raw `size_t` vocabulary indices and returns a span of
+  // `string_view`s backed by memory kept alive by the returned shared_ptr.
+  if (vocabBegin != vocabEnd) {
+    auto rawIndices = ::ranges::to<std::vector<size_t>>(
+        ql::ranges::subrange(vocabBegin, vocabEnd) |
+        ql::views::transform(
+            [](const Id& id) { return id.getVocabIndex().get(); }));
 
     auto batchResult = index.getImpl().getVocab().lookupBatch(rawIndices);
-    for (size_t i = vocabBegin; i < vocabEnd; ++i) {
-      std::string_view sv = (*batchResult)[i - vocabBegin];
-      results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
-                                               returnOnlyLiterals>(
-          LiteralOrIri::fromStringRepresentation(std::string{sv}),
-          escapeFunction);
+
+    // The block occupies the same positions in `results` as it does in `ids`.
+    auto blockOffset = vocabBegin - ids.begin();
+    auto resultsBlock = ql::ranges::subrange(
+        results.begin() + blockOffset,
+        results.begin() + blockOffset + (vocabEnd - vocabBegin));
+
+    // Pair each looked-up `string_view` with its target slot in `results`.
+    for (auto&& [sv, slot] : ::ranges::views::zip(*batchResult, resultsBlock)) {
+      slot = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                         returnOnlyLiterals>(
+          LiteralOrIriView::fromStringRepresentation(sv), escapeFunction);
     }
   }
 
