@@ -284,6 +284,19 @@ TEST(SortedRunsVectorTest, back) {
     s.consolidate();
     testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p60); });
   }
+  {
+    SV s{};
+    s.push_back(p10);
+    s.push_back(p30);
+    s.push_back(p21);
+    s.push_back(p31);
+    s.push_back(p20);
+    s.push_back(p11);
+    // A threshold `>=1` means that two parts are never merged. Here this leads
+    // to all elements being in the small part.
+    s.consolidate(1);
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p31); });
+  }
 }
 
 // ____________________________________________________________________________
@@ -313,6 +326,18 @@ TEST(SortedRunsVectorTest, front) {
     s.push_back(p20);
     s.consolidate();
     testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
+  }
+  {
+    SV s{};
+    s.push_back(p10);
+    s.push_back(p21);
+    s.push_back(p20);
+    s.push_back(p11);
+    s.push_back(p30);
+    // A threshold `>=1` means that two parts are never merged. Here this leads
+    // to all elements being in the small part.
+    s.consolidate(1);
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p11); });
   }
 }
 

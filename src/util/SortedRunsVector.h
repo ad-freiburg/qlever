@@ -158,10 +158,10 @@ class SortedRunsVector {
   using value_type = ValueType;
 
   // Consolidate the stored items after inserts have been performed by sorting
-  // and deduplicating the small part. If the small part makes up at
-  // least `threshold` of the total items, the two parts are additionally
-  // merged. `consolidate` must be called before any read access after inserting
-  // new items. After calling `consolidate` `isConsolidated` will be true.
+  // and deduplicating the small part. If the small part makes more than
+  // `threshold` of the total items, the two parts are additionally merged.
+  // `consolidate` must be called before any read access after inserting new
+  // items. After calling `consolidate` `isConsolidated` will be true.
   void consolidate(double threshold = 0.25) {
     if (smallPartIsSorted_) {
       return;
