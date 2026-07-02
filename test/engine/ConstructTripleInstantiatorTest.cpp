@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
@@ -406,22 +407,6 @@ TEST(FormatTriple, TurtleLiteralObject) {
 }
 
 // _____________________________________________________________________________
-TEST(FormatTriple, NTriplesIriObject) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("<http://o>")};
-  EXPECT_EQ("<http://s> <http://p> <http://o> .\n",
-            formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
-TEST(FormatTriple, NTriplesLiteralObject) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("\"hello\"")};
-  EXPECT_EQ("<http://s> <http://p> \"hello\" .\n",
-            formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
 TEST(FormatTriple, CsvSimpleTerms) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
@@ -495,7 +480,7 @@ TEST(FormatTriple, TsvTabInPredicate) {
 TEST(FormatTriple, UnsupportedMediaType) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("<http://o>")};
-  EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::ntriples));
+  EXPECT_ANY_THROW(formatTriple(triple, ad_utility::MediaType::qleverJson));
 }
 
 // ============================================================================
@@ -515,17 +500,17 @@ TEST(CreateStringTriple, ReturnsFormattedTerms) {
 //==============================================================================
 // N-TRIPLES FORMATTING VIA `formatTriple
 //==============================================================================
-// `formatTriple` selects the serialization from the media type. For `ntriples`
-// every literal whose datatype is not xsd:string must explicitly carry its
-// datatype IRI ("value"^^<datatype>); only string and language-tagged literals
-// are written without one.
+// `formatTriple` selects the serialization from the `ad_utility::MediaType`.
+// For `ntriples` every literal whose datatype is not xsd:string must explicitly
+// carry its datatype IRI ("value"^^<datatype>); only string and language-tagged
+// literals are written without one.
 //
 // This follows from the W3C RDF N-Triples grammar: a literal with neither a
 // language tag (`@...`) nor a datatype IRI (`^^<...>`) is a *simple literal*
 // whose datatype is DEFINED to be xsd:string. Emitting a string which is not of
 // type xsd:string as a bare quoted value (e.g. "42") would lead to that literal
-// to be reinterpreted as a xsd:string. A string literal needs no annotation
-// because xsd:string is already that default.
+// being defined to have datatype xsd:string. A string literal needs no
+// annotation because xsd:string is already that default.
 // A language-tagged literal is defined to be of datatype
 // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString.
 
@@ -595,6 +580,57 @@ TEST(FormatTriple, NTriplesCustomDatatypeObjectPreservedVerbatim) {
   const std::string expected =
       "<http://s> <http://p> \"blubb\"^^<http://example.org/dt> .\n";
   EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+// An xsd:string literal is a *simple literal*: it reaches `formatTriple`
+// already serialized with a null datatype pointer (xsd:string is the default
+// datatype and is normalized away), so no `^^<...#string>` is ever appended.
+TEST(FormatTriple, NTriplesXsdStringObjectHasNoDatatype) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("\"blubb\"")};
+  EXPECT_EQ("<http://s> <http://p> \"blubb\" .\n",
+            formatTriple(triple, ad_utility::MediaType::ntriples));
+}
+
+// Exhaustive check that N-Triples qualifies every literal that reaches
+// `formatTerm` with a non-null datatype (i.e. all values encoded directly in a
+// `ValueId`). The lexical form is irrelevant to the datatype handling, so a
+// fixed placeholder is used. `xsd:string` and `rdf:langString` are
+// intentionally absent: they are the simple- and language-tagged-literal cases,
+// which never reach `formatTerm` with a non-null datatype (see the tests
+// above).
+TEST(FormatTriple, NTriplesQualifiesEveryTypedDatatype) {
+  auto expectQualified = [](const char* datatype) {
+    auto triple =
+        EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                        makeTerm("v", datatype)};
+    EXPECT_EQ(absl::StrCat("<http://s> <http://p> \"v\"^^<", datatype, "> .\n"),
+              formatTriple(triple, ad_utility::MediaType::ntriples))
+        << "datatype = " << datatype;
+  };
+  expectQualified(XSD_DATETIME_TYPE);
+  expectQualified(XSD_DATE_TYPE);
+  expectQualified(XSD_GYEAR_TYPE);
+  expectQualified(XSD_GYEARMONTH_TYPE);
+  expectQualified(XSD_DAYTIME_DURATION_TYPE);
+  expectQualified(XSD_INT_TYPE);
+  expectQualified(XSD_INTEGER_TYPE);
+  expectQualified(XSD_FLOAT_TYPE);
+  expectQualified(XSD_DOUBLE_TYPE);
+  expectQualified(XSD_DECIMAL_TYPE);
+  expectQualified(XSD_NON_POSITIVE_INTEGER_TYPE);
+  expectQualified(XSD_NEGATIVE_INTEGER_TYPE);
+  expectQualified(XSD_LONG_TYPE);
+  expectQualified(XSD_SHORT_TYPE);
+  expectQualified(XSD_BYTE_TYPE);
+  expectQualified(XSD_NON_NEGATIVE_INTEGER_TYPE);
+  expectQualified(XSD_UNSIGNED_LONG_TYPE);
+  expectQualified(XSD_UNSIGNED_INT_TYPE);
+  expectQualified(XSD_UNSIGNED_SHORT_TYPE);
+  expectQualified(XSD_POSITIVE_INTEGER_TYPE);
+  expectQualified(XSD_BOOLEAN_TYPE);
+  expectQualified(XSD_ANYURI_TYPE);
+  expectQualified(GEO_WKT_LITERAL.data());
 }
 
 }  // namespace
