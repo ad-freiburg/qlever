@@ -132,16 +132,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   }
 
   auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer().resize(totalSize);
-  data->views().resize(indices.size());
-  size_t offset = 0;
-  for (size_t i = 0; i < words.size(); ++i) {
-    char* dest = data->buffer().data() + offset;
-    std::memcpy(dest, words[i].data(), words[i].size());
-    data->views()[i] = std::string_view(dest, words[i].size());
-    offset += words[i].size();
-  }
-  return VocabBatchLookupData::asResult(std::move(data));
+  data->buffer() = words;
 }
 
 // Sequential fallback for `lookupBatchesStreamed`: lazily apply
