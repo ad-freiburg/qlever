@@ -478,9 +478,12 @@ TEST_F(ConstructTripleGeneratorTest,
   auto table = makeTableWithRange(*result, 0, 1);
   auto templateTriples = oneTriple(Iri{"<s>"}, Iri{"<p>"}, Iri{"<o>"});
 
-  static constexpr std::array supported{ad_utility::MediaType::turtle,
-                                        ad_utility::MediaType::csv,
-                                        ad_utility::MediaType::tsv};
+  static constexpr std::array supported{
+      ad_utility::MediaType::turtle,
+      ad_utility::MediaType::csv,
+      ad_utility::MediaType::tsv,
+      ad_utility::MediaType::ntriples,
+  };
 
   // expect that unsupported mediatypes throw, expect that supported mediatypes
   // don't throw.
