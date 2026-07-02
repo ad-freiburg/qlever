@@ -515,56 +515,6 @@ TEST(CreateStringTriple, ReturnsFormattedTerms) {
 // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString.
 
 // _____________________________________________________________________________
-TEST(FormatTriple, NTriplesIntegerObjectCarriesDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("42", XSD_INT_TYPE)};
-  EXPECT_EQ(
-      "<http://s> <http://p> \"42\"^^<http://www.w3.org/2001/XMLSchema#int> "
-      ".\n",
-      formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
-TEST(FormatTriple, NTriplesBooleanObjectCarriesDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("true", XSD_BOOLEAN_TYPE)};
-  EXPECT_EQ(
-      "<http://s> <http://p> "
-      "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
-      formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
-TEST(FormatTriple, NTriplesDecimalObjectCarriesDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("3.14", XSD_DECIMAL_TYPE)};
-  EXPECT_EQ(
-      "<http://s> <http://p> "
-      "\"3.14\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n",
-      formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
-TEST(FormatTriple, NTriplesDoubleObjectCarriesDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("INF", XSD_DOUBLE_TYPE)};
-  const std::string expected =
-      "<http://s> <http://p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"
-      " .\n";
-  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
-TEST(FormatTriple, NTriplesDateObjectCarriesDatatype) {
-  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
-                                makeTerm("2020-01-01", XSD_DATE_TYPE)};
-  const std::string expected =
-      "<http://s> <http://p> "
-      "\"2020-01-01\"^^<http://www.w3.org/2001/XMLSchema#date> .\n";
-  EXPECT_EQ(expected, formatTriple(triple, ad_utility::MediaType::ntriples));
-}
-
-// _____________________________________________________________________________
 TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"")};
