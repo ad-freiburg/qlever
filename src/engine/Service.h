@@ -167,6 +167,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
 #else
 // In the C++17 mode, where the If we disable the `Service` operation isled,

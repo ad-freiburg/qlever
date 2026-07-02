@@ -37,8 +37,8 @@ TEST(TextIndexScanForEntity, ShortPrefixWord) {
                             "t*"};
   ASSERT_EQ(s1.getResultWidth(), 3);
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 3);
   ASSERT_EQ("\"he failed the test\"",
             h::getEntityFromResultTable(qec, result, 0));
   ASSERT_EQ("\"testing can help\"",
@@ -57,8 +57,8 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 3);
 
   // NOTE: because of the way the graph above is constructed, the entities are
   // texts
@@ -86,8 +86,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 
   auto result = s3.computeResultOnlyForTesting();
   ASSERT_EQ(s3.getResultWidth(), 2);
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables = {
@@ -103,8 +103,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   fixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "test*"};
   result = s4.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 }

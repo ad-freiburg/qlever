@@ -488,7 +488,7 @@ class CompressedRelationWriter {
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
   CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
-                                              IdTableView<0> relation);
+                                              const IdTable& relation);
 
   // Add a new block for a large relation that is to be stored in multiple
   // blocks. This function may only be called if one of the following holds:

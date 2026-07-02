@@ -202,12 +202,12 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        GIT_TAG 2d2a6d74ddf28447afabb75943913a6445a27d4f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
-add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=1 SPATIALJOIN_NO_ZLIB=1)
 
 ################################
 # Threading
@@ -246,6 +246,23 @@ else ()
     on Ubuntu 18.04, where pkg-config does not find jemalloc. Continuing without jemalloc,
     this will impact the performance, most notably of the IndexBuilder")
     endif ()
+endif ()
+
+### io_uring (optional, for asynchronous batch vocabulary I/O)
+option(USE_IO_URING "Enable io_uring support for batch vocabulary I/O (requires liburing)" ON)
+if (USE_IO_URING)
+    find_package(PkgConfig)
+    pkg_check_modules(URING QUIET liburing)
+    if (URING_FOUND)
+        MESSAGE(STATUS "Found liburing, enabling io_uring support")
+        add_compile_definitions(QLEVER_HAS_IO_URING)
+        include_directories(${URING_INCLUDE_DIRS})
+        link_libraries(${URING_LIBRARIES})
+    else ()
+        MESSAGE(STATUS "USE_IO_URING is ON but liburing was not found, building without io_uring support")
+    endif ()
+else ()
+    MESSAGE(STATUS "USE_IO_URING is OFF, building without io_uring support")
 endif ()
 
 ### ZSTD
