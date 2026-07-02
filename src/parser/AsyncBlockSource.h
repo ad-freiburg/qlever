@@ -103,6 +103,14 @@ class AsyncBlockSource {
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
 
+  // Synchronously obtain the next block of bytes. This is a direct call to
+  // `getNextBlockImpl()` and carries the same thread-safety restrictions:
+  // must not be called concurrently with `asyncGetNextBlock()` or with
+  // another `getNextBlock()` call on the same object. The intended use is
+  // during construction of a class that owns this source, before any
+  // asynchronous calls have been initiated.
+  std::optional<ByteBlock> getNextBlock() { return getNextBlockImpl(); }
+
  protected:
   // Synchronously produce the next block of bytes. Called from within the
   // internal strand — implementers do not need extra synchronization.

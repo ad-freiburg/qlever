@@ -14,6 +14,9 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 #include <future>
 #include <locale>
 #include <stdexcept>
@@ -744,28 +747,22 @@ class RdfParallelParser : public Parser {
 //
 // Unlike `RdfParallelParser`, this class does not prefetch or buffer batches
 // on its own behalf: parallelism comes entirely from the caller keeping
-// several calls to `asyncGetBatch()` in flight at once. Once any batch fails
-// to parse, the error is remembered, and every subsequent call to
-// `asyncGetBatch()` (even for batches that would otherwise have succeeded)
-// completes with that same exception.
+// several calls to `asyncGetBatch()` in flight at once. The `AsyncBlockSource`
+// owned by this class serializes block fetches internally via its strand,
+// while parsing of different blocks happens in parallel on `executor_`.
 //
-// Note: an instance of this class must outlive all of its in-flight
-// `asyncGetBatch()` calls. Because it owns no threads of its own, its
-// destructor cannot wait for pending work the way `RdfParallelParser`'s does.
+// Once any batch fails to parse, `errorWasEncountered_` is set and:
+//   - the failing call's completion handler receives the exception, and
+//   - every subsequent `asyncGetBatch()` call completes with
+//     `(nullptr, nullopt)` to trigger early stopping in the caller.
+//
+// An instance of this class must outlive all in-flight `asyncGetBatch()` calls.
+// The `ioPool_` destructor joins the dedicated IO thread, so the class is safe
+// to destroy after all outstanding futures have been retrieved.
 template <typename Parser>
 class RdfAsyncParallelParser {
  private:
-  // The completion handler type used internally, after the caller's
-  // completion token has been type-erased away in `asyncGetBatch()`.
-  using CompletionHandler = absl::AnyInvocable<void(
-      std::exception_ptr, std::optional<std::vector<TurtleTriple>>)>;
-
   boost::asio::any_io_executor executor_;
-
-  // Used to serialize access to `driver_`, `remainderFromInit_`,
-  // `initialBatchConsumed_`, and `firstError_` below, all of which are read
-  // and written from calls to `asyncGetBatch()` that might run concurrently.
-  boost::asio::strand<boost::asio::any_io_executor> strand_;
 
   // Holds the header state (prefixes, base IRI, file-level blank node prefix)
   // collected while parsing the leading declarations. This state is copied
@@ -775,26 +772,34 @@ class RdfAsyncParallelParser {
   // those two methods) is used here instead.
   RdfStringParser<Parser> parser_;
 
-  std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
+  // Dedicated one-thread pool for I/O, kept separate from `executor_` so that
+  // `asyncGetNextBlock(boost::asio::use_future).get()` on an `executor_`
+  // thread can never deadlock. Declared before `driver_` so it is destroyed
+  // after `driver_` (members are destroyed in reverse declaration order).
+  boost::asio::thread_pool ioPool_{1};
 
-  // The part of the first block that is left over after parsing the leading
-  // `@prefix`/`@base` declarations in the constructor. Consumed by exactly
-  // one call to `asyncGetBatch()`. Must only be accessed while running on
-  // `strand_`.
+  // Owns the file-reading and block-splitting logic. Created on `ioPool_`'s
+  // executor so that its internal strand runs on the dedicated IO thread.
+  std::unique_ptr<qlever::parser::AsyncBlockSource> driver_;
+
+  // The part of the first block left over after parsing the leading
+  // `@prefix`/`@base` declarations in the constructor. The first caller to
+  // exchange `initialBatchConsumed_` from false to true is the sole owner and
+  // may move from this field.
   qlever::parser::ByteBlock remainderFromInit_;
-  bool initialBatchConsumed_ = false;
+  std::atomic_bool initialBatchConsumed_{false};
 
-  // The first exception encountered while fetching or parsing a batch, if
-  // any. Once set, every subsequent call to `asyncGetBatch()` completes with
-  // this exception instead of fetching a new batch. Must only be accessed
-  // while running on `strand_`.
-  std::exception_ptr firstError_;
+  // Set to true by the first `asyncGetBatch()` call that encounters an error.
+  // All subsequent calls complete with `(nullptr, nullopt)` instead of
+  // propagating further exceptions, so that the caller's pipeline stops
+  // cleanly.
+  std::atomic_bool errorWasEncountered_{false};
 
  public:
-  // Construct a parser that reads from an `InputFileSpecification` and
-  // schedules all of its work on `executor`. As in `RdfParallelParser`, the
-  // constructor eagerly parses the leading declarations and stores the
-  // remainder of the first block for the first call to `asyncGetBatch()`.
+  // Construct a parser that reads from `spec` and schedules all of its work
+  // on `executor`. As in `RdfParallelParser`, the constructor eagerly parses
+  // the leading declarations and stores the remainder of the first block for
+  // the first call to `asyncGetBatch()`.
   RdfAsyncParallelParser(const boost::asio::any_io_executor& executor,
                          const qlever::InputFileSpecification& spec,
                          ad_utility::MemorySize blocksize,
@@ -802,48 +807,185 @@ class RdfAsyncParallelParser {
                          const TripleComponent& defaultGraphIri =
                              qlever::specialIds().at(DEFAULT_GRAPH_IRI));
 
-  // Asynchronously fetch and parse the next batch of triples. Accepts any
+  // Asynchronously fetch and parse the next batch of triples. Accept any
   // Asio completion token. The completion signature is
   // `void(std::exception_ptr, std::optional<std::vector<TurtleTriple>>)`: a
-  // null `exception_ptr` signals success, a non-null one signals that
-  // fetching or parsing the batch threw (see the class comment above for what
-  // happens to subsequent calls in that case). A successful result of
-  // `std::nullopt` means that the input is exhausted.
+  // null `exception_ptr` with a non-null optional signals success; a non-null
+  // `exception_ptr` signals that this batch failed (see the class comment for
+  // what happens to subsequent calls); a null `exception_ptr` with `nullopt`
+  // means EOF or that an earlier batch already failed.
   template <typename CompletionToken>
   auto asyncGetBatch(CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr,
                                     std::optional<std::vector<TurtleTriple>>)>(
-        [this](auto handler) mutable {
-          net::any_io_executor ex =
-              net::get_associated_executor(handler, executor_);
-          CompletionHandler erasedHandler =
-              [h = std::move(handler)](
+        [this](auto handler) {
+          auto ex = net::get_associated_executor(handler, executor_);
+          // Factory: dispatch `(ep, batch)` to `ex` and invoke `handler`.
+          auto dispatchResult =
+              [ex, h = std::move(handler)](
                   std::exception_ptr ep,
                   std::optional<std::vector<TurtleTriple>> batch) mutable {
-                std::move(h)(ep, std::move(batch));
+                net::dispatch(ex, [h = std::move(h), ep,
+                                   batch = std::move(batch)]() mutable {
+                  std::move(h)(ep, std::move(batch));
+                });
               };
-          net::post(strand_,
-                    [this, h = std::move(erasedHandler), ex]() mutable {
-                      fetchAndParseNextBatch(std::move(h), ex);
-                    });
+          // If a prior error was encountered, signal clean EOF to stop the
+          // caller's pipeline without re-throwing.
+          if (errorWasEncountered_.load()) {
+            dispatchResult(nullptr, std::nullopt);
+            return;
+          }
+          // The first caller to win the exchange gets to deliver the remainder
+          // left over from initialization.
+          if (!initialBatchConsumed_.exchange(true)) {
+            net::post(
+                executor_,
+                [this, dispatchResult = std::move(dispatchResult)]() mutable {
+                  std::exception_ptr eptr;
+                  std::optional<std::vector<TurtleTriple>> result;
+                  try {
+                    result = parseBatch(std::move(remainderFromInit_));
+                  } catch (...) {
+                    eptr = std::current_exception();
+                  }
+                  if (eptr) {
+                    if (!errorWasEncountered_.exchange(true)) {
+                      dispatchResult(eptr, std::nullopt);
+                    } else {
+                      dispatchResult(nullptr, std::nullopt);
+                    }
+                  } else {
+                    dispatchResult(nullptr, std::move(result));
+                  }
+                });
+            return;
+          }
+          // General case: post to `executor_` and block on `ioPool_`'s
+          // dedicated IO thread via `use_future`. Because `ioPool_` is
+          // separate from `executor_`, this `.get()` can never deadlock
+          // regardless of how many concurrent `asyncGetBatch()` calls are
+          // in-flight.
+          net::post(executor_, [this, dispatchResult =
+                                          std::move(dispatchResult)]() mutable {
+            std::exception_ptr fetchEptr;
+            std::optional<qlever::parser::ByteBlock> block;
+            try {
+              block = driver_->asyncGetNextBlock(boost::asio::use_future).get();
+            } catch (...) {
+              fetchEptr = std::current_exception();
+            }
+            if (fetchEptr) {
+              if (!errorWasEncountered_.exchange(true)) {
+                dispatchResult(fetchEptr, std::nullopt);
+              } else {
+                dispatchResult(nullptr, std::nullopt);
+              }
+              return;
+            }
+            if (!block.has_value()) {
+              dispatchResult(nullptr, std::nullopt);
+              return;
+            }
+            std::exception_ptr parseEptr;
+            std::optional<std::vector<TurtleTriple>> result;
+            try {
+              result = parseBatch(std::move(block.value()));
+            } catch (...) {
+              parseEptr = std::current_exception();
+            }
+            if (parseEptr) {
+              if (!errorWasEncountered_.exchange(true)) {
+                dispatchResult(parseEptr, std::nullopt);
+              } else {
+                dispatchResult(nullptr, std::nullopt);
+              }
+            } else {
+              dispatchResult(nullptr, std::move(result));
+            }
+          });
         },
         AD_FWD(token));
   }
 
  private:
-  // Run on `strand_`. Pick the next batch (either the leftover batch from
-  // initialization, or the next block from `driver_`). If a batch is
-  // available, dispatch its parsing to `executor_`; either way, dispatch the
-  // final completion of `handler` to `ex` (the executor associated with the
-  // original completion token, falling back to `executor_`).
-  void fetchAndParseNextBatch(CompletionHandler handler,
-                              boost::asio::any_io_executor ex);
-
   // Parse a single batch of raw bytes into triples, exactly like
-  // `RdfParallelParser::parseBatch`. Throws on a parse error.
+  // `RdfParallelParser::parseBatch`. Throw on a parse error.
   std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch);
+};
+
+// A synchronous wrapper around `RdfAsyncParallelParser` that owns an internal
+// `boost::asio::thread_pool` and exposes the same file-reading interface as
+// `RdfParallelParser`. Useful when a blocking batch interface is needed without
+// an external `boost::asio` executor.
+template <typename Parser>
+class RdfParallelParserViaAsync : public Parser {
+ private:
+  // Declared before `asyncParser_` so the pool outlives the parser during
+  // destruction (members are destroyed in reverse order of declaration).
+  std::optional<boost::asio::thread_pool> pool_;
+  std::optional<RdfAsyncParallelParser<Parser>> asyncParser_;
+  // Leftover triples from the last batch, used by `getLineImpl`.
+  std::vector<TurtleTriple> triples_;
+
+ public:
+  // Default construction needed for tests.
+  explicit RdfParallelParserViaAsync(const EncodedIriManager* ev)
+      : Parser{ev} {}
+
+  // Construct a parser that reads from `spec` on an internally-managed thread
+  // pool. The interface is identical to that of `RdfParallelParser`.
+  RdfParallelParserViaAsync(const qlever::InputFileSpecification& spec,
+                            ad_utility::MemorySize blocksize,
+                            const EncodedIriManager* ev,
+                            const TripleComponent& defaultGraphIri =
+                                qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : Parser{ev, defaultGraphIri},
+        pool_{std::in_place, NUM_PARALLEL_PARSER_THREADS} {
+    asyncParser_.emplace(pool_->get_executor(), spec, blocksize, ev,
+                         defaultGraphIri);
+  }
+
+  // Overload that accepts and ignores a `sleepTimeForTesting` parameter so that
+  // tests can instantiate this class and `RdfParallelParser` with the same
+  // constructor arguments.
+  RdfParallelParserViaAsync(
+      const qlever::InputFileSpecification& spec,
+      ad_utility::MemorySize blocksize, const EncodedIriManager* ev,
+      const TripleComponent& defaultGraphIri,
+      [[maybe_unused]] std::chrono::milliseconds sleepTimeForTesting)
+      : RdfParallelParserViaAsync{spec, blocksize, ev, defaultGraphIri} {}
+
+  using Parser::getLine;
+
+  // Fetch the next batch by forwarding to the internal `asyncParser_`.
+  std::optional<std::vector<TurtleTriple>> getBatch() override {
+    if (!asyncParser_.has_value()) {
+      return std::nullopt;
+    }
+    return asyncParser_->asyncGetBatch(boost::asio::use_future).get();
+  }
+
+  // Return triples one by one, buffering an entire batch internally.
+  bool getLineImpl(TurtleTriple* triple) override {
+    while (triples_.empty()) {
+      if (!asyncParser_.has_value()) {
+        return false;
+      }
+      auto batch = asyncParser_->asyncGetBatch(boost::asio::use_future).get();
+      if (!batch.has_value()) {
+        return false;
+      }
+      triples_ = std::move(batch.value());
+    }
+    *triple = std::move(triples_.back());
+    triples_.pop_back();
+    return true;
+  }
+
+  size_t getParsePosition() const override { return 0; }
 };
 
 // This class is an RDF parser that parses multiple files in parallel. Each

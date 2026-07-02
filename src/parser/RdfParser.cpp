@@ -1306,14 +1306,15 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     ad_utility::MemorySize blocksize,
     const EncodedIriManager* encodedIriManager,
     const TripleComponent& defaultGraphIri)
-    : executor_{executor},
-      strand_{boost::asio::make_strand(executor)},
-      parser_{encodedIriManager, defaultGraphIri} {
-  driver_.emplace(spec, blocksize, "\\.[\\t ]*([\\r\\n]+)");
+    : executor_{executor}, parser_{encodedIriManager, defaultGraphIri} {
+  driver_ = std::make_unique<qlever::parser::AsyncEndRegexBlockSource>(
+      ioPool_.get_executor(),
+      spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
+      "\\.[\\t ]*([\\r\\n]+)");
   RdfStringParser<Parser> declarationParser{encodedIriManager};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = driver_.value().getNextBlock()) {
+    if (auto batch = driver_->getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
@@ -1328,73 +1329,6 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
   Parser::copyHeaderFrom(std::move(declarationParser), parser_);
   remainderFromInit_.reserve(remainder.size());
   ql::ranges::copy(remainder, std::back_inserter(remainderFromInit_));
-}
-
-// ____________________________________________________________________________
-template <typename Parser>
-void RdfAsyncParallelParser<Parser>::fetchAndParseNextBatch(
-    CompletionHandler handler, boost::asio::any_io_executor ex) {
-  namespace net = boost::asio;
-  // This function runs on `strand_`, so `driver_`, `remainderFromInit_`,
-  // `initialBatchConsumed_`, and `firstError_` can be accessed without any
-  // extra synchronization.
-  if (firstError_) {
-    auto eptr = firstError_;
-    net::dispatch(ex, [handler = std::move(handler), eptr]() mutable {
-      handler(eptr, std::nullopt);
-    });
-    return;
-  }
-  std::optional<qlever::parser::ByteBlock> batch;
-  try {
-    if (!initialBatchConsumed_) {
-      initialBatchConsumed_ = true;
-      batch = std::move(remainderFromInit_);
-    } else {
-      batch = driver_.value().getNextBlock();
-    }
-  } catch (...) {
-    firstError_ = std::current_exception();
-    auto eptr = firstError_;
-    net::dispatch(ex, [handler = std::move(handler), eptr]() mutable {
-      handler(eptr, std::nullopt);
-    });
-    return;
-  }
-  if (!batch.has_value()) {
-    net::dispatch(ex, [handler = std::move(handler)]() mutable {
-      handler(nullptr, std::nullopt);
-    });
-    return;
-  }
-  // Parse the batch on `executor_` (not on `strand_`), so that batches
-  // requested by concurrent calls to `asyncGetBatch()` can be parsed in
-  // parallel. Only the batch-selection logic above needs to run on `strand_`.
-  net::post(executor_, [this, handler = std::move(handler), ex,
-                        batch = std::move(batch).value()]() mutable {
-    std::exception_ptr eptr;
-    std::optional<std::vector<TurtleTriple>> result;
-    try {
-      result = parseBatch(std::move(batch));
-    } catch (...) {
-      eptr = std::current_exception();
-    }
-    // Record the error (if any) back on `strand_` before dispatching the
-    // completion. Doing both from the same task on `strand_` guarantees that
-    // no access to `this` is still outstanding once `handler` runs, which
-    // matters because the caller is free to destroy `*this` as soon as its
-    // completion handler has been invoked.
-    net::post(strand_, [this, handler = std::move(handler), ex, eptr,
-                        result = std::move(result)]() mutable {
-      if (eptr && !firstError_) {
-        firstError_ = eptr;
-      }
-      net::dispatch(ex, [handler = std::move(handler), eptr,
-                         result = std::move(result)]() mutable {
-        handler(eptr, std::move(result));
-      });
-    });
-  });
 }
 
 // ____________________________________________________________________________

@@ -927,6 +927,14 @@ auto forAllParallelParsers(const auto& function, const auto&... args) {
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, false, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, true, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<Tokenizer>>>, true,
+           args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<Tokenizer>>>, false,
+           args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<TokenizerCtre>>>, true,
+           args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<TokenizerCtre>>>, false,
+           args...);
 }
 auto forAllMultifileParsers(const auto& function, const auto&... args) {
   function(ti<RdfMultifileParser>, true, args...);
@@ -1387,9 +1395,9 @@ TEST(RdfParserTest, asyncParallelParserExceptionPropagation) {
   forAllAsyncParallelParsers(testWithParser, "<missing> <object> .");
 }
 
-// Test that once a batch fails to parse, every subsequent call to
-// `asyncGetBatch()` also fails with the same exception, instead of silently
-// reporting a clean end of input.
+// Test that once a batch fails to parse, the error is reported exactly once and
+// subsequent calls return `nullopt` to stop the caller's pipeline cleanly,
+// instead of silently reporting EOF or re-throwing on every call.
 TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
   std::string filename{"rdfAsyncParallelParserHaltsOnFirstError.dat"};
   auto testWithParser = [&](auto t, [[maybe_unused]] bool useBatchInterface) {
@@ -1409,10 +1417,13 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
                       filename, qlever::Filetype::Turtle, std::nullopt},
                   1_kB, encodedIriManager()};
 
+    // The first call encounters the parse error and propagates it.
     EXPECT_ANY_THROW(parser.asyncGetBatch(boost::asio::use_future).get());
-    // The input is now exhausted, but the error must still be reported.
-    EXPECT_ANY_THROW(parser.asyncGetBatch(boost::asio::use_future).get());
-    EXPECT_ANY_THROW(parser.asyncGetBatch(boost::asio::use_future).get());
+    // Subsequent calls return nullopt to stop the pipeline cleanly.
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
   };
   forAllAsyncParallelParsers(testWithParser);
 }
