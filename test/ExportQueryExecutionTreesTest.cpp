@@ -129,8 +129,9 @@ struct TestCaseConstructQuery {
                                     // including triples with UNDEF values.
   uint64_t resultSizeExported;      // The expected number of results exported.
   std::string resultTsv;            // The expected result in TSV format.
-  std::string resultCsv;            // The expected result in CSV format
-  std::string resultTurtle;         // The expected result in Turtle format
+  std::string resultCsv;            // The expected result in CSV format.
+  std::string resultTurtle;         // The expected result in Turtle format.
+  std::string resultNtriples;       // The expected result in NTriples format.
   nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
                                     // Note: this member only contains the inner
                                     // result array with the bindings and NOT
@@ -203,6 +204,8 @@ void runConstructQueryTestCase(
   EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, ntriples),
+            testCase.resultNtriples);
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
@@ -406,6 +409,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
       "<s> <p> -42019234865781 .\n"
       "<s> <p> 42 .\n"
       "<s> <p> 4012934858173560 .\n",
+      // NTriples
+      "<s> <p> -42019234865781 .\n"
+      "<s> <p> 42 .\n"
+      "<s> <p> 4012934858173560 .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
@@ -486,6 +493,11 @@ TEST(ExportQueryExecutionTrees, Bool) {
       "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
       "<s> <p> true .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
+      // Ntriples
+      "<s> <p> false .\n"
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> true .\n"
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
@@ -540,6 +552,8 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       // CSV
       "",
       // Turtle
+      "",
+      // Ntriples
       "", []() { return nlohmann::json::parse("[]"); }()};
   runConstructQueryTestCase(testCaseConstruct);
 }
@@ -684,6 +698,17 @@ TEST(ExportQueryExecutionTrees, Floats) {
       "<s> <p> 960000.06 .\n"
       "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
+      // N-Triples
+      "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> -42019234865780982022144.0 .\n"
+      "<s> <p> 4.012934858174e-12 .\n"
+      "<s> <p> 1e-10 .\n"
+      "<s> <p> 42.2 .\n"
+      "<s> <p> 100.0 .\n"
+      "<s> <p> 123456.0 .\n"
+      "<s> <p> 960000.06 .\n"
+      "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{
@@ -753,6 +778,10 @@ TEST(ExportQueryExecutionTrees, Dates) {
       "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\"\n",
       // Turtle
+      "<s> <p> "
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
+      ".\n",
+      // N-Triples
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
       ".\n",
@@ -838,6 +867,8 @@ TEST(ExportQueryExecutionTrees, Entities) {
       "<s>,<p>,<http://qlever.com/o>\n",
       // Turtle
       "<s> <p> <http://qlever.com/o> .\n",
+      // N-triples
+      "<s> <p> <http://qlever.com/o> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "<http://qlever.com/o>"s});
@@ -886,6 +917,8 @@ TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
       // CSV
       "<s>,<p>,\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
       // Turtle
+      "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
+      // N-Triples
       "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
       []() {
         nlohmann::json j;
@@ -936,6 +969,8 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
       "<s>,<p>,\"\"\"something\"\"^^<www.example.org/bim>\"\n",
       // Turtle
       "<s> <p> \"something\"^^<www.example.org/bim> .\n",
+      // N-Triples
+      "<s> <p> \"something\"^^<www.example.org/bim> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s,
@@ -984,6 +1019,8 @@ TEST(ExportQueryExecutionTrees, LiteralPlain) {
       "<s>,<p>,\"\"\"something\"\"\"\n",
       // Turtle
       "<s> <p> \"something\" .\n",
+      // N-Triples
+      "<s> <p> \"something\" .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "\"something\""s});
@@ -1029,6 +1066,8 @@ testIriKg</uri></binding>
       // CSV
       "<s>,<p>,\"<https://\t: )\ntestIriKg>\"\n",
       // Turtle
+      "<s> <p> <https://\t: )\ntestIriKg> .\n",
+      // N-Triples
       "<s> <p> <https://\t: )\ntestIriKg> .\n",
       []() {
         nlohmann::json j;
@@ -1101,6 +1140,10 @@ TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
       "<s> <p> <iriescaped\x01o\x02"
       "e\x03i\x04o\x05u\x06"
       "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
+      // N-Triples
+      "<s> <p> <iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{
@@ -1150,6 +1193,8 @@ TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
       "<s>,<p>,\"\"\" hallo\n\t welt\"\"\"\n",
       // Turtle
       "<s> <p> \" hallo\\n\t welt\" .\n",
+      // N-Triples
+      "<s> <p> \" hallo\\n\t welt\" .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "\" hallo\n\t welt\""s});
@@ -1192,6 +1237,7 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       "BY ?o",
       1,
       0,
+      "",
       "",
       "",
       "",
@@ -1315,6 +1361,15 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
       "_:g3_0,<p>,_:u3_a\n"
       "_:g3_1,<p>,_:u3_a\n",
       // Turtle
+      "_:g0_0 <p> _:u0_a .\n"
+      "_:g0_1 <p> _:u0_a .\n"
+      "_:g1_0 <p> _:u1_a .\n"
+      "_:g1_1 <p> _:u1_a .\n"
+      "_:g2_0 <p> _:u2_a .\n"
+      "_:g2_1 <p> _:u2_a .\n"
+      "_:g3_0 <p> _:u3_a .\n"
+      "_:g3_1 <p> _:u3_a .\n",
+      // N-Triples
       "_:g0_0 <p> _:u0_a .\n"
       "_:g0_1 <p> _:u0_a .\n"
       "_:g1_0 <p> _:u1_a .\n"
