@@ -889,9 +889,9 @@ ExportQueryExecutionTrees::computeResult(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
-      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson, binaryQleverExport>{}(
-          compute, mediaType);
+      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, ntriples,
+                                  sparqlXml, sparqlJson, qleverJson,
+                                  binaryQleverExport>{}(compute, mediaType);
 
   return [](auto range) -> cppcoro::generator<std::string> {
     for (auto&& item : range) {
