@@ -200,21 +200,32 @@ class SortedVector {
   void getSortedView() && = delete;
   void getSortedView() const&& = delete;
 
-  // Return a reference to the last element. Requires the container to not be
-  // empty and `isConsolidated` to be true.
-  const ValueType& back() const {
+ private:
+  // Return the extreme (maximal if `wantMax`, else minimal) element w.r.t.
+  // `comp_`/`proj_`. On a tie (equal projected key) the small part's element
+  // wins, since it holds the most recently inserted value for that key.
+  // Requires the container to not be empty and `isConsolidated` to be true.
+  const ValueType& extremumImpl(bool wantMax) const {
     AD_CONTRACT_CHECK(!empty());
     AD_CONTRACT_CHECK(isConsolidated());
-    // If we only have a single part directly return the back of that single
-    // sorted part.
+    // If we only have a single part directly return its respective end.
     if (numItemsLargePart_ == elements_.size() || numItemsLargePart_ == 0) {
-      return elements_.back();
+      return wantMax ? elements_.back() : elements_.front();
     }
-    auto& lastLargePart = elements_.at(numItemsLargePart_ - 1);
-    auto& lastSmallPart = elements_.back();
-    return comp_(proj_(lastSmallPart), proj_(lastLargePart)) ? lastLargePart
-                                                             : lastSmallPart;
+    auto& largePartBoundary =
+        wantMax ? elements_.at(numItemsLargePart_ - 1) : elements_.front();
+    auto& smallPartBoundary =
+        wantMax ? elements_.back() : elements_.at(numItemsLargePart_);
+    bool largeWins =
+        wantMax ? comp_(proj_(smallPartBoundary), proj_(largePartBoundary))
+                : comp_(proj_(largePartBoundary), proj_(smallPartBoundary));
+    return largeWins ? largePartBoundary : smallPartBoundary;
   }
+
+ public:
+  // Return a reference to the last element. Requires the container to not be
+  // empty and `isConsolidated` to be true.
+  const ValueType& back() const { return extremumImpl(true); }
   // Return a reference to the last element. Requires the container to not be
   // empty and `isConsolidated` to be true.
   ValueType& back() {
@@ -223,19 +234,7 @@ class SortedVector {
 
   // Return a reference to the first element. Requires the container to not be
   // empty and `isConsolidated` to be true.
-  const ValueType& front() const {
-    AD_CONTRACT_CHECK(!empty());
-    AD_CONTRACT_CHECK(isConsolidated());
-    // If we only have a single part directly return the front of that single
-    // sorted part.
-    if (numItemsLargePart_ == elements_.size() || numItemsLargePart_ == 0) {
-      return elements_.front();
-    }
-    auto& firstLargePart = elements_.front();
-    auto& firstSmallpart = elements_.at(numItemsLargePart_);
-    return comp_(proj_(firstSmallpart), proj_(firstLargePart)) ? firstLargePart
-                                                               : firstSmallpart;
-  }
+  const ValueType& front() const { return extremumImpl(false); }
   // Return a reference to the first element. Requires the container to not be
   // empty and `isConsolidated` to be true.
   ValueType& front() {

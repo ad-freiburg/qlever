@@ -286,6 +286,36 @@ TEST(SortedVectorTest, back) {
 }
 
 // ____________________________________________________________________________
+TEST(SortedVectorTest, front) {
+  {
+    SV s{};
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.front(), AssertionFailed("!empty()"));
+    });
+  }
+  {
+    SV s = SV::fromSorted({p20, p30, p40, p50});
+    // small part is empty
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p20); });
+    s.insert(p21);
+    s.consolidate();
+    // The small part is non-empty but the large part has the largest element.
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p21); });
+    s.insert(p10);  // `p10` will be in the small part
+    testConstOverloads(s, [](auto& s) {
+      AD_EXPECT_THROW_WITH_MESSAGE(s.front(), NotConsolidated);
+    });
+    s.consolidate();
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
+    s.consolidate(0);
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
+    s.insert(p20);
+    s.consolidate();
+    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
+  }
+}
+
+// ____________________________________________________________________________
 TEST(SortedVectorTest, consolidate) {
   {
     SV s = SV::fromSorted({p10, p20, p31, p40, p51});
