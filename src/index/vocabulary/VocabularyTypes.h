@@ -20,6 +20,7 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
+#include "util/Views.h"
 
 // The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
@@ -151,7 +152,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
 template <typename Vocab>
 VocabLookupOutput sequentialLookupBatchesStreamed(const Vocab& vocab,
                                                   VocabLookupInput input) {
-  return VocabLookupOutput{OwningView{std::move(input)} |
+  return VocabLookupOutput{ad_utility::OwningView{std::move(input)} |
                            ql::views::transform([&vocab](const auto& indices) {
                              return vocab.lookupBatch(indices);
                            })};
