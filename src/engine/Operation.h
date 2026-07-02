@@ -183,20 +183,30 @@ class Operation {
   virtual std::string getCacheKey() const final;
 
   // Return true iff this operation and all of its children are guaranteed to
-  // produce the same result on every invocation (i.e. the tree contains no
-  // BNODE(), RAND(), UUID(), STRUUID(), SERVICE, or LOAD). Operations for
-  // which this returns false must not be cloned, as the clone would share the
-  // same cache key but might compute a different result.
+  // produce the same result on every invocation, OR are explicitly configured
+  // to be treated as reproducible (e.g. SERVICE/LOAD with result caching
+  // enabled, where the user guarantees that the remote endpoint returns a
+  // stable result). A tree containing BNODE(), RAND(), UUID(), STRUUID(), or a
+  // non-cached SERVICE/LOAD is not deterministic. Operations for which this
+  // returns false must not be cloned (or only cloned if you can prove only one
+  // of the clones will ever be used in the same query tree), as the clone would
+  // share the same cache key but might compute a different result.
   [[nodiscard]] bool isDeterministic() const;
 
   // If this function returns `false`, then the result of this `Operation` will
-  // never be stored in the cache. It might however be read from the cache.
-  // This can be used, if the operation actually only returns a subset of the
-  // actual result because it has been constrained by a parent operation (e.g.
-  // an IndexScan that has been prefiltered by another operation which it is
-  // joined with).
+  // never be stored in the cache. It might however be read from the cache. A
+  // result is not stored if any of the following holds:
+  //   - the operation is not deterministic (see `isDeterministic()`), because
+  //     such a result could never be retrieved anyway: its cache key is either
+  //     unique per instantiation, or the operation is not meant to be reused;
+  //   - `disableStoringInCache()` was called on this operation;
+  //   - `resultDoesMatchCacheKey()` returns `false`, i.e. the operation only
+  //     returns a subset of the actual result associated with its cache key
+  //     because it has been constrained by a parent operation (e.g. an
+  //     `IndexScan` that has been prefiltered by another operation which it is
+  //     joined with).
   virtual bool canResultBeCached() const final {
-    return canResultBeCachedImpl() && canResultBeCached_;
+    return resultDoesMatchCacheKey() && canResultBeCached_ && isDeterministic();
   }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
@@ -204,16 +214,24 @@ class Operation {
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
-  // Return if the result of this `Operation` can be cached at all. Caching can
-  // still be disabled for other reason external to this operation with
-  // `disableStoringInCache()`.
-  virtual bool canResultBeCachedImpl() const { return true; }
+  // Return whether the result produced by this `Operation` actually matches the
+  // result associated with its cache key. This is `true` for almost all
+  // operations, but `false` e.g. for an `IndexScan` that has been prefiltered
+  // by a parent operation: such a scan shares the cache key of the unfiltered
+  // scan but only produces a subset of its result, so storing it would poison
+  // the cache entry for the full scan. This is independent of
+  // `disableStoringInCache()` and of `isDeterministic()`; see
+  // `canResultBeCached()` for how the three are combined.
+  virtual bool resultDoesMatchCacheKey() const { return true; }
 
   // Per-class component of `isDeterministic()`. Return true iff this specific
-  // operation (ignoring children) is intrinsically deterministic. Override and
-  // return false for operations that perform network requests (SERVICE, LOAD)
-  // or evaluate non-deterministic expressions (BIND/FILTER with BNODE, RAND,
-  // UUID, or STRUUID).
+  // operation (ignoring children) is deterministic. Override and return false
+  // for operations that evaluate non-deterministic expressions (BIND/FILTER
+  // with BNODE, RAND, UUID, or STRUUID). Operations that perform network
+  // requests (SERVICE, LOAD) are non-deterministic by default, but report
+  // `true` when their result caching is explicitly enabled, in which case the
+  // user guarantees that the remote endpoint returns a stable result (and the
+  // cache key becomes reproducible accordingly).
   [[nodiscard]] virtual bool isDeterministicImpl() const = 0;
 
   // The individual implementation of `getCacheKey` (see above) that has to

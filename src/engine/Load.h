@@ -35,10 +35,6 @@ class Load final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
-  // Initialized to the value of the runtime parameter `cache-load-results` at
-  // construction.
-  bool loadResultCachingEnabled_;
-
  public:
   Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
        SendRequestType getResultFunction = sendHttpOrHttpsRequest);
@@ -46,8 +42,6 @@ class Load final : public Operation {
   ~Load() override = default;
 
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  bool canResultBeCachedImpl() const override;
 
   std::string getCacheKeyImpl() const override;
 
@@ -67,8 +61,12 @@ class Load final : public Operation {
 
  private:
   // LOAD performs a network request and may return different results on
-  // successive invocations.
-  [[nodiscard]] bool isDeterministicImpl() const override { return false; }
+  // successive invocations, so it is non-deterministic by default. It is
+  // treated as deterministic (and hence cacheable) iff the runtime parameter
+  // `cache-load-results` is enabled, in which case the user guarantees that the
+  // remote endpoint returns a stable result. This is kept consistent with
+  // `getCacheKeyImpl()`, which also reads the parameter live.
+  [[nodiscard]] bool isDeterministicImpl() const override;
 
   std::unique_ptr<Operation> cloneImpl() const override;
 

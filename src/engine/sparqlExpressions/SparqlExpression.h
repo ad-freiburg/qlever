@@ -182,17 +182,16 @@ class SparqlExpression {
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final;
 
-  // Helper for isDeterministic() in subclasses: returns true iff every element
-  // in `children` (a range of SparqlExpression::Ptr) is deterministic.
+  // Helper for `isDeterministic()` in subclasses: return true iff every element
+  // in `children` (a range of `SparqlExpression::Ptr`) is deterministic.
   CPP_template(typename Range)(
       requires ql::ranges::input_range<Range>&& ql::concepts::same_as<
           ql::ranges::range_value_t<Range>,
           SparqlExpression::
               Ptr>) static bool areChildrenDeterministic(const Range&
                                                              children) {
-    return ql::ranges::all_of(children, [](const SparqlExpression::Ptr& child) {
-      return child->isDeterministic();
-    });
+    return ql::ranges::all_of(
+        children, [](const Ptr& child) { return child->isDeterministic(); });
   }
 };
 }  // namespace sparqlExpression

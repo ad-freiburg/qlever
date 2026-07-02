@@ -785,7 +785,7 @@ std::unique_ptr<Operation> Operation::clone() const {
   // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
   // legitimately produce a different cache key on each instantiation, so we
   // do not enforce the equality there.
-  AD_EXPENSIVE_CHECK(!canResultBeCached() || !isDeterministic() ||
+  AD_EXPENSIVE_CHECK(!isDeterministic() ||
                      getCacheKey() == result->getCacheKey());
   return result;
 }

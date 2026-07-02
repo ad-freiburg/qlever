@@ -56,10 +56,10 @@ class ExternalValues : private Values, virtual public Operation {
   // in the new values match the existing variables.
   void updateValues(parsedQuery::SparqlValues newValues);
 
-  // Override to ensure external values are never cached.
-  bool canResultBeCachedImpl() const override { return false; }
-
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+  // External values are injected at runtime and may change between invocations,
+  // so this operation is non-deterministic. This also ensures its result is
+  // never stored in the cache (see `Operation::canResultBeCached()`).
+  [[nodiscard]] bool isDeterministicImpl() const override { return false; }
 
   // Override to ensure external values are never considered empty.
   bool knownEmptyResult() override { return false; }

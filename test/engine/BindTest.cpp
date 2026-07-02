@@ -30,6 +30,20 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
        Variable{"?b"}}};
 }
 
+// Construct a `Bind` that assigns `expression` to `?b`.
+Bind makeBindForExpression(QueryExecutionContext* qec,
+                           SparqlExpression::Ptr expression,
+                           std::string descriptor) {
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+  return {qec,
+          std::move(valuesTree),
+          {SparqlExpressionPimpl{std::move(expression),
+                                 std::move(descriptor) + " AS ?b"},
+           Variable{"?b"}}};
+}
+
 void expectBindYieldsIdTable(
     QueryExecutionContext* qec, Bind& bind, const IdTable& expected,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -233,59 +247,34 @@ INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
 // _____________________________________________________________________________
 TEST(Bind, isDeterministicWithDeterministicExpression) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   // A deterministic expression (a constant literal).
-  Bind bind{
-      qec,
-      std::move(valuesTree),
-      {SparqlExpressionPimpl{
-           std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
-       Variable{"?b"}}};
+  Bind bind = makeBindForExpression(
+      qec, std::make_unique<IdExpression>(Id::makeFromInt(42)), "42");
   EXPECT_TRUE(bind.isDeterministic());
 }
 
 // _____________________________________________________________________________
 TEST(Bind, isDeterministicWithBnodeExpression) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   // BNODE() is non-deterministic: clone() must not be called on this Bind.
-  Bind bind{
-      qec,
-      std::move(valuesTree),
-      {SparqlExpressionPimpl{makeUniqueBlankNodeExpression(), "BNODE() as ?b"},
-       Variable{"?b"}}};
+  Bind bind =
+      makeBindForExpression(qec, makeUniqueBlankNodeExpression(), "BNODE()");
   EXPECT_FALSE(bind.isDeterministic());
 }
 
 // _____________________________________________________________________________
 TEST(Bind, isDeterministicWithRandExpression) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
-  Bind bind{qec,
-            std::move(valuesTree),
-            {SparqlExpressionPimpl{std::make_unique<RandomExpression>(),
-                                   "RAND() as ?b"},
-             Variable{"?b"}}};
+  Bind bind = makeBindForExpression(qec, std::make_unique<RandomExpression>(),
+                                    "RAND()");
   EXPECT_FALSE(bind.isDeterministic());
 }
 
 // _____________________________________________________________________________
 TEST(Bind, isDeterministicWithUuidExpression) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
-  Bind bind{qec,
-            std::move(valuesTree),
-            {SparqlExpressionPimpl{std::make_unique<UuidExpression>(),
-                                   "UUID() as ?b"},
-             Variable{"?b"}}};
+  Bind bind =
+      makeBindForExpression(qec, std::make_unique<UuidExpression>(), "UUID()");
   EXPECT_FALSE(bind.isDeterministic());
 }
 
@@ -297,14 +286,8 @@ TEST(Bind, isDeterministicWithUuidExpression) {
 // QueryPlannerTest.nondeterministicOperandNotDistributedOverUnion).
 TEST(Bind, cloneSucceedsForNondeterministicBind) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
-  Bind bind{
-      qec,
-      std::move(valuesTree),
-      {SparqlExpressionPimpl{makeUniqueBlankNodeExpression(), "BNODE() as ?b"},
-       Variable{"?b"}}};
+  Bind bind =
+      makeBindForExpression(qec, makeUniqueBlankNodeExpression(), "BNODE()");
   EXPECT_FALSE(bind.isDeterministic());
   auto clone = bind.clone();
   ASSERT_TRUE(clone);

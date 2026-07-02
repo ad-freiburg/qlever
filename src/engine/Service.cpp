@@ -38,6 +38,11 @@ Service::Service(QueryExecutionContext* qec,
       getResultFunction_{std::move(getResultFunction)} {}
 
 // ____________________________________________________________________________
+bool Service::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
+}
+
+// ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
     return absl::StrCat(
