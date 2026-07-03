@@ -248,7 +248,7 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   if (vocabBegin != vocabEnd) {
     auto rawIndices =
         ::ranges::to_vector(ql::ranges::subrange(vocabBegin, vocabEnd) |
-                            ql::views::transform([](const Id& id) {
+                            ql::views::transform([](const Id& id) -> size_t {
                               return id.getVocabIndex().get();
                             }));
 
