@@ -616,7 +616,8 @@ auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
 
 TEST(SparqlExpression, dateOperators) {
   // Test `YearExpression`, `MonthExpression`, `DayExpression`,
-  //  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
+  //  `HoursExpression`, `MinutesExpression`, `SecondsExpression` and
+  //  `ToEpochExpression`.
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto checkYear = testUnaryExpression<&makeYearExpression>;
@@ -625,8 +626,9 @@ TEST(SparqlExpression, dateOperators) {
   auto checkHours = testUnaryExpression<&makeHoursExpression>;
   auto checkMinutes = testUnaryExpression<&makeMinutesExpression>;
   auto checkSeconds = testUnaryExpression<&makeSecondsExpression>;
+  auto checkEpoch = testUnaryExpression<&makeToEpochExpression>;
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
-                &checkSeconds](
+                &checkSeconds, &checkEpoch](
                    const DateYearOrDuration& date,
                    std::optional<int> expectedYear,
                    std::optional<int> expectedMonth = std::nullopt,
@@ -634,6 +636,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
+                   std::optional<int64_t> expectedEpoch = std::nullopt,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
@@ -657,27 +660,59 @@ TEST(SparqlExpression, dateOperators) {
     checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMinutes)});
     checkSeconds(Ids{Id::makeFromDate(date)},
                  Ids{optToIdDouble(expectedSeconds)});
+    checkEpoch(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedEpoch)});
   };
 
   using D = DateYearOrDuration;
-  // Now the checks for dates with varying level of detail.
+// Now the checks for dates with varying level of detail.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // `ToEpochExpression` works with `std::chrono`.
   check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
-        42.25);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
-  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
-  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
-  check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
-  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
-
-  // Test behavior of the `largeYear` representation that doesn't store the
-  // actual date.
+        42.25, 9'633'222);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt, std::nullopt,
+        std::nullopt, 9'590'400);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt, std::nullopt,
+        std::nullopt, 9'590'400);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24, std::nullopt, std::nullopt,
+        std::nullopt, -60'810'912'000);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -65'275'718'400);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt, std::nullopt,
+        std::nullopt, std::nullopt, -101'108'476'800);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -52'021'785'600);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, 11'092'118'400);
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
+            42.25, 9'633'222),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt,
+            std::nullopt, std::nullopt, 9'590'400),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt,
+            std::nullopt, std::nullopt, std::nullopt, -101'108'476'800),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
+// Test behavior of the `largeYear` representation that doesn't store the
+// actual date.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   check(D::parseGYear("123456"), 123456);
   check(D::parseGYearMonth("-12345-01"), -12345, 1);
   check(D::parseGYearMonth("-12345-03"), -12345, 1);
   check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
   check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseGYear("123456"), 123456),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
 
   // Invalid inputs for date expressions.
   checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
@@ -686,10 +721,15 @@ TEST(SparqlExpression, dateOperators) {
   checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
+  checkEpoch(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   auto testYear = testUnaryExpression<&makeYearExpression>;
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
+
+  // Test epoch for invalid dates.
+  checkEpoch(Ids{Id::makeFromDate(D::parseXsdDate("1970-02-30"))},
+             Ids{Id::makeUndefined()});
 
   // test makeTimezoneStrExpression / makeTimezoneExpression
   auto positive = DayTimeDuration::Type::Positive;
@@ -1722,6 +1762,59 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("LINESTRING(2 8,4 6)"),
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
+
+  // The internal function `ql:simplifyGeometry`.
+  auto checkSimplify =
+      std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
+
+  const IdOrLocalVocabEntryVec geometries{
+      // 1. Undefined input geometry.
+      U,
+      // 2. Line with a vertex that is removed for this tolerance.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 3. Line whose middle vertex is too far from the simplified segment and
+      //    is therefore kept.
+      geoLit("LINESTRING(0 0,5 5,10 0)"),
+      // 4. Polygon with a near-collinear vertex that is removed.
+      geoLit("POLYGON((0 0,5 0.1,10 0,10 10,0 10,0 0))"),
+      // 5. Multipolygon: each member is simplified independently.
+      geoLit(
+          "MULTIPOLYGON(((0 0,5 0.1,10 0,10 10,0 10,0 0)),((20 20,25 20.1,30 "
+          "20,30 30,20 30,20 20)))"),
+      // 6. Points are returned unchanged.
+      geoLit("POINT(1 2)"),
+      // 7. Tolerance of zero is invalid -> UNDEF.
+      geoLit("POLYGON((0 0,5 0.1,10 0,10 10,0 10,0 0))"),
+      // 8. Negative tolerance is invalid -> UNDEF.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 9. Non-numeric (undefined) tolerance -> UNDEF.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 10. Non-geometry literal -> UNDEF.
+      IdOrLocalVocabEntry{lit("NotAGeometry")},
+      // 11. Invalid WKT with the correct datatype -> UNDEF.
+      geoLit("NOTWKT(1 2)"),
+      // 12. An integer tolerance is accepted just like a double.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+  };
+  const Ids tolerances{D(1.0), D(1.0),  D(1.0), D(1.0), D(1.0), D(1.0),
+                       D(0.0), D(-1.0), U,      D(1.0), D(1.0), I(1)};
+  const IdOrLocalVocabEntryVec expected{
+      U,
+      geoLit("LINESTRING(0 0,10 0)"),
+      geoLit("LINESTRING(0 0,5 5,10 0)"),
+      geoLit("POLYGON((10 10,0 10,0 0,10 0,10 10))"),
+      geoLit(
+          "MULTIPOLYGON(((10 10,0 10,0 0,10 0,10 10)),((30 30,20 30,20 20,30 "
+          "20,30 30)))"),
+      geoLit("POINT(1 2)"),
+      U,
+      U,
+      U,
+      U,
+      U,
+      geoLit("LINESTRING(0 0,10 0)"),
+  };
+  checkSimplify(expected, geometries, tolerances);
 }
 
 // ________________________________________________________________________________________

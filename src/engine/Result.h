@@ -21,9 +21,8 @@
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
-// is either a table and contained in the member `idTable()` or can be consumed
-// through a generator via `idTables()` when it is supposed to be lazily
-// evaluated.
+// is either a table accessible via `idTableView()` or can be consumed through a
+// generator via `idTables()` when it is supposed to be lazily evaluated.
 class Result {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
@@ -93,21 +92,23 @@ class Result {
   // The spans inside `view_` survive moving this object because `IdTable` keeps
   // its columns in heap-backed storage that the move only re-points to.
   class IdTableSharedLocalVocabPair {
-    std::variant<IdTable, IdTablePtr> idTableOrPtr_;
+    std::variant<IdTable, IdTablePtr, IdTableView<0>> idTableOrPtr_;
     LocalVocabPtr localVocab_;
     IdTableView<0> view_;
 
     // Build the view from `idTableOrPtr_`. Used by the constructors and by
     // `applyLimitOffset()` after the data has been modified.
     static IdTableView<0> makeView(
-        const std::variant<IdTable, IdTablePtr>& idTableOrPtr);
+        const std::variant<IdTable, IdTablePtr, IdTableView<0>>& idTableOrPtr);
 
    public:
     IdTableSharedLocalVocabPair(IdTable idTable, LocalVocabPtr localVocab);
     IdTableSharedLocalVocabPair(IdTablePtr idTablePtr,
                                 LocalVocabPtr localVocab);
+    // Construct from a non-owning view. The caller is responsible for ensuring
+    // that the underlying data outlives this object.
+    IdTableSharedLocalVocabPair(IdTableView<0> view, LocalVocabPtr localVocab);
 
-    const IdTable& idTable() const;
     // The returned reference is stable for the lifetime of this object.
     // `applyLimitOffset()` refreshes the view in place; copies of the view
     // value taken before that call should not be reused afterwards.
@@ -177,6 +178,11 @@ class Result {
          LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
          std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+
+  // Construct from a non-owning view. The caller is responsible for ensuring
+  // that the underlying data outlives this `Result`.
+  Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
@@ -224,15 +230,15 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw if this result is not fully
-  // materialized.
-  const IdTable& idTable() const;
-
-  // Returns a non-owning view of the materialized `idTable()`. Throw if not
-  // fully materialized. The reference is stable for the lifetime of this
-  // `Result`; `applyLimitOffset()` refreshes the view in place, so copies of
-  // the view value taken before that call should not be reused afterwards.
+  // Return a non-owning view of the materialized table. Throw if not fully
+  // materialized. The reference is stable for the lifetime of this `Result`;
+  // `applyLimitOffset()` refreshes the view in place, so copies of the view
+  // value taken before that call should not be reused afterwards.
   const IdTableView<0>& idTableView() const;
+
+  // Return a clone of the materialized table. Throw if not fully materialized.
+  // This operation is potentially expensive as it copies all data.
+  IdTable cloneIdTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
@@ -242,7 +248,7 @@ class Result {
   // was destroyed.
   LazyResult idTables() const;
 
-  // Const access to the columns by which the `idTable()` is sorted.
+  // Const access to the columns by which the `idTableView()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
@@ -315,7 +321,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const IdTableView<0>&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many
