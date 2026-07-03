@@ -18,12 +18,15 @@
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/span.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "util/Exception.h"
 #include "util/ValueIdentity.h"
 
 namespace ql::exportIds {
