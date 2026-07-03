@@ -35,6 +35,16 @@ class ExportQueryExecutionTrees {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
 
+  static constexpr std::array supportedMediaTypesForConstructQueries{
+      MediaType::turtle, MediaType::csv, MediaType::tsv, MediaType::ntriples};
+  static constexpr std::array supportedMediaTypesForAskQueries{
+      MediaType::qleverJson, MediaType::sparqlJson, MediaType::sparqlXml
+
+  };
+  static constexpr std::array supportedMediaTypesForSelectQueries{
+      MediaType::octetStream, MediaType::csv, MediaType::tsv,
+      MediaType::sparqlXml, MediaType::sparqlJson};
+
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
   // created by the `QueryPlanner`. The result is converted into a sequence of

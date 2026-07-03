@@ -59,6 +59,13 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
     const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     STREAMABLE_YIELDER_ARG_DECL) {
+  if (!ad_utility::contains(
+          ExportQueryExecutionTrees::supportedMediaTypesForAskQueries,
+          mediaType)) {
+    AD_THROW(absl::StrCat("ASK queries are not supported for",
+                          ad_utility::toString(mediaType)));
+  }
+
   // Compute the result of the ASK query.
   bool result = getResultForAsk(qet.getResult(true));
 
@@ -460,11 +467,8 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
       octetStream, csv, tsv, turtle, ntriples, qleverJson};
   static_assert(ad_utility::contains(staticallySupportedFormats, format));
 
-  // TODO<joka921> Use a proper error message, or check that we get a more
-  // reasonable error from upstream.
-  static constexpr std::array dynamicallySupportedFormats{octetStream, csv,
-                                                          tsv};
-  AD_CONTRACT_CHECK(ad_utility::contains(dynamicallySupportedFormats, format));
+  AD_CONTRACT_CHECK(ad_utility::contains(
+      ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries, format));
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -765,19 +769,18 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
-  static constexpr std::array supportedFormats{
+
+  static constexpr std::array supportedFormatsForTemplateInstantiation{
       octetStream, csv,    tsv,      sparqlXml,         sparqlJson,
       qleverJson,  turtle, ntriples, binaryQleverExport};
-  static_assert(ad_utility::contains(supportedFormats, format));
+  static_assert(
+      ad_utility::contains(supportedFormatsForTemplateInstantiation, format));
 
-  if constexpr (format == octetStream || format == binaryQleverExport) {
-    AD_THROW("Binary export is not supported for CONSTRUCT queries");
-  } else if constexpr (format == sparqlXml) {
-    AD_THROW("XML export is currently not supported for CONSTRUCT queries");
-  } else if constexpr (format == sparqlJson) {
-    AD_THROW("SparqlJSON export is not supported for CONSTRUCT queries");
+  if constexpr (!ad_utility::contains(supportedMediaTypesForConstructQueries,
+                                      format)) {
+    AD_THROW(absl::StrCat("{} is not supported for CONSTRUCT queries",
+                          ad_utility::toString(format)));
   }
-  AD_CONTRACT_CHECK(format != qleverJson);
 
   result->logResultSize();
   uint64_t resultSize = 0;
@@ -862,6 +865,7 @@ ExportQueryExecutionTrees::computeResult(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   auto limit = parsedQuery._limitOffset;
   compensateForLimitOffsetClause(limit, qet);
+
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
