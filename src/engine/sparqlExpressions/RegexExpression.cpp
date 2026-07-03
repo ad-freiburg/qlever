@@ -203,7 +203,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
 
   // Helper that checks whether a single `Id` lies in (at least) one of the
   // prefix ranges.
-  auto matchesPrefix = [&lowerAndUpperIds](Id id) -> Id {
+  auto matchesPrefix = [&lowerAndUpperIds](Id id) {
     if (id.isUndefined()) {
       return Id::makeUndefined();
     }
@@ -222,7 +222,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
         "A non-grouped variable outside of an aggregate should have been "
         "rejected by the parser");
     return std::visit(
-        [context, &matchesPrefix](auto&& childResult) -> ExpressionResult {
+        [context, &matchesPrefix](const auto& childResult) -> ExpressionResult {
           using T = std::decay_t<decltype(childResult)>;
           // Usually the child of a prefix-regex expression is a
           // `VariableExpression`, so the result is a single `ValueId`.
