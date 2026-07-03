@@ -164,7 +164,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
   }
 
-  auto formatLiteralOrIri = [&escapeFunction](const LiteralOrIri& word) {
+  auto formatLiteralOrIri = [&escapeFunction](const LiteralOrIriView& word) {
     return literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
                                        returnOnlyLiterals>(word,
                                                            escapeFunction);
