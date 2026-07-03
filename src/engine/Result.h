@@ -338,6 +338,13 @@ class Result {
   // a generator, this behaviour applies analogously when consuming the
   // generator.
   void checkDefinedness(const VariableToColumnMap& varColMap);
+
+  // DEN Returns type-statistic. WIP. REquires isFullyMaterialized()?
+  // [[]]
+  std::optional<std::array<
+	  std::array<int, static_cast<int>(Datatype::MaxValue) + 1>,
+	  IdTable::numStaticColumns>> getStatistics();
+
 };
 
 #endif  // QLEVER_SRC_ENGINE_RESULT_H
