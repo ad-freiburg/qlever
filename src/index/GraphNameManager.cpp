@@ -33,7 +33,7 @@ void GraphNameManager::writeToDisk() const {
   auto path = filenameForPersisting_.value();
   auto tempPath = path;
   tempPath += ".tmp";
-  ad_utility::serialization::FileWriteSerializer serializer{tempPath.c_str()};
+  ad_utility::serialization::FileWriteSerializer serializer{tempPath.string()};
   serializer | *this;
   std::filesystem::rename(tempPath, path);
 }
@@ -48,7 +48,7 @@ void GraphNameManager::readFromDisk() {
   }
 
   ad_utility::serialization::FileReadSerializer serializer{
-      filenameForPersisting_.value().c_str()};
+      filenameForPersisting_.value().string()};
   serializer | *this;
 }
 
