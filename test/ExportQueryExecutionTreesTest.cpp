@@ -174,7 +174,8 @@ void runSelectQueryTestCase(
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
-  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+  for (uint64_t exportLimit = uint64_t{0}; exportLimit < uint64_t{4};
+       ++exportLimit) {
     auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
         testCase.kg, testCase.query, qleverJson, useTextIndex, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSize);
@@ -206,7 +207,8 @@ void runConstructQueryTestCase(
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
-  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+  for (uint64_t exportLimit = uint64_t{0}; exportLimit < uint64_t{4};
+       ++exportLimit) {
     auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
         testCase.kg, testCase.query, qleverJson, false, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
@@ -1880,7 +1882,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   };
   AD_EXPECT_THROW_WITH_MESSAGE(call(throwEarly()), std::string_view("failed"));
   auto throwLate = [](bool throwProperException) -> S {
-    size_t largerThanBufferSize = (1ul << 20) + 4;
+    size_t largerThanBufferSize = (uint64_t{1} << 20) + 4;
     std::string largerThanBuffer;
     largerThanBuffer.resize(largerThanBufferSize);
     co_yield largerThanBuffer;

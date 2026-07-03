@@ -1268,7 +1268,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";
     std::string longBlock;
     longBlock.reserve(200 * singleBlock.size());
-    for ([[maybe_unused]] size_t i : ad_utility::integerRange(200ul)) {
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(uint64_t{200})) {
       longBlock.append(singleBlock);
     }
     return longBlock;

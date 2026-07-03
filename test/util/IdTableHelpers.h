@@ -75,7 +75,7 @@ inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
 template <typename Transformation = decltype(ad_utility::testing::VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& content,
                               Transformation transformation = {}) {
-  size_t numCols = content.empty() ? 0UL : content.at(0).size();
+  size_t numCols = content.empty() ? uint64_t{0} : content.at(0).size();
   IdTable result{numCols, ad_utility::testing::makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {

@@ -86,7 +86,7 @@ TEST(PrefixCompressor, prefixCompression) {
 
   // Newlines handling
   std::vector<std::string> input;
-  for (size_t i : ad_utility::integerRange(200UL)) {
+  for (size_t i : ad_utility::integerRange(uint64_t{200})) {
     input.push_back(absl::StrCat("\"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\""));
   }
 

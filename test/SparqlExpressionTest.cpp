@@ -224,7 +224,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
     if constexpr (isVectorResult<T>) {
       return operand.size();
     } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      return operand._intervals.empty() ? 0ul
+      return operand._intervals.empty() ? uint64_t{0}
                                         : operand._intervals.back().second;
     }
     return 1;
@@ -233,7 +233,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   const auto resultSize = [&operands..., &getResultSize]() {
     if constexpr (sizeof...(operands) == 0) {
       (void)getResultSize;
-      return 0ul;
+      return uint64_t{0};
     } else {
       return std::max({getResultSize(operands)...});
     }

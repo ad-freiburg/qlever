@@ -170,7 +170,7 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 1);
   {
     auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
-    for ([[maybe_unused]] size_t i : integerRange(5ul)) {
+    for ([[maybe_unused]] size_t i : integerRange(uint64_t{5})) {
       EXPECT_EQ(numCalls, 1u);
     }
     // Callback not invoked, because because end was not reached yet.
