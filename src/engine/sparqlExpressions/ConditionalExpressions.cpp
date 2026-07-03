@@ -143,26 +143,21 @@ class CoalesceExpression : public VariadicExpression {
     };
 
     // The visitors below return an engaged optional iff the whole `COALESCE`
-    // can be short-circuited to a single constant value (see below). Note: we
-    // cannot use a trailing return type together with the `CPP_template_lambda`
-    // macro (the constraint expands to a trailing `requires`-clause, which has
-    // to come after the return type), so we let the return type be deduced and
-    // make every `return` yield this exact type.
-    using OptResult = std::optional<IdOrLocalVocabEntry>;
-
+    // can be short-circuited to a single constant value (see below).
     auto visitConstantExpressionResult =
-        CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
-                            &result, ctx)(typename T)(T && childResult)(
-            requires SingleExpressionResult<T> && isConstantResult<T>) {
+        [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
+         ctx](auto&& childResult) -> std::optional<IdOrLocalVocabEntry> {
+      using T = decltype(childResult);
+      static_assert(SingleExpressionResult<T> && isConstantResult<T>);
       IdOrLocalVocabEntry constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
-        return OptResult{};
+        return std::nullopt;
       }
       // If we have a constant value and no other values are bound so far, we
       // can directly return the constant value.
       if (unboundIndices.size() == ctx->size()) {
-        return OptResult{std::move(constantResult)};
+        return constantResult;
       }
       ad_utility::chunkedForLoop<CHUNK_SIZE>(
           0, unboundIndices.size(),
@@ -176,18 +171,19 @@ class CoalesceExpression : public VariadicExpression {
             result[unboundIndices[idx]] = constantResult;
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
-      return OptResult{};
+      return std::nullopt;
     };
     GCC_REENABLE_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
-    auto visitVectorExpressionResult =
-        CPP_template_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
-                            &isUnbound)(typename T)(T && childResult)(
-            requires CPP_NOT(isConstantResult<T> && SingleExpressionResult<T> &&
-                             std::is_rvalue_reference_v<T&&>)) {
+    auto visitVectorExpressionResult = [&result, &unboundIndices,
+                                        &nextUnboundIndices, &ctx,
+                                        &isUnbound](auto&& childResult) {
+      using T = decltype(childResult);
+      static_assert(!(isConstantResult<T> && SingleExpressionResult<T> &&
+                      std::is_rvalue_reference_v<T>));
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
@@ -217,17 +213,18 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    auto visitExpressionResult = CPP_template_lambda(
-        &visitConstantExpressionResult,
-        &visitVectorExpressionResult)(typename T)(T && childResult)(
-        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
+    auto visitExpressionResult =
+        [&visitConstantExpressionResult, &visitVectorExpressionResult](
+            auto&& childResult) -> std::optional<IdOrLocalVocabEntry> {
+      using T = decltype(childResult);
+      static_assert(SingleExpressionResult<T> && std::is_rvalue_reference_v<T>);
       // If the previous expression result is a constant, we can skip the
       // loop.
       if constexpr (isConstantResult<T>) {
         return visitConstantExpressionResult(AD_FWD(childResult));
       } else {
         visitVectorExpressionResult(AD_FWD(childResult));
-        return OptResult{};
+        return std::nullopt;
       }
     };
 

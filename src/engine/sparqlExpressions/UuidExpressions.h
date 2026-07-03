@@ -55,7 +55,7 @@ class UuidExpressionImpl : public SparqlExpression {
     // As part of a GROUP BY (and outside of an aggregate) we only return one
     // value per group. Inside an aggregate we must still produce one value per
     // row, so that e.g. `COUNT(STRUUID())` counts the rows in the group.
-    if (context->_isPartOfGroupBy && !isInsideAggregate()) {
+    if (worksOnAggregatedData(context)) {
       return LocalVocabEntry{FuncConv(uuidGen()),
                              context->getLocalVocabContext()};
     }

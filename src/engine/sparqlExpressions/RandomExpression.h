@@ -27,7 +27,7 @@ class RandomExpression : public SparqlExpression {
 
     // As part of a GROUP BY (and outside of an aggregate) we only return one
     // value per group.
-    if (context->_isPartOfGroupBy && !isInsideAggregate()) {
+    if (worksOnAggregatedData(context)) {
       return Id::makeFromDouble(randDouble());
     }
 

@@ -72,7 +72,7 @@ class BlankNodeExpression : public SparqlExpression {
     // single (constant) blank node per group. Inside an aggregate we must still
     // produce one blank node per row, so that e.g. `COUNT(BNODE())` counts the
     // number of rows in the group.
-    if (context->_isPartOfGroupBy && !isInsideAggregate()) {
+    if (worksOnAggregatedData(context)) {
       return Id::makeFromBlankNodeIndex(context->_localVocab.getBlankNodeIndex(
           context->_qec.getIndex().getBlankNodeManager()));
     }
@@ -154,7 +154,7 @@ class BlankNodeExpression : public SparqlExpression {
             // is constant within the group, so we only produce a single
             // (constant) blank node. The counter is still advanced for the full
             // range for consistency with the per-row case.
-            if (context->_isPartOfGroupBy && !isInsideAggregate()) {
+            if (worksOnAggregatedData(context)) {
               auto result = makeBlankNode(escapedValue, counter_, context);
               counter_ += context->size();
               return result;

@@ -161,6 +161,11 @@ class SparqlExpression {
   // class.
   bool isInsideAggregate() const;
 
+  // Return true iff this expression is evaluated on aggregated data, i.e. it is
+  // part of a GROUP BY but not inside an aggregate. In this case the expression
+  // only has to produce a single (constant) value per group.
+  bool worksOnAggregatedData(const EvaluationContext* context) const;
+
  private:
   virtual ql::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
