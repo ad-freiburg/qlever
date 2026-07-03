@@ -9,6 +9,8 @@
 
 #include "parser/ParallelBuffer.h"
 
+#include <boost/iostreams/device/file.hpp>
+
 #include "util/StringUtils.h"
 
 // _________________________________________________________________________
@@ -136,4 +138,37 @@ ParallelBufferWithEndRegex::getNextBlock() {
   remainder_.insert(remainder_.end(), rawInput->begin() + *endPosition,
                     rawInput->end());
   return result;
+}
+
+// _____________________________________________________________________________
+DecompressingFileBuffer::DecompressingFileBuffer(size_t blocksize,
+                                                 const std::string& filename)
+    : ParallelBuffer{blocksize} {
+  stream_.push(boost::iostreams::gzip_decompressor{});
+  stream_.push(boost::iostreams::file_source{filename, std::ios::binary});
+  if (!stream_.good()) {
+    throw std::runtime_error{
+        absl::StrCat("Could not open gzip-compressed file: ", filename)};
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<ParallelBuffer::BufferType>
+DecompressingFileBuffer::getNextBlock() {
+  if (eof_) {
+    return std::nullopt;
+  }
+  BufferType buf;
+  buf.resize(blocksize_);
+  stream_.read(buf.data(), static_cast<std::streamsize>(blocksize_));
+  auto numRead = stream_.gcount();
+  if (numRead == 0) {
+    eof_ = true;
+    return std::nullopt;
+  }
+  if (stream_.eof()) {
+    eof_ = true;
+  }
+  buf.resize(static_cast<size_t>(numRead));
+  return buf;
 }

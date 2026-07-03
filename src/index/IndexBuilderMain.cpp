@@ -75,11 +75,18 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
     }
   }
 
+  // Strip a trailing `.gz` before deducing the format, so that e.g.
+  // `data.nq.gz` is correctly recognized as NQuad.
+  if (filename.size() >= 3 && filename.substr(filename.size() - 3) == ".gz") {
+    filename = filename.substr(0, filename.size() - 3);
+  }
+
   auto posOfDot = filename.rfind('.');
   auto throwNotDeducable = [&filename]() {
     throw std::runtime_error{absl::StrCat(
         "Could not deduce the file format from the filename \"", filename,
-        "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq`, "
+        "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq` "
+        "(optionally followed by `.gz`), "
         "or explicitly set the format of the file via --file-format or -F")};
   };
   if (posOfDot == std::string::npos) {
