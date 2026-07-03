@@ -896,16 +896,10 @@ class RdfAsyncParallelParser {
                   dispatchResult(nullptr, std::move(result));
                 }
               };
-          // `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)` expands to `T&` in this Boost
-          // version, so `async_initiate`'s token parameter is an lvalue
-          // reference. The handler must therefore be a named lvalue — passing
-          // the `bind_executor` result as a temporary (rvalue) would fail with
-          // "no matching function for call to `async_initiate`".
-          auto blockFetchHandler =
-              net::bind_executor(executor_, std::move(completionLogic));
-          driver_->asyncGetNextBlock(blockFetchHandler);
+          driver_->asyncGetNextBlock(
+              net::bind_executor(executor_, std::move(completionLogic)));
         },
-        AD_FWD(token));
+        token);
   }
 
  private:

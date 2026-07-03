@@ -98,7 +98,7 @@ class AsyncBlockSource {
             }
           });
         },
-        AD_FWD(token));
+        token);
   }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }
