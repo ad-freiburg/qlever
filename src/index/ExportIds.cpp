@@ -168,19 +168,6 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> blankNodeIriToString(const auto& iri) {
-  const auto& representation = iri.toStringRepresentation();
-  if (ql::starts_with(representation, QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
-    std::string_view view = representation;
-    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
-    view.remove_suffix(1);
-    AD_CORRECTNESS_CHECK(ql::starts_with(view, "_:"));
-    return std::string{view};
-  }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
