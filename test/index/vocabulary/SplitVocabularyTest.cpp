@@ -425,6 +425,32 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
 }
 
 // _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularySetNumWordsPerCodebook) {
+  // A `SplitVocabulary` whose underlying vocabularies are
+  // `CompressedVocabulary` forwards `setNumWordsPerCodebook` to all of them.
+  using CompressedVocab = CompressedVocabulary<VocabularyInternalExternal>;
+  using CompressedSplitVocab =
+      SplitVocabulary<decltype(testSplitTwoFunction),
+                      decltype(testSplitFnTwoFunction), CompressedVocab,
+                      CompressedVocab>;
+  CompressedSplitVocab sv;
+  sv.setNumWordsPerCodebook(7);
+  for (uint8_t marker = 0; marker < CompressedSplitVocab::numberOfVocabs;
+       ++marker) {
+    std::visit(
+        [](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (requires(T& v) { v.getNumWordsPerCodebook(); }) {
+            EXPECT_EQ(vocab.getNumWordsPerCodebook(), 7u);
+          } else {
+            FAIL();
+          }
+        },
+        sv.getUnderlyingVocabulary(marker));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.

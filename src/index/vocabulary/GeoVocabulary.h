@@ -98,6 +98,14 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   void open(const std::string& filename);
 
+  // Forward the number of words per codebook to the underlying literal
+  // vocabulary if it supports it (e.g. a `CompressedVocabulary`).
+  void setNumWordsPerCodebook(size_t numWordsPerCodebook) {
+    if constexpr (SupportsNumWordsPerCodebook<UnderlyingVocabulary>) {
+      literals_.setNumWordsPerCodebook(numWordsPerCodebook);
+    }
+  }
+
   // Custom word writer, which precomputes and writes geometry info along with
   // the words.
   class WordWriter : public WordWriterBase {

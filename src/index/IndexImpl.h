@@ -143,6 +143,11 @@ class IndexImpl {
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
+  // The number of words that share one compression codebook in the compressed
+  // vocabulary. Configurable via the settings key `num-words-per-codebook` and
+  // persisted in the meta-data JSON. The default keeps the historical behavior.
+  size_t numWordsPerCodebook_ = 1UL << 20;
+
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
   NumNormalAndInternal numObjects_;

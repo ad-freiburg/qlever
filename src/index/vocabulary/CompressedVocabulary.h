@@ -32,22 +32,37 @@ CPP_concept IterableVocabulary =
 }  // namespace detail
 
 // A vocabulary in which compression is performed using a customizable
-// compression algorithm, with one dictionary per `NumWordsPerBlock` many words
-// (default 1 million).
+// compression algorithm, with one dictionary per `numWordsPerCodebook_` many
+// words (default 1 million).
 CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
-                 ad_utility::vocabulary::FsstSquaredCompressionWrapper,
-             size_t NumWordsPerBlock = 1UL << 20)(
+                 ad_utility::vocabulary::FsstSquaredCompressionWrapper)(
     requires ad_utility::vocabulary::CompressionWrapper<
         CompressionWrapper>) class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
+  // The number of words that share one compression codebook (decoder). This is
+  // a runtime value; it is set by the index builder from the settings JSON and
+  // restored by the reader from the meta-data JSON. The default keeps the
+  // historical behavior.
+  size_t numWordsPerCodebook_ = 1UL << 20;
   // We need to store two files, one for the words and one for the codebooks.
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".codebooks";
 
  public:
+  // Set/get the number of words per codebook. The setter must be called before
+  // `makeDiskWriterPtr` (when writing) and before `open` (when reading) so that
+  // the codebook block size matches the one used when the vocabulary was
+  // written. Must be positive: a value of 0 would divide by zero in
+  // `getDecoderIdx` and flush a codebook after every word in the writer.
+  void setNumWordsPerCodebook(size_t n) {
+    AD_CONTRACT_CHECK(n > 0, "num-words-per-codebook must be positive.");
+    numWordsPerCodebook_ = n;
+  }
+  size_t getNumWordsPerCodebook() const { return numWordsPerCodebook_; }
+
   // The vocabulary is initialized using the `open()` method, the default
   // constructor leads to an empty vocabulary.
   CompressedVocabulary() = default;
@@ -142,20 +157,23 @@ CPP_template(typename UnderlyingVocabulary,
     std::atomic<size_t> queueIndex_ = 0;
     ad_utility::TaskQueue<false> compressQueue_{10, 10};
     uint64_t counter_ = 0;
+    size_t numWordsPerCodebook_;
 
    public:
     /// Constructor.
     explicit DiskWriterFromUncompressedWords(
-        const std::string& filenameWords, const std::string& filenameDecoders)
+        const std::string& filenameWords, const std::string& filenameDecoders,
+        size_t numWordsPerCodebook)
         : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+          filenameDecoders_{filenameDecoders},
+          numWordsPerCodebook_{numWordsPerCodebook} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
                         bool isExternal) override {
       wordBuffer_.emplace_back(uncompressedWord);
       isExternalBuffer_.push_back(isExternal);
-      if (wordBuffer_.size() == NumWordsPerBlock) {
+      if (wordBuffer_.size() == numWordsPerCodebook_) {
         finishBlock();
       }
       return counter_++;
@@ -258,11 +276,12 @@ CPP_template(typename UnderlyingVocabulary,
   using WordWriter = DiskWriterFromUncompressedWords;
 
   // Return a `unique_ptr<DiskWriter>` that can be used to create the
-  // vocabulary.
-  static auto makeDiskWriterPtr(const std::string& filename) {
+  // vocabulary. Reads `numWordsPerCodebook_`, so it must be a non-static
+  // member.
+  auto makeDiskWriterPtr(const std::string& filename) const {
     return std::make_unique<DiskWriterFromUncompressedWords>(
         absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix));
+        absl::StrCat(filename, decodersSuffix), numWordsPerCodebook_);
   }
 
   // Access to the underlying vocabulary.
@@ -292,7 +311,7 @@ CPP_template(typename UnderlyingVocabulary,
 
  private:
   // Get the correct decoder for the given `idx`.
-  size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
+  size_t getDecoderIdx(size_t idx) const { return idx / numWordsPerCodebook_; }
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
