@@ -92,7 +92,7 @@ std::string replaceAnglesByQuotes(std::string iriString);
 
 // Return the blank-node string representation if `iri` is a blank-node IRI,
 // otherwise std::nullopt.
-std::optional<std::string> blankNodeIriToString(const IriView& iri);
+std::optional<std::string> blankNodeIriToString(const auto& iri);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
 // is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
