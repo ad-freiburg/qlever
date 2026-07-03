@@ -117,8 +117,7 @@ template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
 std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-    const LiteralOrIriView& word,
-    EscapeFunction&& escapeFunction = EscapeFunction{}) {
+    const auto& word, EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
       return std::nullopt;
@@ -135,7 +134,8 @@ std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
         escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
         nullptr};
   }
-  return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+  return std::pair{escapeFunction(std::string{word.toStringRepresentation()}),
+                   nullptr};
 }
 
 // Convert the `id` to a human-readable string. The `index` is used to resolve
@@ -164,7 +164,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
   }
 
-  auto formatLiteralOrIri = [&escapeFunction](const LiteralOrIriView& word) {
+  auto formatLiteralOrIri = [&escapeFunction](const auto& word) {
     return literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
                                        returnOnlyLiterals>(word,
                                                            escapeFunction);
