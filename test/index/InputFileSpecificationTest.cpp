@@ -9,20 +9,26 @@
 
 #include <gmock/gmock.h>
 
+#include <boost/asio/thread_pool.hpp>
 #include <filesystem>
 #include <fstream>
 
 #include "index/InputFileSpecification.h"
-#include "parser/ParallelBuffer.h"
+#include "parser/AsyncBlockSource.h"
 
 using namespace qlever;
 using namespace testing;
 
 namespace {
-// Minimal concrete ParallelBuffer for use in factory-based tests.
-struct DummyBuffer : ParallelBuffer {
-  explicit DummyBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
-  std::optional<BufferType> getNextBlock() override { return std::nullopt; }
+// Minimal concrete `AsyncBlockSource` for use in factory-based tests.
+struct DummyBlockSource : qlever::parser::AsyncBlockSource {
+  explicit DummyBlockSource(boost::asio::any_io_executor exec, size_t blocksize)
+      : AsyncBlockSource{exec, blocksize} {}
+
+ protected:
+  std::optional<qlever::parser::ByteBlock> getNextBlockImpl() override {
+    return std::nullopt;
+  }
 };
 }  // namespace
 
@@ -38,9 +44,10 @@ TEST(InputFileSpecification, FilenameSource) {
 
 // _____________________________________________________________________________
 TEST(InputFileSpecification, FactorySource) {
-  auto factory = [](size_t blocksize,
-                    std::string_view) -> std::unique_ptr<ParallelBuffer> {
-    return std::make_unique<DummyBuffer>(blocksize);
+  auto factory = [](boost::asio::any_io_executor exec, size_t blocksize,
+                    std::string_view)
+      -> std::unique_ptr<qlever::parser::AsyncBlockSource> {
+    return std::make_unique<DummyBlockSource>(exec, blocksize);
   };
   InputFileSpecification spec{
       InputFileSpecification::BufferFactoryAndDescription{factory, "my-stream"},
@@ -51,37 +58,41 @@ TEST(InputFileSpecification, FactorySource) {
 }
 
 // _____________________________________________________________________________
-TEST(InputFileSpecification, GetParallelBufferFileBased) {
+TEST(InputFileSpecification, GetAsyncBlockSourceFileBased) {
   std::filesystem::path tmpFile =
       std::filesystem::temp_directory_path() / "qlever_ifs_test.ttl";
   std::ofstream{tmpFile} << "<s> <p> <o> .\n";
 
   InputFileSpecification spec{tmpFile.string(), Filetype::Turtle, std::nullopt};
-  auto buf = spec.getParallelBuffer(1024);
+  boost::asio::thread_pool pool{1};
+  auto buf = spec.getAsyncBlockSource(pool.get_executor(), 1024);
   EXPECT_NE(buf, nullptr);
-  EXPECT_NE(dynamic_cast<ParallelFileBuffer*>(buf.get()), nullptr);
+  EXPECT_NE(dynamic_cast<qlever::parser::AsyncFileBlockSource*>(buf.get()),
+            nullptr);
 
   std::filesystem::remove(tmpFile);
 }
 
 // _____________________________________________________________________________
-TEST(InputFileSpecification, GetParallelBufferFactoryBased) {
+TEST(InputFileSpecification, GetAsyncBlockSourceFactoryBased) {
   bool called = false;
   size_t receivedBlocksize = 0;
   std::string receivedDescription;
 
-  auto factory = [&](size_t blocksize,
-                     std::string_view desc) -> std::unique_ptr<ParallelBuffer> {
+  auto factory = [&](boost::asio::any_io_executor exec, size_t blocksize,
+                     std::string_view desc)
+      -> std::unique_ptr<qlever::parser::AsyncBlockSource> {
     called = true;
     receivedBlocksize = blocksize;
     receivedDescription = desc;
-    return std::make_unique<DummyBuffer>(blocksize);
+    return std::make_unique<DummyBlockSource>(exec, blocksize);
   };
   InputFileSpecification spec{
       InputFileSpecification::BufferFactoryAndDescription{factory, "my-desc"},
       Filetype::Turtle, std::nullopt};
 
-  auto buf = spec.getParallelBuffer(4096);
+  boost::asio::thread_pool pool{1};
+  auto buf = spec.getAsyncBlockSource(pool.get_executor(), 4096);
   EXPECT_TRUE(called);
   EXPECT_EQ(receivedBlocksize, 4096u);
   EXPECT_EQ(receivedDescription, "my-desc");
