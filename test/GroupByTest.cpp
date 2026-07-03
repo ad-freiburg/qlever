@@ -2971,7 +2971,7 @@ TEST(GroupBy, RegexOnGroupedVariable) {
                          std::make_unique<VariableExpression>(o),
                          std::make_unique<StringLiteralExpression>(lit("^abc")),
                          nullptr))
-                .idTable(),
+                .idTableView(),
             makeIdTableFromVector({{abc, T}, {xyz, F}}));
 
   // Test regular regex expression.
@@ -2979,7 +2979,7 @@ TEST(GroupBy, RegexOnGroupedVariable) {
                          std::make_unique<VariableExpression>(o),
                          std::make_unique<StringLiteralExpression>(lit("b")),
                          nullptr))
-                .idTable(),
+                .idTableView(),
             makeIdTableFromVector({{abc, T}, {xyz, F}}));
 }
 
@@ -3016,7 +3016,7 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
        Alias{SparqlExpressionPimpl{std::move(regex), "regex"}, Variable{"?m"}}},
       std::move(sorted)};
 
-  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTable(),
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
             makeIdTableFromVector({{abc, I(2), T}, {xyz, I(1), F}}));
 }
 
@@ -3044,7 +3044,7 @@ TEST(GroupBy, CoalesceOnGroupedVariable) {
              Variable{"?c"}}},
       std::move(subtree)};
 
-  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTable(),
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
             makeIdTableFromVector({{abc, abc}, {xyz, xyz}}));
 }
 
@@ -3073,7 +3073,7 @@ TEST(GroupBy, CoalesceWithGroupedVariableAndSample) {
              Variable{"?c"}}},
       std::move(subtree)};
 
-  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTable(),
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
             makeIdTableFromVector({{U, I(7)}}));
 }
 
@@ -3108,7 +3108,7 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
              Variable{"?year"}}},
       std::move(subtree)};
 
-  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTable(),
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
             makeIdTableFromVector({{I(1), I(2000)}, {I(2), I(1990)}}));
 }
 
@@ -3129,7 +3129,7 @@ TEST(GroupBy, BlankNodeInGroupBy) {
       std::move(subtree)};
 
   const auto result = groupBy.computeResultOnlyForTesting(false);
-  const auto& table = result.idTable();
+  const auto& table = result.idTableView();
   ASSERT_EQ(table.numRows(), 2);
   EXPECT_EQ(table(0, 0), I(1));
   EXPECT_EQ(table(1, 0), I(2));
