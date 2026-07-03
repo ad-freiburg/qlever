@@ -1306,14 +1306,14 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     ad_utility::MemorySize blocksize,
     const EncodedIriManager* encodedIriManager,
     const TripleComponent& defaultGraphIri)
-    : executor_{executor}, parser_{encodedIriManager, defaultGraphIri} {
-  driver_ = std::make_unique<qlever::parser::AsyncEndRegexBlockSource>(
-      executor_, spec.makeAsyncBlockSource(executor_, blocksize),
-      "\\.[\\t ]*([\\r\\n]+)");
+    : executor_{executor},
+      parser_{encodedIriManager, defaultGraphIri},
+      driver_{executor, spec.makeAsyncBlockSource(executor, blocksize),
+              "\\.[\\t ]*([\\r\\n]+)"} {
   RdfStringParser<Parser> declarationParser{encodedIriManager};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = driver_->getNextBlock()) {
+    if (auto batch = driver_.getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
