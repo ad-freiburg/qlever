@@ -214,9 +214,13 @@ ExpressionResult PrefixRegexExpression::evaluate(
         }));
   };
 
-  // If the variable is grouped (and we are not inside an aggregate), it is
-  // constant within each group.
-  if (context->_groupedVariables.contains(variable_) && !isInsideAggregate()) {
+  // When we work on aggregated data (i.e. as part of a GROUP BY, but outside of
+  // an aggregate), the variable is grouped and thus constant within each group.
+  if (worksOnAggregatedData(context)) {
+    AD_CORRECTNESS_CHECK(
+        context->_groupedVariables.contains(variable_),
+        "A non-grouped variable outside of an aggregate should have been "
+        "rejected by the parser");
     return std::visit(
         [context, &matchesPrefix](auto&& childResult) -> ExpressionResult {
           using T = std::decay_t<decltype(childResult)>;

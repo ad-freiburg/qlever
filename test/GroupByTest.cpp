@@ -2417,6 +2417,10 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
       std::vector<std::optional<Variable>>{Variable{"?a"}});
 
   {
+    // A bare, non-grouped variable outside of an aggregate can only occur if a
+    // malformed query bypassed the parser (which normally rejects such
+    // queries). It is caught by a correctness check when the variable is
+    // (incorrectly) treated as a grouped constant.
     auto expr0 = std::make_unique<VariableExpression>(Variable{"?a"});
     GroupBy groupBy{qec,
                     {},
@@ -2425,7 +2429,9 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     subtree};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         groupBy.computeResultOnlyForTesting(false),
-        ::testing::HasSubstr("An expression returned an invalid type"),
+        ::testing::HasSubstr(
+            "A non-grouped variable outside of an aggregate should have been "
+            "rejected by the parser"),
         ad_utility::Exception);
   }
   {

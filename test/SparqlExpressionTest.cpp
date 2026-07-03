@@ -2118,6 +2118,41 @@ TEST(SparqlExpression, unboundVariableExpression) {
               ::testing::VariantWith<Id>(Id::makeUndefined()));
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
+  Variable vocab{"?vocab"};
+  // Evaluate on a single-row "group" in which `?vocab` is constant.
+  auto setUpGroupedContext = [&vocab](TestContext& ctx) {
+    ctx.context._groupedVariables = {vocab};
+    ctx.context._isPartOfGroupBy = true;
+    ctx.context._beginIndex = 0;
+    ctx.context._endIndex = 1;
+  };
+
+  // Outside an aggregate the grouped variable is treated as a constant.
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    VariableExpression var{vocab};
+    EXPECT_THAT(var.evaluate(&ctx.context),
+                ::testing::VariantWith<Id>(ctx.Beta));
+  }
+
+  // Inside an aggregate the variable is not folded; the `VariableExpression`
+  // still evaluates to the `Variable` itself (which is expanded to the whole
+  // column by the surrounding aggregate).
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    auto aggregate = std::make_unique<SampleExpression>(
+        false, std::make_unique<VariableExpression>(vocab));
+    const auto* inner = aggregate->children()[0].get();
+    ASSERT_TRUE(inner->isInsideAggregate());
+    EXPECT_THAT(inner->evaluate(&ctx.context),
+                ::testing::VariantWith<::Variable>(vocab));
+  }
+}
+
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
