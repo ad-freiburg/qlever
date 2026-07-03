@@ -1308,8 +1308,7 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     const TripleComponent& defaultGraphIri)
     : executor_{executor}, parser_{encodedIriManager, defaultGraphIri} {
   driver_ = std::make_unique<qlever::parser::AsyncEndRegexBlockSource>(
-      ioPool_.get_executor(),
-      spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
+      executor_, spec.makeAsyncBlockSource(executor_, blocksize),
       "\\.[\\t ]*([\\r\\n]+)");
   RdfStringParser<Parser> declarationParser{encodedIriManager};
   std::string_view remainder;

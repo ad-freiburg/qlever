@@ -757,8 +757,7 @@ class RdfParallelParser : public Parser {
 //     `(nullptr, nullopt)` to trigger early stopping in the caller.
 //
 // An instance of this class must outlive all in-flight `asyncGetBatch()` calls.
-// The `ioPool_` destructor joins the dedicated IO thread, so the class is safe
-// to destroy after all outstanding futures have been retrieved.
+// Because it owns no threads, its destructor cannot wait for pending work.
 template <typename Parser>
 class RdfAsyncParallelParser {
  private:
@@ -772,14 +771,9 @@ class RdfAsyncParallelParser {
   // those two methods) is used here instead.
   RdfStringParser<Parser> parser_;
 
-  // Dedicated one-thread pool for I/O, kept separate from `executor_` so that
-  // `asyncGetNextBlock(boost::asio::use_future).get()` on an `executor_`
-  // thread can never deadlock. Declared before `driver_` so it is destroyed
-  // after `driver_` (members are destroyed in reverse declaration order).
-  boost::asio::thread_pool ioPool_{1};
-
-  // Owns the file-reading and block-splitting logic. Created on `ioPool_`'s
-  // executor so that its internal strand runs on the dedicated IO thread.
+  // Owns the file-reading and block-splitting logic. The `AsyncBlockSource`
+  // has its own internal strand on `executor_`, which serializes block fetches
+  // while letting concurrent `asyncGetBatch()` calls parse in parallel.
   std::unique_ptr<qlever::parser::AsyncBlockSource> driver_;
 
   // The part of the first block left over after parsing the leading
@@ -863,49 +857,66 @@ class RdfAsyncParallelParser {
                 });
             return;
           }
-          // General case: post to `executor_` and block on `ioPool_`'s
-          // dedicated IO thread via `use_future`. Because `ioPool_` is
-          // separate from `executor_`, this `.get()` can never deadlock
-          // regardless of how many concurrent `asyncGetBatch()` calls are
-          // in-flight.
-          net::post(executor_, [this, dispatchResult =
-                                          std::move(dispatchResult)]() mutable {
-            std::exception_ptr fetchEptr;
-            std::optional<qlever::parser::ByteBlock> block;
-            try {
-              block = driver_->asyncGetNextBlock(boost::asio::use_future).get();
-            } catch (...) {
-              fetchEptr = std::current_exception();
+          // General case: fetch the next block asynchronously, then parse it.
+          // `completionLogic` holds the full result-handling and parse logic.
+          // It is defined as a lambda (not inlined into a struct method) so
+          // that it can call the private `parseBatch()` via the captured
+          // `this`.
+          auto completionLogic =
+              [this, dispatchResult = std::move(dispatchResult)](
+                  std::exception_ptr fetchEptr,
+                  std::optional<qlever::parser::ByteBlock> block) mutable {
+                if (fetchEptr) {
+                  if (!errorWasEncountered_.exchange(true)) {
+                    dispatchResult(fetchEptr, std::nullopt);
+                  } else {
+                    dispatchResult(nullptr, std::nullopt);
+                  }
+                  return;
+                }
+                if (!block.has_value()) {
+                  dispatchResult(nullptr, std::nullopt);
+                  return;
+                }
+                std::exception_ptr parseEptr;
+                std::optional<std::vector<TurtleTriple>> result;
+                try {
+                  result = parseBatch(std::move(block.value()));
+                } catch (...) {
+                  parseEptr = std::current_exception();
+                }
+                if (parseEptr) {
+                  if (!errorWasEncountered_.exchange(true)) {
+                    dispatchResult(parseEptr, std::nullopt);
+                  } else {
+                    dispatchResult(nullptr, std::nullopt);
+                  }
+                } else {
+                  dispatchResult(nullptr, std::move(result));
+                }
+              };
+          // Wrap `completionLogic` in a handler struct that exposes
+          // `get_executor()`. This avoids `net::bind_executor`, which does not
+          // work as a completion token with plain lambdas in Boost 1.83 because
+          // `async_result<executor_binder<Lambda,Exec>,Sig>` fails the
+          // `BOOST_ASIO_COMPLETION_TOKEN_FOR` constraint that guards
+          // `async_initiate`.
+          struct BlockFetchHandler {
+            using executor_type = net::any_io_executor;
+            executor_type executor;
+            decltype(completionLogic) callback;
+            executor_type get_executor() const { return executor; }
+            void operator()(std::exception_ptr eptr,
+                            std::optional<qlever::parser::ByteBlock> block) {
+              std::move(callback)(eptr, std::move(block));
             }
-            if (fetchEptr) {
-              if (!errorWasEncountered_.exchange(true)) {
-                dispatchResult(fetchEptr, std::nullopt);
-              } else {
-                dispatchResult(nullptr, std::nullopt);
-              }
-              return;
-            }
-            if (!block.has_value()) {
-              dispatchResult(nullptr, std::nullopt);
-              return;
-            }
-            std::exception_ptr parseEptr;
-            std::optional<std::vector<TurtleTriple>> result;
-            try {
-              result = parseBatch(std::move(block.value()));
-            } catch (...) {
-              parseEptr = std::current_exception();
-            }
-            if (parseEptr) {
-              if (!errorWasEncountered_.exchange(true)) {
-                dispatchResult(parseEptr, std::nullopt);
-              } else {
-                dispatchResult(nullptr, std::nullopt);
-              }
-            } else {
-              dispatchResult(nullptr, std::move(result));
-            }
-          });
+          };
+          // Pass as a named lvalue: `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)`
+          // expands to `T&` in this Boost version, so `async_initiate`
+          // requires an lvalue for its token argument.
+          BlockFetchHandler blockFetchHandler{executor_,
+                                              std::move(completionLogic)};
+          driver_->asyncGetNextBlock(blockFetchHandler);
         },
         AD_FWD(token));
   }
