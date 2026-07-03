@@ -86,7 +86,9 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
       "materializeEmptyLocalVocab", std::move(config));
-  std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
+  std::string vocabPrefix =
+      (std::filesystem::temp_directory_path() / "materializeEmptyLocalVocab")
+          .string();
   std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
   absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
     deleteVocabFiles(vocabFileName, type.value());
@@ -112,7 +114,9 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
                                                      std::move(config));
-  std::string vocabPrefix = "/tmp/materializeLocalVocab";
+  std::string vocabPrefix =
+      (std::filesystem::temp_directory_path() / "materializeLocalVocab")
+          .string();
   absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
@@ -402,7 +406,9 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-  std::string prefix = "/tmp/createPermutationWriterTask";
+  std::string prefix =
+      (std::filesystem::temp_directory_path() / "createPermutationWriterTask")
+          .string();
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
   newIndex.setOnDiskBase(prefix);
@@ -448,7 +454,8 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 TEST(IndexRebuilder, materializeToIndex) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  std::string baseFolder = "/tmp/materializeToIndex";
+  std::string baseFolder =
+      (std::filesystem::temp_directory_path() / "materializeToIndex").string();
   std::string newIndexName = baseFolder + "/index";
   std::string logFile = newIndexName + ".log";
 
@@ -513,7 +520,8 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   std::string sourceIndexName = "materializeToIndexWithZeroMemorySourceIndex";
-  std::string baseFolder = "/tmp/" + sourceIndexName;
+  std::string baseFolder =
+      (std::filesystem::temp_directory_path() / sourceIndexName).string();
   std::string newIndexName = baseFolder + "/index";
   std::string logFile = newIndexName + ".log";
 
