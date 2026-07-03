@@ -7,6 +7,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -77,8 +78,9 @@ class MergeVocabularyTest : public ::testing::Test {
     // create random subdirectory in /tmp
     std::string tempPath = "";
     _basePath = tempPath + _basePath + "/";
-    if (system(("mkdir -p " + _basePath).c_str())) {
-      // system should return 0 on success
+    std::error_code errorCode;
+    std::filesystem::create_directories(_basePath, errorCode);
+    if (errorCode) {
       std::cerr << "Could not create subfolder of tmp for test. this might "
                    "lead to test failures\n";
     }
