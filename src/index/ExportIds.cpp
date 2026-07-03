@@ -168,7 +168,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> blankNodeIriToString(const IriView& iri) {
+std::optional<std::string> blankNodeIriToString(const auto& iri) {
   const auto& representation = iri.toStringRepresentation();
   if (ql::starts_with(representation, QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
     std::string_view view = representation;
