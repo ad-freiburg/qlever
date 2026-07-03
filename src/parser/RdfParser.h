@@ -15,6 +15,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <future>
@@ -895,27 +896,13 @@ class RdfAsyncParallelParser {
                   dispatchResult(nullptr, std::move(result));
                 }
               };
-          // Wrap `completionLogic` in a handler struct that exposes
-          // `get_executor()`. This avoids `net::bind_executor`, which does not
-          // work as a completion token with plain lambdas in Boost 1.83 because
-          // `async_result<executor_binder<Lambda,Exec>,Sig>` fails the
-          // `BOOST_ASIO_COMPLETION_TOKEN_FOR` constraint that guards
-          // `async_initiate`.
-          struct BlockFetchHandler {
-            using executor_type = net::any_io_executor;
-            executor_type executor;
-            decltype(completionLogic) callback;
-            executor_type get_executor() const { return executor; }
-            void operator()(std::exception_ptr eptr,
-                            std::optional<qlever::parser::ByteBlock> block) {
-              std::move(callback)(eptr, std::move(block));
-            }
-          };
-          // Pass as a named lvalue: `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)`
-          // expands to `T&` in this Boost version, so `async_initiate`
-          // requires an lvalue for its token argument.
-          BlockFetchHandler blockFetchHandler{executor_,
-                                              std::move(completionLogic)};
+          // `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)` expands to `T&` in this Boost
+          // version, so `async_initiate`'s token parameter is an lvalue
+          // reference. The handler must therefore be a named lvalue — passing
+          // the `bind_executor` result as a temporary (rvalue) would fail with
+          // "no matching function for call to `async_initiate`".
+          auto blockFetchHandler =
+              net::bind_executor(executor_, std::move(completionLogic));
           driver_->asyncGetNextBlock(blockFetchHandler);
         },
         AD_FWD(token));
