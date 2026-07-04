@@ -87,7 +87,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
   // [start, end).
   static TableWithRange makeTableWithRange(const Result& result, uint64_t start,
                                            uint64_t end) {
-    return {TableConstRefWithVocab{result.idTable(), result.localVocab()},
+    return {TableConstRefWithVocab{result.idTableView(), result.localVocab()},
             ql::views::iota(start, end)};
   }
 

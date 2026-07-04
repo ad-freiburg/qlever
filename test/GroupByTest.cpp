@@ -437,7 +437,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(6)}}));
   }
   {
     auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -452,7 +453,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(6)}}));
   }
   // Distinct should not be optimized
   {
@@ -467,7 +469,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                                Variable{"?x"}}},
                         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(5)}}));
   }
   // With variable name should also not be optimized
   {
@@ -481,7 +484,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         {Alias{makeCountPimpl(Variable{"?a"}, false), Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(5)}}));
   }
   {
     auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -494,7 +498,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         {Alias{makeCountPimpl(Variable{"?a"}, true), Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(4)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(4)}}));
   }
 }
 
@@ -663,7 +668,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
     auto result = groupBy.computeResultOnlyForTesting();
     ASSERT_TRUE(result.isFullyMaterialized());
     EXPECT_THAT(
-        result.idTable(),
+        result.idTableView(),
         matchesIdTableFromVector({{I(3), D(5)}, {I(5), D(6)}, {I(8), D(27)}}));
   };
   runTest(true);
@@ -753,7 +758,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -810,7 +815,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -866,7 +871,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -930,7 +935,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1004,7 +1009,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1077,7 +1082,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1162,7 +1167,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto i = IntId;
@@ -1210,7 +1215,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   // WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
   const auto& localVocabContext = qec->getLocalVocabContext();
@@ -1255,7 +1260,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
 
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
@@ -1300,7 +1305,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   // SELECT (MIN(?y) as ?z) (MAX(?y) as ?w) WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasMin, aliasMax}, subtreeWithSort};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
 
@@ -1691,7 +1696,7 @@ TEST_F(GroupByOptimizations,
     GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
     auto result = groupBy.getResult();
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_THAT(result->idTable(), matchesIdTableFromVector({{I(1)}}));
+    EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({{I(1)}}));
   }
 
   {
@@ -1707,7 +1712,7 @@ TEST_F(GroupByOptimizations,
     GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
     auto result = groupBy.getResult();
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_THAT(result->idTable(), matchesIdTableFromVector({{I(3)}}));
+    EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({{I(3)}}));
   }
 }
 
@@ -1903,7 +1908,7 @@ TEST(GroupByOptimizationsDeltaTriples, singleIndexScanTotalCountAfterInsert) {
   // falls back to the general algorithm when delta triples are present, so
   // testing the end-to-end result is the right regression check.
   auto result = groupBy.computeResultOnlyForTesting(false);
-  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{I(3)}}));
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(3)}}));
 }
 
 // _____________________________________________________________________________
@@ -1939,7 +1944,7 @@ TEST(GroupByOptimizationsDeltaTriples,
 
   // After deleting <a> <p2> <b>, only <b> remains as a subject -> count = 1.
   auto result = groupBy.computeResultOnlyForTesting(false);
-  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{I(1)}}));
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(1)}}));
 }
 
 // _____________________________________________________________________________
@@ -2224,7 +2229,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -2287,7 +2292,7 @@ TEST(GroupBy, AliasResultReused) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -2332,7 +2337,7 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
   EXPECT_THAT(tree.getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  const auto& table = res->idTable();
+  const auto& table = res->idTableView();
   auto i = IntId;
   auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
@@ -2502,7 +2507,8 @@ TEST(GroupBy, countDistinctGraph) {
                     std::move(subtree)};
 
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(1)}}));
   }
   {
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
@@ -2521,7 +2527,8 @@ TEST(GroupBy, countDistinctGraph) {
                     std::move(subtree)};
 
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(0)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(0)}}));
   }
 }
 
@@ -2681,7 +2688,7 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
       for (const IdTable& idTable : idTables) {
         aggregatedTable.insertAtEnd(idTable);
       }
-      EXPECT_EQ(result.idTable(), aggregatedTable);
+      EXPECT_EQ(result.idTableView(), aggregatedTable);
     }
   }
 
@@ -2889,7 +2896,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
     ASSERT_TRUE(entry2.has_value());
     ASSERT_TRUE(entry3.has_value());
 
-    EXPECT_EQ(result.idTable(),
+    EXPECT_EQ(result.idTableView(),
               makeIdTableFromVector({{i(0), entryToId(entry1)},
                                      {i(1), entryToId(entry2)},
                                      {i(2), entryToId(entry3)}}));

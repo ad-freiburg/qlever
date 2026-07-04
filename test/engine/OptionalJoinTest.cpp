@@ -75,7 +75,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
-    ASSERT_EQ(result.idTable(), expectedResult);
+    ASSERT_EQ(result.idTableView(), expectedResult);
   }
 }
 
@@ -132,7 +132,7 @@ void testLazyOptionalJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -458,7 +458,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
     auto result = optionalJoin.computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA, entryB));
 
@@ -930,7 +930,7 @@ class OptionalJoinWithIndexScan
       }
       return lazyResult;
     } else {
-      return result.idTable().clone();
+      return result.cloneIdTable();
     }
   }
   // Helper to verify that lazy and materialized results match.
