@@ -605,8 +605,8 @@ class RdfStreamParser : public Parser {
   // need the `backupState()` and `resetStateAndRead()` methods.
   qlever::parser::ByteBlock byteVec_;
 
-  // that many bytes were already parsed before dealing with the current batch
-  // in member byteVec_
+  // That many bytes were already parsed before dealing with the current batch
+  // in member `byteVec_`.
   size_t numBytesBeforeCurrentBatch_ = 0;
 
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;

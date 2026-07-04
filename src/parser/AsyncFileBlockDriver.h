@@ -27,7 +27,7 @@ namespace qlever::parser {
 // while the rest of the index builder pipeline is not yet migrated to
 // Boost::Asio. It internally holds a `unique_ptr<AsyncEndRegexBlockSource>` and
 // schedules it on a thread pool with a single thread. The public interface is
-// a synchronous `getBlock()` function, the asynchronouse prefetching of the
+// a synchronous `getNextBlock()` function, the asynchronous prefetching of the
 // next block is purely internal.
 class AsyncFileBlockDriver {
  public:
