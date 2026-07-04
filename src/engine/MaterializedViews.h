@@ -76,9 +76,9 @@ class MaterializedViewWriter {
 
   using PlannedQuery = qlever::PlannedQuery;
 
-  // Initialize a writer given the base filename of the view and a query plan.
-  // The view will be written to files prefixed with the index basename followed
-  // by the view name.
+  // Initialize a writer given the base filename of the view and a planned
+  // query. The view will be written to files prefixed with the index basename
+  // followed by the view name.
   MaterializedViewWriter(std::string onDiskBase, std::string name,
                          const PlannedQuery& plannedQuery,
                          ad_utility::MemorySize memoryLimit,

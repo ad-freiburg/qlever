@@ -164,7 +164,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       }
     )");
     auto res = plannedQuery.queryExecutionTree().getResult(false);
-    EXPECT_EQ(res->idTable().numRows(), 1);
+    EXPECT_EQ(res->idTableView().numRows(), 1);
   }
 }
 
@@ -978,7 +978,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto res = qet.getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
     auto col = qet.getVariableColumn(Variable{"?cnt"});
-    auto count = res->idTable().at(0, col);
+    auto count = res->idTableView().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }

@@ -257,7 +257,7 @@ class Qlever {
   //
   // NOTE: This is useful as a separate function for the following reasons.
   //
-  // 1. Using a `QueryPlan`, one can execute a `query` multiple times without
+  // 1. Using a `PlannedQuery`, one can execute a `query` multiple times without
   // having to parse and plan it again.
   //
   // 2. It helps measuring the time for the parsing and planning separately
@@ -292,7 +292,7 @@ class Qlever {
   // NOTE: With `ad_utility::MediaType::qleverJson`, the result also contains
   // detailed information on the query execution, including timings of the
   // various parts of the query plan.
-  std::string query(const PlannedQuery& queryPlan,
+  std::string query(const PlannedQuery& plannedQuery,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 

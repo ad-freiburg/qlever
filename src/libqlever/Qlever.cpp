@@ -227,7 +227,7 @@ PlannedQuery Qlever::parseAndPlanQuery(
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
-  PlannedQuery plannedQuery{std::move(parsedQuery), qet, *qecPtr};
+  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
 
   handle->throwIfCancelled();
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
