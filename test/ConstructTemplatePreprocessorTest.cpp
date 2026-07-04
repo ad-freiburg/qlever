@@ -164,8 +164,8 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
   // return the dedup `ValueId` computed for the object constant.
   auto objectDedupId = [&index](GraphTerm object) {
     Triples triples;
-    triples.push_back({GraphTerm{Iri{"<http://s>"}},
-                       GraphTerm{Iri{"<http://p>"}}, std::move(object)});
+    triples.push_back({GraphTerm{iriV("<http://s>")},
+                       GraphTerm{iriV("<http://p>")}, std::move(object)});
     VariableToColumnMap varMap;
     auto result =
         ConstructTemplatePreprocessor::preprocess(triples, varMap, index);
@@ -175,7 +175,7 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
   };
 
   // (a) IRI constant vs. the same IRI from the data (vocabulary lookup).
-  EXPECT_EQ(objectDedupId(GraphTerm{Iri{"<http://o>"}}), getId("<http://o>"));
+  EXPECT_EQ(objectDedupId(GraphTerm{iriV("<http://o>")}), getId("<http://o>"));
 
   // (b) Non-encoded (language-tagged) literal vs. the same literal from data.
   EXPECT_EQ(objectDedupId(GraphTerm{Literal{"\"foo\"@en"}}),
@@ -533,7 +533,8 @@ ValueId dedupIdAt(const PreprocessedConstructTemplate& result, size_t tripleIdx,
 // deduplication `ValueId` during preprocessing.
 TEST(ConstructTemplatePreprocessorTest, dedupIdIsResolvedForConstants) {
   Triples triples;
-  triples.push_back({GraphTerm{Iri{"<http://s>"}}, GraphTerm{Iri{"<http://p>"}},
+  triples.push_back({GraphTerm{iriV("<http://s>")},
+                     GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"\"hello\""}}});
 
   VariableToColumnMap varMap;
