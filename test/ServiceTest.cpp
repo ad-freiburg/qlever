@@ -425,9 +425,8 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
-        ". ?y "
-        "<is-a> ?z2 . }";
+        "{ ?x <ble> ?y . ?y <is-a> ?z2 . VALUES (?x ?y) { (<x> <y>) "
+        "(<blu> <bla>) } }";
 
     Service serviceOperation5{
         testQec, parsedServiceClause5,
@@ -498,8 +497,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
-      "?c } } }";
+      " SELECT ?a { { SELECT ?obj WHERE { ?a ?b ?c } } VALUES (?a) { (<a>) } }";
 
   Service serviceOperation{
       testQec, parsedServiceClause,
@@ -508,6 +506,27 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
+  // Normal body: VALUES clause appears after the body content.
+  EXPECT_EQ(
+      Service::pushDownValues("{ ?x <ble> ?y . }", "VALUES (?x) { (<a>) } "),
+      "{\n ?x <ble> ?y . \nVALUES (?x) { (<a>) } \n}");
+
+  // Subquery body: subquery is wrapped in braces and VALUES appears after.
+  EXPECT_EQ(Service::pushDownValues("{ SELECT ?a WHERE { ?a ?b ?c } }",
+                                    "VALUES (?a) { (<a>) } "),
+            "{\n{ SELECT ?a WHERE { ?a ?b ?c } }\nVALUES (?a) { (<a>) } \n}");
+
+  // BIND body: VALUES is placed AFTER the BIND so the remote endpoint does not
+  // see the variable as already bound when it evaluates the BIND expression.
+  // Reproducer: SELECT * WHERE { VALUES ?x { 1 }
+  //             SERVICE <...> { BIND (1 AS ?x) } }
+  EXPECT_EQ(
+      Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
+      "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
 // _____________________________________________________________________________
