@@ -59,7 +59,7 @@ size_t DistinctGraphs::getCostEstimate() {
 // Filters out the default graph IRI from the result when the
 // `treatDefaultGraphAsNamedGraph` runtime parameter is off.
 //
-// A Result object containing a unique set of all matching named graph Ids.
+// A result object containing a unique set of all matching named graph Ids.
 // ____________________________________________________________________________
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
@@ -86,6 +86,6 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{1, getExecutionContext()->getAllocator()};
   idTable.resize(graphIds.size());
   ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBits);
-  numOfDistinctGraphs = graphIds.size();
+  numOfDistinctGraphs_ = graphIds.size();
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
