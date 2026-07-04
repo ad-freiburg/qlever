@@ -44,16 +44,19 @@ class SortedRunsVector {
   [[no_unique_address]] Compare comp_ = {};
   [[no_unique_address]] Projection proj_ = {};
 
+  // Helper for the overloads of `smallPart`/`largePart`.
+  static auto partImpl(auto& self, bool wantSmall) {
+    auto mid = self.elements_.begin() + self.numItemsLargePart_;
+    return wantSmall ? ql::ranges::subrange(mid, self.elements_.end())
+                     : ql::ranges::subrange(self.elements_.begin(), mid);
+  }
+
   // Return the subrange of the small part from the whole storage vector.
-  auto smallPart() {
-    return ql::ranges::subrange(elements_.begin() + numItemsLargePart_,
-                                elements_.end());
-  }
+  auto smallPart() { return partImpl(*this, true); }
+  auto smallPart() const { return partImpl(*this, true); }
   // Return the subrange of the large part from the whole storage vector.
-  auto largePart() {
-    return ql::ranges::subrange(elements_.begin(),
-                                elements_.begin() + numItemsLargePart_);
-  }
+  auto largePart() { return partImpl(*this, false); }
+  auto largePart() const { return partImpl(*this, false); }
 
   // Merge the elements of the small part into the large part. The small part
   // must be sorted before calling this function. Preserves `isConsolidated`.
@@ -138,7 +141,7 @@ class SortedRunsVector {
  public:
   SortedRunsVector() = default;
 
-  // Create a `SortedVector` from a already sorted and deduplicated elements.
+  // Create a `SortedVector` from already sorted and deduplicated elements.
   static SortedRunsVector fromSorted(std::vector<ValueType> sortedElements,
                                      Compare comp = {}, Projection proj = {}) {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElements, comp, proj));
@@ -208,14 +211,15 @@ class SortedRunsVector {
   const ValueType& extremumImpl(bool wantMax) const {
     AD_CONTRACT_CHECK(!empty());
     AD_CONTRACT_CHECK(isConsolidated());
+    auto frontOrBack = [wantMax](const auto& range) -> decltype(auto) {
+      return wantMax ? range.back() : range.front();
+    };
     // If we only have a single part directly return its respective end.
     if (numItemsLargePart_ == elements_.size() || numItemsLargePart_ == 0) {
-      return wantMax ? elements_.back() : elements_.front();
+      return frontOrBack(elements_);
     }
-    auto& largePartBoundary =
-        wantMax ? elements_.at(numItemsLargePart_ - 1) : elements_.front();
-    auto& smallPartBoundary =
-        wantMax ? elements_.back() : elements_.at(numItemsLargePart_);
+    auto& largePartBoundary = frontOrBack(largePart());
+    auto& smallPartBoundary = frontOrBack(smallPart());
     bool largeWins =
         wantMax ? comp_(proj_(smallPartBoundary), proj_(largePartBoundary))
                 : comp_(proj_(largePartBoundary), proj_(smallPartBoundary));
