@@ -17,7 +17,6 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "parser/ParallelBuffer.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -884,6 +883,8 @@ TEST(RdfParserTest, iriref) {
 // for parsing, else `getLine()` is used. The default size for the parse buffer
 // in the following tests is 1 kB (which is much less than the default value
 // `DEFAULT_PARSER_BUFFER_SIZE` defined in `src/global/Constants.h`).
+// `Filetype::Turtle` is hardcoded because all `Parser` instantiations used
+// below are Turtle-based.
 template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
@@ -896,9 +897,9 @@ std::vector<TurtleTriple> parseFromFile(
                   {filename, qlever::Filetype::Turtle, std::nullopt}}},
           encodedIriManager(), bufferSize};
     } else {
-      return Parser{
-          std::make_unique<ParallelFileBuffer>(bufferSize.getBytes(), filename),
-          encodedIriManager()};
+      return Parser{qlever::InputFileSpecification{
+                        filename, qlever::Filetype::Turtle, std::nullopt},
+                    bufferSize, encodedIriManager()};
     }
   }();
 
@@ -1253,8 +1254,9 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
                       {filename, qlever::Filetype::Turtle, std::nullopt}}},
               encodedIriManager(), 40_B};
         } else {
-          return Parser{std::make_unique<ParallelFileBuffer>(40, filename),
-                        encodedIriManager(),
+          return Parser{qlever::InputFileSpecification{
+                            filename, qlever::Filetype::Turtle, std::nullopt},
+                        ad_utility::MemorySize::bytes(40), encodedIriManager(),
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
         }
       }();
@@ -1417,7 +1419,7 @@ TEST(RdfParserTest, specialPredicateA) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
   // Regression test for small payloads with long prefixes, where the initial
-  // chunk size of `ParallelBufferWithEndRegex::findRegexNearEnd` of 1000 is
+  // chunk size of `AsyncEndRegexBlockSource::findRegexNearEnd` of 1000 is
   // greater than the total size of the payload.
   std::string filename{"payloadSmallerThanInitialChunkSize.dat"};
   auto testWithParser = [&](auto t, bool useBatchInterface,
@@ -1709,8 +1711,9 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
-                encodedIriManager()};
+  Parser parser{qlever::InputFileSpecification{
+                    filename, qlever::Filetype::Turtle, std::nullopt},
+                ad_utility::MemorySize::bytes(50), encodedIriManager()};
 
   TurtleTriple triple;
   EXPECT_THROW(parser.getLine(triple), TurtleParser<Tokenizer>::ParseException);
@@ -1751,8 +1754,9 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{std::make_unique<ParallelFileBuffer>(50, filename),
-                encodedIriManager()};
+  Parser parser{qlever::InputFileSpecification{
+                    filename, qlever::Filetype::Turtle, std::nullopt},
+                ad_utility::MemorySize::bytes(50), encodedIriManager()};
 
   TurtleTriple triple;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1789,9 +1793,9 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
   }};
   ad_utility::setGlobalLoggingStream(&logStream);
 
-  Parser parser{
-      std::make_unique<ParallelFileBuffer>((2_kB).getBytes(), filename),
-      encodedIriManager()};
+  Parser parser{qlever::InputFileSpecification{
+                    filename, qlever::Filetype::Turtle, std::nullopt},
+                2_kB, encodedIriManager()};
   TurtleTriple triple;
   ASSERT_TRUE(parser.getLine(triple));
   EXPECT_EQ(triple.subject_, iri("<a>"));
