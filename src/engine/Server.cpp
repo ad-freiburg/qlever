@@ -1478,12 +1478,10 @@ void Server::writeMaterializedView(
   auto qec = qlever().createQueryExecutionContext(indexAndViews);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         std::move(cancellationHandle));
-  auto qet = std::make_shared<QueryExecutionTree>(
-      std::move(plan.queryExecutionTree()));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  indexAndViews->materializedViewsManager_.writeViewToDisk(
-      name, {qet, qec, std::move(plan.parsedQuery())}, memoryLimit);
+  indexAndViews->materializedViewsManager_.writeViewToDisk(name, plan,
+                                                           memoryLimit);
 }
 
 // _____________________________________________________________________________

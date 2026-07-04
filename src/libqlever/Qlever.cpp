@@ -6,6 +6,7 @@
 
 #include "libqlever/Qlever.h"
 
+#include <functional>
 #include <memory>
 #include <stdexcept>
 
@@ -155,27 +156,27 @@ std::string Qlever::query(std::string queryString,
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(const QueryPlan& queryPlan,
+std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
-  const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
-  // TODO<joka921> For cancellation we have to call
-  // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  const auto& sharedCancellationHandle = plannedQuery.queryExecutionTree()
+                                             .getRootOperation()
+                                             ->getCancellationHandle();
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, *qet, mediaType, timer, std::move(handle));
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      timer, sharedCancellationHandle);
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
 #else
   ad_utility::streams::StringBatcher yielder{
       [&result](std::string_view batch) { result.append(batch); }};
-  ExportQueryExecutionTrees::computeResult(parsedQuery, *qet, mediaType, timer,
-                                           std::move(handle),
-                                           std::ref(yielder));
+  ExportQueryExecutionTrees::computeResult(
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      timer, sharedCancellationHandle, std::ref(yielder));
 
 #endif
   return result;
@@ -184,10 +185,9 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
-  auto queryPlan = parseAndPlanQuery(std::move(query));
-  auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() = std::move(options);
-  [[maybe_unused]] auto result = this->query(queryPlan);
+  auto plannedQuery = parseAndPlanQuery(std::move(query));
+  plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
+  [[maybe_unused]] auto result = this->query(plannedQuery);
 }
 
 // _____________________________________________________________________________
@@ -206,23 +206,39 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
-Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    ad_utility::SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  ad_utility::Timer planningTimer{ad_utility::Timer::InitialStatus::Started};
+
   auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(),
-      [](const std::
-             string&) { /* No runtime updates for this interface yet. */ },
-      false, false, disableCaching_);
-  // TODO<joka921> support Dataset clauses.
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+
   auto parsedQuery = SparqlParser::parseQuery(
-      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query), {});
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
+      datasetClauses);
+
   QueryPlanner qp{qecPtr.get(), handle};
+
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
+  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
 
-  auto qetPtr = std::make_shared<QueryExecutionTree>(std::move(qet));
-  return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
+  handle->throwIfCancelled();
+  auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
+  // Propagate the `cancellationHandle` and the `timeLimit` through the
+  // `queryExecutionTree`.
+  rootOperation.recursivelySetCancellationHandle(std::move(handle));
+  if (timeLimit.has_value()) {
+    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
+  }
+
+  return plannedQuery;
 }
 
 // ___________________________________________________________________________

@@ -36,7 +36,7 @@ void expectBindYieldsIdTable(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 
   {
@@ -116,7 +116,7 @@ TEST(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(), table);
+    EXPECT_EQ(result->idTableView(), table);
   }
 
   {
@@ -175,7 +175,7 @@ TEST(Bind, limitIsPropagated) {
       valuesTree->getRootOperation()->getLimitOffset().isUnconstrained());
 
   auto result = bind.computeResultOnlyForTesting();
-  const auto& idTable = result.idTable();
+  const auto& idTable = result.idTableView();
 
   EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
 }
