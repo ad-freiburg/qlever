@@ -11,10 +11,10 @@
 #define QLEVER_SRC_ENGINE_DISTINCTGRAPHS_H
 
 #include <cstdint>
-#include <optional>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "rdfTypes/Variable.h"
 
 // Operation that produces a single-column result containing all distinct
@@ -47,14 +47,16 @@ class DistinctGraphs : public Operation {
     return "Distinct Graphs";
   }
 
-  // The Result table has only 1 column.
+  // The result table has only 1 column.
   [[nodiscard]] size_t getResultWidth() const override { return 1; }
 
-  // At worst, every triplets might've checked for graph info.
+  // In the worst case every block introduces a new graph ID, forcing
+  // decompression of all blocks. The cost is then proportional to the
+  // total number of triples in the index.
   size_t getCostEstimate() override;
 
   // All values are distinct by design. There are no duplicates.
-  float getMultiplicity(size_t col) override { return 1.0f; }
+  float getMultiplicity(size_t) override { return 1.0f; }
 
   bool knownEmptyResult() override { return false; }
 
@@ -73,18 +75,20 @@ class DistinctGraphs : public Operation {
   // return last saved #distinctgraphs if valid, otherwise return an optimistic
   // average (MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20)
   uint64_t getSizeEstimateBeforeLimit() override {
-    return numOfDistinctGraphs.value_or(50);
+    return numOfDistinctGraphs_;
   }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Single variable, single column
+  // The graph variable of queries of the form: `SELECT * { GRAPH ?g { ... }}`
   Variable graphVariable_;
 
-  // Last saved number of distinct graphs
-  std::optional<uint64_t> numOfDistinctGraphs = std::nullopt;
+  // Last saved number of distinct graphs, default to
+  // MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA
+  inline static std::atomic<uint64_t> numOfDistinctGraphs_{
+      MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA};
 };
 
 #endif
