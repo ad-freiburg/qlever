@@ -179,7 +179,7 @@ addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
-addLinkAndDiscoverTestNoLibs(SortedVectorTest)
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 

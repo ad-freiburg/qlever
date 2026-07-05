@@ -9,6 +9,10 @@
 
 #ifndef QLEVER_ZIPMERGEUNIQUEVIEWTESTHELPERS_H
 #define QLEVER_ZIPMERGEUNIQUEVIEWTESTHELPERS_H
+
+#include <gtest/gtest.h>
+
+#include "util/StringUtils.h"
 #include "util/views/ZipMergeUniqueView.h"
 
 // We need to explicitly tell GTest how to print a `ZipMergeUniqueView`,

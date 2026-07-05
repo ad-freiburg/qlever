@@ -7,8 +7,10 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_SORTEDVECTOR_H
-#define QLEVER_SRC_UTIL_SORTEDVECTOR_H
+#ifndef QLEVER_SRC_UTIL_SORTEDSEQUENCE_H
+#define QLEVER_SRC_UTIL_SORTEDSEQUENCE_H
+
+#include <gtest/gtest_prod.h>
 
 #include <functional>
 #include <iterator>
@@ -29,14 +31,15 @@ namespace ad_utility {
 // `Compare`. After inserting elements `consolidate` must be called before
 // reading. Only the last inserted element for each projected key is retained.
 //
-// Internally the elements are stored in two-parts - an always sorted large and
-// a small part. Newly inserted elements are first inserted into the small part.
-// `consolidate` sorts the small part. Iteration will the internally merge the
-// two sorted parts using `ZipMergeUniqueView`. Once the small parts get large
-// it is merged into the large part which is always sorted.
+// Internally the elements are stored in two parts - an always sorted large
+// part and a small part. Newly inserted elements are first inserted into the
+// small part. `consolidate` sorts the small part. Iteration will then
+// internally merge the two sorted parts using `ZipMergeUniqueView`. Once the
+// small part gets large, it is merged into the large part, which is always
+// sorted.
 template <typename ValueType, typename Compare = std::less<>,
           typename Projection = ql::identity>
-class SortedRunsVector {
+class SortedSequence {
   using Storage = std::vector<ValueType>;
   Storage elements_ = {};
   size_t numItemsLargePart_ = 0;
@@ -132,28 +135,28 @@ class SortedRunsVector {
     return numItemsErased;
   }
 
-  FRIEND_TEST(SortedRunsVectorTest, eraseSortedSubRange);
-  FRIEND_TEST(SortedRunsVectorTest, sortAndRemoveDuplicates);
-  FRIEND_TEST(SortedRunsVectorTest, constructor);
-  FRIEND_TEST(SortedRunsVectorTest, insert);
-  friend struct SortedRunsVectorPairsTestHelper;
+  FRIEND_TEST(SortedSequenceTest, eraseSortedSubRange);
+  FRIEND_TEST(SortedSequenceTest, sortAndRemoveDuplicates);
+  FRIEND_TEST(SortedSequenceTest, constructor);
+  FRIEND_TEST(SortedSequenceTest, insert);
+  friend struct SortedSequencePairsTestHelper;
 
  public:
-  SortedRunsVector() = default;
+  SortedSequence() = default;
 
-  // Create a `SortedVector` from already sorted and deduplicated elements.
-  static SortedRunsVector fromSorted(std::vector<ValueType> sortedElements,
-                                     Compare comp = {}, Projection proj = {}) {
+  // Create a `SortedSequence` from already sorted and deduplicated elements.
+  static SortedSequence fromSorted(std::vector<ValueType> sortedElements,
+                                   Compare comp = {}, Projection proj = {}) {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElements, comp, proj));
     // No duplicate elements (elements with the same projected key).
     AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(sortedElements, {}, proj) ==
                        sortedElements.end());
-    SortedRunsVector vec;
-    vec.comp_ = std::move(comp);
-    vec.proj_ = std::move(proj);
-    vec.numItemsLargePart_ = sortedElements.size();
-    vec.elements_ = std::move(sortedElements);
-    return vec;
+    SortedSequence seq;
+    seq.comp_ = std::move(comp);
+    seq.proj_ = std::move(proj);
+    seq.numItemsLargePart_ = sortedElements.size();
+    seq.elements_ = std::move(sortedElements);
+    return seq;
   }
 
   // Some GTest matchers require `value_type`, also add it as a type for the
@@ -161,8 +164,9 @@ class SortedRunsVector {
   using value_type = ValueType;
 
   // Consolidate the stored items after inserts have been performed by sorting
-  // and deduplicating the small part. If the small part makes more than
-  // `threshold` of the total items, the two parts are additionally merged.
+  // and deduplicating the small part. If the small part makes up more than a
+  // fraction `threshold` of the total items, the two parts are additionally
+  // merged.
   // `consolidate` must be called before any read access after inserting new
   // items. After calling `consolidate` `isConsolidated` will be true.
   void consolidate(double threshold = 0.25) {
@@ -180,7 +184,7 @@ class SortedRunsVector {
 
   // Insert an element. `consolidate` must be called before the next read
   // access.
-  void push_back(ValueType elem) {
+  void insert(ValueType elem) {
     elements_.push_back(std::move(elem));
     smallPartIsSorted_ = false;
   }
@@ -196,8 +200,8 @@ class SortedRunsVector {
   }
 
  public:
-  // Return of the sorted and deduplicated elements in this container. Requires
-  // `isConsolidated` to be true.
+  // Return a view of the sorted and deduplicated elements in this container.
+  // Requires `isConsolidated` to be true.
   auto getSortedView() & { return getSortedViewImpl(*this); }
   auto getSortedView() const& { return getSortedViewImpl(*this); }
   void getSortedView() && = delete;
@@ -231,7 +235,8 @@ class SortedRunsVector {
   // empty and `isConsolidated` to be true.
   const ValueType& back() const { return extremumImpl(true); }
   // Return a reference to the last element. Requires the container to not be
-  // empty and `isConsolidated` to be true.
+  // empty and `isConsolidated` to be true. Note: modifying the returned element
+  // such that its projected key changes breaks the invariants of this class.
   ValueType& back() {
     return const_cast<ValueType&>(std::as_const(*this).back());
   }
@@ -240,7 +245,8 @@ class SortedRunsVector {
   // empty and `isConsolidated` to be true.
   const ValueType& front() const { return extremumImpl(false); }
   // Return a reference to the first element. Requires the container to not be
-  // empty and `isConsolidated` to be true.
+  // empty and `isConsolidated` to be true. Note: modifying the returned element
+  // such that its projected key changes breaks the invariants of this class.
   ValueType& front() {
     return const_cast<ValueType&>(std::as_const(*this).front());
   }
@@ -249,8 +255,8 @@ class SortedRunsVector {
   // or `eraseSorted`. This is expensive and preserves `isConsolidated`.
   void erase(const ValueType& elem) {
     AD_CONTRACT_CHECK(isConsolidated());
-    // Delete `elem` in the range `subrange` (which is contained in `elements_`
-    // and return the number of deleted elements.
+    // Delete `elem` in the range `subrange` (which is contained in
+    // `elements_`) and return the number of deleted elements.
     auto deleteInRange = [this, &elem](auto subrange) {
       auto iter = ql::ranges::lower_bound(subrange, proj_(elem), comp_, proj_);
       // From lower_bound we get `!comp_(proj_(*iter), proj_(elem))`. If the
@@ -266,10 +272,10 @@ class SortedRunsVector {
     deleteInRange(smallPart());
     numItemsLargePart_ -= deleteInRange(largePart());
   }
-  //  Erase multiple elements that may contain duplicates. If the elements to
-  //  delete are already sorted use `eraseSorted`.
-  //  Note: calling this function is expensive (O(n)) and preserves
-  //  `isConsolidated`.
+  // Erase multiple elements that may contain duplicates. If the elements to
+  // delete are already sorted use `eraseSorted`.
+  // Note: calling this function is expensive (O(n)) and preserves
+  // `isConsolidated`.
   void eraseUnsorted(std::vector<ValueType> toDelete) {
     AD_CONTRACT_CHECK(isConsolidated());
     ql::ranges::sort(toDelete, comp_, proj_);
@@ -286,7 +292,8 @@ class SortedRunsVector {
     numItemsLargePart_ -= eraseSortedSubRange(largePart(), sortedElems);
   }
 
-  // Return an upper bound of the size. Requires `isConsolidated` to be true.
+  // Return an upper bound of the size. Can be called even when
+  // `isConsolidated` is false.
   // Without actually reading all items the size is not known because items
   // might be duplicated between the small and large parts and also inside the
   // parts.
@@ -313,8 +320,7 @@ class SortedRunsVector {
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation. Requires `isConsolidated` to be true.
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const SortedRunsVector& sv) {
+  friend std::ostream& operator<<(std::ostream& os, const SortedSequence& sv) {
     os << "{ ";
     ql::ranges::copy(sv.getSortedView(),
                      std::ostream_iterator<ValueType>(os, " "));
@@ -325,4 +331,4 @@ class SortedRunsVector {
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_SORTEDVECTOR_H
+#endif  // QLEVER_SRC_UTIL_SORTEDSEQUENCE_H
