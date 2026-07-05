@@ -604,6 +604,21 @@ class IdTable {
         std::move(viewSpans), numColumns_, numRows_, allocator_};
   }
 
+  // Return a non-owning view of the rows [offset, offset + size). Requires
+  // `offset + size <= numRows()`.
+  IdTable<T, NumColumns, ColumnStorage, IsView::True> subView(
+      size_t offset, size_t size) const {
+    AD_CONTRACT_CHECK(offset + size <= numRows_);
+    auto viewSpans = ::ranges::to<ViewSpans>(
+        ad_utility::allView(getColumns()) |
+        ql::views::transform(
+            [offset, size](const auto& col) -> ql::span<const T> {
+              return col.subspan(offset, size);
+            }));
+    return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
+        std::move(viewSpans), numColumns_, size, allocator_};
+  }
+
   // Obtain a dynamic and const view to this IdTable that contains a subset of
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
