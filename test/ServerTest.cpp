@@ -560,22 +560,36 @@ MATCHER(PairwiseUnequal, "contains no duplicate elements") {
 
 // _____________________________________________________________________________
 TEST(ServerTest, gspPost) {
-  // TODO: test more broadly including the delta triples after the operation
-  auto expectPost = [](std::string body, const auto& responseMatcher) {
-    auto baseName = "ServerTest_gspPost";
-    makeTestIndex(baseName, "");
-    SimulateHttpRequest simulateHttpRequest{baseName};
+  // TODO<qup42> test more thoroughly including the exact delta triples state
+  auto baseName = "ServerTest_gspPost";
+  makeTestIndex(baseName, "");
+  PersistentTestServer testServer{1, "accessToken",
+                                  getDefaultConfigWithName(baseName)};
+  auto expectPost = [&testServer](std::string body,
+                                  const auto& responseMatcher) {
     auto request =
         makeRequest(http::verb::post, "/?graph=foo",
                     {{http::field::authorization, "Bearer accessToken"},
                      {http::field::host, "example.org"},
                      {http::field::content_type, "text/turtle"}},
-                    body);
-    auto response = simulateHttpRequest.processRaw(request);
+                    std::move(body));
+    auto response = testServer.processRaw(request);
     EXPECT_THAT(response, responseMatcher);
   };
+  auto NumDeltaTriples = [](const auto& matcher) {
+    return testing::ResultOf(
+        [](const PersistentTestServer& server) {
+          return server.deltaTriplesManager()
+              .getCurrentLocatedTriplesSharedState()
+              ->getLocatedTriplesForPermutation<false>(Permutation::PSO)
+              .numTriples();
+        },
+        matcher);
+  };
   expectPost("", StatusIs(http::status::no_content));
+  EXPECT_THAT(testServer, NumDeltaTriples(testing::Eq(0)));
   expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+  EXPECT_THAT(testServer, NumDeltaTriples(testing::Eq(1)));
 }
 
 // _____________________________________________________________________________

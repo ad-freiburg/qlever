@@ -24,51 +24,85 @@ namespace http = boost::beast::http;
 using ReqT = http::request<http::string_body>;
 using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 
-// Test the HTTP request processing of the `Server` class.
-struct SimulateHttpRequest {
-  std::string indexBaseName_;
-  // Optional: write the server's query start/end events to this file so a test
-  // can read them back. Empty leaves the event log unconfigured.
-  std::optional<std::filesystem::path> eventLogPath_ = std::nullopt;
+// Convert the body of an `http::response` into a string. Free function so it
+// can be used by both `PersistentTestServer` and the backwards-compatible
+// `SimulateHttpRequest`.
+inline std::string responseBodyToString(
+    ad_utility::httpUtils::streamable_body::value_type body) {
+  // The range overload doesn't work because it takes a const Range& but
+  // begin/end on the generator are not const. absl::StrJoin furthermore also
+  // only accepts common iterators.
+  auto respWithCommonIterators = body | ql::views::common;
+  return absl::StrJoin(respWithCommonIterators.begin(),
+                       respWithCommonIterators.end(), "");
+}
+
+// Test the HTTP request processing of the `Server` class using a *persistent*
+// `Server` instance. In contrast to `SimulateHttpRequest`, the underlying
+// `Server` (and hence its `Index`, `DeltaTriples`, caches, thread pools, ...)
+// lives for the whole lifetime of this object. This allows
+// - executing multiple requests that share state (e.g. an `INSERT DATA` update
+//   followed by a `SELECT` that observes the inserted triples), and
+// - inspecting the server state after a request via `server()` (e.g. the
+//   `DeltaTriples` via
+//   `server().indexAndViewsSnapshot()->index_.deltaTriplesManager()`).
+class PersistentTestServer {
+  std::unique_ptr<Server> server_;
+
+ public:
+  explicit PersistentTestServer(size_t numThreads, std::string accessToken,
+                                const qlever::EngineConfig& config,
+                                bool noAccessCheck = false)
+      : server_{std::make_unique<Server>(
+            4321, numThreads, std::move(accessToken), config, noAccessCheck)} {}
+
+  // Access the underlying `Server` to inspect its state after requests.
+  Server& server() { return *server_; }
+  const Server& server() const { return *server_; }
+
+  // Access the `DeltaTriplesManager` of the underlying `Server`, e.g. to
+  // inspect the delta triples after an `INSERT DATA`/`DELETE DATA` update.
+  DeltaTriplesManager& deltaTriplesManager() {
+    return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
+  }
+  const DeltaTriplesManager& deltaTriplesManager() const {
+    return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
+  }
+
+  // Forwards to `Server::configureQueryEventLog`.
+  void configureQueryEventLog(const std::filesystem::path& path) {
+    server_->configureQueryEventLog(path);
+  }
 
   static std::string bodyToString(
       ad_utility::httpUtils::streamable_body::value_type body) {
-    // The range overload doesn't work because it takes a const Range& but
-    // begin/end on the generator are not const. absl::StrJoin furthermore also
-    // only accepts common iterators.
-    auto respWithCommonIterators = body | ql::views::common;
-    return absl::StrJoin(respWithCommonIterators.begin(),
-                         respWithCommonIterators.end(), "");
+    return responseBodyToString(std::move(body));
   }
 
   // Apply `Server::process` on the given request and return the raw
-  // `http::response`.
-  ResT processRaw(const ReqT& request) const {
+  // `http::response`. A fresh `io_context` and `QueryHub` are created per
+  // request, but the `Server` itself persists across calls.
+  ResT processRaw(const ReqT& request) {
     boost::asio::io_context io;
+    // NOTE: `request`, `io`, and the `Server` are passed as *arguments* to the
+    // coroutine (not captured), because references captured in a lambda
+    // coroutine dangle after the first suspension point. `request` is copied
+    // into the coroutine frame, `io` is passed by reference, and the persistent
+    // `Server` is passed as a pointer.
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName, auto eventLogPath,
+        [](auto request, Server* server,
            auto& io) -> boost::asio::awaitable<ResT> {
-          // Initialize but do not start a `Server` instance on our test index.
-          qlever::EngineConfig config;
-          config.persistUpdates_ = false;
-          config.baseName_ = indexName;
-          Server server{4321, 1, "accessToken", config};
-
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
-          server.queryHub_ = queryHub;
-          // Wire the query event log to the test's file, if requested.
-          if (eventLogPath.has_value()) {
-            server.configureQueryEventLog(*eventLogPath);
-          }
+          server->queryHub_ = queryHub;
 
           // Simulate receiving the HTTP request.
           auto result =
               co_await server
-                  .template onlyForTestingProcess<decltype(request), ResT>(
+                  ->template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, indexBaseName_, eventLogPath_, io),
+        }(request, server_.get(), io),
         boost::asio::use_future);
     io.run();
     return fut.get();
@@ -77,7 +111,7 @@ struct SimulateHttpRequest {
   // Given an HTTP request, apply the `Server::process` method on this request
   // and if the response is a JSON, parse and return it. Otherwise
   // `std::nullopt` is returned.
-  std::optional<nlohmann::json> operator()(const ReqT& request) const {
+  std::optional<nlohmann::json> operator()(const ReqT& request) {
     auto response = processRaw(request);
 
     // Check `Content-type`: currently only `application/json` is supported.
@@ -97,7 +131,7 @@ struct SimulateHttpRequest {
 
   // Apply `Server::process` on the given request and return the body of the
   // response as a string.
-  std::string processAsString(const ReqT& request) const {
+  std::string processAsString(const ReqT& request) {
     auto response = processRaw(request);
     return bodyToString(std::move(response.body()));
   }
@@ -111,6 +145,60 @@ inline qlever::EngineConfig getDefaultConfig() {
   config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
   return config;
 }
+
+// Helper function creating a config for testing with the given base name.
+inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
+  auto config = getDefaultConfig();
+  config.baseName_ = std::move(baseName);
+  return config;
+}
+
+// Test the HTTP request processing of the `Server` class. Each call creates a
+// fresh `Server` on the given test index, runs a single request, and discards
+// it. For multiple requests that share state or for inspecting the server state
+// afterwards, use `PersistentTestServer` instead.
+struct SimulateHttpRequest {
+  std::string indexBaseName_;
+  // Optional: write the server's query start/end events to this file so a test
+  // can read them back. Empty leaves the event log unconfigured.
+  std::optional<std::filesystem::path> eventLogPath_ = std::nullopt;
+
+  static std::string bodyToString(
+      ad_utility::httpUtils::streamable_body::value_type body) {
+    return responseBodyToString(std::move(body));
+  }
+
+  // Build a throwaway `PersistentTestServer` matching the historic behaviour of
+  // this helper (`persistUpdates_ == false`, single-use).
+  PersistentTestServer makeServer() const {
+    auto config = getDefaultConfigWithName(indexBaseName_);
+    config.persistUpdates_ = false;
+    PersistentTestServer server{1, "accessToken", config, false};
+    if (eventLogPath_.has_value()) {
+      server.configureQueryEventLog(*eventLogPath_);
+    }
+    return server;
+  }
+
+  // Apply `Server::process` on the given request and return the raw
+  // `http::response`.
+  ResT processRaw(const ReqT& request) const {
+    return makeServer().processRaw(request);
+  }
+
+  // Given an HTTP request, apply the `Server::process` method on this request
+  // and if the response is a JSON, parse and return it. Otherwise
+  // `std::nullopt` is returned.
+  std::optional<nlohmann::json> operator()(const ReqT& request) const {
+    return makeServer()(request);
+  }
+
+  // Apply `Server::process` on the given request and return the body of the
+  // response as a string.
+  std::string processAsString(const ReqT& request) const {
+    return makeServer().processAsString(request);
+  }
+};
 
 }  // namespace serverTestHelpers
 
