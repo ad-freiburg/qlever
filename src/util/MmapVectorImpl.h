@@ -24,12 +24,6 @@ constexpr size_t MmapVector<T>::MinCapacity;
 template <class T>
 constexpr float MmapVector<T>::ResizeFactor;
 
-template <class T>
-constexpr uint32_t MmapVector<T>::MagicNumber;
-
-template <class T>
-constexpr uint32_t MmapVector<T>::Version;
-
 // __________________________________________________________________________
 template <class T>
 void MmapVector<T>::writeMetaDataToEnd() {
@@ -38,46 +32,21 @@ void MmapVector<T>::writeMetaDataToEnd() {
     throw TruncateException(_filename, _bytesize, errno);
   }
 
-  // open file and seek to end of array space
-  // additionally specifying ios::in avoids truncation of file
-  std::ofstream ofs(_filename, std::ios::binary | std::ios::in);
-  ofs.seekp(_bytesize, std::ios_base::beg);
-  // write metadata to end of file
-  ofs.write((char*)&_size, sizeof(_size));
-  ofs.write((char*)&_capacity, sizeof(_capacity));
-  ofs.write((char*)&_bytesize, sizeof(_bytesize));
-  ofs.write((char*)&MagicNumber, sizeof(MagicNumber));
-  ofs.write((char*)&Version, sizeof(Version));
-  ofs.close();
+  // Open the file for updating (mode "r+" does not truncate it), seek to the
+  // end of the array space, and write the metadata trailer there.
+  File file{_filename, "r+"};
+  file.seek(static_cast<off_t>(_bytesize), SEEK_SET);
+  MmapVectorMetaData{_size, _capacity, _bytesize}.writeToFile(file);
 }
 
 // __________________________________________________________________________
 template <class T>
 void MmapVector<T>::readMetaDataFromEnd() {
-  auto fs =
-      ad_utility::makeIfstream(_filename, std::ios::binary | std::ios::ate);
-  // since we do not know _bytesize yet we have to seek from the end
-  static constexpr off_t metaDataSize = sizeof(_size) + sizeof(_capacity) +
-                                        sizeof(_bytesize) +
-                                        sizeof(MagicNumber) + sizeof(Version);
-  if (fs.tellg() == -1 || static_cast<size_t>(fs.tellg()) < metaDataSize) {
-    throw InvalidFileException();
-  }
-  fs.seekg(-metaDataSize, std::ios_base::end);
-
-  // read metadata
-  fs.read((char*)&_size, sizeof(_size));
-  fs.read((char*)&_capacity, sizeof(_capacity));
-  fs.read((char*)&_bytesize, sizeof(_bytesize));
-
-  auto tmpMagic = MagicNumber;
-  auto tmpVersion = Version;
-  fs.read((char*)&tmpMagic, sizeof(tmpMagic));
-  fs.read((char*)&tmpVersion, sizeof(tmpVersion));
-  fs.close();
-  if (tmpMagic != MagicNumber || tmpVersion != Version) {
-    throw InvalidFileException();
-  }
+  File file{_filename, "r"};
+  const auto metaData = MmapVectorMetaData::readFromFile(file);
+  _size = metaData.size_;
+  _capacity = metaData.capacity_;
+  _bytesize = metaData.bytesize_;
 }
 
 // ________________________________________________________________

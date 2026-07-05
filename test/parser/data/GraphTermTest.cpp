@@ -16,6 +16,7 @@ constexpr auto lit = ad_utility::testing::tripleComponentLiteral;
 TEST(GraphTerm, toSparql) {
   using V = Variable;
   using GT = GraphTerm;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   EXPECT_EQ(GT(V("?x")).toSparql(), "?x");
   EXPECT_EQ(GT(Iri("<x>")).toSparql(), "<x>");
   EXPECT_EQ(GT(Literal("\"x\"")).toSparql(), "\"x\"");
@@ -27,6 +28,7 @@ TEST(GraphTerm, toSparql) {
 TEST(GraphTerm, toTripleComponent) {
   using V = Variable;
   using GT = GraphTerm;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   EXPECT_EQ(GT(V("?x")).toTripleComponent(), V("?x"));
   EXPECT_EQ(GT(Iri("<x>")).toTripleComponent(), iri("<x>"));
   EXPECT_EQ(GT(Literal("\"x\"")).toTripleComponent(), lit("x"));

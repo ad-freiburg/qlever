@@ -44,7 +44,8 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     // a have to equal those of column 2 of b and vice versa).
     OptionalJoin{qec, idTableToExecutionTree(qec, inputA),
                  idTableToExecutionTree(qec, inputB)}
-        .optionalJoin(inputA, inputB, jcls, &result);
+        .optionalJoin(inputA.asStaticView<0>(), inputB.asStaticView<0>(), jcls,
+                      &result);
     ASSERT_EQ(expectedResult, result);
   }
 
@@ -74,7 +75,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
-    ASSERT_EQ(result.idTable(), expectedResult);
+    ASSERT_EQ(result.idTableView(), expectedResult);
   }
 }
 
@@ -131,7 +132,7 @@ void testLazyOptionalJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -457,7 +458,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
     auto result = optionalJoin.computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA, entryB));
 
@@ -782,6 +783,90 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoin, limitOffsetIsPropagated) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+
+  {
+    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputTable.clone(), vars);
+    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputTable.clone(), vars);
+
+    OptionalJoin optionalJoin{qec, subtree1, subtree2};
+    optionalJoin.applyLimitOffset({2, 1});
+
+    EXPECT_EQ(
+        optionalJoin.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+        LimitOffsetClause(3, 0));
+    EXPECT_TRUE(optionalJoin.getChildren()
+                    .at(1)
+                    ->getRootOperation()
+                    ->getLimitOffset()
+                    .isUnconstrained());
+    // We expect that the original subtree is unchanged.
+    EXPECT_TRUE(
+        subtree1->getRootOperation()->getLimitOffset().isUnconstrained());
+    EXPECT_TRUE(
+        subtree2->getRootOperation()->getLimitOffset().isUnconstrained());
+  }
+
+  // Only an offset should be no-op.
+  {
+    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputTable.clone(), vars);
+    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputTable.clone(), vars);
+
+    OptionalJoin optionalJoin{qec, subtree1, subtree2};
+    optionalJoin.applyLimitOffset({std::nullopt, 1337});
+
+    EXPECT_TRUE(optionalJoin.getChildren()
+                    .at(0)
+                    ->getRootOperation()
+                    ->getLimitOffset()
+                    .isUnconstrained());
+    EXPECT_TRUE(optionalJoin.getChildren()
+                    .at(1)
+                    ->getRootOperation()
+                    ->getLimitOffset()
+                    .isUnconstrained());
+    // We expect that the original subtree is unchanged.
+    EXPECT_TRUE(
+        subtree1->getRootOperation()->getLimitOffset().isUnconstrained());
+    EXPECT_TRUE(
+        subtree2->getRootOperation()->getLimitOffset().isUnconstrained());
+  }
+
+  // Test correct overflow handling when the offset is very large.
+  {
+    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputTable.clone(), vars);
+    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(inputTable), vars);
+
+    OptionalJoin optionalJoin{qec, subtree1, subtree2};
+    optionalJoin.applyLimitOffset({1, std::numeric_limits<uint64_t>::max()});
+
+    EXPECT_TRUE(optionalJoin.getChildren()
+                    .at(0)
+                    ->getRootOperation()
+                    ->getLimitOffset()
+                    .isUnconstrained());
+    EXPECT_TRUE(optionalJoin.getChildren()
+                    .at(1)
+                    ->getRootOperation()
+                    ->getLimitOffset()
+                    .isUnconstrained());
+    // We expect that the original subtree is unchanged.
+    EXPECT_TRUE(
+        subtree1->getRootOperation()->getLimitOffset().isUnconstrained());
+    EXPECT_TRUE(
+        subtree2->getRootOperation()->getLimitOffset().isUnconstrained());
+  }
+}
 // Test fixture for testing optionalJoinWithIndexScan with prefiltering.
 class OptionalJoinWithIndexScan
     : public ::testing::TestWithParam<bool>,
@@ -845,7 +930,7 @@ class OptionalJoinWithIndexScan
       }
       return lazyResult;
     } else {
-      return result.idTable().clone();
+      return result.cloneIdTable();
     }
   }
   // Helper to verify that lazy and materialized results match.

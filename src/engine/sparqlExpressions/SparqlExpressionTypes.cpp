@@ -26,12 +26,12 @@ void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
 // _____________________________________________________________________________
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
-    const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
+    const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
-      _inputTable{inputTable},
+      _inputTable{std::move(inputTable)},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
@@ -86,3 +86,16 @@ const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
 }
 
 }  // namespace sparqlExpression
+
+namespace sparqlExpression::detail {
+
+// _____________________________________________________________________________
+bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
+}  // namespace sparqlExpression::detail

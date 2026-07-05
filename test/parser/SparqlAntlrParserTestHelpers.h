@@ -25,7 +25,6 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
@@ -34,6 +33,7 @@
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
+  using Iri = ad_utility::triple_component::Iri;
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
@@ -43,7 +43,7 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
           out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-          out << "Iri " << object.iri();
+          out << "Iri " << object.toSparql();
         } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {
@@ -268,8 +268,9 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
-  return MultiVariantWith<GraphTerm, ::Iri>(
-      AD_PROPERTY(::Iri, iri, testing::Eq(value)));
+  using Iri = ad_utility::triple_component::Iri;
+  return MultiVariantWith<GraphTerm, Iri>(
+      AD_PROPERTY(Iri, toStringRepresentation, testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
@@ -1217,7 +1218,8 @@ auto parse =
     [](const std::string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+       std::string_view baseIri = "") {
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
@@ -1227,6 +1229,9 @@ auto parse =
           std::move(prefixes), std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
+      }
+      if (!baseIri.empty()) {
+        p.visitor_.setBaseIriForTesting(baseIri);
       }
       return p.parseTypesafe(F);
     };
@@ -1297,6 +1302,19 @@ struct ExpectCompleteParse {
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
               input, {}, std::move(activeDatasetClauses), disableSomeChecks),
+          matcher, l);
+    });
+  }
+
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      std::string_view baseIri,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, prefixMap_, std::nullopt, disableSomeChecks, baseIri),
           matcher, l);
     });
   }

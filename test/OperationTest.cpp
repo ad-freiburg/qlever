@@ -529,11 +529,12 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       &namedCache,
       materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
-  CustomGeneratorOperation operation{
-      &context, []() -> Result::Generator {
-        throw CancellationException{"Operation was cancelled"};
-        co_return;
-      }()};
+  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
+                                       throw CancellationException{
+                                           CancellationState::MANUAL,
+                                           "Operation was cancelled"};
+                                       co_return;
+                                     }()};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -725,7 +726,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
       aggregatedValue.value()._resultPointer->resultTable();
   ASSERT_TRUE(aggregatedResult.isFullyMaterialized());
 
-  const auto& idTable = aggregatedResult.idTable();
+  const auto& idTable = aggregatedResult.idTableView();
   ASSERT_EQ(idTable.numColumns(), 2);
   ASSERT_EQ(idTable.numRows(), 3);
 

@@ -102,12 +102,15 @@ std::string Service::pushDownValues(std::string_view pattern,
   size_t index = pattern.find('{');
   AD_CORRECTNESS_CHECK(index != std::string::npos);
   pattern.remove_prefix(index + 1);
+  size_t lastBrace = pattern.rfind('}');
+  AD_CORRECTNESS_CHECK(lastBrace != std::string_view::npos);
+  std::string_view body = pattern.substr(0, lastBrace);
   // If we have a single subquery in the service clause, wrap it inside curly
   // braces so it remains valid syntax alongside a VALUES clause.
   if (ctre::starts_with<selectPatternRegex>(pattern)) {
-    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
+    return absl::StrCat("{\n{", body, "}\n", values, "\n}");
   }
-  return absl::StrCat("{\n", values, "\n", pattern);
+  return absl::StrCat("{\n", body, "\n", values, "\n}");
 }
 
 // _____________________________________________________________________________
@@ -398,7 +401,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
       const auto& optStr = idToValueForValuesClause(
-          getIndex(), siblingResult->idTable()(rowIndex, columnIdx),
+          getIndex(), siblingResult->idTableView()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
       if (!optStr.has_value()) {
@@ -412,7 +415,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   ad_utility::HashSet<std::string> rowSet;
   std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTableView().size();
        ++rowIndex) {
     std::string row = createValueRow(rowIndex);
     if (row.empty() || rowSet.contains(row)) {
@@ -424,7 +427,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     checkCancellation();
   }
 
-  return "VALUES " + vars + values + "} . ";
+  return "VALUES " + vars + values + "} ";
 }
 
 // ____________________________________________________________________________
@@ -633,7 +636,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   if (siblingResult->isFullyMaterialized()) {
     bool resultIsSmall =
-        siblingResult->idTable().size() <=
+        siblingResult->idTableView().size() <=
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(

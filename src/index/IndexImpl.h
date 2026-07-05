@@ -40,6 +40,7 @@
 #include "util/BufferedVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/json.h"
 
@@ -202,8 +203,6 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
   GraphNameManager graphNameManager_ = GraphNameManager();
-  std::optional<std::filesystem::path> graphNameManagerStateFile_ =
-      std::nullopt;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -240,6 +239,9 @@ class IndexImpl {
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
+  void createFromFiles(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,
@@ -265,10 +267,6 @@ class IndexImpl {
 
   GraphNameManager& graphNameManager() { return graphNameManager_; }
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
-  const std::optional<std::filesystem::path>& getPersistedGraphNameManager()
-      const {
-    return graphNameManagerStateFile_;
-  }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
@@ -294,15 +292,6 @@ class IndexImpl {
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesState&) const;
-
-  // ___________________________________________________________________________
-  size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation,
-                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -547,7 +536,8 @@ class IndexImpl {
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<RdfParserBase> makeRdfParser(
-      const std::vector<Index::InputFileSpecification>& files) const;
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
+      const;
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
