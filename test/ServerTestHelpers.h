@@ -37,15 +37,11 @@ inline std::string responseBodyToString(
                        respWithCommonIterators.end(), "");
 }
 
-// Test the HTTP request processing of the `Server` class using a *persistent*
+// Test the HTTP request processing of the `Server` class using a persistent
 // `Server` instance. In contrast to `SimulateHttpRequest`, the underlying
-// `Server` (and hence its `Index`, `DeltaTriples`, caches, thread pools, ...)
-// lives for the whole lifetime of this object. This allows
-// - executing multiple requests that share state (e.g. an `INSERT DATA` update
-//   followed by a `SELECT` that observes the inserted triples), and
-// - inspecting the server state after a request via `server()` (e.g. the
-//   `DeltaTriples` via
-//   `server().indexAndViewsSnapshot()->index_.deltaTriplesManager()`).
+// `Server` lives for the whole lifetime of this object. This allows executing
+// multiple operations (e.g. a `SELECT` after an `UPDATE`) or inspecting the
+// state of the `Server` and `DeltaTriples` after the request.
 class PersistentTestServer {
   std::unique_ptr<Server> server_;
 
@@ -56,7 +52,7 @@ class PersistentTestServer {
       : server_{std::make_unique<Server>(
             4321, numThreads, std::move(accessToken), config, noAccessCheck)} {}
 
-  // Access the underlying `Server` to inspect its state after requests.
+  // Accessors for the `Server` and `DeltaTriples`.
   Server& server() { return *server_; }
   const Server& server() const { return *server_; }
 
@@ -84,11 +80,9 @@ class PersistentTestServer {
   // request, but the `Server` itself persists across calls.
   ResT processRaw(const ReqT& request) {
     boost::asio::io_context io;
-    // NOTE: `request`, `io`, and the `Server` are passed as *arguments* to the
+    // NOTE: `request`, `io`, and the `Server` are passed as arguments to the
     // coroutine (not captured), because references captured in a lambda
-    // coroutine dangle after the first suspension point. `request` is copied
-    // into the coroutine frame, `io` is passed by reference, and the persistent
-    // `Server` is passed as a pointer.
+    // coroutine dangle after the first suspension point.
     std::future<ResT> fut = co_spawn(
         io,
         [](auto request, Server* server,
@@ -96,7 +90,6 @@ class PersistentTestServer {
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server->queryHub_ = queryHub;
 
-          // Simulate receiving the HTTP request.
           auto result =
               co_await server
                   ->template onlyForTestingProcess<decltype(request), ResT>(
@@ -124,7 +117,6 @@ class PersistentTestServer {
       }
     }
 
-    // Parse the JSON body.
     return std::optional{
         nlohmann::json::parse(bodyToString(std::move(response.body())))};
   }
@@ -168,8 +160,7 @@ struct SimulateHttpRequest {
     return responseBodyToString(std::move(body));
   }
 
-  // Build a throwaway `PersistentTestServer` matching the historic behaviour of
-  // this helper (`persistUpdates_ == false`, single-use).
+  // Build a throwaway `PersistentTestServer`.
   PersistentTestServer makeServer() const {
     auto config = getDefaultConfigWithName(indexBaseName_);
     config.persistUpdates_ = false;
