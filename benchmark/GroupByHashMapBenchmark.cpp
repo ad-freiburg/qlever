@@ -275,7 +275,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
                     {std::move(alias1)},
                     std::move(subtree)};
     auto result = groupBy.getResult();
-    (void)result->idTable();
+    (void)result->idTableView();
 
     qec->clearCacheUnpinnedOnly();
   };
@@ -331,7 +331,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
                     {std::move(alias1), std::move(alias2)},
                     std::move(subtree)};
     auto result = groupBy.getResult();
-    (void)result->idTable();
+    (void)result->idTableView();
 
     qec->clearCacheUnpinnedOnly();
   };

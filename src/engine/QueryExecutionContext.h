@@ -50,7 +50,9 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  CPP_template(typename IdTableT)(
+      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
+      getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }
@@ -59,7 +61,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }

@@ -179,6 +179,8 @@ addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
+
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
@@ -247,6 +249,8 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -507,6 +511,8 @@ addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 

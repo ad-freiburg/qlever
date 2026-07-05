@@ -25,10 +25,16 @@ struct ComparatorForConstCol0 {
   }
 };
 
-// Helper function to make a row from `IdTable` easier to compare. This ties
-// the cells of the given row with the indices 0, 1 and 2.
-inline auto tieFirstThreeColumns = [](const auto& row) {
-  return std::tie(row[0], row[1], row[2]);
+// Helper function to make a row from `IdTable` easier to compare. This selects
+// the binary representation of the cells of the given row with the indices 0, 1
+// and 2 and makes sure (using `AD_EXPENSIVE_CHECK`) that the resulting `Id`s
+// can be compared bitwise, which should always be true for index building. This
+// way comparison becomes really cheap.
+inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
+  std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::all_of(result, &Id::canBeComparedBitwise, &Id::fromBits));
+  return result;
 };
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
