@@ -515,10 +515,10 @@ class IndexImpl {
   // Create a task that writes a partial vocabulary given by `items` to disk and
   // adds the corresponding triples in `localIds` to the provided
   // `globalWritePtr`. This is used to write the partial vocabularies in
-  // parallel while we are still parsing the input file.  `numLines` indicates
-  // how many lines from the KB have we already parsed (only for logging).
-  // `numFiles` indicates how many partial vocabularies have we seen
-  // before/which is the index of the voc we are going to write.
+  // parallel while we are still parsing the input file. `numLines` indicates
+  // how many lines from the KB we have already parsed (only for logging).
+  // `numFiles` indicates how many partial vocabularies we have seen before,
+  // which is the index of the vocabulary we are going to write.
   // `actualCurrentPartialSize` indicates how many triples belong to this
   // partition (including extra langfilter triples). The `globalWritePtr` is
   // shared between all tasks and is protected by a mutex internally, so the

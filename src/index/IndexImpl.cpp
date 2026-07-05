@@ -573,8 +573,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
         ad_utility::transformArray(std::move(itemArray), moveMap),
         std::move(localWriter), &idTriples));
     // Save the information how many triples this partial vocabulary actually
-    // deals with we will use this later for mapping from partial to global
-    // ids
+    // deals with; we will use this later for mapping from partial to global
+    // IDs.
     numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
