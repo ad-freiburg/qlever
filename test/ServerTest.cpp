@@ -479,17 +479,28 @@ TEST(ServerTest, metricsEndpoint) {
             SimulateHttpRequest::bodyToString(std::move(response.body())),
             bodyMatcher);
       };
-  expectMetrics("accessToken", nullptr, StatusIs(http::status::not_found),
-                testing::StrEq("Metrics not enabled (use --enable-metrics)"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      expectMetrics(std::nullopt, nullptr, testing::_, testing::_),
-      testing::HasSubstr("metrics requires a valid access token"));
-  auto reader = std::make_shared<FakeMetricsReader>();
-  expectMetrics("accessToken", reader, StatusIs(http::status::ok),
-                testing::HasSubstr("fake_counter 42"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      expectMetrics(std::nullopt, reader, testing::_, testing::_),
-      testing::HasSubstr("metrics requires a valid access token"));
+  auto expectRequiresAccessToken = [&](auto reader) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        expectMetrics(std::nullopt, reader, testing::_, testing::_),
+        testing::HasSubstr("metrics requires a valid access token"));
+  };
+  {
+    expectMetrics("accessToken", nullptr, StatusIs(http::status::not_found),
+                  testing::StrEq("Metrics not enabled (use --enable-metrics)"));
+    expectRequiresAccessToken(nullptr);
+  }
+  {
+    auto fakeReader = std::make_shared<FakeMetricsReader>();
+    expectMetrics("accessToken", fakeReader, StatusIs(http::status::ok),
+                  testing::HasSubstr("fake_counter 42"));
+    expectRequiresAccessToken(fakeReader);
+  }
+  {
+    auto reader = ad_utility::metrics::initialize(true);
+    expectMetrics("accessToken", reader, StatusIs(http::status::ok),
+                  testing::HasSubstr("qlever_memory_cache_used_bytes 0"));
+    expectRequiresAccessToken(reader);
+  }
 }
 
 // _____________________________________________________________________________
