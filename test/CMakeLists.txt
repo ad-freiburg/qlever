@@ -534,3 +534,5 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest util)
+
+addLinkAndDiscoverTest(MetricsTest metrics)
