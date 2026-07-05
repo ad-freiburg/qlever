@@ -589,8 +589,11 @@ void cleanFilesWithPrefix(std::string_view prefix) {
                         return ql::starts_with(e.path().filename().string(),
                                                prefix);
                       });
-  AD_CONTRACT_CHECK(ql::ranges::all_of(
-      toDelete, [](const auto& entry) { return entry.is_regular_file(); }));
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(
+          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
+      "All entries matching the prefix must be regular files, this function "
+      "does not delete directories.");
   for (const auto& entry : toDelete) {
     ad_utility::deleteFile(entry.path());
   }
