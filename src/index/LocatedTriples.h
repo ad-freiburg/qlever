@@ -19,7 +19,7 @@
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
-#include "util/SortedVector.h"
+#include "util/SortedSequence.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
@@ -106,7 +106,7 @@ struct LocatedTriple {
   }
 };
 
-using SortedLocatedTriplesVector = ad_utility::SortedVector<
+using SortedLocatedTriplesVector = ad_utility::SortedSequence<
     LocatedTriple, std::less<>,
     ad_utility::MemberProjection<&LocatedTriple::triple_>>;
 
