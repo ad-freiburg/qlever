@@ -13,30 +13,10 @@
 #include <ostream>
 #include <utility>
 
+#include "./ZipMergeUniqueViewTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/StringUtils.h"
 #include "util/views/ZipMergeUniqueView.h"
-
-// We need to explicitly tell GTest how to print a `ZipMergeUniqueView`,
-// because the latter inherits an implicit `operator<<` from `range-v3`s
-// `view_interface`. That operator leads to a hard compile error if the value
-// type of the view is not printable. Note: `::testing::PrintToString`
-// already falls back to a hex byte representation for non-streamable types, so
-// no SFINAE machinery is needed here.
-namespace ad_utility {
-template <typename V1, typename V2, typename Compare, typename Projection>
-void PrintTo(const ZipMergeUniqueView<V1, V2, Compare, Projection>& view,
-             std::ostream* os) {
-  *os << '[';
-  lazyStrJoin(os,
-              ql::views::transform(ql::ranges::ref_view{view},
-                                   [](const auto& elem) {
-                                     return ::testing::PrintToString(elem);
-                                   }),
-              ",");
-  *os << ']';
-}
-}  // namespace ad_utility
 
 // Pair of the two container types passed to `ZipMergeUniqueView` for testing
 // different input types. The difference to a normal `std::pair` is that this
