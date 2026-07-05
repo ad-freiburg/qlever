@@ -512,25 +512,24 @@ class IndexImpl {
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
-  /**
-   * @brief Everything that has to be done when we have seen all the triples
-   * that belong to one partial vocabulary, including Log output used inside
-   * passFileForVocabulary
-   *
-   * @param numLines How many Lines from the KB have we already parsed (only for
-   * Logging)
-   * @param numFiles How many partial vocabularies have we seen before/which is
-   * the index of the voc we are going to write
-   * @param actualCurrentPartialSize How many triples belong to this partition
-   * (including extra langfilter triples)
-   * @param items Contains our unsorted vocabulary. Maps words to their local
-   * ids within this vocabulary.
-   */
-  std::future<void> writeNextPartialVocabulary(
+  // Create a task that writes a partial vocabulary given by `items` to disk and
+  // adds the corresponding triples in `localIds` to the provided
+  // `globalWritePtr`. This is used to write the partial vocabularies in
+  // parallel while we are still parsing the input file. `numLines` indicates
+  // how many lines from the KB we have already parsed (only for logging).
+  // `numFiles` indicates how many partial vocabularies we have seen before,
+  // which is the index of the vocabulary we are going to write.
+  // `actualCurrentPartialSize` indicates how many triples belong to this
+  // partition (including extra langfilter triples). The `globalWritePtr` is
+  // shared between all tasks and is protected by a mutex internally, so the
+  // tasks can safely add their triples to it while writing their partial
+  // vocabularies to disk.
+  absl::AnyInvocable<void()> createWritePartialVocabularyTask(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items,
+      ItemMapArray items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
+      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
+      const;
 
   // Return a Turtle parser that parses the given file. The parser will be
   // configured to either parse in parallel or not, and to either use the
