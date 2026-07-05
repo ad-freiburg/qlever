@@ -19,9 +19,9 @@
 #include "engine/Operation.h"
 
 // This Operation implements ordinary joins with a single join column. It is
-// implemented via the PIMPL idiom, for details see JoinImpl.h
+// implemented via the Pimpl idiom; for details see `JoinImpl.h`.
 
-// Forward declaration of the impl class
+// Forward declaration of the impl class.
 class JoinImpl;
 class Join : public Operation {
  public:
@@ -34,7 +34,7 @@ class Join : public Operation {
   // Internal constructor used for the implementation of `clone`.
   Join(QueryExecutionContext* qec, std::unique_ptr<JoinImpl>&& impl);
 
-  // Destructor and Move Operators
+  // Destructor and move operators.
   ~Join() override;
   Join(Join&&);
   Join& operator=(Join&&);
@@ -49,7 +49,7 @@ class Join : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-  virtual std::string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 

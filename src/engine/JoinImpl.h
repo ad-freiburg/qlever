@@ -119,7 +119,7 @@ class JoinImpl : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
-  virtual std::string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
