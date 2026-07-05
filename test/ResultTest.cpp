@@ -686,3 +686,17 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(Result, assertionOnNullptrConstruction) {
   EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
 }
+
+// _____________________________________________________________________________
+TEST(Result, assertCorrectStatistic) {
+
+  auto u = Id::makeUndefined();
+  auto Table1 = makeIdTableFromVector({{u, 7}, {1, 6}, {2, 5}, {3, 4}});
+  Result result{Table1.clone(), {}, LocalVocab{}};
+  std::array<std::array<
+    int, static_cast<int>(Datatype::MaxValue) + 1>, IdTable::numStaticColumns> counts{};
+  counts[0][0] = 1; // undefined
+  counts[0][2] = 3; // ints
+  counts[1][2] = 4;
+  EXPECT_EQ(counts, result.getStatistics());
+}
