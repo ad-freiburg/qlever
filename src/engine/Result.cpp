@@ -461,7 +461,7 @@ std::optional<std::array<std::array<int, static_cast<int>(Datatype::MaxValue) + 
     return std::nullopt;
   }
 
-  const auto& table = std::get<IdTableSharedLocalVocabPair>(data_).idTable();
+  const auto& table = std::get<IdTableSharedLocalVocabPair>(data_).idTableView();
   std::array<std::array<
 	  int, static_cast<int>(Datatype::MaxValue) + 1>, IdTable::numStaticColumns> counts{};
   int columnIndex = 0;
