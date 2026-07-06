@@ -110,10 +110,10 @@ class AsyncBlockSource {
   // Return `nullopt` to signal EOF, throw exceptions on errors.
   virtual std::optional<ByteBlock> getNextBlockImpl() = 0;
 
-  // Helper for `AsyncEndRegexBlockSource`: call `getNextBlockImpl()` on a
-  // different `AsyncBlockSource` instance. C++ protected-access rules prevent
-  // calling a protected method on a sibling object, so this static trampoline
-  // is provided in the base.
+  // Helper for `AsyncStatementBoundaryBlockSource`: call `getNextBlockImpl()`
+  // on a different `AsyncBlockSource` instance. C++ protected-access rules
+  // prevent calling a protected method on a sibling object, so this static
+  // trampoline is provided in the base.
   static std::optional<ByteBlock> nextBlockFrom(AsyncBlockSource& src) {
     return src.getNextBlockImpl();
   }
@@ -144,7 +144,7 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 // with the tail carried over from the previous block prepended. If no statement
 // boundary can be found in a complete block, an exception is thrown with a
 // message that indicates possible mitigations for this error.
-class AsyncEndRegexBlockSource : public AsyncBlockSource {
+class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // A function that, given a block, returns the number of bytes until the end
   // of the last statement in the block (i.e. the position at which the block
@@ -164,10 +164,10 @@ class AsyncEndRegexBlockSource : public AsyncBlockSource {
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
   // marks the end of a statement.
-  AsyncEndRegexBlockSource(const boost::asio::any_io_executor& exec,
-                           std::unique_ptr<AsyncBlockSource> inner,
-                           EndPositionFinder findEndPosition,
-                           std::string description);
+  AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
+                                    std::unique_ptr<AsyncBlockSource> inner,
+                                    EndPositionFinder findEndPosition,
+                                    std::string description);
 
  protected:
   std::optional<ByteBlock> getNextBlockImpl() override;

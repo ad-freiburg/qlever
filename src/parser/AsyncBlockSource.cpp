@@ -53,7 +53,7 @@ std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
 }
 
 // ____________________________________________________________________________
-AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
+AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
     const net::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
     EndPositionFinder findEndPosition, std::string description)
     : AsyncBlockSource{exec, inner->getBlocksize()},
@@ -62,7 +62,7 @@ AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
       description_{std::move(description)} {}
 
 // ____________________________________________________________________________
-std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
+std::optional<ByteBlock> AsyncStatementBoundaryBlockSource::getNextBlockImpl() {
   // Mark the source exhausted and return whatever is left in `remainder_`.
   auto returnRemainder = [this]() -> std::optional<ByteBlock> {
     exhausted_ = true;
@@ -115,9 +115,9 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
     // Inner source has more data: this is a real "statement too large" error.
     auto rawSize = rawInput.size();
     throw std::runtime_error{absl::StrCat(
-        "The pattern ", description_,
-        " which marks the end of a statement was not found in the "
-        "current input batch (that was not the last one) of size ",
+        "No statement boundary (", description_,
+        ") was found in the current input batch (which was not the last one) "
+        "of size ",
         ad_utility::insertThousandSeparator(std::to_string(rawSize), ','),
         "; possible fixes are: "
         "use `--parser-buffer-size` to increase the buffer size or "

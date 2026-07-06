@@ -51,9 +51,9 @@ namespace detail {
 // break.
 std::optional<size_t> findEndOfLastNewline(std::string_view input);
 
-// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` (but reversed)
-// in `input`, or `std::nullopt` if there is no match. Used to split a block of
-// input at a turtle statement boundary.
+// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
+// `std::nullopt` if there is no match. Used to split a block of input at a
+// Turtle statement boundary.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 }  // namespace detail
 

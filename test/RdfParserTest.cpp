@@ -1420,8 +1420,8 @@ TEST(RdfParserTest, specialPredicateA) {
 TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
   // Regression test for small payloads with long prefixes, where the initial
   // chunk size of 1000 of the former
-  // `AsyncEndRegexBlockSource::findRegexNearEnd` function is greater than the
-  // total size of the payload.
+  // `AsyncStatementBoundaryBlockSource::findRegexNearEnd` function is greater
+  // than the total size of the payload.
   std::string filename{"payloadSmallerThanInitialChunkSize.dat"};
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             std::string_view input) {
