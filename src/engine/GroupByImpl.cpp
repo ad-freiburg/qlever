@@ -812,9 +812,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           locatedTriplesState());
-  // `numBlocks()` returns the count of blocks with a non-empty set of located
-  // triples, so this is equivalent to "any located triples at all."
-  bool hasLocatedTriples = locTriples.numBlocks() > 0;
+  bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
 

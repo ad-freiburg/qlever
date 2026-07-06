@@ -67,9 +67,8 @@ LocatedTriplesPerBlock::getUpdatesIfPresent(size_t blockIndex) const {
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::consolidateAllBlocks() {
-  for (auto& locatedTriples : map_ | ql::views::values) {
-    locatedTriples.consolidate();
-  }
+  ql::ranges::for_each(map_ | ql::views::values,
+                       [](auto& lts) { lts.consolidate(); });
 }
 
 // ____________________________________________________________________________
@@ -169,6 +168,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   auto rowIt = block.begin();
   auto sortedLocatedTriples = locatedTriples.getSortedView();
   auto locatedTripleIt = sortedLocatedTriples.begin();
+  auto locatedTripleEnd = sortedLocatedTriples.end();
   auto resultIt = result.begin();
 
   // Write the given `locatedTriple` to `result` at position `resultIt` and
@@ -191,8 +191,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     resultIt++;
   };
 
-  while (rowIt != block.end() &&
-         locatedTripleIt != sortedLocatedTriples.end()) {
+  while (rowIt != block.end() && locatedTripleIt != locatedTripleEnd) {
     if (lessThan(locatedTripleIt, *rowIt)) {
       if (locatedTripleIt->insertOrDelete_) {
         // Insertion of a non-existent triple.
@@ -211,15 +210,15 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     }
   }
 
-  if (locatedTripleIt != sortedLocatedTriples.end()) {
+  if (locatedTripleIt != locatedTripleEnd) {
     AD_CORRECTNESS_CHECK(rowIt == block.end());
     ql::ranges::for_each(
-        ql::ranges::subrange(locatedTripleIt, sortedLocatedTriples.end()) |
+        ql::ranges::subrange(locatedTripleIt, locatedTripleEnd) |
             ql::views::filter(&LocatedTriple::insertOrDelete_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
-    AD_CORRECTNESS_CHECK(locatedTripleIt == sortedLocatedTriples.end());
+    AD_CORRECTNESS_CHECK(locatedTripleIt == locatedTripleEnd);
     while (rowIt != block.end()) {
       *resultIt++ = *rowIt++;
     }
@@ -371,11 +370,11 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::add(std::vector<LocatedTriple> locatedTriples,
+void LocatedTriplesPerBlock::add(ql::span<LocatedTriple> locatedTriples,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("adding");
   for (auto& locatedTriple : locatedTriples) {
-    map_[locatedTriple.blockIndex_].insert(std::move(locatedTriple));
+    map_[locatedTriple.blockIndex_].insert(locatedTriple);
   }
   tracer.endTrace("adding");
 }
@@ -397,34 +396,28 @@ void LocatedTriplesPerBlock::erase(ql::span<LocatedTriple> sortedTriples) {
   AD_CORRECTNESS_CHECK(
       ql::ranges::is_sorted(sortedTriples, {}, &LocatedTriple::triple_));
 
-  auto it = sortedTriples.begin();
-  while (it != sortedTriples.end()) {
-    size_t blockIndex = it->blockIndex_;
-    auto groupEnd = std::find_if_not(it, sortedTriples.end(),
-                                     [blockIndex](const LocatedTriple& lt) {
-                                       return lt.blockIndex_ == blockIndex;
-                                     });
-
+  for (const auto chunk :
+       ::ranges::views::chunk_by(sortedTriples, [](auto& lt1, auto& lt2) {
+         return lt1.blockIndex_ == lt2.blockIndex_;
+       })) {
+    size_t blockIndex = chunk.front().blockIndex_;
     auto blockIter = map_.find(blockIndex);
     AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                       " is not contained");
     auto& block = blockIter->second;
-    block.eraseSorted(ql::span(it, groupEnd));
+    block.eraseSorted(chunk);
     if (block.empty()) {
       map_.erase(blockIndex);
     }
-
-    it = groupEnd;
   }
 }
 
 // ____________________________________________________________________________
 size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
-  auto sizes =
-      map_ | ql::views::values | ql::views::transform([](const auto& block) {
-        return block.sizeForTesting();
-      });
-  return std::accumulate(sizes.begin(), sizes.end(), 0UL);
+  return ::ranges::accumulate(
+      map_ | ql::views::values |
+          ql::views::transform(&LocatedTriples::sizeForTesting),
+      0UL, std::plus());
 }
 
 // ____________________________________________________________________________

@@ -189,7 +189,7 @@ class LocatedTriplesPerBlock {
   }
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
-  void add(std::vector<LocatedTriple> locatedTriples,
+  void add(ql::span<LocatedTriple> locatedTriples,
            ad_utility::timer::TimeTracer& tracer =
                ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -203,11 +203,16 @@ class LocatedTriplesPerBlock {
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriplesForTesting() const;
 
-  // Get the number of blocks with a non-empty set of located triples.
+  // Get the number of blocks with a non-empty set of located triples. This is
+  // equivalent to "any located triples at all.
   size_t numBlocks() const { return map_.size(); }
 
-  // Sort the located triples in all blocks. Must be called before any sorted
-  // access (begin/end/size/mergeTriples/updateAugmentedMetadata).
+  // Return whether there are any updates at all.
+  bool isEmpty() const { return map_.empty(); }
+
+  // Consolidate the located triples in all blocks. Forwards to
+  // `SortedSequence`. Must be called before any sorted access
+  // (begin/end/size/mergeTriples/updateAugmentedMetadata).
   void consolidateAllBlocks();
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to

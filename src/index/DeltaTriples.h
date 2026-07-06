@@ -274,8 +274,11 @@ class DeltaTriples {
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
       bool setInternalMetadata);
 
-  // Sort the located triples in all permutations. Must be called after a batch
-  // of insertTriples/deleteTriples, before any query access or metadata update.
+  // Consolidate the located triples in all permutations. Must be called after a
+  // batch of insertTriples/deleteTriples, before any query access or metadata
+  // update.
+  // Note: This function allows doing updates more efficiently but is
+  // expensive should only be called once at the end.
   void consolidateAll();
 
   // Update the block metadata.
