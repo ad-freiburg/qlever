@@ -224,10 +224,10 @@ inline PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids) {
 // Precondition: `vocabIds` is non-empty and every id has datatype `VocabIndex`.
 template <typename IdRange>
 auto lookupVocabIndexStrings(const Index& index, IdRange vocabIds) {
-  auto rawIndices = ::ranges::to_vector(
-      vocabIds | ql::views::transform([](const Id& id) -> size_t {
-        return id.getVocabIndex().get();
-      }));
+  auto rawIndices =
+      ::ranges::to_vector(vocabIds | ql::views::transform([](const Id& id) {
+                            return id.getVocabIndex().get();
+                          }));
   return index.getImpl().getVocab().lookupBatch(rawIndices);
 }
 
