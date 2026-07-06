@@ -202,15 +202,61 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   }
 }
 
-// Batch variant of `idToStringAndType`.
-// Precondition: `ids` is sorted by `ValueId` (as `ConstructBatchEvaluator` does
-// before calling vocabulary lookups). Because the datatype tag occupies the 4
-// most significant bits of a `ValueId`, all `VocabIndex` IDs  therefore form a
-// single contiguous block that is already sorted by vocabulary position. We
-// resolve that block in one sequential `lookupBatch` call for I/O-local access
-// to the on-disk vocabulary. All other IDs are resolved immediately, since
-// their values are either encoded in the id bits or stored in the in-memory
-// `LocalVocab`.
+struct PartitionedIdPositions {
+  std::vector<size_t> vocabIndexIndices_;
+  std::vector<size_t> nonVocabIndexIndices_;
+};
+
+inline PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids) {
+  PartitionedIdPositions positions;
+  ql::ranges::partition_copy(
+      ql::views::iota(size_t{0}, ids.size()),
+      std::back_inserter(positions.vocabIndexIndices_),
+      std::back_inserter(positions.nonVocabIndexIndices_), [&ids](size_t i) {
+        return ids[i].getDatatype() == Datatype::VocabIndex;
+      });
+  return positions;
+}
+
+// Batch-look-up the vocabulary strings for a range of `VocabIndex` ids. Returns
+// one `string_view` per id, in the same order as `vocabIds`, inside a handle
+// that keeps the backing memory alive (dereference it to get the `span`).
+// Precondition: `vocabIds` is non-empty and every id has datatype `VocabIndex`.
+template <typename IdRange>
+auto lookupVocabIndexStrings(const Index& index, IdRange&& vocabIds) {
+  auto rawIndices = ::ranges::to_vector(
+      vocabIds | ql::views::transform([](const Id& id) -> size_t {
+        return id.getVocabIndex().get();
+      }));
+  return index.getImpl().getVocab().lookupBatch(rawIndices);
+}
+
+// Resolve the IDs at `positions` (all non-`VocabIndex`) immediately via
+// in-memory `idToStringAndType`, writing each result into its slot in
+// `results`. These values are either encoded in the id bits or stored in the
+// in-memory `LocalVocab`.
+template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
+          typename EscapeFunction>
+void resolveNonVocabIndexIds(
+    const Index& index, ql::span<const Id> ids, const LocalVocab& localVocab,
+    ql::span<const size_t> positions,
+    ql::span<std::optional<std::pair<std::string, const char*>>> results,
+    EscapeFunction&& escapeFunction) {
+  for (size_t i : positions) {
+    results[i] =
+        idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+            index, ids[i], localVocab, escapeFunction);
+  }
+}
+
+// Batch variant of `idToStringAndType`. We cannot assume that the `VocabIndex`
+// IDs form a single contiguous block: even when the `ids` are sorted, IDs of
+// other datatype `LocalVocabIndex` might be interspersed between the
+// `VocabIndex` IDs. We therefore check each ID's datatype individually to
+// partition the positions. All `VocabIndex` IDs are then gathered and resolved
+// in a single `lookupBatch` call; every other ID is resolved immediately from
+// the id bits or the in-memory `LocalVocab`. Results are returned in the same
+// order as `ids`.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -221,48 +267,24 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   std::vector<std::optional<std::pair<std::string, const char*>>> results(
       ids.size());
 
-  // Locate the single contiguous block of `VocabIndex` IDs.
-  auto isVocab = [](const Id& id) {
-    return id.getDatatype() == Datatype::VocabIndex;
-  };
-  auto vocabBegin = ql::ranges::find_if(ids, isVocab);
-  auto vocabEnd = ql::ranges::find_if_not(vocabBegin, ids.end(), isVocab);
+  PartitionedIdPositions positions = partitionIdPositions(ids);
+  resolveNonVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+      index, ids, localVocab, positions.nonVocabIndexIndices_, results,
+      escapeFunction);
 
-  // Resolve every non-`VocabIndex` ID immediately via in-memory lookups. These
-  // are exactly the IDs outside `[vocabBegin, vocabEnd)`, i.e. the ranges
-  // before and after the block.
-  auto resolveInMemory = [&](auto first, auto last) {
-    for (auto it = first; it != last; ++it) {
-      results[it - ids.begin()] =
-          idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-              index, *it, localVocab, escapeFunction);
-    }
-  };
-  resolveInMemory(ids.begin(), vocabBegin);
-  resolveInMemory(vocabEnd, ids.end());
+  const auto& vocabPositions = positions.vocabIndexIndices_;
+  if (!vocabPositions.empty()) {
+    // A lazy view of the scattered `VocabIndex` ids; nothing is materialized.
+    auto vocabIds =
+        vocabPositions |
+        ql::views::transform([&ids](size_t i) -> const Id& { return ids[i]; });
+    auto vocabStrings = lookupVocabIndexStrings(index, vocabIds);
 
-  // Resolve the `VocabIndex` block in a single batch call. `lookupBatch`
-  // expects raw `size_t` vocabulary indices and returns a span of
-  // `string_view`s backed by memory kept alive by the returned shared_ptr.
-  if (vocabBegin != vocabEnd) {
-    auto rawIndices =
-        ::ranges::to_vector(ql::ranges::subrange(vocabBegin, vocabEnd) |
-                            ql::views::transform([](const Id& id) -> size_t {
-                              return id.getVocabIndex().get();
-                            }));
-
-    auto batchResult = index.getImpl().getVocab().lookupBatch(rawIndices);
-
-    // The block occupies the same positions in `results` as it does in `ids`.
-    auto blockOffset = vocabBegin - ids.begin();
-    auto resultsBlock = ql::ranges::subrange(
-        results.begin() + blockOffset,
-        results.begin() + blockOffset + (vocabEnd - vocabBegin));
-
-    // Pair each looked-up `string_view` with its target slot in `results`.
-    for (auto&& [sv, slot] : ::ranges::views::zip(*batchResult, resultsBlock)) {
-      slot = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
-                                         returnOnlyLiterals>(
+    // `vocabStrings` is in the same order as `vocabPositions`, so zip scatters
+    // each looked-up string back to the position it came from.
+    for (auto&& [sv, i] : ::ranges::views::zip(*vocabStrings, vocabPositions)) {
+      results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                               returnOnlyLiterals>(
           LiteralOrIriView::fromStringRepresentation(sv), escapeFunction);
     }
   }
