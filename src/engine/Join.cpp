@@ -69,6 +69,9 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
 
 // _____________________________________________________________________________
+bool Join::isDeterministicImpl() const { return impl_->isDeterministic(); }
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Join::cloneImpl() const {
   auto ptr = std::unique_ptr<JoinImpl>{
       static_cast<JoinImpl*>(impl_->cloneImpl().release())};
