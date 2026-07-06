@@ -158,7 +158,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
                                                          {1, {{LT4, LT5}}},
                                                          {3, {{LT6, LT7}}}}));
 
-  locatedTriplesPerBlock.add({LT8, LT9});
+  locatedTriplesPerBlock.add(std::vector{LT8, LT9});
   locatedTriplesPerBlock.consolidateAllBlocks();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(4));

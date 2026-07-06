@@ -302,11 +302,17 @@ VacuumStatistics processBlockForVacuum(
   auto deletionsRemovedInBlock =
       processTriples(false, ql::ranges::set_difference, allDeletionsToRemove);
 
-  // TODO: `sizeUpperBound` is wrong here, but we can also get both counts from
-  // the scan below
-  auto insertionsInBlock = ql::ranges::count_if(
-      locatedTriples.getSortedView(), &LocatedTriple::insertOrDelete_);
-  auto deletionsInBlock = locatedTriples.sizeUpperBound() - insertionsInBlock;
+  // TODO<qup42>: we could also get these without an extra iteration by
+  // instrumenting the iteration in `processTriples`.
+  size_t insertionsInBlock = 0, deletionsInBlock = 0;
+  ql::ranges::for_each(locatedTriples.getSortedView(),
+                       [&](const LocatedTriple& lt) {
+                         if (lt.insertOrDelete_) {
+                           insertionsInBlock++;
+                         } else {
+                           deletionsInBlock++;
+                         }
+                       });
 
   return {deletionsRemovedInBlock, insertionsRemovedInBlock,
           deletionsInBlock - deletionsRemovedInBlock,
@@ -370,10 +376,10 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::add(ql::span<LocatedTriple> locatedTriples,
+void LocatedTriplesPerBlock::add(ql::span<const LocatedTriple> locatedTriples,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("adding");
-  for (auto& locatedTriple : locatedTriples) {
+  for (const auto& locatedTriple : locatedTriples) {
     map_[locatedTriple.blockIndex_].insert(locatedTriple);
   }
   tracer.endTrace("adding");
@@ -541,19 +547,18 @@ std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
     result.at(insertion ? 0 : 1).push_back(triple);
   };
 
-  for (const auto& [blockIndex, locatedTriples] : map_) {
+  for (const auto& [blockIndex, currentTriples] : map_) {
     auto it = oldBlocks.map_.find(blockIndex);
     const LocatedTriples empty;
-    const auto& set = it != oldBlocks.map_.end() ? it->second.getSortedView()
-                                                 : empty.getSortedView();
-    ql::ranges::for_each(
-        locatedTriples.getSortedView(),
-        [&addTriple, &set](const LocatedTriple& lt) {
-          auto it = ql::ranges::lower_bound(set, lt);
-          if (it == set.end() || it->insertOrDelete_ != lt.insertOrDelete_) {
-            addTriple(lt.triple_, lt.insertOrDelete_);
-          }
-        });
+    const auto& oldTriplesSortedView = it != oldBlocks.map_.end()
+                                           ? it->second.getSortedView()
+                                           : empty.getSortedView();
+    ql::ranges::set_difference(currentTriples.getSortedView(),
+                               oldTriplesSortedView,
+                               ad_utility::IteratorForAssigmentOperator(
+                                   [&addTriple](const LocatedTriple& lt) {
+                                     addTriple(lt.triple_, lt.insertOrDelete_);
+                                   }));
   }
   // Account for non-deterministic order introduced by hash map. (Or in case a
   // permutation that is not SPO was used).

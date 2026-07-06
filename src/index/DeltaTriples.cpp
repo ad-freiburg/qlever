@@ -14,6 +14,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "Permutation.h"
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -91,6 +92,29 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
+void DeltaTriples::eraseTriplesInPermutation(
+    Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
+    bool insertOrDelete, auto isInternal,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
+  // The requested `Permutation` and `LocatedTriplesPerBlock` for that
+  // permutation from which the triples are erased.
+  const auto& perm = index_.getPermutation(permutation);
+  LocatedTriplesPerBlock& lts =
+      locatedTriples_->getLocatedTriplesForPermutation<isInternal>(permutation);
+  // To `erase` in `LocatedTriplesPerBlock` we need the block index for which we
+  // need to locate the triples. `insertOrDelete` could be any value because
+  // `erase` because the `SortedSequence` only considers the triple. Here it is
+  // the actual value though.
+  auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+      triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
+      cancellationHandle);
+  // For somewhat efficient `erase` both `LocatedTriplesPerBlock` and
+  // `SortedSequence` need sorted elements.
+  ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
+  lts.erase(locatedTriples);
+}
+
+// ____________________________________________________________________________
 nlohmann::json DeltaTriples::vacuum(
     ad_utility::SharedCancellationHandle cancellationHandle) {
   // When the cancellation handle stops the execution this results in the state
@@ -106,17 +130,8 @@ nlohmann::json DeltaTriples::vacuum(
         std::make_shared<ad_utility::CancellationHandle<>>();
     // Erase located triples
     for (auto permutation : Permutation::all<isInternal>()) {
-      const auto& perm = index_.getPermutation(permutation);
-      // `LocatedTriple`s are compared only by their `triple_` so
-      // `insertOrDelete` could also be a fixed value.
-      auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-          triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
-          cancellationHandle);
-      ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
-      LocatedTriplesPerBlock& lts =
-          locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-              permutation);
-      lts.erase(locatedTriples);
+      eraseTriplesInPermutation(permutation, triples, insertOrDelete,
+                                isInternal, cancellationHandle);
     }
 
     // Remove from handles map.
@@ -194,16 +209,6 @@ void DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     cancellationHandle->throwIfCancelled();
     tracer.endTrace("addToLocatedTriples");
     tracer.endTrace(Permutation::toString(permutation));
-  }
-}
-
-// ____________________________________________________________________________
-template <bool isInternal>
-void DeltaTriples::eraseTripleInAllPermutations(const LocatedTriple& lt) {
-  auto& lts = locatedTriples_->getLocatedTriples<isInternal>();
-  // Erase for all permutations.
-  for (auto permutation : Permutation::all<isInternal>()) {
-    lts[static_cast<int>(permutation)].erase(lt.blockIndex_, lt);
   }
 }
 

@@ -140,19 +140,18 @@ class LocatedTriplesPerBlock {
   // Get upper limits for the number of inserted and deleted located triples
   // for the given block.
   //
-  // NOTE: This currently returns the total number of triples in the block
-  // twice, in order to avoid counting the triples with `insertOrDelete_ ==
-  // true` and `insertOrDelete_ == false` separately, which turned out to
-  // be very expensive for a `std::set`, which is the underlying data
-  // structure.
+  // NOTE: This currently returns an upper bound for the total number of triples
+  // in the block twice, in order to avoid counting the triples with
+  // `insertOrDelete_ == true` and `insertOrDelete_ == false` separately, which
+  // is expensive.
   //
   // TODO: Since the average number of located triples per block is usually
   // small, this estimate is usually fine. We could get better estimates in
   // constant time by maintaining a counter for each of these two numbers in
-  // `LocatedTriplesPerBlock` and update these counters for each update
-  // operation. However, note that that would still be an estimate because at
-  // this point we do not know whether an insertion or deletion is actually
-  // effective.
+  // `SortedSequence` and update these counters for each consolidate
+  // However, note that that would still be an estimate because 1. the triple
+  // might be counted twice between the parts and 2. at this point we do not
+  // know whether an insertion or deletion is actually effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
   // Returns an optional reference to update triples for the block with the
@@ -189,7 +188,7 @@ class LocatedTriplesPerBlock {
   }
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
-  void add(ql::span<LocatedTriple> locatedTriples,
+  void add(ql::span<const LocatedTriple> locatedTriples,
            ad_utility::timer::TimeTracer& tracer =
                ad_utility::timer::DEFAULT_TIME_TRACER);
 
