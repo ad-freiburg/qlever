@@ -290,7 +290,7 @@ template <bool removeQuotesAndAngleBrackets = false,
 std::vector<std::optional<std::pair<std::string, const char*>>>
 idsToStringAndType(const Index& index, ql::span<const Id> ids,
                    const LocalVocab& localVocab,
-                   EscapeFunction& escapeFunction = EscapeFunction{}) {
+                   const EscapeFunction& escapeFunction = EscapeFunction{}) {
   std::vector<std::optional<std::pair<std::string, const char*>>> results(
       ids.size());
 
