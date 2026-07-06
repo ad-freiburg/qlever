@@ -191,10 +191,8 @@ struct RuntimeParameters {
 
   // If set to `true` (the default), then a query without an explicit dataset
   // clause (`FROM`/`FROM NAMED`) uses the union of all graphs (including the
-  // default graph) as its default graph, which deviates from the SPARQL
-  // standard. If set to `false`, then such a query instead implicitly uses
-  // only `ql:default-graph` as its default graph, following the SPARQL
-  // standard.
+  // default graph) as its default graph. If set to `false`, then such a query
+  // instead implicitly uses only `ql:default-graph` as its default graph.
   Bool unionGraphAsDefaultGraph_{true, "union-graph-as-default-graph"};
 
   // ___________________________________________________________________________

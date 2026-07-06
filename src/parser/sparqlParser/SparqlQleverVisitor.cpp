@@ -476,6 +476,10 @@ const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
 const parsedQuery::DatasetClauses&
 SparqlQleverVisitor::setAndGetDatasetClausesForQuery(
     const std::vector<DatasetClause>& clauses) {
+  // If the `unionGraphAsDefaultGraph_` `RuntimeParameter` is set to `false`,
+  // then a query without an explicit dataset clause implicitly gets a dataset
+  // clause that consists only of `ql:default-graph`, instead of using the
+  // union of all graphs as its default graph.
   if (clauses.empty() &&
       !getRuntimeParameter<&RuntimeParameters::unionGraphAsDefaultGraph_>()) {
     std::vector<DatasetClause> implicitDefaultGraphClause{DatasetClause{

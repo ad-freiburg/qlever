@@ -166,8 +166,8 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::unionGraphAsDefaultGraph_>(),
       "If set to true (the default), queries without an explicit dataset "
       "clause use the union of all graphs as their default graph. If set to "
-      "false, such queries implicitly use only `ql:default-graph` as their "
-      "default graph, following the SPARQL standard.");
+      "false, such queries implicitly use only the explicit unnamed default "
+      "graph (spelled `ql:default-graph` inside QLever)");
   add("spatial-join-max-num-threads",
       optionFactory
           .getProgramOption<&RuntimeParameters::spatialJoinMaxNumThreads_>(),
