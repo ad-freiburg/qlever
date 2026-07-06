@@ -1562,7 +1562,8 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       runQueryStreamableResult(kg, constructQuery,
                                ad_utility::MediaType::sparqlXml),
       ::testing::ContainsRegex(
-          "XML export is currently not supported for CONSTRUCT"));
+          "application/sparql-results+xml is not supported for CONSTRUCT "
+          "queries"));
 
   // Binary export is not supported for CONSTRUCT queries.
   ASSERT_THROW(runQueryStreamableResult(kg, constructQuery,
