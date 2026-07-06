@@ -80,9 +80,6 @@ class PersistentTestServer {
   // request, but the `Server` itself persists across calls.
   ResT processRaw(const ReqT& request) {
     boost::asio::io_context io;
-    // NOTE: `request`, `io`, and the `Server` are passed as arguments to the
-    // coroutine (not captured), because references captured in a lambda
-    // coroutine dangle after the first suspension point.
     std::future<ResT> fut = co_spawn(
         io,
         [](auto request, Server* server,
