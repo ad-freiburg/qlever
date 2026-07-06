@@ -142,12 +142,6 @@ struct LogstreamChoice {
   std::ostream* _stream = &std::cout;
 };
 
-// After this call, every use of `AD_LOG_...` will use the specified stream.
-// Used in various tests to redirect or suppress logging output.
-inline void setGlobalLoggingStream(std::ostream* stream) {
-  LogstreamChoice::get().setStream(stream);
-}
-
 // Helper class to get thousandth separators in a locale
 class CommaNumPunct : public std::numpunct<char> {
  protected:

@@ -435,9 +435,7 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
 
   // Capture the log so we can assert that the destructor stays silent.
   std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-  absl::Cleanup restoreLog{
-      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  auto restoreLog = setGlobalLoggingStreamForTesting(&logStream);
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
@@ -467,9 +465,7 @@ TEST(IoUringManagerDrop, dropRunningManager) {
   // Redirect the global logging stream so we can assert on the destructor's
   // warning.
   std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-  absl::Cleanup restoreLog{
-      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  auto restoreLog = setGlobalLoggingStreamForTesting(&logStream);
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});

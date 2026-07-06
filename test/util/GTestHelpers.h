@@ -125,6 +125,19 @@ inline auto setLoglevelForTesting(LogLevel level) {
 }
 
 // _____________________________________________________________________________
+// Redirect the global logging stream to `stream` and return an `absl::Cleanup`
+// that restores the *previously active* stream when it goes out of scope. Use
+// this in tests that temporarily capture or suppress log output, so the global
+// stream is never left dangling or reset to the wrong value.
+inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
+  auto& choice = ad_utility::LogstreamChoice::get();
+  auto* previous = &choice.getStream();
+  choice.setStream(stream);
+  return absl::MakeCleanup(
+      [previous] { ad_utility::LogstreamChoice::get().setStream(previous); });
+}
+
+// _____________________________________________________________________________
 
 // Helper matcher that allows to use matchers for strings that represent json
 // objects.

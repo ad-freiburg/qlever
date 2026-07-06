@@ -73,9 +73,7 @@ TEST(LogTest, StreamFiltering) {
   // runtime when the level is set to FATAL.
   auto levelCleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
   std::stringstream ss;
-  ad_utility::setGlobalLoggingStream(&ss);
-  auto streamCleanup =
-      absl::MakeCleanup([] { ad_utility::setGlobalLoggingStream(&std::cout); });
+  auto streamCleanup = setGlobalLoggingStreamForTesting(&ss);
 
   AD_LOG_FATAL << "hello-fatal";
   EXPECT_THAT(ss.str(), ::testing::HasSubstr("hello-fatal"));
@@ -92,9 +90,7 @@ TEST(LogTest, ThreadSafety) {
 
   // Redirect all logging to a local stringstream for the duration of the test.
   std::stringstream ss;
-  ad_utility::setGlobalLoggingStream(&ss);
-  auto streamCleanup =
-      absl::MakeCleanup([] { ad_utility::setGlobalLoggingStream(&std::cout); });
+  auto streamCleanup = setGlobalLoggingStreamForTesting(&ss);
 
   // Spawn N threads; each logs M lines using multiple `<<` operators. The
   // multi-part write is intentional: if the mutex were absent, partial writes

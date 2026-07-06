@@ -269,13 +269,10 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
 
-  // Tell absl to reset the logging stream after scope exits.
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-
-  // Redirect logging stream to a stream object which we can test on.
+  // Redirect logging stream to a stream object which we can test on. The
+  // returned cleanup resets the logging stream when the scope exits.
   std::stringstream stream;
-  ad_utility::setGlobalLoggingStream(&stream);
+  auto cleanup = setGlobalLoggingStreamForTesting(&stream);
 
   // Trigger a `CHECK_WINDOW_MISSED` cancellation state which will make the
   // handle's watchdog write logs containing the algorithmName specified in
