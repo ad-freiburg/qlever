@@ -14,6 +14,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 

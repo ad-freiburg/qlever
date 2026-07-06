@@ -30,8 +30,7 @@ void IndexImpl::addTextFromOnDiskIndex() {
               << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
   AD_CONTRACT_CHECK(textIndexFile_.isOpen());
-  off_t metaFrom;
-  [[maybe_unused]] off_t metaTo = textIndexFile_.getLastOffset(&metaFrom);
+  auto [metaTo, metaFrom] = textIndexFile_.getLastOffset();
   ad_utility::serialization::FileReadSerializer serializer(
       std::move(textIndexFile_));
   serializer.setSerializationPosition(metaFrom);

@@ -7,6 +7,7 @@
 #include "./util/IdTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/TripleSerializer.h"
 
 namespace {
