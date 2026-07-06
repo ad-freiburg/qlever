@@ -144,6 +144,27 @@ class DayTimeDuration {
     setValues(days, hours, minutes, seconds, signType);
   }
 
+  // Safely construct a `DayTimeDuration` without running into an overflow
+  // error.
+  static std::optional<DayTimeDuration> makeWithBoundsCheck(
+      Type signType = Type::Positive, int days = 0, int hours = 0,
+      int minutes = 0, double seconds = 0.00) {
+    AD_CONTRACT_CHECK(days >= 0 && hours >= 0 && minutes >= 0 &&
+                      seconds >= 0.00);
+    auto totalMilliseconds =
+        static_cast<long long>(days) * dayMultiplier +
+        static_cast<long long>(hours) * hourMultiplier +
+        static_cast<long long>(minutes) * minuteMultiplier +
+        static_cast<long long>(std::round(seconds * secondMultiplier));
+    // Overflow.
+    if (totalMilliseconds >= static_cast<long long>(boundTotalMilliseconds)) {
+      return std::nullopt;
+    } else {
+      // `DayTimeDuration` can be constructed normally.
+      return DayTimeDuration{signType, days, hours, minutes, seconds};
+    }
+  }
+
   // ___________________________________________________________________________
   // Returns `true` if `DayTimeDuration` w.r.t. this object is `Type::Positive`.
   constexpr bool isPositive() const {
@@ -231,11 +252,13 @@ class DayTimeDuration {
 
   //____________________________________________________________________________
   // Subtraction of two `DayTimeDuration` objects.
-  [[nodiscard]] DayTimeDuration operator-(const DayTimeDuration& rhs) const;
+  [[nodiscard]] std::optional<DayTimeDuration> operator-(
+      const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   // Addition of two `DayTimeDuration` objects.
-  [[nodiscard]] DayTimeDuration operator+(const DayTimeDuration& rhs) const;
+  [[nodiscard]] std::optional<DayTimeDuration> operator+(
+      const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   template <typename H>
