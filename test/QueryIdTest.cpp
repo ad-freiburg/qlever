@@ -13,7 +13,7 @@
 #include "util/GTestHelpers.h"
 #include "util/http/websocket/QueryId.h"
 
-using ad_utility::websocket::epochMillis;
+using ad_utility::epochMillis;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
