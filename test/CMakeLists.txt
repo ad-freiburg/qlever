@@ -52,14 +52,17 @@ else ()
 
 endif ()
 
-# The implementation of `addLinkAndDiscoverTest` and `addLinkandDiscoverTestNoLibs` below.
-function(addLinkAndDiscoverTestImpl basename)
+# The shared implementation of the `addLinkAndDiscoverTest*` family below.
+# `discoverFunction` is the name of the function used to link and discover the
+# tests, i.e. either `linkAndDiscoverTest` or its serial variant
+# `linkAndDiscoverTestSerial`.
+function(addLinkAndDiscoverTestImpl discoverFunction basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
         qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
     else ()
         addTest(${basename})
-        linkAndDiscoverTest(${basename} ${ARGN})
+        cmake_language(CALL ${discoverFunction} ${basename} ${ARGN})
     endif ()
 
 endfunction()
@@ -72,13 +75,13 @@ endfunction()
 
 # This function links the test against `testUtil` (basically all of QLever).
 function(addLinkAndDiscoverTest basename)
-    addLinkAndDiscoverTestImpl(${basename} ${ARGN} testUtil)
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN} testUtil)
 endfunction()
 
 # This function links only against Gtest + the explicitly specified libraries.
 # It can be used for tests of standalone utils that don't require the rest of QLever.
 function(addLinkAndDiscoverTestNoLibs basename)
-    addLinkAndDiscoverTestImpl(${basename} ${ARGN})
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN})
 endfunction()
 
 
@@ -101,23 +104,11 @@ endfunction()
 # Serial variants of `addLinkAndDiscoverTest` / `addLinkAndDiscoverTestNoLibs`.
 # See `linkAndDiscoverTestSerial` for the policy on when to use them.
 function(addLinkAndDiscoverTestSerial basename)
-    if (SINGLE_TEST_BINARY)
-        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-    else ()
-        addTest(${basename})
-        linkAndDiscoverTestSerial(${basename} testUtil ${ARGN})
-    endif ()
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTestSerial ${basename} ${ARGN} testUtil)
 endfunction()
 
 function(addLinkAndDiscoverTestSerialNoLibs basename)
-    if (SINGLE_TEST_BINARY)
-        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-    else ()
-        addTest(${basename})
-        linkAndDiscoverTestSerial(${basename} ${ARGN})
-    endif ()
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTestSerial ${basename} ${ARGN})
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -159,6 +150,8 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
+addLinkAndDiscoverTest(VariableCounterTest parser engine)
+
 addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
@@ -183,6 +176,10 @@ addLinkAndDiscoverTest(IndexTest index)
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
+
+addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
+
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
@@ -237,9 +234,11 @@ addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
-addLinkAndDiscoverTest(BatchedPipelineTest)
-
 addLinkAndDiscoverTest(TupleHelpersTest)
+
+addLinkAndDiscoverTest(UriParserUriTest)
+
+addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
@@ -248,6 +247,8 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -260,6 +261,8 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
+
+addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
@@ -507,6 +510,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)
+
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
@@ -527,3 +532,5 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTestSerial(InputFileServerTest qlever)
+
+addLinkAndDiscoverTest(QueryEventLogTest util)

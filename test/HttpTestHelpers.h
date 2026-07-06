@@ -19,8 +19,9 @@
 
 using namespace std::literals;
 
-// Test HTTP Server.
-template <typename HttpHandler>
+// Test HTTP Server, parameterised on the body-read mode. Defaults to
+// `BodyReadMode::Eager` so existing tests are unaffected.
+template <typename HttpHandler, BodyReadMode readMode = BodyReadMode::Eager>
 class TestHttpServer {
  private:
   static constexpr auto webSocketSessionSupplier =
@@ -37,8 +38,7 @@ class TestHttpServer {
       decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
 
   // The server.
-  std::shared_ptr<
-      HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>
+  std::shared_ptr<HttpServer<readMode, HttpHandler, WebSocketHandlerType>>
       server_;
 
   // The own thread in which the server is running.
@@ -54,11 +54,14 @@ class TestHttpServer {
 
  public:
   // Create server on localhost. Port 0 instructs the operating system to choose
-  // a free port of its choice.
-  explicit TestHttpServer(HttpHandler httpHandler) {
+  // a free port of its choice. `lazyBodyChunkSize` controls the internal buffer
+  // size for lazy body streaming (ignored in eager mode).
+  explicit TestHttpServer(HttpHandler httpHandler,
+                          size_t lazyBodyChunkSize = 100u) {
     server_ = std::make_shared<
-        HttpServer<BodyReadMode::Eager, HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
+        HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
+        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier,
+        ad_utility::MemorySize::bytes(lazyBodyChunkSize));
   }
 
   // Get port on which this server is running.

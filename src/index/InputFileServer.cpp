@@ -10,14 +10,55 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <thread>
 
-#include "parser/ParallelBuffer.h"
 #include "util/http/HttpUtils.h"
 
 using namespace ad_utility::httpUtils;
+
+namespace {
+// An `AsyncBlockSource` that streams the bytes of an HTTP request body. The
+// bytes themselves are delivered chunk by chunk into `queue` by
+// `InputFileServer::handleFileUpload`, which pulls them from the HTTP
+// session's `bodyGetter`; `getNextBlockImpl` simply pops them again on the
+// (unrelated) executor that drives the RDF parser. The queue's `finish()`/
+// `pushException()` signal EOF or an error to the parser thread.
+class HttpBodyBlockSource : public qlever::parser::AsyncBlockSource {
+  using ChunkQueue =
+      ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
+  std::shared_ptr<ChunkQueue> queue_;
+
+ public:
+  HttpBodyBlockSource(const boost::asio::any_io_executor& exec,
+                      ad_utility::MemorySize blocksize,
+                      std::shared_ptr<ChunkQueue> queue)
+      : AsyncBlockSource{exec, blocksize}, queue_{std::move(queue)} {}
+
+ protected:
+  std::optional<Block> getNextBlockImpl() override {
+    auto chunk = queue_->pop();
+    if (!chunk.has_value()) {
+      return std::nullopt;
+    }
+    Block block;
+    block.resize(chunk->size());
+    std::ranges::copy(*chunk, block.data());
+    return block;
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+std::unique_ptr<qlever::parser::AsyncBlockSource>
+InputFileServer::makeHttpBodyBlockSource(
+    const boost::asio::any_io_executor& exec, ad_utility::MemorySize blocksize,
+    SharedChunkQueue queue) {
+  return std::make_unique<HttpBodyBlockSource>(exec, blocksize,
+                                               std::move(queue));
+}
 
 // _____________________________________________________________________________
 InputFileServer::Response InputFileServer::createStringResponse(
@@ -84,75 +125,6 @@ InputFileServer::Response InputFileServer::handleFinishSignal(
 }
 
 // _____________________________________________________________________________
-InputFileServer::Response InputFileServer::handleFileUpload(
-    Request request, SharedChunkQueue chunkQueue) {
-  qlever::Filetype filetype;
-  try {
-    filetype = filetypeFromContentType(request);
-  } catch (const std::runtime_error& e) {
-    return createStringResponse(e.what(), http::status::unsupported_media_type,
-                                request);
-  }
-
-  std::optional<std::string> graph = [&request]() {
-    auto it = request.find("graph");
-    return it == request.end() ? std::nullopt
-                               : std::optional{std::string{it->value()}};
-  }();
-
-  ++numReceivedFiles_;
-  std::string description =
-      absl::StrCat("<http-upload-", numReceivedFiles_, ">");
-
-  auto factory = [q = std::move(chunkQueue)](size_t blocksize,
-                                             std::string_view) {
-    return std::make_unique<HttpBodyParallelBuffer>(q, blocksize);
-  };
-  qlever::InputFileSpecification spec{
-      qlever::InputFileSpecification::BufferFactoryAndDescription{
-          std::move(factory), std::move(description)},
-      filetype, std::move(graph)};
-
-  // Honour an explicit request to enable or disable parallel parsing.
-  auto pit = request.find("Parse-In-Parallel");
-  if (pit != request.end()) {
-    spec.parseInParallel_ = (pit->value() == "true" || pit->value() == "1");
-    spec.parseInParallelSetExplicitly_ = true;
-  }
-
-  auto pushStatus = queue_.pushIfNotFull(std::move(spec));
-  switch (pushStatus) {
-    using enum decltype(queue_)::Status;
-    case Pushed:
-      return createStringResponse("successfully registered a file for parsing",
-                                  http::status::ok, request);
-    case Full:
-      return createStringResponse(
-          "input file queue is currently full, please send the file later",
-          http::status::too_many_requests, request);
-    case Finished:
-      return createStringResponse(
-          "tried to send a file after the signal for finishing was already "
-          "sent",
-          http::status::forbidden, request);
-  }
-  AD_FAIL();
-}
-
-// _____________________________________________________________________________
-InputFileServer::Response InputFileServer::computeResponse(
-    Request request, SharedChunkQueue chunkQueue) {
-  if (request.find("Can-Upload") != request.end()) {
-    return handleCanUploadQuery(request);
-  }
-  auto it = request.find("Finish-Index-Building");
-  if (it != request.end() && it->value() == "true") {
-    return handleFinishSignal(request);
-  }
-  return handleFileUpload(std::move(request), std::move(chunkQueue));
-}
-
-// _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>
 InputFileServer::run() {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -160,7 +132,7 @@ InputFileServer::run() {
       "InputFileServer::run() requires coroutine support (C++20).");
 #else
   auto server = std::make_shared<
-      HttpServer<BodyReadMode::Lazy, HttpHandler, WebsocketHandlerDummy> >(
+      HttpServer<BodyReadMode::Lazy, HttpHandler, WebsocketHandlerDummy>>(
       port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{});
   shutDown_ = [server]() { server->shutDown(); };
   serverThread_ = ad_utility::JThread{[server]() { server->run(); }};

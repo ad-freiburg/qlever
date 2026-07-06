@@ -24,7 +24,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/EncodedIriManager.h"
 #include "index/InputFileSpecification.h"
-#include "parser/ParallelBuffer.h"
+#include "parser/AsyncBlockSource.h"
+#include "parser/AsyncFileBlockDriver.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
 #include "parser/data/BlankNode.h"
@@ -33,6 +34,7 @@
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
+#include "util/ParsedUri.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 
@@ -165,21 +167,20 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
-  // The keys for storing the base prefix (for relative and absolute IRIs) in
-  // the prefix map. The only thing that is important about these keys is that
-  // they are different from each other and from any valid prefix name.
-  static constexpr const char* baseForRelativeIriKey_ = "@";
-  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
-
   // Helper function to raise an exception in response to BASE or PREFIX
   // mismatches during parallel parsing.
   [[noreturn]] void raiseDisallowedPrefixOrBaseError() const;
 
-  // Set the prefix or base IRI for the given key. If `prefixAndBaseDisabled_`
+  // Set the prefix IRI for the given key. If `prefixAndBaseDisabled_`
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
   void setPrefixOrThrow(const std::string& key,
                         const ad_utility::triple_component::Iri& prefix);
+
+  // Set the base IRI for the given key. If `prefixAndBaseDisabled_`
+  // is true, throw an error if this would change the mapping, which is illegal
+  // during parallel parsing.
+  void setBaseIriOrThrow(const ad_utility::triple_component::Iri& iri);
 
  protected:
   // Data members.
@@ -199,23 +200,8 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Map that maps prefix names to their IRI. For our tests, it is important
-  // that without any BASE declaration, the two base prefixes are mapped to the
-  // empty IRI.
-  static const inline ad_utility::HashMap<std::string, TripleComponent::Iri>
-      prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
-                        {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_ =
-      prefixMapDefault_;
-
-  // Getters for the two base prefixes. Without BASE declaration, these will
-  // both return the empty IRI.
-  const TripleComponent::Iri& baseForRelativeIri() const {
-    return prefixMap_.at(baseForRelativeIriKey_);
-  }
-  const TripleComponent::Iri& baseForAbsoluteIri() const {
-    return prefixMap_.at(baseForAbsoluteIriKey_);
-  }
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+  std::optional<qlever::util::ParsedUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -241,6 +227,14 @@ class TurtleParser : public RdfParserBase {
   // grammar that can be parsed in parallel. This disallows re-definitions of
   // @base and @prefix as well as usage of multiline literals.
   bool useSimplifiedGrammar_ = false;
+
+  // Unified interface to copy/move data that has been collected by the parallel
+  // parser before sharding out to parallel worker threads.
+  template <typename Source, typename Target>
+  static void copyHeaderFrom(Source&& source, Target& target) {
+    target.prefixMap_ = AD_FWD(source).prefixMap_;
+    target.baseIri_ = AD_FWD(source).baseIri_;
+  }
 
  public:
   explicit TurtleParser(const EncodedIriManager* encodedIriManager)
@@ -433,6 +427,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                               Parser, RdfParserBase>) class RdfStringParser
     : public Parser {
  public:
+  using Parser::baseIri_;
   using Parser::getLine;
   using Parser::prefixMap_;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
@@ -498,7 +493,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
  private:
   // The complete input to this parser.
-  ParallelBuffer::BufferType tmpToParse_;
+  qlever::parser::ByteBlock tmpToParse_;
   // Used to add a certain offset to the parsing position when using this
   // in a parallel setting.
   size_t positionOffset_ = 0;
@@ -516,17 +511,20 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
   const auto& getPrefixMap() const { return prefixMap_; }
 
+  const auto& getBaseIri() const { return baseIri_; }
+
   // __________________________________________________________
-  void setInputStream(ParallelBuffer::BufferType&& toParse) {
+  void setInputStream(qlever::parser::ByteBlock&& toParse) {
     tmpToParse_ = std::move(toParse);
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
-  // testing interface, only works when parsing from an utf8-string
-  // return the current position of the tokenizer in the input string
-  // can be used to test if the advancing of the tokenizer works
-  // as expected
-  size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
+  // Testing interface, only works when parsing from a UTF-8 string.
+  // Return the current position of the tokenizer in the input string.
+  // Can be used to test if the advancing of the tokenizer works as expected.
+  size_t getPosition() const {
+    return this->tok_.data().data() - tmpToParse_.data();
+  }
 
   // Disable use of @base, @prefix and multiline string literals for turtle
   // parsers during parallel parsing.
@@ -567,18 +565,22 @@ class RdfStreamParser : public Parser {
   // Default construction needed for tests
   explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
 
-  // Construct a parser that reads from an already-opened `ParallelBuffer`.
-  explicit RdfStreamParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+  // Construct a parser that reads from an `InputFileSpecification`. The parser
+  // creates its own I/O thread and `AsyncBlockSource` internally. The
+  // `blocksize` parameter controls the size of the underlying I/O block buffer.
+  explicit RdfStreamParser(const qlever::InputFileSpecification& spec,
+                           ad_utility::MemorySize blocksize,
                            const EncodedIriManager* ev,
                            TripleComponent defaultGraphIri =
                                qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : Parser{ev, std::move(defaultGraphIri)} {
-    initialize(std::move(rawBuffer));
+    initialize(spec, blocksize);
   }
 
   bool getLineImpl(TurtleTriple* triple) override;
 
-  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
+  void initialize(const qlever::InputFileSpecification& spec,
+                  ad_utility::MemorySize blocksize);
 
   size_t getParsePosition() const override {
     return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
@@ -589,10 +591,9 @@ class RdfStreamParser : public Parser {
   using Parser::tok_;
   using Parser::triples_;
   // Backup the current state of the turtle parser to a
-  // TurtleparserBackupState object
-  // This can be used e.g. when parsing from a compressed input
-  // and the currently uncompressed buffer is not sufficient to parse the
-  // next expression
+  // `TurtleParserBackupState` object. This can be used e.g. when parsing from
+  // a compressed input and the currently uncompressed buffer is not sufficient
+  // to parse the next expression.
   TurtleParserBackupState backupState() const;
 
   // Reset the parser to the state indicated by the argument
@@ -600,16 +601,16 @@ class RdfStreamParser : public Parser {
   // state (the actual triples are not backed up)
   bool resetStateAndRead(TurtleParserBackupState* state);
 
-  // stores the current batch of bytes we have to parse.
-  // Might end in the middle of a statement or even a multibyte utf8 character,
-  // that's why we need the backupState() and resetStateAndRead() methods
-  ParallelBuffer::BufferType byteVec_;
+  // Stores the current batch of bytes we have to parse. Might end in the
+  // middle of a statement or even a multibyte UTF-8 character, that's why we
+  // need the `backupState()` and `resetStateAndRead()` methods.
+  qlever::parser::ByteBlock byteVec_;
 
-  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
-
-  // that many bytes were already parsed before dealing with the current batch
-  // in member byteVec_
+  // That many bytes were already parsed before dealing with the current batch
+  // in member `byteVec_`.
   size_t numBytesBeforeCurrentBatch_ = 0;
+
+  std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
 };
 
 /**
@@ -624,8 +625,11 @@ class RdfParallelParser : public Parser {
   // Default construction needed for tests
   explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
 
-  // Construct a parser that reads from an already-opened `ParallelBuffer`.
-  RdfParallelParser(std::unique_ptr<ParallelBuffer> rawBuffer,
+  // Construct a parser that reads from an `InputFileSpecification`. The parser
+  // creates its own I/O thread and `AsyncBlockSource` internally. The
+  // `blocksize` parameter controls the size of the underlying I/O block buffer.
+  RdfParallelParser(const qlever::InputFileSpecification& spec,
+                    ad_utility::MemorySize blocksize,
                     const EncodedIriManager* ev,
                     const TripleComponent& defaultGraphIri =
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
@@ -634,7 +638,7 @@ class RdfParallelParser : public Parser {
       : Parser{ev, defaultGraphIri},
         defaultGraphIri_{defaultGraphIri},
         sleepTimeForTesting_(sleepTimeForTesting) {
-    initialize(std::move(rawBuffer));
+    initialize(spec, blocksize);
   }
 
   // inherit the wrapper overload
@@ -649,7 +653,8 @@ class RdfParallelParser : public Parser {
     parallelParser_.resetTimers();
   }
 
-  void initialize(std::unique_ptr<ParallelBuffer> rawBuffer);
+  void initialize(const qlever::InputFileSpecification& spec,
+                  ad_utility::MemorySize blocksize);
 
   size_t getParsePosition() const override {
     // TODO: can we really define this position here?
@@ -686,7 +691,7 @@ class RdfParallelParser : public Parser {
   using Parser::triples_;
 
   // Initialized in the call to `initialize`.
-  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
+  std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
 
   // Collect error messages in case of multiple failures. The `size_t` is the
   // start position of the corresponding batch, used to order the errors in case

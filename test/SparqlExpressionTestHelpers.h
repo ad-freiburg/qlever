@@ -45,7 +45,7 @@ struct TestContext {
   sparqlExpression::EvaluationContext context{
       *qec,
       varToColMap,
-      table,
+      table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
       std::make_shared<ad_utility::CancellationHandle<>>(),
@@ -107,6 +107,9 @@ struct TestContext {
     table.push_back({IntId(-1), DoubleId(2.8), DoubleId(3.4), aelpha, x,
                      notInVocabD, Id::makeUndefined()});
 
+    // Refresh the view: `table` was modified after `context` was initialized,
+    // so the spans stored in `_inputTable` are stale.
+    context._inputTable = table.asStaticView<0>();
     context._beginIndex = 0;
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.

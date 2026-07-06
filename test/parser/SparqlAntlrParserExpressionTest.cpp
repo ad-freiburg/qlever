@@ -66,6 +66,19 @@ TEST(SparqlParser, builtInCall) {
       matchNaryWithChildrenMatchers(
           &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
           matchLiteralExpression(ad_utility::triple_component::Iri{})));
+  // Repeat the tests with a BASE IRI.
+  expectBuiltInCall(
+      "IRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
+  expectBuiltInCall(
+      "URI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
@@ -324,6 +337,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(ql, "toEpoch>(?x)"),
+                     matchUnary(&makeToEpochExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
                      matchUnary(&makeEnvelopeLowerLeftExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),
@@ -409,6 +424,11 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(
       absl::StrCat(geof, "geometryN>(?a, ?b)"),
       matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
+
+  // Simplify geometry (QLever-internal function)
+  expectFunctionCall(absl::StrCat(ql, "simplifyGeometry>(?a, ?b)"),
+                     matchNary(&makeSimplifyGeometryExpression, Variable{"?a"},
+                               Variable{"?b"}));
 
   // Geometric relation functions
   expectFunctionCall(

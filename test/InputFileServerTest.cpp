@@ -8,12 +8,16 @@
 
 #include <gmock/gmock.h>
 
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <thread>
 
 #include "backports/algorithm.h"
 #include "index/InputFileServer.h"
 #include "libqlever/Qlever.h"
+#include "parser/AsyncBlockSource.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/http/beast.h"
 #include "util/jthread.h"
 
@@ -145,6 +149,23 @@ struct UploadTestParams {
 };
 
 class UploadAndQueryTest : public TestWithParam<UploadTestParams> {};
+
+// Synchronously drain `spec`'s `AsyncBlockSource` (built with the given
+// `blocksize`, on a dedicated single-thread pool) and return the total number
+// of bytes read. This runs the counterpart to the HTTP session's producer
+// loop (`InputFileServer::handleFileUpload`) that feeds the corresponding
+// queue, so draining it is required for that upload to complete.
+size_t drainAndCountBytes(const qlever::InputFileSpecification& spec,
+                          ad_utility::MemorySize blocksize) {
+  boost::asio::thread_pool pool{1};
+  auto source = spec.makeAsyncBlockSource(pool.get_executor(), blocksize);
+  size_t totalBytes = 0;
+  while (auto block =
+             source->asyncGetNextBlock(boost::asio::use_future).get()) {
+    totalBytes += block->size();
+  }
+  return totalBytes;
+}
 
 }  // namespace
 
@@ -317,10 +338,8 @@ TEST(InputFileServer, LargeBodyMultiChunk) {
   // Drain each uploaded file spec and count total bytes received.
   size_t totalBytes = 0;
   for (auto& spec : range) {
-    auto buf = spec.getParallelBuffer(1 << 16);
-    while (auto block = buf->getNextBlock()) {
-      totalBytes += block->size();
-    }
+    totalBytes +=
+        drainAndCountBytes(spec, ad_utility::MemorySize::bytes(1 << 16));
   }
   EXPECT_EQ(totalBytes, bodySize);
 }
@@ -344,8 +363,6 @@ TEST(InputFileServer, ParseInParallelHeader) {
     EXPECT_TRUE(spec.parseInParallelSetExplicitly_);
     EXPECT_TRUE(spec.parseInParallel_);
     // Drain the buffer to allow the HTTP session to complete.
-    auto buf = spec.getParallelBuffer(1 << 16);
-    while (buf->getNextBlock()) {
-    }
+    drainAndCountBytes(spec, ad_utility::MemorySize::bytes(1 << 16));
   }
 }

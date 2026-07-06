@@ -9,7 +9,10 @@
 #ifndef QLEVER_INDEX_INPUTFILESERVER_H
 #define QLEVER_INDEX_INPUTFILESERVER_H
 
+#include <absl/strings/str_cat.h>
+
 #include "index/InputFileSpecification.h"
+#include "parser/AsyncBlockSource.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ThreadSafeQueue.h"
@@ -17,11 +20,15 @@
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
-  // In lazy mode the body is streamed separately; the handler receives
-  // a header-only request and a shared chunk queue.
+  // In lazy mode the body is streamed separately; the handler receives a
+  // header-only request and pulls the body itself via `bodyGetter`.
   using Request = http::request<http::empty_body>;
   using Response = http::response<http::string_body>;
-  using SharedChunkQueue = SharedLazyChunkQueue;
+  // Chunks read from the request body are handed off to the parser thread via
+  // this queue; see `HttpBodyBlockSource` in InputFileServer.cpp.
+  using ChunkQueue =
+      ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
+  using SharedChunkQueue = std::shared_ptr<ChunkQueue>;
 
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
       queue_;
@@ -33,11 +40,10 @@ class InputFileServer {
 
   struct HttpHandler {
     InputFileServer* server_;
-    net::awaitable<void> operator()(Request request,
-                                    SharedChunkQueue chunkQueue,
-                                    auto&& send) const {
-      return server_->processRequest(std::move(request), std::move(chunkQueue),
-                                     AD_FWD(send));
+    net::awaitable<void> operator()(Request request, auto&& send,
+                                    auto&& bodyGetter) const {
+      return server_->processRequest(std::move(request), AD_FWD(send),
+                                     AD_FWD(bodyGetter));
     }
   };
   struct WebsocketHandlerDummy {
@@ -61,23 +67,126 @@ class InputFileServer {
   // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
   Response handleFinishSignal(const Request& request);
 
-  // Create an InputFileSpecification from the request headers and chunk queue,
-  // and enqueue it for index building.
-  Response handleFileUpload(Request request, SharedChunkQueue chunkQueue);
+  // Create an InputFileSpecification backed by a `HttpBodyBlockSource` and
+  // enqueue it for index building, then pull the request body from
+  // `bodyGetter` chunk by chunk and forward it to that source's queue.
+  net::awaitable<void> handleFileUpload(Request request, auto& send,
+                                        auto& bodyGetter) {
+    qlever::Filetype filetype;
+    // `co_await` is not allowed inside a `catch` handler, so the error
+    // response is only built here and sent afterwards.
+    std::optional<Response> unsupportedMediaTypeResponse;
+    try {
+      filetype = filetypeFromContentType(request);
+    } catch (const std::runtime_error& e) {
+      unsupportedMediaTypeResponse = createStringResponse(
+          e.what(), http::status::unsupported_media_type, request);
+    }
+    if (unsupportedMediaTypeResponse.has_value()) {
+      co_await send(std::move(unsupportedMediaTypeResponse).value());
+      co_return;
+    }
 
-  // Dispatch the incoming request to the appropriate handler.
-  Response computeResponse(Request request, SharedChunkQueue chunkQueue);
+    std::optional<std::string> graph = [&request]() {
+      auto it = request.find("graph");
+      return it == request.end() ? std::nullopt
+                                 : std::optional{std::string{it->value()}};
+    }();
+
+    ++numReceivedFiles_;
+    std::string description =
+        absl::StrCat("<http-upload-", numReceivedFiles_, ">");
+
+    // The queue size of `20` mirrors the default queue size of `queue_` and
+    // gives the HTTP session some slack over the (potentially slower) parser
+    // thread.
+    auto chunkQueue = std::make_shared<ChunkQueue>(20);
+    auto factory = [chunkQueue](const boost::asio::any_io_executor& exec,
+                                ad_utility::MemorySize blocksize,
+                                std::string_view) {
+      return makeHttpBodyBlockSource(exec, blocksize, chunkQueue);
+    };
+    qlever::InputFileSpecification spec{
+        qlever::InputFileSpecification::BufferFactoryAndDescription{
+            std::move(factory), std::move(description)},
+        filetype, std::move(graph)};
+
+    // Honour an explicit request to enable or disable parallel parsing.
+    auto pit = request.find("Parse-In-Parallel");
+    if (pit != request.end()) {
+      spec.parseInParallel_ = (pit->value() == "true" || pit->value() == "1");
+      spec.parseInParallelSetExplicitly_ = true;
+    }
+
+    auto pushStatus = queue_.pushIfNotFull(std::move(spec));
+    switch (pushStatus) {
+      using enum decltype(queue_)::Status;
+      case Pushed:
+        co_await send(
+            createStringResponse("successfully registered a file for parsing",
+                                 http::status::ok, request));
+        break;
+      case Full:
+        co_await send(createStringResponse(
+            "input file queue is currently full, please send the file later",
+            http::status::too_many_requests, request));
+        co_return;
+      case Finished:
+        co_await send(createStringResponse(
+            "tried to send a file after the signal for finishing was already "
+            "sent",
+            http::status::forbidden, request));
+        co_return;
+    }
+
+    // Pull the request body from `bodyGetter` and forward it to the parser
+    // thread via `chunkQueue`. A network error is reported to the parser
+    // thread (instead of leaving it waiting forever) and otherwise swallowed
+    // here, because the response has already been sent and the connection is
+    // closed unconditionally after a lazy-mode request anyway.
+    try {
+      while (auto chunk = co_await bodyGetter()) {
+        chunkQueue->push(std::vector<char>(chunk->begin(), chunk->end()));
+      }
+      chunkQueue->finish();
+    } catch (const std::exception& e) {
+      AD_LOG_WARN << "Error while streaming the request body for upload #"
+                  << numReceivedFiles_ << ": " << e.what() << std::endl;
+      chunkQueue->pushException(std::current_exception());
+    } catch (...) {
+      AD_LOG_WARN << "Unknown error while streaming the request body for "
+                     "upload #"
+                  << numReceivedFiles_ << std::endl;
+      chunkQueue->pushException(std::current_exception());
+    }
+  }
 
   // Create a plain-text HTTP response from `body` and `status`, reusing the
   // keep-alive and version settings from `request`.
   static Response createStringResponse(std::string body, http::status status,
                                        const Request& request);
 
-  net::awaitable<void> processRequest(Request request,
-                                      SharedChunkQueue chunkQueue,
-                                      auto&& send) {
+  // Create the `AsyncBlockSource` that pops chunks pushed by `handleFileUpload`
+  // from `queue` (defined in InputFileServer.cpp to keep `HttpBodyBlockSource`
+  // out of this header).
+  static std::unique_ptr<qlever::parser::AsyncBlockSource>
+  makeHttpBodyBlockSource(const boost::asio::any_io_executor& exec,
+                          ad_utility::MemorySize blocksize,
+                          SharedChunkQueue queue);
+
+  net::awaitable<void> processRequest(Request request, auto&& send,
+                                      auto&& bodyGetter) {
     try {
-      co_await send(computeResponse(std::move(request), std::move(chunkQueue)));
+      if (request.find("Can-Upload") != request.end()) {
+        co_await send(handleCanUploadQuery(request));
+        co_return;
+      }
+      auto it = request.find("Finish-Index-Building");
+      if (it != request.end() && it->value() == "true") {
+        co_await send(handleFinishSignal(request));
+        co_return;
+      }
+      co_await handleFileUpload(std::move(request), send, bodyGetter);
     } catch (const std::exception& e) {
       AD_LOG_FATAL << "InputFileServer::processRequest: " << e.what()
                    << std::endl;

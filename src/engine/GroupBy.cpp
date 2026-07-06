@@ -82,6 +82,9 @@ const std::vector<Variable>& GroupBy::groupByVariables() const {
 const std::vector<Alias>& GroupBy::aliases() const { return _impl->aliases(); }
 
 // _____________________________________________________________________________
+bool GroupBy::isDeterministicImpl() const { return _impl->isDeterministic(); }
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {
   // We need to return a `unique_ptr<GroupBy>` to let the unit tests for `clone`
   // pass and to make `GroupByImpl` a true hidden implementation.

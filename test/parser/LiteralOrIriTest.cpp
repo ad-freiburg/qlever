@@ -20,6 +20,7 @@
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
+#include "util/ParsedUri.h"
 
 namespace {
 
@@ -37,35 +38,33 @@ TEST(IriTest, IriCreation) {
 }
 
 // _____________________________________________________________________________
-TEST(IriTest, getBaseIri) {
-  // Helper lambda that calls `Iri::getBaseIri` and returns the result as a
-  // string (including the angle brackets).
-  auto getBaseIri = [](std::string_view iriSv, bool domainOnly) {
-    return Iri::fromIriref(iriSv)
-        .getBaseIri(domainOnly)
-        .toStringRepresentation();
+TEST(IriTest, fromIrirefValidated) {
+  // Valid IRI references are accepted and behave like `fromIriref`.
+  EXPECT_EQ(Iri::fromIrirefValidated("<http://www.wikidata.org/entity/Q3138>"),
+            Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>"));
+  // The empty body `<>` is a valid `IRIREF`.
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<>"));
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<urn:foo>"));
+
+  // Invalid inputs throw with a descriptive message.
+  auto expectInvalid = [](std::string_view input) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Iri::fromIrirefValidated(input),
+        ::testing::HasSubstr("not a valid IRI reference"));
   };
-  // IRI with path.
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", false),
-            "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", false),
-            "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", true),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", true),
-            "<http://purl.uniprot.org/>");
-  // IRI with domain only.
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", false),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", false),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", true),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", true),
-            "<http://purl.uniprot.org/>");
-  // IRI without scheme.
-  EXPECT_EQ(getBaseIri("<blabla>", false), "<blabla/>");
-  EXPECT_EQ(getBaseIri("<blabla>", true), "<blabla/>");
+  // Missing brackets.
+  expectInvalid("http://example.org");
+  expectInvalid("<http://example.org");
+  expectInvalid("http://example.org>");
+  // Forbidden characters inside the brackets.
+  expectInvalid("<http://example.org/a b>");   // space
+  expectInvalid("<http://example.org/a\"b>");  // double quote
+  expectInvalid("<http://example.org/a{b}>");  // braces
+  expectInvalid("<http://example.org/a\\b>");  // backslash
+  expectInvalid("<http://example.org/a^b>");   // caret
+  expectInvalid("<http://example.org/a`b>");   // backtick
+  // The internal `@lang@`-prefixed format is deliberately rejected.
+  expectInvalid("@en@<http://example.org>");
 }
 
 // _____________________________________________________________________________
@@ -76,35 +75,27 @@ TEST(IriTest, emptyIri) {
 
 // _____________________________________________________________________________
 TEST(IriTest, fromIrirefConsiderBase) {
-  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the two base
-  // IRIs and returns the results as a string (including the angle brackets).
-  Iri baseForRelativeIris;
+  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
+  // IRI and returns the results as a string (including the angle brackets).
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
   Iri baseForAbsoluteIris;
-  auto fromIrirefConsiderBase = [&baseForRelativeIris, &baseForAbsoluteIris](
-                                    std::string_view iriStringWithBrackets) {
-    return Iri::fromIrirefConsiderBase(iriStringWithBrackets,
-                                       baseForRelativeIris, baseForAbsoluteIris)
-        .toStringRepresentation();
-  };
+  auto fromIrirefConsiderBase =
+      [&baseUri](std::string_view iriStringWithBrackets) {
+        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri)
+            .toStringRepresentation();
+      };
 
-  // Check that it works for "real" base IRIs.
-  baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
-  baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
             "<http://purl.uniprot.org/uniprot/>");
   EXPECT_EQ(fromIrirefConsiderBase("<UPI001AF4585D>"),
-            "<http://.../uniprot/UPI001AF4585D>");
+            "<http://example.com/UPI001AF4585D>");
   EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
-            "<http://.../prosite/PS51927>");
-
-  // Check that with the default base, all IRIs remain unchanged.
-  baseForRelativeIris = Iri{};
-  baseForAbsoluteIris = Iri{};
+            "<http://example.com/prosite/PS51927>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
             "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "</a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<>");
+  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
 }
 
 // _____________________________________________________________________________

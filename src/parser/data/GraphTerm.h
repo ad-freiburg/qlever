@@ -15,16 +15,18 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/BlankNode.h"
-#include "parser/data/Iri.h"
 #include "parser/data/Literal.h"
+#include "rdfTypes/Iri.h"
 #include "util/VisitMixin.h"
 
-using GraphTermBase = std::variant<Literal, BlankNode, Iri, Variable>;
+using GraphTermBase = std::variant<Literal, BlankNode,
+                                   ad_utility::triple_component::Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
  public:
   using GraphTermBase::GraphTermBase;
+  using Iri = ad_utility::triple_component::Iri;
 
   // ___________________________________________________________________________
   std::string toSparql() const {
@@ -43,13 +45,10 @@ class GraphTerm : public GraphTermBase,
   TripleComponent toTripleComponent() const {
     return visit([](const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
-      if constexpr (std::is_same_v<T, Variable>) {
+      if constexpr (ad_utility::SameAsAny<T, Variable, Iri>) {
         return element;
       } else if constexpr (std::is_same_v<T, Literal>) {
         return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-            element.toSparql());
-      } else if constexpr (std::is_same_v<T, Iri>) {
-        return ad_utility::triple_component::Iri::fromStringRepresentation(
             element.toSparql());
       } else {
         static_assert(std::is_same_v<T, BlankNode>);

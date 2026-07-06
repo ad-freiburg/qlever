@@ -32,6 +32,8 @@ class CountStarExpression : public SparqlExpression {
   // ___________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
   bool isDistinct() const { return distinct_; }
 };
 

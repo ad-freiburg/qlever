@@ -176,7 +176,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
         ql::starts_with(name, indexBasename + ".index") ||
         ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
+        ql::starts_with(name, indexBasename + ".update-triples") ||
+        ql::starts_with(name, indexBasename + ".allocated-graphs-state")) {
       ad_utility::deleteFile(entry.path());
     }
   }
@@ -317,7 +319,8 @@ Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(TestIndexConfig c) {
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -356,31 +359,38 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
             materializedViewsManager_);
   };
 
-  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
+  static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>
+      contextMap;
 
-  if (!contextMap.contains(c)) {
+  if (!contextMap.contains({c, indexBasenamePrefix})) {
     // We have to pass `false` to `gtestCurrentTestName` to make this work for
     // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
     // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        absl::StrCat("_staticGlobalTestIndex", gtestCurrentTestName(false), "_",
+        absl::StrCat(indexBasenamePrefix, gtestCurrentTestName(false), "_",
                      contextMap.size());
     contextMap.emplace(
-        c, Context{TypeErasedCleanup{[testIndexBasename]() {
-                     for (const std::string& indexFilename :
-                          getAllIndexFilenames(testIndexBasename)) {
-                       // Don't log when a file can't be deleted,
-                       // because the logging might already be
-                       // destroyed.
-                       ad_utility::deleteFile(indexFilename, false);
-                     }
-                   }},
-                   std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
-                   std::make_unique<QueryResultCache>(),
-                   std::make_unique<NamedResultCache>(),
-                   std::make_shared<MaterializedViewsManager>()});
+        std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
+        Context{TypeErasedCleanup{[testIndexBasename]() {
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
+                std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
+                std::make_unique<QueryResultCache>(),
+                std::make_unique<NamedResultCache>(),
+                std::make_shared<MaterializedViewsManager>()});
   }
-  return contextMap.at(c).qec_.get();
+  return contextMap.at({c, indexBasenamePrefix}).qec_.get();
+}
+
+// ________________________________________________________________________________
+QueryExecutionContext* getQec(TestIndexConfig c) {
+  return getQec("_staticGlobalTestIndex", std::move(c));
 }
 
 // _____________________________________________________________________________
