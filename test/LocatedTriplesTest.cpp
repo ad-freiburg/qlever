@@ -1032,7 +1032,6 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   {
     DeltaTriples dt(index);
     dt.insertTriples(handle, {tInIdx1, tInIdx2});
-    dt.consolidateAll();
     const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
 
     {
@@ -1069,7 +1068,6 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     DeltaTriples dt(index);
     dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
     dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
-    dt.consolidateAll();
     const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
     auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
     EXPECT_THAT(result.insertionsToRemove_,

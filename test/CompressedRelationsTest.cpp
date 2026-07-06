@@ -968,7 +968,6 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     dt.insertTriples(handle, {IdTriple{{I(0), I(1), I(2), I(3)}},
                               IdTriple{{I(0), I(4), I(5), I(3)}}});
-    dt.consolidateAll();
   });
   auto sharedLocatedTriplesSnapshot =
       deltaTriplesManager.getCurrentLocatedTriplesSharedState();
@@ -1119,7 +1118,6 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});
-        deltaTriples.consolidateAll();
       });
   auto sharedLocatedTriplesSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();

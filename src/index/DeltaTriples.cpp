@@ -289,6 +289,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
 }
 
 // ____________________________________________________________________________
+template <DeltaTriples::Consolidate consolidate>
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
@@ -305,9 +306,15 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
   tracer.endTrace("internalPermutation");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
+  consolidateIfRequested<consolidate>(tracer);
 }
+template void DeltaTriples::insertTriples<DeltaTriples::Consolidate::Yes>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
+template void DeltaTriples::insertTriples<DeltaTriples::Consolidate::No>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
 
 // ____________________________________________________________________________
+template <DeltaTriples::Consolidate consolidate>
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
@@ -324,23 +331,44 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
   tracer.endTrace("internalPermutation");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
+  consolidateIfRequested<consolidate>(tracer);
 }
+template void DeltaTriples::deleteTriples<DeltaTriples::Consolidate::Yes>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
+template void DeltaTriples::deleteTriples<DeltaTriples::Consolidate::No>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
 
 // ____________________________________________________________________________
+template <DeltaTriples::Consolidate consolidate>
 void DeltaTriples::insertInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
                                 std::move(triples), tracer);
+  consolidateIfRequested<consolidate>(tracer);
 }
+template void
+DeltaTriples::insertInternalTriplesForTesting<DeltaTriples::Consolidate::Yes>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
+template void
+DeltaTriples::insertInternalTriplesForTesting<DeltaTriples::Consolidate::No>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
 
 // ____________________________________________________________________________
+template <DeltaTriples::Consolidate consolidate>
 void DeltaTriples::deleteInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),
                                  std::move(triples), tracer);
+  consolidateIfRequested<consolidate>(tracer);
 }
+template void
+DeltaTriples::deleteInternalTriplesForTesting<DeltaTriples::Consolidate::Yes>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
+template void
+DeltaTriples::deleteInternalTriplesForTesting<DeltaTriples::Consolidate::No>(
+    CancellationHandle, Triples, ad_utility::timer::TimeTracer&);
 
 // ____________________________________________________________________________
 void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
@@ -588,6 +616,17 @@ void DeltaTriples::consolidateAll() {
 }
 
 // _____________________________________________________________________________
+template <DeltaTriples::Consolidate consolidate>
+void DeltaTriples::consolidateIfRequested(
+    ad_utility::timer::TimeTracer& tracer) {
+  if constexpr (consolidate == Consolidate::Yes) {
+    tracer.beginTrace("consolidate");
+    consolidateAll();
+    tracer.endTrace("consolidate");
+  }
+}
+
+// _____________________________________________________________________________
 void DeltaTriples::updateAugmentedMetadata() {
   auto update = [](auto& lt) {
     ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
@@ -653,8 +692,8 @@ void DeltaTriples::readFromDisk() {
   };
   auto cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
-  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
-  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  insertTriples<Consolidate::No>(cancellationHandle, toTriples(idRanges.at(1)));
+  deleteTriples<Consolidate::No>(cancellationHandle, toTriples(idRanges.at(0)));
   consolidateAll();
   AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
               << ", #deleted triples = " << idRanges.at(0).size() << std::endl;

@@ -96,6 +96,13 @@ class DeltaTriples {
   using Triples = std::vector<IdTriple<0>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // Whether `insertTriples`/`deleteTriples` consolidate the located triples
+  // immediately. Consolidation is required before any read access, but it is
+  // expensive, so batch callers that issue several insert/delete calls in a row
+  // should pass `Consolidate::No` and call `consolidateAll()` exactly once at
+  // the end.
+  enum class Consolidate { Yes, No };
+
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
@@ -218,19 +225,24 @@ class DeltaTriples {
   // form `<object> ql:langtag <@language>`.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
 
-  // Insert triples.
+  // Insert triples. By default the located triples are consolidated
+  // immediately; pass `Consolidate::No` when batching several inserts/deletes
+  // and calling `consolidateAll()` once at the end.
+  template <Consolidate consolidate = Consolidate::Yes>
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples.
+  // Delete triples. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Insert internal delta triples for test code. In practice these are inferred
   // from regular triples, so `insertTriples` and `deleteTriples` will insert
-  // them on their own.
+  // them on their own. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void insertInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =
@@ -238,7 +250,8 @@ class DeltaTriples {
 
   // Delete internal delta triples for test code. In practice these are inferred
   // from regular triples, so `insertTriples` and `deleteTriples` will insert
-  // them on their own.
+  // them on their own. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void deleteInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =
@@ -310,7 +323,12 @@ class DeltaTriples {
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
 #endif
 
- private:
+  // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
+  // the insert/delete functions to implement their `consolidate` template
+  // parameter.
+  template <Consolidate consolidate>
+  void consolidateIfRequested(ad_utility::timer::TimeTracer& tracer);
+
   // The proper state according to the template parameter. This will either
   // return a reference to `triplesSetsInternal_` or
   // `triplesSetsNormal_`.

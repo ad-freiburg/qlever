@@ -285,7 +285,6 @@ TEST(IndexRebuilder, readIndexAndRemap) {
             cancellationHandle,
             {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
              IdTriple<0>{std::array{V(0), d2, B(1), g}}});
-        deltaTriples.consolidateAll();
       });
 
   auto [state, vocabEntries, rawBlocks] =
@@ -471,7 +470,6 @@ TEST(IndexRebuilder, materializeToIndex) {
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
-      deltaTriples.consolidateAll();
     });
 
     auto [state, vocab, blankNodes] =
@@ -537,7 +535,6 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
             cancellationHandle,
             {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
                                     Id::makeFromInt(3), g}}});
-        deltaTriples.consolidateAll();
       });
 
   auto [state, vocab, blankNodes] =

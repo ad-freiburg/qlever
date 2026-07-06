@@ -1888,7 +1888,6 @@ TEST(GroupByOptimizationsDeltaTriples, singleIndexScanTotalCountAfterInsert) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
     dt.insertTriples(cancellationHandle, {IdTriple<0>{{b, p1, b, g}}});
-    dt.consolidateAll();
   });
   auto qec = ctx.makeQec();
 
@@ -1926,7 +1925,6 @@ TEST(GroupByOptimizationsDeltaTriples,
       std::make_shared<ad_utility::CancellationHandle<>>();
   ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
     dt.deleteTriples(cancellationHandle, {IdTriple<0>{{a, p2, b, g}}});
-    dt.consolidateAll();
   });
   auto qec = ctx.makeQec();
 
@@ -1960,7 +1958,6 @@ TEST(GroupByOptimizationsDeltaTriples, objectWithCountInsertInUniformBlock) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
     dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, label3, x, g}}});
-    dt.consolidateAll();
   });
   auto qec = ctx.makeQec();
 
@@ -1994,7 +1991,6 @@ TEST(GroupByOptimizationsDeltaTriples,
       std::make_shared<ad_utility::CancellationHandle<>>();
   ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
     dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, p4, x, g}}});
-    dt.consolidateAll();
   });
   auto qec = ctx.makeQec();
 
@@ -2030,7 +2026,6 @@ TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
   // Insert a 4th triple with subject <a>; SPO cardinality goes from 3 to 4.
   ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
     dt.insertTriples(cancellationHandle, {IdTriple<0>{{a, p6, b, g}}});
-    dt.consolidateAll();
   });
   auto qec = ctx.makeQec();
 
