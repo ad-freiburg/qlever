@@ -67,8 +67,8 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Streaming variant of `lookupBatch`, using the generic sequential fallback.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    return ad_utility::vocabulary::sequentialLookupBatchesStreamed(
-        *this, std::move(input));
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }

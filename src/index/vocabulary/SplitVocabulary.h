@@ -175,8 +175,8 @@ class SplitVocabulary {
 
   // Streaming variant of `lookupBatch`, using the generic sequential fallback.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
-    return ad_utility::vocabulary::sequentialLookupBatchesStreamed(
-        *this, std::move(input));
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
   }
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
