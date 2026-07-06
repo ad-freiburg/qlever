@@ -147,12 +147,12 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
-// Sequential fallback for `lookupBatchesStreamed`: lazily apply
-// `vocab.lookupBatch` for the passed `vocab` to each batch of the (type-erased)
-// input range. The referenced `vocab` must outlive the returned range.
+// Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the
+// passed `vocab` to each batch of the (type-erased) input range.
+// The referenced `vocab` must outlive the returned range.
 template <typename Vocab>
-VocabLookupOutput sequentialLookupBatchesStreamed(const Vocab& vocab,
-                                                  VocabLookupInput input) {
+VocabLookupOutput lookupBatchesStreamed(const Vocab& vocab,
+                                        VocabLookupInput input) {
   return VocabLookupOutput{ad_utility::OwningView{std::move(input)} |
                            ql::views::transform([&vocab](const auto& indices) {
                              return vocab.lookupBatch(indices);
