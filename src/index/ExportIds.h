@@ -26,6 +26,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/ValueIdentity.h"
 
@@ -96,7 +97,8 @@ std::string replaceAnglesByQuotes(std::string iriString);
 // Return the blank-node string representation if `iri` is a blank-node IRI,
 // otherwise std::nullopt.
 template <typename IriType>
-std::optional<std::string> blankNodeIriToString(const IriType& iri);
+std::optional<std::string_view> blankNodeIriToString(
+    const IriType& iri AD_LIFETIMEBOUND);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
 // is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
@@ -117,6 +119,8 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 // Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
 // options and `escapeFunction`. Returns `std::nullopt` when
 // `returnOnlyLiterals` is true and `word` is not a literal.
+// TODO<ms2144>: This method always materializes a string. This is wasteful.
+// think about returning a string_view instead.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -129,7 +133,7 @@ std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
   }
   if (word.isIri()) {
     if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
-      return std::pair{std::move(blankNodeString.value()), nullptr};
+      return std::pair{std::string{blankNodeString.value()}, nullptr};
     }
   }
   if constexpr (removeQuotesAndAngleBrackets) {

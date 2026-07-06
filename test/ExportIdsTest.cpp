@@ -183,13 +183,12 @@ TEST(ExportIds, ReplaceAnglesByQuotes) {
 TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
   using ad_utility::triple_component::Iri;
   std::string_view input = "_:test";
-  EXPECT_THAT(
-      ql::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
-          absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
-      ::testing::Optional(::testing::Eq(input)));
-  EXPECT_EQ(ql::exportIds::blankNodeIriToString(
-                Iri::fromStringRepresentation("<some_iri>")),
-            std::nullopt);
+  auto blankNodeIri = Iri::fromStringRepresentation(
+      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"));
+  EXPECT_THAT(ql::exportIds::blankNodeIriToString(blankNodeIri),
+              ::testing::Optional(::testing::Eq(input)));
+  auto nonBlankNodeIri = Iri::fromStringRepresentation("<some_iri>");
+  EXPECT_EQ(ql::exportIds::blankNodeIriToString(nonBlankNodeIri), std::nullopt);
 }
 
 // _____________________________________________________________________________
