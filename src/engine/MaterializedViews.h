@@ -129,7 +129,7 @@ class MaterializedViewWriter {
   // Helper for `computeResultAndWritePermutation`: given sorted and permuted
   // blocks from `getSortedBlocks`, write the `Permutation` to disk using
   // `CompressedRelationWriter`. Returns the permutation metadata.
-  IndexMetaDataMmap writePermutation(RangeOfIdTables sortedBlocksSPO) const;
+  IndexMetaData writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
   // files with column names and ordering to disk.

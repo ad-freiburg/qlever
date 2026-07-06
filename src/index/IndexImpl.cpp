@@ -832,11 +832,8 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
-    IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+    IndexMetaData& metaData, size_t numColumns,
     const std::string& fileName) const {
-  static_assert(IndexMetaDataMmapDispatcher::WriteType::isMmapBased_);
-  metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
       blocksizePermutationPerColumn_);
@@ -848,18 +845,17 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 
 // _____________________________________________________________________________
 template <typename T, typename... Callbacks>
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+std::tuple<size_t, IndexMetaData, IndexMetaData>
 IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      const std::string& fileName1,
                                      const std::string& fileName2,
                                      T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
-  IndexMetaDataMmapDispatcher::WriteType metaData1;
+  IndexMetaData metaData1;
   auto writerAndCallback1 =
       getWriterAndCallback(metaData1, numColumns, fileName1);
-  IndexMetaDataMmapDispatcher::WriteType metaData2;
+  IndexMetaData metaData2;
   auto writerAndCallback2 =
       getWriterAndCallback(metaData2, numColumns, fileName2);
 
@@ -878,11 +874,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationImpl(
+std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
-  IndexMetaDataMmapDispatcher::WriteType metaData;
+  IndexMetaData metaData;
   auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
 
   // We can always supply the tables with the correct permutation. No need to
@@ -898,11 +893,9 @@ IndexImpl::createPermutationImpl(
 
 // ________________________________________________________________________
 template <typename T, typename... Callbacks>
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
-                              const Permutation& p1, const Permutation& p2,
-                              Callbacks&&... perTripleCallbacks) {
+std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
+    size_t numColumns, T&& sortedTriples, const Permutation& p1,
+    const Permutation& p2, Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
@@ -922,16 +915,16 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+void IndexImpl::writeMetaData(IndexMetaData& metaData,
                               const std::string& filename) const {
   metaData.setName(getKbName());
   ad_utility::File f(filename, "r+");
-  metaData.appendToFile(&f);
+  ad_utility::File metaFile(filename + META_FILE_SUFFIX, "w");
+  metaData.appendToFile(f, metaFile);
 }
 
 // _____________________________________________________________________________
-std::pair<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationWithoutMetadata(
+std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
@@ -950,9 +943,9 @@ IndexImpl::createPermutationWithoutMetadata(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::finalizePermutation(
-    IndexMetaDataMmapDispatcher::WriteType& meta,
-    const Permutation& permutation, bool internal) const {
+void IndexImpl::finalizePermutation(IndexMetaData& meta,
+                                    const Permutation& permutation,
+                                    bool internal) const {
   std::string fileName = getFilenameForPermutation(permutation, internal);
 
   writeMetaData(meta, fileName);
