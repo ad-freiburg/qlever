@@ -119,13 +119,15 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 // Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
 // options and `escapeFunction`. Returns `std::nullopt` when
 // `returnOnlyLiterals` is true and `word` is not a literal.
-// TODO<ms2144>: This method always materializes a string. This is wasteful.
-// think about returning a string_view instead.
-template <bool removeQuotesAndAngleBrackets = false,
-          bool returnOnlyLiterals = false,
-          typename EscapeFunction = ql::identity>
-std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-    const auto& word, EscapeFunction&& escapeFunction = EscapeFunction{}) {
+CPP_template(bool removeQuotesAndAngleBrackets = false,
+             bool returnOnlyLiterals = false,
+             typename LiteralOrIriType = LiteralOrIri,
+             typename EscapeFunction = ql::identity)(
+    requires ad_utility::SameAsAny<LiteralOrIriType, LiteralOrIri,
+                                   LiteralOrIriView>) std::
+    optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+        const LiteralOrIriType& word,
+        EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
       return std::nullopt;
@@ -142,6 +144,8 @@ std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
         escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
         nullptr};
   }
+  // TODO<ms2144>: we unconditionally always materialize a string here, which
+  // is wasteful and should be mitigated in the future.
   return std::pair{escapeFunction(std::string{word.toStringRepresentation()}),
                    nullptr};
 }
