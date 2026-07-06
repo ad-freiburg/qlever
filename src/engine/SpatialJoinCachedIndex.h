@@ -10,6 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
 // Forward declarations
@@ -43,7 +44,7 @@ class SpatialJoinCachedIndex {
   // the `IdTable`. Currently only line strings are supported for the
   // experimental S2 point polyline algorithm.
   SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
-                         const IdTable& restable, const Index& index);
+                         const IdTableView<0>& restable, const Index& index);
 
   // Getters
   const Variable& getGeometryColumn() const;

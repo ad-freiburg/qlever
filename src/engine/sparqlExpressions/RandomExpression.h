@@ -47,6 +47,9 @@ class RandomExpression : public SparqlExpression {
     return "RAND " + std::to_string(randId);
   }
 
+  // RAND() produces a fresh random value on every invocation.
+  bool isDeterministic() const override { return false; }
+
   // `RAND()` is always defined.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
     return true;

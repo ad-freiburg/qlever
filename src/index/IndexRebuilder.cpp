@@ -328,14 +328,13 @@ boost::asio::awaitable<void> createPermutationWriterTask(
   auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);
 
-  auto makeFinalizerTasks =
-      [&newIndex, isInternal](
-          IndexImpl::IndexMetaDataMmapDispatcher::WriteType& meta,
-          const Permutation& permutation) {
-        return [&newIndex, &meta, &permutation, isInternal]() {
-          return newIndex.finalizePermutation(meta, permutation, isInternal);
-        };
-      };
+  auto makeFinalizerTasks = [&newIndex, isInternal](
+                                IndexMetaData& meta,
+                                const Permutation& permutation) {
+    return [&newIndex, &meta, &permutation, isInternal]() {
+      return newIndex.finalizePermutation(meta, permutation, isInternal);
+    };
+  };
   co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
             asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
