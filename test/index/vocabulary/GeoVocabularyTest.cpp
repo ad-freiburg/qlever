@@ -102,7 +102,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // Build a `GeoVocabulary` on disk under `filename`, fill it with a small set
   // of WKT literals, and return those literals sorted (so index `i` holds
   // `literals[i]`).
-  std::vector<std::string> setupGeoVocab(GeoVocabulary<T>& geoVocab) {
+  void setupGeoVocab(GeoVocabulary<T>& geoVocab) {
     const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
     auto ww = geoVocab.makeDiskWriterPtr(filename);
     ww->readableName() = "test";
