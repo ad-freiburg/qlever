@@ -947,7 +947,7 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
   // be skipped.
-  graphs.insert(V(3));
+  graphs = ad_utility::HashSet<Id>{V(3)};
   graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_TRUE(filter.canBlockBeSkipped(metadata));
 
