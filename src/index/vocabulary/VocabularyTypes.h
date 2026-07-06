@@ -134,9 +134,8 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // does not relocate the contained strings.
 
   std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform([&vocab](size_t idx) -> std::string {
-        return std::string{vocab[idx]};
-      }));
+      indices | ql::views::transform(
+                    [&vocab](size_t idx) { return std::string{vocab[idx]}; }));
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer() = std::move(words);
