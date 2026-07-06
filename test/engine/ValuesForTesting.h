@@ -248,6 +248,8 @@ class ValuesForTesting : public Operation {
 
   ValuesForTesting& operator=(const ValuesForTesting&) = delete;
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }

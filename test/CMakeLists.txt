@@ -179,6 +179,8 @@ addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
+
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
@@ -232,8 +234,6 @@ addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
-addLinkAndDiscoverTest(BatchedPipelineTest)
-
 addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(UriParserUriTest)
@@ -247,6 +247,8 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 

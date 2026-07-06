@@ -11,8 +11,10 @@
 #include <map>
 
 #include "util/Algorithm.h"
+#include "util/GTestHelpers.h"
 #include "util/HashMap.h"
 #include "util/Random.h"
+#include "util/TransparentFunctors.h"
 
 using namespace ad_utility;
 
@@ -243,4 +245,74 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
                                                value, compForUpperBound),
               ql::ranges::upper_bound(input, value));
   }
+}
+
+// ____________________________________________________________________________
+TEST(AlgorithmTest, SetDifference) {
+  using Vec = std::vector<int>;
+
+  // Helper: run setDifference in-place (output = begin(r1)) and check result.
+  auto testInplace = [](Vec r1, Vec r2, const Vec& expected,
+                        source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(loc);
+    auto newEnd = inplace_set_difference(r1, r2);
+    r1.erase(newEnd, r1.end());
+    EXPECT_EQ(r1, expected);
+  };
+
+  testInplace({}, {}, {});
+  testInplace({}, {1, 2, 3}, {});
+  testInplace({1, 2, 3}, {}, {1, 2, 3});
+  testInplace({1, 2, 3}, {1, 2, 3}, {});
+  testInplace({1, 2, 3}, {2}, {1, 3});
+  testInplace({1, 2, 3}, {1}, {2, 3});
+  testInplace({1, 2, 3}, {3}, {1, 2});
+  testInplace({1, 2, 3}, {1, 3}, {2});
+  testInplace({2, 3}, {1, 3}, {2});
+  testInplace({1, 2}, {1, 4}, {2});
+  testInplace({2, 3, 4}, {1, 3, 5}, {2, 4});
+  testInplace({2, 3, 4}, {1, 3, 3, 3, 5}, {2, 4});
+  testInplace({2, 3, 4}, {1, 5}, {2, 3, 4});
+  testInplace({1, 2, 3, 4, 5}, {1}, {2, 3, 4, 5});
+  testInplace({1, 2, 3, 4, 5}, {2, 3}, {1, 4, 5});
+  // Duplicates in `r1`: `std::set_difference` semantics, each `r2` element
+  // cancels one equivalent `r1` element.
+  testInplace({1, 1, 2}, {1}, {1, 2});
+  testInplace({1, 1, 2}, {1, 1}, {2});
+
+  if (areExpensiveChecksEnabled) {
+    auto assertionFailed = [](const std::string& assertion) {
+      return ::testing::HasSubstr("Assertion `" + assertion + "` failed");
+    };
+    // r1 unsorted triggers the first AD_EXPENSIVE_CHECK.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        inplace_set_difference(Vec{3, 1, 2}, Vec{1}),
+        assertionFailed("ql::ranges::is_sorted(r1, comp, proj1)"));
+    // r2 unsorted triggers the second AD_EXPENSIVE_CHECK.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        inplace_set_difference(Vec{1, 2, 3}, Vec{3, 1}),
+        assertionFailed("ql::ranges::is_sorted(r2, comp, proj2)"));
+  }
+
+  // With projection: compare only the first element of pairs.
+  using Pair = std::pair<int, int>;
+  using PVec = std::vector<Pair>;
+  using Proj = MemberProjection<&Pair::first>;
+
+  auto testProj = [&](PVec r1, PVec r2, const PVec& expected,
+                      source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(loc);
+    auto newEnd = inplace_set_difference(r1, r2, std::less{}, Proj{}, Proj{});
+    r1.erase(newEnd, r1.end());
+    EXPECT_EQ(r1, expected);
+  };
+
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {}, {{1, 0}, {2, 0}, {3, 0}});
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {{2, 9}}, {{1, 0}, {3, 0}});
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {{1, 9}, {2, 9}, {3, 9}}, {});
+  // Output contains only elements from `r1`, never from `r2`. Each `r2` element
+  // cancels one equivalent `r1` element.
+  testProj({{9, 1}, {9, 2}}, {}, {{9, 1}, {9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}}, {{9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}, {9, 4}}, {});
 }

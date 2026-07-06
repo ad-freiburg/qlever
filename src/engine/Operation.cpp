@@ -247,8 +247,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(
-        limitOffset_,
-        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
+        limitOffset_, [this](std::chrono::microseconds limitTime,
+                             const IdTableView<0>& idTable) {
           updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
                              limitTime);
         });
@@ -781,9 +781,11 @@ std::unique_ptr<Operation> Operation::clone() const {
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  // If the result can be cached, then the cache key must be the same for
-  // the cloned operation.
-  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+  // For deterministic operations the cache key must be identical in the clone.
+  // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
+  // legitimately produce a different cache key on each instantiation, so we
+  // do not enforce the equality there.
+  AD_EXPENSIVE_CHECK(!isDeterministic() ||
                      getCacheKey() == result->getCacheKey());
   return result;
 }
@@ -826,6 +828,16 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::isDeterministic() const {
+  if (!isDeterministicImpl()) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [](const QueryExecutionTree* child) {
+    return child->getRootOperation()->isDeterministic();
+  });
 }
 
 // _____________________________________________________________________________

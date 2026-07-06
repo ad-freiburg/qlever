@@ -65,7 +65,7 @@ void consumeGenerator(Result::LazyResult generator) {
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
   Result result{[]() -> Result::Generator { co_return; }(), {}};
   EXPECT_FALSE(result.isFullyMaterialized());
-  EXPECT_THROW(result.idTable(), ad_utility::Exception);
+  EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -95,7 +95,7 @@ TEST(Result, cloneIdTableReturnsCopy) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Verify it is a deep copy, not a reference to the same data.
-  EXPECT_NE(&cloned(0, 0), &result.idTable()(0, 0));
+  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
 }
 
 // _____________________________________________________________________________
@@ -373,7 +373,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
         },
         [&](Result aggregatedResult) {
           EXPECT_TRUE(aggregatedResult.isFullyMaterialized());
-          EXPECT_EQ(aggregatedResult.idTable(), idTable);
+          EXPECT_EQ(aggregatedResult.idTableView(), idTable);
           EXPECT_EQ(aggregatedResult.sortedBy(), std::vector<ColumnIndex>{0});
         });
   }
@@ -447,7 +447,8 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
   {
     auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
     uint32_t callCounter = 0;
-    auto callback = [&](std::chrono::microseconds, const IdTable& innerTable) {
+    auto callback = [&](std::chrono::microseconds,
+                        const IdTableView<0>& innerTable) {
       // NOTE: duration can't be tested here, processors are too fast
       EXPECT_EQ(innerTable, comparisonTable);
       ++callCounter;
@@ -456,7 +457,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       Result result{idTable.clone(), {}, LocalVocab{}};
       result.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 1);
-      EXPECT_EQ(result.idTable(), comparisonTable);
+      EXPECT_EQ(result.idTableView(), comparisonTable);
     }
     {
       // Now test the limit offset application for shared results;
@@ -464,7 +465,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
           std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
-      EXPECT_EQ(result2.idTable(), comparisonTable);
+      EXPECT_EQ(result2.idTableView(), comparisonTable);
     }
   }
 
@@ -472,19 +473,19 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     std::vector<size_t> colSizes{};
     uint32_t totalRows = 0;
     Result result{std::move(generator), {}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          // NOTE: duration can't be tested here, processors are too fast
-          for (const auto& row : innerTable) {
-            ASSERT_EQ(row.size(), 2);
-            // Make sure we never get values that were supposed to be filtered
-            // out.
-            EXPECT_THAT(row[0].getVocabIndex().get(), Not(AnyOf(0, 1, 4)));
-            EXPECT_THAT(row[1].getVocabIndex().get(), Not(AnyOf(9, 8, 5)));
-          }
-          totalRows += innerTable.size();
-          colSizes.push_back(innerTable.numColumns());
-        });
+    result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                             const IdTableView<0>& innerTable) {
+      // NOTE: duration can't be tested here, processors are too fast
+      for (const auto& row : innerTable) {
+        ASSERT_EQ(row.size(), 2);
+        // Make sure we never get values that were supposed to be filtered
+        // out.
+        EXPECT_THAT(row[0].getVocabIndex().get(), Not(AnyOf(0, 1, 4)));
+        EXPECT_THAT(row[1].getVocabIndex().get(), Not(AnyOf(9, 8, 5)));
+      }
+      totalRows += innerTable.size();
+      colSizes.push_back(innerTable.numColumns());
+    });
 
     EXPECT_EQ(totalRows, 0);
     EXPECT_TRUE(colSizes.empty());
@@ -511,11 +512,11 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
   {
     uint32_t callCounter = 0;
     Result result{idTable.clone(), {}, LocalVocab{}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          EXPECT_EQ(innerTable.numRows(), 0);
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                             const IdTableView<0>& innerTable) {
+      EXPECT_EQ(innerTable.numRows(), 0);
+      ++callCounter;
+    });
     EXPECT_EQ(callCounter, 1);
   }
 
@@ -523,8 +524,9 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
     uint32_t callCounter = 0;
     Result result{std::move(generator), {}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
+          ++callCounter;
+        });
 
     consumeGenerator(result.idTables());
 
@@ -539,28 +541,28 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
   {
     uint32_t callCounter = 0;
     Result result{idTable.clone(), {}, LocalVocab{}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          EXPECT_EQ(innerTable.numRows(), 3);
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                             const IdTableView<0>& innerTable) {
+      EXPECT_EQ(innerTable.numRows(), 3);
+      ++callCounter;
+    });
     EXPECT_EQ(callCounter, 1);
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
     Result result{std::move(generator), {}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          for (const auto& row : innerTable) {
-            ASSERT_EQ(row.size(), 2);
-            // Make sure we never get values that were supposed to be filtered
-            // out.
-            EXPECT_NE(row[0].getVocabIndex().get(), 0);
-            EXPECT_NE(row[1].getVocabIndex().get(), 7);
-          }
-          ++callCounter;
-        });
+    result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                             const IdTableView<0>& innerTable) {
+      for (const auto& row : innerTable) {
+        ASSERT_EQ(row.size(), 2);
+        // Make sure we never get values that were supposed to be filtered
+        // out.
+        EXPECT_NE(row[0].getVocabIndex().get(), 0);
+        EXPECT_NE(row[1].getVocabIndex().get(), 7);
+      }
+      ++callCounter;
+    });
 
     consumeGenerator(result.idTables());
 
@@ -576,16 +578,18 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   {
     Result result{idTable.clone(), {}, LocalVocab{}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
+          ++callCounter;
+        });
     EXPECT_EQ(callCounter, 0);
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {}};
     result.applyLimitOffset(
-        limitOffset,
-        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+        limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
+          ++callCounter;
+        });
 
     consumeGenerator(result.idTables());
 
@@ -685,6 +689,76 @@ INSTANTIATE_TEST_SUITE_P(
 // _____________________________________________________________________________
 TEST(Result, assertionOnNullptrConstruction) {
   EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
+}
+
+// Tests for the `IdTableView<0>`-backed `Result` constructor and the
+// corresponding `if constexpr` branches in `makeView` and `applyLimitOffset`.
+
+TEST(Result, viewBackedResultIsFullyMaterialized) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}, {5, 6}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  Result result{view, {}, LocalVocab{}};
+  EXPECT_TRUE(result.isFullyMaterialized());
+  // The returned view must alias the original data, not a copy.
+  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
+  EXPECT_EQ(result.idTableView(), idTable);
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedResultCloneIdTable) {
+  auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  Result result{view, {}, LocalVocab{}};
+  IdTable cloned = result.cloneIdTable();
+  EXPECT_EQ(cloned, idTable);
+  // Must be a deep copy, not an alias into the original data.
+  EXPECT_NE(&cloned(0, 0), &idTable(0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedResultThrowsOnIdTables) {
+  auto idTable = makeIdTableFromVector({{1, 2}});
+  Result result{idTable.asStaticView<0>(), {}, LocalVocab{}};
+  EXPECT_THROW(result.idTables(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedApplyLimitOffset) {
+  auto idTable =
+      makeIdTableFromVector({{0, 9}, {1, 8}, {2, 7}, {3, 6}, {4, 5}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  // Skip the first 2 rows, keep 2: expected rows are {{2, 7}, {3, 6}}.
+  LimitOffsetClause limitOffset{2, 2};
+  auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
+  uint32_t callCounter = 0;
+  Result result{view, {}, LocalVocab{}};
+  result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
+                                           const IdTableView<0>& innerTable) {
+    EXPECT_EQ(innerTable, comparisonTable);
+    // The sub-view must alias the original data at offset 2 (no copy).
+    EXPECT_EQ(&innerTable(0, 0), &idTable(2, 0));
+    ++callCounter;
+  });
+  EXPECT_EQ(callCounter, 1);
+  EXPECT_EQ(result.idTableView(), comparisonTable);
+  // After the limit/offset the result view still aliases the original data.
+  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(2, 0));
+}
+
+// _____________________________________________________________________________
+TEST(Result, viewBackedSortOrderIsRespected) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
+  }
+  // Sorted by column 0 — must not throw.
+  auto idTable = makeIdTableFromVector({{1, 6}, {2, 5}, {3, 4}});
+  IdTableView<0> view = idTable.asStaticView<0>();
+  EXPECT_NO_THROW((Result{view, {0}, LocalVocab{}}));
+
+  // Not sorted by column 1 — must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE((Result{view, {1}, LocalVocab{}}),
+                                        HasSubstr("compareRowsBySortColumns"),
+                                        ad_utility::Exception);
 }
 
 // _____________________________________________________________________________

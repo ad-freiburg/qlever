@@ -40,6 +40,7 @@
 #include "util/BufferedVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/json.h"
 
@@ -93,11 +94,6 @@ class IndexImpl {
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
-
-  struct IndexMetaDataMmapDispatcher {
-    using WriteType = IndexMetaDataMmap;
-    using ReadType = IndexMetaDataMmapView;
-  };
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
@@ -237,6 +233,9 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
+
+  void createFromFiles(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -508,32 +507,32 @@ class IndexImpl {
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
-  /**
-   * @brief Everything that has to be done when we have seen all the triples
-   * that belong to one partial vocabulary, including Log output used inside
-   * passFileForVocabulary
-   *
-   * @param numLines How many Lines from the KB have we already parsed (only for
-   * Logging)
-   * @param numFiles How many partial vocabularies have we seen before/which is
-   * the index of the voc we are going to write
-   * @param actualCurrentPartialSize How many triples belong to this partition
-   * (including extra langfilter triples)
-   * @param items Contains our unsorted vocabulary. Maps words to their local
-   * ids within this vocabulary.
-   */
-  std::future<void> writeNextPartialVocabulary(
+  // Create a task that writes a partial vocabulary given by `items` to disk and
+  // adds the corresponding triples in `localIds` to the provided
+  // `globalWritePtr`. This is used to write the partial vocabularies in
+  // parallel while we are still parsing the input file. `numLines` indicates
+  // how many lines from the KB we have already parsed (only for logging).
+  // `numFiles` indicates how many partial vocabularies we have seen before,
+  // which is the index of the vocabulary we are going to write.
+  // `actualCurrentPartialSize` indicates how many triples belong to this
+  // partition (including extra langfilter triples). The `globalWritePtr` is
+  // shared between all tasks and is protected by a mutex internally, so the
+  // tasks can safely add their triples to it while writing their partial
+  // vocabularies to disk.
+  absl::AnyInvocable<void()> createWritePartialVocabularyTask(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items,
+      ItemMapArray items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
+      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
+      const;
 
   // Return a Turtle parser that parses the given file. The parser will be
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<RdfParserBase> makeRdfParser(
-      const std::vector<Index::InputFileSpecification>& files) const;
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
+      const;
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
@@ -547,18 +546,16 @@ class IndexImpl {
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
   // of large relations to the `metaData` object.
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
-      IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+      IndexMetaData& metaData, size_t numColumns,
       const std::string& fileName) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
-  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
-             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationPairImpl(size_t numColumns, const std::string& fileName1,
-                            const std::string& fileName2, T&& sortedTriples,
-                            Permutation::KeyOrder permutation,
-                            Callbacks&&... perTripleCallbacks);
+  std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutationPairImpl(
+      size_t numColumns, const std::string& fileName1,
+      const std::string& fileName2, T&& sortedTriples,
+      Permutation::KeyOrder permutation, Callbacks&&... perTripleCallbacks);
 
   // Write a single permutation to disk. `numColumns` specifies the number of
   // columns in the relation (usually 4, sometimes 6 with patterns).
@@ -567,8 +564,7 @@ class IndexImpl {
   // order.
   // Return the number of triples written and the metadata for the written
   // permutation.
-  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationImpl(
+  std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
 
@@ -588,7 +584,7 @@ class IndexImpl {
   // IndexImpl::createFromFile function)
 
   // Write `metaData` to the provided file.
-  void writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+  void writeMetaData(IndexMetaData& metaData,
                      const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
@@ -607,11 +603,9 @@ class IndexImpl {
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
   template <typename T, typename... Callbacks>
-  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
-             IndexMetaDataMmapDispatcher::WriteType>
-  createPermutations(size_t numColumns, T&& sortedTriples,
-                     const Permutation& p1, const Permutation& p2,
-                     Callbacks&&... perTripleCallbacks);
+  std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutations(
+      size_t numColumns, T&& sortedTriples, const Permutation& p1,
+      const Permutation& p2, Callbacks&&... perTripleCallbacks);
 
  public:
   // Write a single permutation to disk. `numColumns` specifies the number of
@@ -627,16 +621,15 @@ class IndexImpl {
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
-  std::pair<size_t, IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationWithoutMetadata(
+  std::pair<size_t, IndexMetaData> createPermutationWithoutMetadata(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       const Permutation& permutation, bool internal);
 
   // Finalize the writing of a permutation by appending the metadata to
   // the corresponding file on disk.
-  void finalizePermutation(IndexMetaDataMmapDispatcher::WriteType& meta,
-                           const Permutation& permutation, bool internal) const;
+  void finalizePermutation(IndexMetaData& meta, const Permutation& permutation,
+                           bool internal) const;
 
  protected:
   void openTextFileHandle();

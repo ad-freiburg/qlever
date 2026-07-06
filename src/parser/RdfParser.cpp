@@ -340,9 +340,10 @@ void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   if (ql::starts_with(input, '+')) {
     input.remove_prefix(1);
   }
+  const char* end = input.data() + input.size();
   auto [firstNonMatching, errorCode] =
-      absl::from_chars(input.data(), input.data() + input.size(), result);
-  if (firstNonMatching != input.end() || errorCode != std::errc{}) {
+      absl::from_chars(input.data(), end, result);
+  if (firstNonMatching != end || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
@@ -378,7 +379,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
           "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } else if (firstNonMatching != input.end()) {
+  } else if (firstNonMatching != input.data() + input.size()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
@@ -944,18 +945,17 @@ RdfStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
   b.numBlankNodes_ = this->numBlankNodes_;
   b.numTriples_ = this->triples_.size();
-  b.tokenizerPosition_ = this->tok_.data().begin();
+  b.tokenizerPosition_ = this->tok_.data().data();
   b.tokenizerSize_ = this->tok_.data().size();
   return b;
 }
 
-// _______________________________________________________________
+// ____________________________________________________________________________
 template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
-  AD_CORRECTNESS_CHECK(fileBuffer_);
-  auto nextBytesOpt = fileBuffer_->getNextBlock();
+  auto nextBytesOpt = driver_.value().getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
     // do not alter any internal state.
@@ -970,13 +970,13 @@ bool RdfStreamParser<T>::resetStateAndRead(
   this->triples_.resize(b.numTriples_);
   this->tok_.reset(b.tokenizerPosition_, b.tokenizerSize_);
 
-  ParallelBuffer::BufferType buf;
+  qlever::parser::ByteBlock buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
   numBytesBeforeCurrentBatch_ += byteVec_.size() - tok_.data().size();
   buf.resize(tok_.data().size() + nextBytes.size());
-  memcpy(buf.data(), tok_.data().begin(), tok_.data().size());
+  memcpy(buf.data(), tok_.data().data(), tok_.data().size());
   memcpy(buf.data() + tok_.data().size(), nextBytes.data(), nextBytes.size());
   byteVec_ = std::move(buf);
   tok_.reset(byteVec_.data(), byteVec_.size());
@@ -991,7 +991,8 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
+void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
+                                    ad_utility::MemorySize blocksize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
@@ -1004,10 +1005,9 @@ void RdfStreamParser<T>::initialize(std::unique_ptr<ParallelBuffer> rawBuffer) {
   // The reason is that with a `.` at the end, we cannot decide whether we are
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "([\\r\\n]+)");
+  driver_.emplace(spec, blocksize, "([\\r\\n]+)");
   // Read the first block and initialize the tokenizer.
-  if (auto res = fileBuffer_->getNextBlock(); res) {
+  if (auto res = driver_.value().getNextBlock(); res.has_value()) {
     byteVec_ = std::move(res.value());
     tok_.reset(byteVec_.data(), byteVec_.size());
   } else {
@@ -1170,7 +1170,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        auto nextOptional = fileBuffer_->getNextBlock();
+        auto nextOptional = driver_.value().getNextBlock();
         if (!nextOptional) {
           return;
         }
@@ -1200,14 +1200,14 @@ void RdfParallelParser<T>::feedBatchesToParser(
 // _______________________________________________________________________
 template <typename T>
 void RdfParallelParser<T>::initialize(
-    std::unique_ptr<ParallelBuffer> rawBuffer) {
-  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
-      std::move(rawBuffer), "\\.[\\t ]*([\\r\\n]+)");
-  ParallelBuffer::BufferType remainingBatchFromInitialization;
+    const qlever::InputFileSpecification& spec,
+    ad_utility::MemorySize blocksize) {
+  driver_.emplace(spec, blocksize, "\\.[\\t ]*([\\r\\n]+)");
+  qlever::parser::ByteBlock remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
-    if (auto batch = fileBuffer_->getNextBlock()) {
+    if (auto batch = driver_.value().getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
@@ -1324,8 +1324,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(
-            input.getParallelBuffer(bufferSize.getBytes()), ev, graph());
+        return std::make_unique<Parser>(input, bufferSize, ev, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
@@ -1355,54 +1354,50 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
   return result;
 }
 
+// _____________________________________________________________________________
+void RdfMultifileParser::parseFileAndPushBatches(
+    const qlever::InputFileSpecification& file,
+    ad_utility::MemorySize bufferSize) {
+  try {
+    auto parser =
+        makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(), bufferSize);
+    while (auto batch = parser->getBatch()) {
+      bool active = finishedBatchQueue_.push(std::move(batch.value()));
+      if (!active) {
+        // The queue was finished prematurely; stop to avoid deadlocks.
+        return;
+      }
+    }
+  } catch (...) {
+    finishedBatchQueue_.pushException(std::current_exception());
+  }
+}
+
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
-    const std::vector<qlever::InputFileSpecification>& files,
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
-  using namespace qlever;
-
-  // This lambda parses a single file and pushes the results and all occurring
-  // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this, encodedIriManager](
-                       const InputFileSpecification& file,
-                       ad_utility::MemorySize bufferSize) {
-    try {
-      auto parser =
-          makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
-      while (auto batch = parser->getBatch()) {
-        bool active = finishedBatchQueue_.push(std::move(batch.value()));
-        if (!active) {
-          // The queue was finished prematurely, stop this thread. This is
-          // important to avoid deadlocks.
-          return;
-        }
-      }
-    } catch (...) {
-      finishedBatchQueue_.pushException(std::current_exception());
-    }
-  };
-
   // Feed all the input files to the `parsingQueue_`.
-  auto makeParsers = [files, bufferSize, this, parseFile]() {
-    for (const auto& file : files) {
-      bool active =
-          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
+  auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
+    for (auto& file : files) {
+      bool active = parsingQueue_.push(
+          absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches, this,
+                           std::move(file), bufferSize));
       if (!active) {
-        // The queue was finished prematurely, stop this thread. This is
-        // important to avoid deadlocks.
+        // The queue was finished prematurely; stop to avoid deadlocks.
         break;
       }
     }
     // Every input has been fed into the `parsingQueue_`. After the call to
     // `finish()` returns, the parsing has completed and all the results have
-    // been pushed into the `finishedBatchQueue`, which we then also finish to
+    // been pushed into the `finishedBatchQueue_`, which we then also finish to
     // inform the consuming code, that there will be no more parse results.
     parsingQueue_.finish();
     finishedBatchQueue_.finish();
   };
-  feederThread_ = ad_utility::JThread{makeParsers};
+  feederThread_ = ad_utility::JThread{std::move(makeParsers)};
 }
 
 // _____________________________________________________________________________
