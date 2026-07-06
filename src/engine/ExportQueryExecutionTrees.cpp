@@ -779,7 +779,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   if constexpr (!ad_utility::contains(supportedMediaTypesForConstructQueries,
                                       format)) {
     AD_THROW(absl::StrCat(ad_utility::toString(format),
-                          " is not supported for CONSTRUCT queries"));
+                          " is not supported for CONSTRUCT queries."));
   }
 
   result->logResultSize();
