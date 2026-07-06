@@ -11,6 +11,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
+#include <boost/asio/co_spawn.hpp>
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -20,33 +21,55 @@
 using namespace ad_utility::httpUtils;
 
 namespace {
-// An `AsyncBlockSource` that streams the bytes of an HTTP request body. The
-// bytes themselves are delivered chunk by chunk into `queue` by
-// `InputFileServer::handleFileUpload`, which pulls them from the HTTP
-// session's `bodyGetter`; `getNextBlockImpl` simply pops them again on the
-// (unrelated) executor that drives the RDF parser. The queue's `finish()`/
-// `pushException()` signal EOF or an error to the parser thread.
+// An `AsyncBlockSource` that pulls the bytes of an HTTP request body directly
+// from `bodyGetter_`, with no intermediate queue or thread. `bodyGetter_` may
+// only be safely called on `sessionExecutor_` (the strand the underlying
+// `beast::tcp_stream` belongs to), so `asyncGetNextBlockImpl` `co_spawn`s a
+// small coroutine onto that exact executor for every block; `net::co_spawn`
+// takes care of running it there regardless of which thread requested the
+// block. Once `bodyGetter_` signals EOF or throws, `completion_->timer` is
+// cancelled to wake up `InputFileServer::handleFileUpload`, which is the sole
+// owner of the (otherwise dangling-prone) `bodyGetter_` reference and must
+// stay suspended for as long as this class might still call it.
 class HttpBodyBlockSource : public qlever::parser::AsyncBlockSource {
-  using ChunkQueue =
-      ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
-  std::shared_ptr<ChunkQueue> queue_;
+  InputFileServer::BodyGetter bodyGetter_;
+  net::any_io_executor sessionExecutor_;
+  std::shared_ptr<InputFileServer::UploadCompletion> completion_;
 
  public:
-  HttpBodyBlockSource(const boost::asio::any_io_executor& exec,
-                      ad_utility::MemorySize blocksize,
-                      std::shared_ptr<ChunkQueue> queue)
-      : AsyncBlockSource{exec, blocksize}, queue_{std::move(queue)} {}
+  HttpBodyBlockSource(
+      ad_utility::MemorySize blocksize, InputFileServer::BodyGetter bodyGetter,
+      net::any_io_executor sessionExecutor,
+      std::shared_ptr<InputFileServer::UploadCompletion> completion)
+      : AsyncBlockSource{blocksize},
+        bodyGetter_{std::move(bodyGetter)},
+        sessionExecutor_{std::move(sessionExecutor)},
+        completion_{std::move(completion)} {}
 
  protected:
-  std::optional<Block> getNextBlockImpl() override {
-    auto chunk = queue_->pop();
-    if (!chunk.has_value()) {
-      return std::nullopt;
-    }
-    Block block;
-    block.resize(chunk->size());
-    std::ranges::copy(*chunk, block.data());
-    return block;
+  void asyncGetNextBlockImpl(Handler handler) override {
+    net::co_spawn(
+        sessionExecutor_,
+        [this]() -> net::awaitable<std::optional<Block>> {
+          auto chunk = co_await bodyGetter_();
+          if (!chunk.has_value()) {
+            co_return std::nullopt;
+          }
+          Block block;
+          block.resize(chunk->size());
+          std::ranges::copy(*chunk, block.data());
+          co_return block;
+        },
+        [this, handler = std::move(handler)](
+            std::exception_ptr ep, std::optional<Block> block) mutable {
+          if (ep || !block.has_value()) {
+            // EOF or error: wake up `handleFileUpload`, which is waiting on
+            // `completion_->timer` for exactly this signal.
+            completion_->error = ep;
+            completion_->timer.cancel();
+          }
+          handler(ep, std::move(block));
+        });
   }
 };
 }  // namespace
@@ -54,10 +77,12 @@ class HttpBodyBlockSource : public qlever::parser::AsyncBlockSource {
 // _____________________________________________________________________________
 std::unique_ptr<qlever::parser::AsyncBlockSource>
 InputFileServer::makeHttpBodyBlockSource(
-    const boost::asio::any_io_executor& exec, ad_utility::MemorySize blocksize,
-    SharedChunkQueue queue) {
-  return std::make_unique<HttpBodyBlockSource>(exec, blocksize,
-                                               std::move(queue));
+    ad_utility::MemorySize blocksize, BodyGetter bodyGetter,
+    net::any_io_executor sessionExecutor,
+    std::shared_ptr<UploadCompletion> completion) {
+  return std::make_unique<HttpBodyBlockSource>(blocksize, std::move(bodyGetter),
+                                               std::move(sessionExecutor),
+                                               std::move(completion));
 }
 
 // _____________________________________________________________________________
@@ -80,23 +105,24 @@ qlever::Filetype InputFileServer::filetypeFromContentType(
         absl::StrCat("A Content-Type header is required for file uploads. ",
                      kSupportedValues));
   }
-  std::string_view ct = it->value();
-  // Strip parameters (e.g., "; charset=utf-8").
-  auto semi = ct.find(';');
-  if (semi != std::string_view::npos) {
-    ct = ct.substr(0, semi);
+  std::string_view contentType = it->value();
+  // Reuse the same Accept-header-grammar-based parsing that
+  // `GraphStoreProtocol::extractMediatype` uses for the `Content-Type`
+  // header; this gives us `; charset=...`-parameter tolerance and
+  // case-insensitivity for free.
+  try {
+    auto mediaTypes = ad_utility::getMediaTypesFromAcceptHeader(contentType);
+    if (mediaTypes.size() == 1) {
+      if (auto filetype = qlever::filetypeFromMediaType(mediaTypes.front())) {
+        return filetype.value();
+      }
+    }
+  } catch (const std::exception&) {
+    // Fall through to the error below; an unparsable `Content-Type` is
+    // reported the same way as an unsupported one.
   }
-  while (!ct.empty() && ct.back() == ' ') {
-    ct.remove_suffix(1);
-  }
-  if (ct == "text/turtle" || ct == "application/n-triples") {
-    return qlever::Filetype::Turtle;
-  }
-  if (ct == "application/n-quads") {
-    return qlever::Filetype::NQuad;
-  }
-  throw std::runtime_error(absl::StrCat("Unsupported Content-Type: \"", ct,
-                                        "\". ", kSupportedValues));
+  throw std::runtime_error(absl::StrCat("Unsupported Content-Type: \"",
+                                        contentType, "\". ", kSupportedValues));
 }
 
 // _____________________________________________________________________________

@@ -270,6 +270,29 @@ TEST(InputFileServer, MissingContentType) {
 }
 
 // ____________________________________________________________________________
+// `filetypeFromContentType` parses the `Content-Type` header via
+// `ad_utility::getMediaTypesFromAcceptHeader`, so it should tolerate mixed
+// case and trailing `; charset=...`-style parameters, just like the SPARQL
+// Graph Store Protocol's `Content-Type` handling does.
+TEST(InputFileServer, ContentTypeIsCaseInsensitiveAndAllowsParameters) {
+  auto port = findFreePort();
+  InputFileServer server{port, 1};
+  auto range = server.run();
+
+  ad_utility::JThread uploadThread{[&]() {
+    ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
+    expectStatus(port, "<a> <b> <c>.", http::status::ok,
+                 "TEXT/Turtle; charset=UTF-8");
+    EXPECT_EQ(sendFinish(port).status, http::status::ok);
+  }};
+
+  // Drain the uploaded spec's body so the HTTP session can complete.
+  for (auto& spec : range) {
+    drainAndCountBytes(spec, ad_utility::MemorySize::bytes(1 << 16));
+  }
+}
+
+// ____________________________________________________________________________
 // A `Finish-Index-Building` request with a non-empty body must return 400.
 TEST(InputFileServer, FinishWithNonEmptyBody) {
   auto port = findFreePort();

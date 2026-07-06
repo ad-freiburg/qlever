@@ -77,7 +77,6 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // after the first capture group in the regex, so after the number that
     // precedes a letter.
     qp::AsyncEndRegexBlockSource buf(
-        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         "([0-9])[a-z]");
@@ -90,7 +89,6 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // The following regex is not found in the data, and the data is too
     // large for one block, so the parsing fails.
     qp::AsyncEndRegexBlockSource buf(
-        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         "([x-z])");
@@ -102,8 +100,7 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
     // The same example but with a larger blocksize, s.t. the complete input
     // fits into a single block. In this case it is no error that the regex
     // can never be found.
-    qp::AsyncEndRegexBlockSource buf(pool.get_executor(),
-                                     std::make_unique<qp::AsyncFileBlockSource>(
+    qp::AsyncEndRegexBlockSource buf(std::make_unique<qp::AsyncFileBlockSource>(
                                          pool.get_executor(), 100_B, filename),
                                      "([x-z])");
     std::vector<qp::ByteBlock> expected{
@@ -128,7 +125,6 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
   ad_utility::MemorySize blocksize = 2000_B;
   {
     qp::AsyncEndRegexBlockSource buf(
-        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         "([0-9])[a-z]");

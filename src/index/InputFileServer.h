@@ -11,6 +11,11 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
 #include "index/InputFileSpecification.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/Iterators.h"
@@ -20,15 +25,33 @@
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
+ public:
+  // Type-erased view of `bodyGetter`, used so that `HttpBodyBlockSource` (in
+  // InputFileServer.cpp) doesn't need to know `HttpServer`'s internal
+  // (deeply templated) `bodyGetter` type. Public because `HttpBodyBlockSource`
+  // (a free class defined in InputFileServer.cpp, not a member of this class)
+  // needs to name it.
+  using BodyGetter =
+      std::function<net::awaitable<std::optional<std::string_view>>()>;
+
+  // Shared between `handleFileUpload` and `HttpBodyBlockSource`: the latter
+  // signals (cancels the timer) once the request body has been fully
+  // consumed or an error occurred, so that `handleFileUpload` -- which owns
+  // the only valid reference to `bodyGetter` and the underlying stream/buffer
+  // it reads from -- knows when it is safe to return. Public for the same
+  // reason as `BodyGetter` above.
+  struct UploadCompletion {
+    net::steady_timer timer;
+    std::exception_ptr error;
+    explicit UploadCompletion(net::any_io_executor exec)
+        : timer{std::move(exec), net::steady_timer::time_point::max()} {}
+  };
+
+ private:
   // In lazy mode the body is streamed separately; the handler receives a
   // header-only request and pulls the body itself via `bodyGetter`.
   using Request = http::request<http::empty_body>;
   using Response = http::response<http::string_body>;
-  // Chunks read from the request body are handed off to the parser thread via
-  // this queue; see `HttpBodyBlockSource` in InputFileServer.cpp.
-  using ChunkQueue =
-      ad_utility::data_structures::ThreadSafeQueue<std::vector<char>>;
-  using SharedChunkQueue = std::shared_ptr<ChunkQueue>;
 
   ad_utility::data_structures::ThreadSafeQueue<qlever::InputFileSpecification>
       queue_;
@@ -68,8 +91,11 @@ class InputFileServer {
   Response handleFinishSignal(const Request& request);
 
   // Create an InputFileSpecification backed by a `HttpBodyBlockSource` and
-  // enqueue it for index building, then pull the request body from
-  // `bodyGetter` chunk by chunk and forward it to that source's queue.
+  // enqueue it for index building. The `HttpBodyBlockSource` pulls the
+  // request body directly from `bodyGetter` (no intermediate queue or
+  // thread); this coroutine stays suspended until it does so, since
+  // `bodyGetter` and the stream/buffer it reads from are only valid for as
+  // long as this coroutine frame is alive.
   net::awaitable<void> handleFileUpload(Request request, auto& send,
                                         auto& bodyGetter) {
     qlever::Filetype filetype;
@@ -97,14 +123,22 @@ class InputFileServer {
     std::string description =
         absl::StrCat("<http-upload-", numReceivedFiles_, ">");
 
-    // The queue size of `20` mirrors the default queue size of `queue_` and
-    // gives the HTTP session some slack over the (potentially slower) parser
-    // thread.
-    auto chunkQueue = std::make_shared<ChunkQueue>(20);
-    auto factory = [chunkQueue](const boost::asio::any_io_executor& exec,
-                                ad_utility::MemorySize blocksize,
-                                std::string_view) {
-      return makeHttpBodyBlockSource(exec, blocksize, chunkQueue);
+    // `bodyGetter` and this coroutine's executor are captured by the factory
+    // below; `completion` is how the resulting `HttpBodyBlockSource` tells us
+    // (from the parser side, running on a wholly different thread) that it is
+    // done with `bodyGetter`, so we know when it is safe to return.
+    auto sessionExecutor = co_await net::this_coro::executor;
+    auto completion = std::make_shared<UploadCompletion>(sessionExecutor);
+    BodyGetter erasedBodyGetter =
+        [&bodyGetter]() -> net::awaitable<std::optional<std::string_view>> {
+      co_return co_await bodyGetter();
+    };
+    auto factory = [erasedBodyGetter, sessionExecutor, completion](
+                       const boost::asio::any_io_executor& /*unused*/,
+                       ad_utility::MemorySize blocksize,
+                       std::string_view /*unused*/) {
+      return makeHttpBodyBlockSource(blocksize, erasedBodyGetter,
+                                     sessionExecutor, completion);
     };
     qlever::InputFileSpecification spec{
         qlever::InputFileSpecification::BufferFactoryAndDescription{
@@ -139,25 +173,21 @@ class InputFileServer {
         co_return;
     }
 
-    // Pull the request body from `bodyGetter` and forward it to the parser
-    // thread via `chunkQueue`. A network error is reported to the parser
-    // thread (instead of leaving it waiting forever) and otherwise swallowed
-    // here, because the response has already been sent and the connection is
-    // closed unconditionally after a lazy-mode request anyway.
-    try {
-      while (auto chunk = co_await bodyGetter()) {
-        chunkQueue->push(std::vector<char>(chunk->begin(), chunk->end()));
+    // Only reached for `Pushed`: wait until the parser has fully consumed the
+    // body (or failed to).
+    co_await completion->timer.async_wait(
+        boost::asio::as_tuple(net::use_awaitable));
+    if (completion->error) {
+      try {
+        std::rethrow_exception(completion->error);
+      } catch (const std::exception& e) {
+        AD_LOG_WARN << "Error while streaming the request body for upload #"
+                    << numReceivedFiles_ << ": " << e.what() << std::endl;
+      } catch (...) {
+        AD_LOG_WARN << "Unknown error while streaming the request body for "
+                       "upload #"
+                    << numReceivedFiles_ << std::endl;
       }
-      chunkQueue->finish();
-    } catch (const std::exception& e) {
-      AD_LOG_WARN << "Error while streaming the request body for upload #"
-                  << numReceivedFiles_ << ": " << e.what() << std::endl;
-      chunkQueue->pushException(std::current_exception());
-    } catch (...) {
-      AD_LOG_WARN << "Unknown error while streaming the request body for "
-                     "upload #"
-                  << numReceivedFiles_ << std::endl;
-      chunkQueue->pushException(std::current_exception());
     }
   }
 
@@ -166,13 +196,14 @@ class InputFileServer {
   static Response createStringResponse(std::string body, http::status status,
                                        const Request& request);
 
-  // Create the `AsyncBlockSource` that pops chunks pushed by `handleFileUpload`
-  // from `queue` (defined in InputFileServer.cpp to keep `HttpBodyBlockSource`
-  // out of this header).
+  // Create the `AsyncBlockSource` that pulls chunks from `bodyGetter` via
+  // `sessionExecutor` and signals `completion` on EOF/error (defined in
+  // InputFileServer.cpp to keep `HttpBodyBlockSource` out of this header).
   static std::unique_ptr<qlever::parser::AsyncBlockSource>
-  makeHttpBodyBlockSource(const boost::asio::any_io_executor& exec,
-                          ad_utility::MemorySize blocksize,
-                          SharedChunkQueue queue);
+  makeHttpBodyBlockSource(ad_utility::MemorySize blocksize,
+                          BodyGetter bodyGetter,
+                          net::any_io_executor sessionExecutor,
+                          std::shared_ptr<UploadCompletion> completion);
 
   net::awaitable<void> processRequest(Request request, auto&& send,
                                       auto&& bodyGetter) {
