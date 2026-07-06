@@ -241,7 +241,7 @@ void resolveNonVocabIndexIds(
     const Index& index, ql::span<const Id> ids, const LocalVocab& localVocab,
     ql::span<const size_t> positions,
     ql::span<std::optional<std::pair<std::string, const char*>>> results,
-    EscapeFunction&& escapeFunction) {
+    const EscapeFunction& escapeFunction) {
   ql::ranges::for_each(positions, [&](size_t i) {
     results[i] =
         idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
