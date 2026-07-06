@@ -709,6 +709,14 @@ class SparqlQleverVisitor {
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 
+  // Like `setAndGetDatasetClauses` above, but to be used for the dataset
+  // clause of a top-level SPARQL query (`SELECT`, `CONSTRUCT`, `ASK`, or
+  // `DESCRIBE`). If `clauses` is empty and the `union-graph-as-default-graph`
+  // `RuntimeParameter` is disabled, an implicit dataset clause consisting only
+  // of `ql:default-graph` is used instead of `clauses`.
+  const parsedQuery::DatasetClauses& setAndGetDatasetClausesForQuery(
+      const std::vector<DatasetClause>& clauses);
+
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
