@@ -6,8 +6,10 @@
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
 
+#include <chrono>
 #include <cstdlib>
 #include <future>
+#include <thread>
 
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -29,6 +31,21 @@ ad_utility::MemorySize getRequestBodyLimit();
 // calling the handler (Eager) or streams it to the handler chunk by chunk
 // while sending the response (Lazy).
 enum class BodyReadMode { Eager, Lazy };
+
+// A `WebSocketHandler`/supplier pair for `HttpServer` instantiations that
+// don't support WebSockets at all (e.g. `InputFileServer`). Use
+// `NoWebSocketHandler` as the `WebSocketHandler` template parameter and
+// `NoWebSocketSupplier{}` as the constructor's `webSocketHandlerSupplier`
+// argument.
+struct NoWebSocketHandler {
+  net::awaitable<void> operator()(auto&&...) const {
+    throw std::runtime_error("Websockets not implemented");
+    co_return;
+  }
+};
+struct NoWebSocketSupplier {
+  NoWebSocketHandler operator()(net::io_context&) const { return {}; }
+};
 
 // A simple `HttpServer`, based on Boost::Beast. It can be configured via
 // the mandatory `HttpHandler` parameter.
@@ -168,6 +185,22 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // test can wait for the server to be ready and continue with its test
   // queries.
   [[nodiscard]] bool serverIsReady() const { return serverIsReady_; }
+
+  // Busy-poll `serverIsReady()` (checking every millisecond) until it becomes
+  // `true` or `timeout` elapses. Returns whether the server became ready in
+  // time. Callers that also need to detect the server thread crashing during
+  // startup (e.g. via a `std::future` for the thread's task) should do so
+  // separately; this function only checks readiness.
+  [[nodiscard]] bool waitUntilReady(std::chrono::milliseconds timeout) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!serverIsReady()) {
+      if (std::chrono::steady_clock::now() >= deadline) {
+        return false;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    return true;
+  }
 
   // Shut down the server. Http sessions that are still active are still allowed
   // to finish, even after this call, but all outstanding new connections will

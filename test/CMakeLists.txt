@@ -531,4 +531,6 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 
 addLinkAndDiscoverTest(LogTest)
 
+addLinkAndDiscoverTestSerial(InputFileServerTest qlever)
+
 addLinkAndDiscoverTest(QueryEventLogTest util)

@@ -14,6 +14,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
+#include "index/InputFileServer.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
@@ -111,8 +112,14 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
-    AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    if (!config.inputFiles_.empty()) {
+      AD_CORRECTNESS_CHECK(!config.inputServerPort_.has_value());
+      index.createFromFiles(config.inputFiles_);
+    } else {
+      AD_CORRECTNESS_CHECK(config.inputServerPort_.has_value());
+      auto server = InputFileServer{config.inputServerPort_.value()};
+      index.getImpl().createFromFiles(server.run());
+    }
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
