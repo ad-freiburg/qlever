@@ -452,7 +452,7 @@ set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 FetchContent_Declare(
         re2
         GIT_REPOSITORY https://github.com/google/re2.git
-        GIT_TAG 2025-11-05  # v.2025-11-05
+        GIT_TAG 972a15cedd008d846f1a39b2e88ce48d7f166cbd  # main branch from January 23 2026
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
         SYSTEM
