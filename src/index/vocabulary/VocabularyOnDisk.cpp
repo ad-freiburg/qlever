@@ -11,6 +11,7 @@
 #include <deque>
 #include <fstream>
 
+#include "global/Constants.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
@@ -112,7 +113,7 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
   return VocabLookupOutput{
       ad_utility::OwningView{std::move(rangeOfIndexBatches)} |
       ql::views::transform(
-          [this](auto& indices) { return lookupBatch(indices); })};
+          [this](const auto& indices) { return lookupBatch(indices); })};
 }
 
 // _____________________________________________________________________________
@@ -174,10 +175,10 @@ void VocabularyOnDisk::open(const std::string& filename) {
   size_ = numOffsets - 1;
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
-  static constexpr size_t numManagers = 8;
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
-      std::unique_ptr<ad_utility::BatchIoManager>>>(numManagers);
-  for (size_t i = 0; i < numManagers; ++i) {
+      std::unique_ptr<ad_utility::BatchIoManager>>>(
+      NUM_VOCAB_BATCH_IO_MANAGERS);
+  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
     ioManagers_->push(std::make_unique<ad_utility::BatchIoManager>());
   }
 }

@@ -83,7 +83,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   std::string operator[](uint64_t idx) const;
 
   // Get the number of words in the vocabulary.
-  // Look up multiple words by their vocabulray index in a single batch.
+  // Look up multiple words by their vocabulary index in a single batch.
   // Makes use of `ioManagers_` to which the IO-Lookup is delegated. `io_uring`
   // is used, if the build supports it.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;

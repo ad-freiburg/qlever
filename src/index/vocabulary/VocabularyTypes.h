@@ -20,6 +20,7 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
+#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
 // The result type for a batch of vocabulary lookups.
@@ -131,24 +132,24 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // views then point at those strings; no byte copying into a contiguous buffer
   // is needed. Building the views after the move is safe: moving the vector
   // does not relocate the contained strings.
-  std::vector<std::string> words;
-  words.reserve(indices.size());
-  for (size_t idx : indices) {
-    words.emplace_back(vocab[idx]);
-  }
+
+  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
+      indices | ql::views::transform([&vocab](size_t idx) -> std::string {
+        return vocab[idx];
+      }));
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer() = std::move(words);
-  data->views().reserve(data->buffer().size());
-  for (const std::string& word : data->buffer()) {
-    data->views().emplace_back(word);
-  }
+  data->views() = ::ranges::to<std::vector>(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
 // Sequential fallback for `lookupBatchesStreamed`: lazily apply
-// `sequentialLookupBatch` to each batch of the (type-erased) input range. The
-// referenced `vocab` must outlive the returned range.
+// `vocab.lookupBatch` for the passed `vocab` to each batch of the (type-erased)
+// input range. The referenced `vocab` must outlive the returned range.
 template <typename Vocab>
 VocabLookupOutput sequentialLookupBatchesStreamed(const Vocab& vocab,
                                                   VocabLookupInput input) {
