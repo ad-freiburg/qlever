@@ -338,11 +338,8 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   // Note: We need a separate server for each call because we must shut down
   // before reading the log to avoid a race condition on the logging stream.
   auto throwAndCaptureLog = [this](auto exceptionObject) {
-    // We interfere with the logging to test it. The returned cleanup restores
-    // the previous logging stream once this lambda returns (after the log has
-    // been read below).
-    std::stringstream logStream;
-    auto cleanup = setGlobalLoggingStreamForTesting(&logStream);
+    // We interfere with the logging to test it.
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
     // Convert the `exceptionObject` to an `exception_ptr`.
     std::exception_ptr exception;

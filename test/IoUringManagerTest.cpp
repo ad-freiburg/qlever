@@ -434,8 +434,7 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
   // Capture the log so we can assert that the destructor stays silent.
-  std::ostringstream logStream;
-  auto restoreLog = setGlobalLoggingStreamForTesting(&logStream);
+  auto [restoreLog, logStream] = setGlobalLoggingStreamToStringStream();
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
@@ -464,8 +463,7 @@ TEST(IoUringManagerDrop, dropRunningManager) {
 
   // Redirect the global logging stream so we can assert on the destructor's
   // warning.
-  std::ostringstream logStream;
-  auto restoreLog = setGlobalLoggingStreamForTesting(&logStream);
+  auto [restoreLog, logStream] = setGlobalLoggingStreamToStringStream();
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});

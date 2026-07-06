@@ -1694,8 +1694,7 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
   absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
-  std::stringstream logStream;
-  auto logCleanup = setGlobalLoggingStreamForTesting(&logStream);
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `@prefix` without a terminating dot raises a `ParseException` on every
   // attempt, so a pending exception is always present when the buffer limit
@@ -1734,8 +1733,7 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
   absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
-  std::stringstream logStream;
-  auto logCleanup = setGlobalLoggingStreamForTesting(&logStream);
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `<a> <b> <c>\n` parses successfully up to the (missing) dot, so
   // `statement()` returns false without raising. The parser is forced to
@@ -1780,9 +1778,8 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
     auto of = ad_utility::makeOfstream(filename);
     of << "<a> <b> <c> .\n" << trailingGarbage;
   }
-  std::stringstream logStream;
   absl::Cleanup cleanup{[&] { ad_utility::deleteFile(filename); }};
-  auto logCleanup = setGlobalLoggingStreamForTesting(&logStream);
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   Parser parser{qlever::InputFileSpecification{
                     filename, qlever::Filetype::Turtle, std::nullopt},

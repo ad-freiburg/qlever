@@ -101,8 +101,7 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
 
 // _____________________________________________________________________________
 TEST(ExceptionCollector, asCompletionHandler) {
-  std::ostringstream logStream;
-  auto cleanup = setGlobalLoggingStreamForTesting(&logStream);
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   ad_utility::ExceptionCollector collector;
   try {

@@ -11,7 +11,9 @@
 #include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
+#include <memory>
 #include <optional>
+#include <sstream>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -130,11 +132,29 @@ inline auto setLoglevelForTesting(LogLevel level) {
 // this in tests that temporarily capture or suppress log output, so the global
 // stream is never left dangling or reset to the wrong value.
 inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
-  auto& choice = ad_utility::LogstreamChoice::get();
-  auto* previous = &choice.getStream();
-  choice.setStream(stream);
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream);
   return absl::MakeCleanup(
-      [previous] { ad_utility::LogstreamChoice::get().setStream(previous); });
+      [previous] { ad_utility::setGlobalLoggingStream(previous); });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to a fresh `std::ostringstream` and return
+// a pair of an `absl::Cleanup` (which restores the previously active stream
+// when it goes out of scope) and a reference to that stream. Typical usage is
+// `auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();`.
+// NOTE: The returned reference is only valid as long as the `cleanup` is alive,
+// as the underlying stream is owned by the `cleanup`.
+inline auto setGlobalLoggingStreamToStringStream() {
+  auto stream = std::make_shared<std::ostringstream>();
+  auto& streamRef = *stream;
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream.get());
+  auto cleanup = absl::MakeCleanup([previous, stream = std::move(stream)] {
+    ad_utility::setGlobalLoggingStream(previous);
+  });
+  return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
+                                                           streamRef};
 }
 
 // _____________________________________________________________________________

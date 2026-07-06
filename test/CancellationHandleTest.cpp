@@ -308,8 +308,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  std::ostringstream testStream;
-  auto cleanup = setGlobalLoggingStreamForTesting(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -333,8 +332,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  std::ostringstream testStream;
-  auto cleanup = setGlobalLoggingStreamForTesting(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -414,8 +412,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  std::ostringstream testStream;
-  auto cleanup = setGlobalLoggingStreamForTesting(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
