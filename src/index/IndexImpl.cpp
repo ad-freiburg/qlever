@@ -80,15 +80,16 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::vector<Index::InputFileSpecification>& files) const {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
+    const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
       "The buffer size of the RDF parser must be greater than zero");
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
-  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
-                                              parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(
+      std::move(files), &encodedIriManager(), parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -376,6 +377,13 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files) {
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -387,9 +395,8 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
-  updateInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(files));
+      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -492,9 +499,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // we add extra triples
   std::vector<size_t> numTriplesPerPartialVocab;
 
-  // Each of these futures corresponds to the processing and writing of one
-  // batch of triples and partial vocabulary.
-  std::array<std::future<void>, 3> writePartialVocabularyFuture;
+  ad_utility::TaskQueue partialVocabularyWriters{3, 3};
 
   // Show progress and statistics for the number of triples parsed, in
   // particular, the average processing time for a batch of 10M triples (see
@@ -559,43 +564,21 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
       parser->printAndResetQueueStatistics();
     }
 
-    // wait until sorting the last partial vocabulary has finished
-    // to control the number of threads and the amount of memory used at the
-    // same time. typically sorting is finished before we reach again here so
-    // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
-    if (writePartialVocabularyFuture[0].valid()) {
-      writePartialVocabularyFuture[0].get();
-    }
-    AD_LOG_TIMING
-        << "Time spent waiting for the writing of a previous vocabulary: "
-        << sortFutureTimer.msecs().count() << "ms." << std::endl;
     auto moveMap = [](std::optional<ItemMapManager>&& el) {
       return std::move(el.value()).moveMap();
     };
-    std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS> convertedMaps =
-        ad_utility::transformArray(std::move(itemArray), moveMap);
-    auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    for (auto it = writePartialVocabularyFuture.begin() + 1;
-         it < writePartialVocabularyFuture.end(); ++it) {
-      *(it - 1) = std::move(*it);
-    }
-    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
-        writeNextPartialVocabulary(
-            numTriplesParsed, numTriplesPerPartialVocab.size(),
-            actualCurrentPartialSize, std::move(oldItemPtr),
-            std::move(localWriter), &idTriples);
+    partialVocabularyWriters.push(createWritePartialVocabularyTask(
+        numTriplesParsed, numTriplesPerPartialVocab.size(),
+        actualCurrentPartialSize,
+        ad_utility::transformArray(std::move(itemArray), moveMap),
+        std::move(localWriter), &idTriples));
     // Save the information how many triples this partial vocabulary actually
-    // deals with we will use this later for mapping from partial to global
-    // ids
+    // deals with; we will use this later for mapping from partial to global
+    // IDs.
     numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  for (auto& future : writePartialVocabularyFuture) {
-    if (future.valid()) {
-      future.get();
-    }
-  }
+  partialVocabularyWriters.finish();
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
@@ -849,11 +832,8 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
-    IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+    IndexMetaData& metaData, size_t numColumns,
     const std::string& fileName) const {
-  static_assert(IndexMetaDataMmapDispatcher::WriteType::isMmapBased_);
-  metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
       blocksizePermutationPerColumn_);
@@ -865,18 +845,17 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 
 // _____________________________________________________________________________
 template <typename T, typename... Callbacks>
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+std::tuple<size_t, IndexMetaData, IndexMetaData>
 IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      const std::string& fileName1,
                                      const std::string& fileName2,
                                      T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
-  IndexMetaDataMmapDispatcher::WriteType metaData1;
+  IndexMetaData metaData1;
   auto writerAndCallback1 =
       getWriterAndCallback(metaData1, numColumns, fileName1);
-  IndexMetaDataMmapDispatcher::WriteType metaData2;
+  IndexMetaData metaData2;
   auto writerAndCallback2 =
       getWriterAndCallback(metaData2, numColumns, fileName2);
 
@@ -895,11 +874,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationImpl(
+std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
-  IndexMetaDataMmapDispatcher::WriteType metaData;
+  IndexMetaData metaData;
   auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
 
   // We can always supply the tables with the correct permutation. No need to
@@ -915,11 +893,9 @@ IndexImpl::createPermutationImpl(
 
 // ________________________________________________________________________
 template <typename T, typename... Callbacks>
-std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
-                              const Permutation& p1, const Permutation& p2,
-                              Callbacks&&... perTripleCallbacks) {
+std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
+    size_t numColumns, T&& sortedTriples, const Permutation& p1,
+    const Permutation& p2, Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
@@ -939,16 +915,16 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+void IndexImpl::writeMetaData(IndexMetaData& metaData,
                               const std::string& filename) const {
   metaData.setName(getKbName());
   ad_utility::File f(filename, "r+");
-  metaData.appendToFile(&f);
+  ad_utility::File metaFile(filename + META_FILE_SUFFIX, "w");
+  metaData.appendToFile(f, metaFile);
 }
 
 // _____________________________________________________________________________
-std::pair<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationWithoutMetadata(
+std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
@@ -967,9 +943,9 @@ IndexImpl::createPermutationWithoutMetadata(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::finalizePermutation(
-    IndexMetaDataMmapDispatcher::WriteType& meta,
-    const Permutation& permutation, bool internal) const {
+void IndexImpl::finalizePermutation(IndexMetaData& meta,
+                                    const Permutation& permutation,
+                                    bool internal) const {
   std::string fileName = getFilenameForPermutation(permutation, internal);
 
   writeMetaData(meta, fileName);
@@ -1527,11 +1503,12 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 }
 
 // ___________________________________________________________________________
-std::future<void> IndexImpl::writeNextPartialVocabulary(
+absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::unique_ptr<ItemMapArray> items,
+    ItemMapArray items,
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
+    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
+    const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
                << std::endl;
@@ -1541,12 +1518,12 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
   std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
-  auto lambda = [localIds = std::move(localIds), globalWritePtr,
-                 items = std::move(items), vocab = &vocab_, partialFilename,
-                 numFiles]() mutable {
+  return [localIds = std::move(localIds), globalWritePtr,
+          items = std::move(items), vocab = &vocab_, partialFilename,
+          numFiles]() mutable {
     auto vec = [&]() {
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(*items);
+      return vocabMapsToVector(items);
     }();
     {
       ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
@@ -1596,8 +1573,6 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       writeTriplesFuture.get();
     }
   };
-
-  return std::async(std::launch::async, std::move(lambda));
 }
 
 // ____________________________________________________________________________
