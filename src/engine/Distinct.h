@@ -65,6 +65,7 @@ class Distinct : public Operation {
   [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
@@ -96,7 +97,7 @@ class Distinct : public Operation {
   // Out-of-place implementation of the unique algorithm. Does only copy values
   // if they're actually unique.
   template <size_t WIDTH>
-  IdTable outOfPlaceDistinct(const IdTable& dynInput) const;
+  IdTable outOfPlaceDistinct(const IdTableView<0>& dynInput) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H

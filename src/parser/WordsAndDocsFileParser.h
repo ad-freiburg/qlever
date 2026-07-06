@@ -117,7 +117,6 @@ struct LiteralsTokenizationDelimiter {
         return text.substr(oldPos, pos - oldPos);
       }
     }
-    // Empty view at the end of `text`.
     return text.substr(text.size());
   }
 };

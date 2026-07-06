@@ -82,29 +82,21 @@ std::string insertThousandSeparator(const std::string_view str,
   static constexpr ctll::fixed_string regexPatDigitSequence{
       "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
       "])(?<digit>\\d{4,})"};
-  // Indices into `str`. Newer libc++ no longer allows constructing a
-  // `string_view` from a wrapped iterator and a length, so we work in
-  // offsets and use `substr` rather than carrying iterators around.
-  std::size_t parseOffset = 0;
+  const char* parsePointer = str.data();
   ql::ranges::for_each(
       ctre::search_all<regexPatDigitSequence>(str),
-      [&parseOffset, &ostream, &insertSeparator, &str](const auto& match) {
-        /*
-        The digit sequence, that must be transformed. Note: The string view
-        iterators point to entries in the `str` string.
-        */
-        const std::string_view& digitSequence{
-            match.template get<detail::digitCaptureGroup>()};
-        const std::size_t digitOffset = static_cast<std::size_t>(
-            std::begin(digitSequence) - std::begin(str));
+      [&parsePointer, &ostream, &insertSeparator](const auto& match) {
+        auto digitSequence =
+            match.template get<detail::digitCaptureGroup>().to_view();
 
         // Insert the transformed digit sequence, and the string between it
-        // and `parseOffset`, into the stream.
-        ostream << str.substr(parseOffset, digitOffset - parseOffset);
+        // and the `parsePointer`, into the stream.
+        ostream << std::string_view(parsePointer,
+                                    digitSequence.data() - parsePointer);
         insertSeparator(digitSequence);
-        parseOffset = digitOffset + digitSequence.size();
+        parsePointer = digitSequence.data() + digitSequence.size();
       });
-  ostream << str.substr(parseOffset);
+  ostream << str.substr(parsePointer - str.data());
   return ostream.str();
 }
 

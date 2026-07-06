@@ -162,11 +162,6 @@ std::string insertThousandSeparator(const std::string_view str,
 // and compare the hashes instead of the actual strings.
 inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
                                             std::string_view view2) {
-  // Newer libc++ removed the implicit `std::char_traits` specializations for
-  // non-character types, so `std::basic_string_view<volatile std::byte>` no
-  // longer compiles. `ql::span` has no char-traits dependency and gives us
-  // the same length+indexed-access interface while preserving the volatile
-  // reads we rely on to keep this comparison constant-time.
   using byte_view = ql::span<const volatile std::byte>;
   auto impl = [](byte_view str1, byte_view str2) {
     if (str1.size() != str2.size()) {
@@ -183,7 +178,7 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
     return !static_cast<bool>(mismatchFound);
   };
   auto toVolatile = [](std::string_view view) constexpr -> byte_view {
-    // Casting is safe because both types have the same size
+    // Casting is safe because both types have the same size.
     static_assert(sizeof(std::string_view::value_type) ==
                   sizeof(byte_view::value_type));
     return byte_view(static_cast<const volatile std::byte*>(

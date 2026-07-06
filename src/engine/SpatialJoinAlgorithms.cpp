@@ -23,6 +23,7 @@
 #include <util/geo/Geo.h>
 
 #include <cmath>
+#include <filesystem>
 #include <set>
 
 #include "backports/three_way_comparison.h"
@@ -152,8 +153,8 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 // ____________________________________________________________________________
 std::optional<ad_utility::BoundingBox>
 SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
-    const IdTable* idTable, const SpatialJoinBoundingBoxColumns& boundingBoxes,
-    size_t row) {
+    const IdTableView<0>* idTable,
+    const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
   if (!boundingBoxes.has_value()) {
     return std::nullopt;
   }
@@ -179,9 +180,8 @@ size_t SpatialJoinAlgorithms::getNumThreads() {
 }
 
 // ____________________________________________________________________________
-std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
-                                                        size_t row,
-                                                        ColumnIndex col) {
+std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
+    const IdTableView<0>* restable, size_t row, ColumnIndex col) {
   auto id = restable->at(row, col);
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
@@ -190,7 +190,8 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
-    const IdTable& restable, size_t row, ColumnIndex col, const Index& index) {
+    const IdTableView<0>& restable, size_t row, ColumnIndex col,
+    const Index& index) {
   using namespace util::geo;
   auto id = restable.at(row, col);
   auto str = ql::exportIds::idToStringAndType(index, id, {});
@@ -219,7 +220,7 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 }
 
 std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
-    const IdTable* idtable, size_t row, size_t col) {
+    const IdTableView<0>* idtable, size_t row, size_t col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
@@ -308,18 +309,17 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
 }
 
 // ____________________________________________________________________________
-void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
-                                                const IdTable* idTableLeft,
-                                                const IdTable* idTableRight,
-                                                size_t rowLeft, size_t rowRight,
-                                                Id distance) const {
+void SpatialJoinAlgorithms::addResultTableEntry(
+    IdTable* result, const IdTableView<0>* idTableLeft,
+    const IdTableView<0>* idTableRight, size_t rowLeft, size_t rowRight,
+    Id distance) const {
   // this lambda function copies values from copyFrom into the table res only if
   // the column of the value is specified in sourceColumns. If sourceColumns is
   // nullopt, all columns are added. It copies them into the row rowIndRes and
   // column column colIndRes. It returns the column number until which elements
   // were copied
-  auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
-                       size_t colIndRes, size_t rowIndCopy,
+  auto addColumns = [](IdTable* res, const IdTableView<0>* copyFrom,
+                       size_t rowIndRes, size_t colIndRes, size_t rowIndCopy,
                        std::optional<std::vector<ColumnIndex>> sourceColumns =
                            std::nullopt) {
     size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
@@ -512,8 +512,25 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   };
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
+  auto basePath = std::filesystem::path(qec_->getIndex().getOnDiskBase());
+
+  std::string sweeperTmpPath = basePath.parent_path().string();
+
+  // `parent_path()` returns `""` if the parent path is empty, not `"."`.
+  if (sweeperTmpPath.empty()) {
+    sweeperTmpPath = ".";
+  }
+
+  std::string baseName = basePath.filename().string();
+
+  // The prefix added before each spatialjoin file.
+  //
+  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
+  // and the spatialjoin files end up named `.spatialjoin`. We should consider
+  // disallowing empty index base names at the engine boundary.
+  std::string sweeperPrefix = baseName + ".spatialjoin";
+
+  sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -959,7 +976,7 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 
 // ____________________________________________________________________________
 std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
-    const IdTable* idTable, const size_t row, const ColumnIndex col) {
+    const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("getRtreeEntry is not supported in this build");
 #else

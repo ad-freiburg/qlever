@@ -59,9 +59,9 @@ class Union : public Operation {
 
   static constexpr size_t chunkSize = 1'000'000;
 
-  // The method is declared here to make it unit testable
+  // The method is declared here to make it unit testable.
   IdTable computeUnion(
-      const IdTable& left, const IdTable& right,
+      const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
   std::vector<QueryExecutionTree*> getChildren() override {
@@ -93,6 +93,8 @@ class Union : public Operation {
                                                ColumnIndex unionColumn) const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;

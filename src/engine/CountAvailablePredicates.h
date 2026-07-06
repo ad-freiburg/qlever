@@ -66,6 +66,8 @@ class CountAvailablePredicates : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
  public:
@@ -90,7 +92,7 @@ class CountAvailablePredicates : public Operation {
    * obtained via a scan of the `ql:has-pattern` predicate.
    */
   template <size_t I>
-  static void computePatternTrick(const IdTable& input, IdTable* result,
+  static void computePatternTrick(const IdTableView<0>& input, IdTable* result,
                                   const CompactVectorOfStrings<Id>& patterns,
                                   size_t subjectColumnIdx,
                                   size_t patternColumnIdx,
