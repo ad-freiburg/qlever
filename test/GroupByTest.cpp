@@ -22,6 +22,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -2387,6 +2388,8 @@ class SetOfIntervalsExpression : public SparqlExpression {
     return "SetOfIntervalsExpression";
   }
 
+  bool isDeterministic() const override { return true; }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };
@@ -2405,6 +2408,8 @@ class AggregationFunctionWithVector : public SparqlExpression {
   std::string getCacheKey(const VariableToColumnMap&) const override {
     return "AggregationFunctionWithVector";
   }
+
+  bool isDeterministic() const override { return true; }
 
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
@@ -2938,4 +2943,34 @@ TEST_P(GroupByLazyFixture, countStarWorks) {
       qec_, {}, {std::move(alias), std::move(aliasDummy)}, std::move(subtree)};
 
   expectReturningIdTables<1>(groupBy, {makeIntTable({{4, 4}})});
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, isDeterministic) {
+  using namespace sparqlExpression;
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+
+  // Deterministic expression.
+  {
+    Alias detAlias{
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(Variable{"?x"})),
+            "SUM(?x)"},
+        Variable{"?sum"}};
+    GroupBy gb{qec, {Variable{"?x"}}, {detAlias}, subtree};
+    EXPECT_TRUE(gb.isDeterministic());
+  }
+
+  // Non-deterministic expression.
+  {
+    Alias nonDetAlias{
+        SparqlExpressionPimpl{makeUniqueBlankNodeExpression(), "BNODE()"},
+        Variable{"?bn"}};
+    GroupBy gb{qec, {}, {nonDetAlias}, subtree};
+    EXPECT_FALSE(gb.isDeterministic());
+  }
 }
