@@ -242,11 +242,11 @@ void resolveNonVocabIndexIds(
     ql::span<const size_t> positions,
     ql::span<std::optional<std::pair<std::string, const char*>>> results,
     EscapeFunction&& escapeFunction) {
-  for (size_t i : positions) {
+  ql::ranges::for_each(positions, [&](size_t i) {
     results[i] =
         idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
             index, ids[i], localVocab, escapeFunction);
-  }
+  });
 }
 
 // Batch variant of `idToStringAndType`. We cannot assume that the `VocabIndex`
@@ -254,9 +254,8 @@ void resolveNonVocabIndexIds(
 // other datatype `LocalVocabIndex` might be interspersed between the
 // `VocabIndex` IDs. We therefore check each ID's datatype individually to
 // partition the positions. All `VocabIndex` IDs are then gathered and resolved
-// in a single `lookupBatch` call; every other ID is resolved immediately from
-// the id bits or the in-memory `LocalVocab`. Results are returned in the same
-// order as `ids`.
+// in a single `lookupBatch` call; every other ID is resolved immediately.
+// Results are returned in the same order as `ids`.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
@@ -274,14 +273,11 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
 
   const auto& vocabPositions = positions.vocabIndexIndices_;
   if (!vocabPositions.empty()) {
-    // A lazy view of the scattered `VocabIndex` ids; nothing is materialized.
     auto vocabIds =
         vocabPositions |
         ql::views::transform([&ids](size_t i) -> const Id& { return ids[i]; });
     auto vocabStrings = lookupVocabIndexStrings(index, vocabIds);
 
-    // `vocabStrings` is in the same order as `vocabPositions`, so zip scatters
-    // each looked-up string back to the position it came from.
     for (auto&& [sv, i] : ::ranges::views::zip(*vocabStrings, vocabPositions)) {
       results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
                                                returnOnlyLiterals>(
