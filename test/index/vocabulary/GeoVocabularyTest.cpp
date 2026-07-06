@@ -165,7 +165,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     for (size_t b = 0; b < expectedBatches.size(); ++b) {
       ASSERT_EQ(streamed[b]->size(), expectedBatches[b].size());
       for (size_t i = 0; i < expectedBatches[b].size(); ++i) {
-        EXPECTED_EQ((*streamed[b])[i], geoVocab[expectedBatches[b][i]]);
+        EXPECT_EQ((*streamed[b])[i], geoVocab[expectedBatches[b][i]]);
       }
     }
 
