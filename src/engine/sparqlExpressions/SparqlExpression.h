@@ -73,6 +73,11 @@ class SparqlExpression {
     return false;
   }
 
+  // Return true iff this expression is guaranteed to produce the same result
+  // on every invocation (i.e. does not contain `BNODE()`, `RAND()`, `UUID()`,
+  // or `STRUUID()`). Every concrete subclass must implement this explicitly.
+  [[nodiscard]] virtual bool isDeterministic() const = 0;
+
   // Get a short, human-readable identifier for this expression.
   virtual const std::string& descriptor() const final;
   virtual std::string& descriptor() final;
@@ -179,6 +184,10 @@ class SparqlExpression {
   // this expression as well as for all its descendants. This function must be
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final;
+
+  // Helper for `isDeterministic()` in subclasses: return true iff every direct
+  // child of this expression is deterministic.
+  bool areChildrenDeterministic() const;
 };
 }  // namespace sparqlExpression
 

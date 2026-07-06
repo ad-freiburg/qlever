@@ -75,6 +75,9 @@ class UuidExpressionImpl : public SparqlExpression {
     return FuncKey(randId_);
   }
 
+  // UUID() / STRUUID() generate a fresh UUID on every invocation.
+  bool isDeterministic() const override { return false; }
+
   // The result of `UUID`/`STRUUID` is always a defined value.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
     return true;

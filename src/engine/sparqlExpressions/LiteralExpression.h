@@ -153,6 +153,8 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  protected:
   // ___________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {
@@ -248,6 +250,8 @@ struct SingleUseExpression : public SparqlExpression {
   }
 
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+
+  [[nodiscard]] bool isDeterministic() const override { return true; }
 };
 
 }  // namespace detail
