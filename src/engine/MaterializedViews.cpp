@@ -27,6 +27,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
@@ -38,20 +39,17 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+    const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
+      qec_{plannedQuery.sharedQueryExecutionContext()},
+      parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  auto [qet, qec, parsedQuery] = queryPlan;
-  AD_CORRECTNESS_CHECK(qet != nullptr);
-  AD_CORRECTNESS_CHECK(qec != nullptr);
-  qet_ = qet;
-  qec_ = qec;
-  parsedQuery_ = std::move(parsedQuery);
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -63,11 +61,11 @@ MaterializedViewWriter::MaterializedViewWriter(
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   unloadViewIfLoaded(name);
-  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }

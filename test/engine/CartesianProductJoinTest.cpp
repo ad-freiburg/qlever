@@ -71,7 +71,7 @@ void testCartesianProductImpl(VectorTable expected,
   {
     auto join = makeJoin(inputs, useLimitInSuboperations);
     EXPECT_EQ(makeIdTableFromVector(expected),
-              join.computeResultOnlyForTesting().idTable());
+              join.computeResultOnlyForTesting().idTableView());
   }
 
   for (size_t limit = 0; limit < expected.size(); ++limit) {
@@ -84,7 +84,7 @@ void testCartesianProductImpl(VectorTable expected,
                 expected.begin() + limitClause.upperBound(expected.size()),
                 std::back_inserter(partialResult));
       EXPECT_EQ(makeIdTableFromVector(partialResult),
-                join.computeResultOnlyForTesting().idTable())
+                join.computeResultOnlyForTesting().idTableView())
           << "failed at offset " << offset << " and limit " << limit;
     }
   }
