@@ -98,6 +98,79 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     geoVocab.close();
   };
+
+  // Build a `GeoVocabulary` on disk under `filename`, fill it with a small set
+  // of WKT literals, and return those literals sorted (so index `i` holds
+  // `literals[i]`).
+  std::vector<std::string> setupGeoVocab(GeoVocabulary<T>& geoVocab) {
+    const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+    auto ww = geoVocab.makeDiskWriterPtr(filename);
+    ww->readableName() = "test";
+    std::vector<std::string> testLiterals{
+        "\"LINESTRING(1 1, 2 2, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POINT(1 1)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POLYGON((1 1, 2 2, 3 3))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POINT(2 2)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    };
+    // The underlying vocabularies require sorted input at write time.
+    std::sort(testLiterals.begin(), testLiterals.end());
+    for (size_t i = 0; i < testLiterals.size(); i++) {
+      EXPECT_EQ(i, (*ww)(testLiterals[i], true));
+    }
+    ww->finish();
+    geoVocab.open(filename);
+  }
+
+  // `lookupBatch` must yield exactly the same strings as looking each index up
+  // individually via `operator[]`.
+  void testLookupBatch() {
+    GeoVocabulary<T> geoVocab;
+    setupGeoVocab(geoVocab);
+    ASSERT_GE(geoVocab.size(), 4u);
+
+    std::array<size_t, 5> indices{2, 0, 3, 1, 0};
+    auto result = geoVocab.lookupBatch(indices);
+    ASSERT_EQ(result->size(), indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      EXPECT_EQ((*result)[i], geoVocab[indices[i]]);
+    }
+
+    geoVocab.close();
+  }
+
+  // `lookupBatchesStreamed` must yield, for each batch, exactly the same
+  // strings as the individual `operator[]` lookups for that batch's indices.
+  void testLookupBatchesStreamed() {
+    GeoVocabulary<T> geoVocab;
+    setupGeoVocab(geoVocab);
+    ASSERT_GE(geoVocab.size(), 4u);
+    ;
+
+    std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
+    // `VocabLookupInput` takes ownership of the batches, so keep a copy of the
+    // indices to compare against.
+    const auto expectedBatches = batches;
+    auto streamedResults =
+        geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+    std::vector<VocabBatchLookupResult> streamed;
+    for (auto& r : streamedResults) {
+      streamed.push_back(std::move(r));
+    }
+    ASSERT_EQ(streamed.size(), expectedBatches.size());
+
+    for (size_t b = 0; b < expectedBatches.size(); ++b) {
+      ASSERT_EQ(streamed[b]->size(), expectedBatches[b].size());
+      for (size_t i = 0; i < expectedBatches[b].size(); ++i) {
+        EXPECTED_EQ((*streamed[b])[i], geoVocab[expectedBatches[b][i]]);
+      }
+    }
+
+    geoVocab.close();
+  }
 };
 
 TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
@@ -106,6 +179,16 @@ TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
 // _____________________________________________________________________________
 TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, TypedTest) {
   this->testGeoVocabulary();
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, LookupBatch) {
+  this->testLookupBatch();
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, LookupBatchesStreamed) {
+  this->testLookupBatchesStreamed();
 }
 
 // _____________________________________________________________________________
