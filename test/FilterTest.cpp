@@ -8,8 +8,10 @@
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -265,4 +267,28 @@ TEST(Filter, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(filter, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), filter.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Filter, isDeterministic) {
+  using namespace sparqlExpression;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+
+  auto makeTree = [qec]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{1, qec->getAllocator()},
+        std::vector<std::optional<Variable>>{Variable{"?x"}});
+  };
+
+  // Deterministic expression.
+  Filter detFilter{
+      qec,
+      makeTree(),
+      {std::make_unique<VariableExpression>(Variable{"?x"}), "?x"}};
+  EXPECT_TRUE(detFilter.isDeterministic());
+
+  // Non-deterministic expression.
+  Filter nonDetFilter{
+      qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
+  EXPECT_FALSE(nonDetFilter.isDeterministic());
 }

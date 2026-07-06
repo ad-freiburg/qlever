@@ -21,7 +21,6 @@ class Bind : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   parsedQuery::Bind _bind;
-  bool isExpressionCacheable_ = true;
   // For the documentation of the overridden members, see Operation.h
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
@@ -36,7 +35,7 @@ class Bind : public Operation {
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:
-  bool canResultBeCachedImpl() const override { return isExpressionCacheable_; }
+  [[nodiscard]] bool isDeterministicImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 

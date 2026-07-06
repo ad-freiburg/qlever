@@ -174,6 +174,9 @@ class BlankNodeExpression : public SparqlExpression {
                         cacheBreaker_++);
   }
 
+  // BNODE() generates a fresh blank node on every invocation.
+  bool isDeterministic() const override { return false; }
+
   // The version of `BNODE()` without arguments always returns a defined value.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
     return !label_.has_value();

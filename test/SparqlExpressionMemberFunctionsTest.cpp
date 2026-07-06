@@ -10,9 +10,22 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NowDatetimeExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 
 namespace {
 
@@ -172,4 +185,85 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
         std::make_unique<VariableExpression>(unboundVar));
     EXPECT_FALSE(ifExprNotSpecial2->isResultAlwaysDefined(varColMap));
   }
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpressionMemberFunctions, isDeterministic) {
+  using namespace sparqlExpression;
+  using namespace sparqlExpression::detail;
+
+  auto makeVar = []() -> SparqlExpression::Ptr {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
+  auto makeSharedVar = []() {
+    return std::make_shared<VariableExpression>(Variable{"?x"});
+  };
+  auto makeRand = []() -> SparqlExpression::Ptr {
+    return std::make_unique<RandomExpression>();
+  };
+
+  EXPECT_TRUE(VariableExpression{Variable{"?x"}}.isDeterministic());
+  EXPECT_TRUE(IdExpression{Id::makeFromInt(1)}.isDeterministic());
+
+  EXPECT_TRUE(makeCountStarExpression(false)->isDeterministic());
+
+  EXPECT_TRUE(NowDatetimeExpression{"2024-06-18T12:00:00"}.isDeterministic());
+
+  ParsedQuery pq;
+  EXPECT_TRUE(ExistsExpression{pq}.isDeterministic());
+
+  EXPECT_FALSE(makeUniqueBlankNodeExpression()->isDeterministic());
+  EXPECT_FALSE(makeBlankNodeExpression(makeVar())->isDeterministic());
+  EXPECT_FALSE(RandomExpression{}.isDeterministic());
+  EXPECT_FALSE(UuidExpression{}.isDeterministic());
+  EXPECT_FALSE(StrUuidExpression{}.isDeterministic());
+
+  EXPECT_TRUE(makeAbsExpression(makeVar())->isDeterministic());
+  EXPECT_FALSE(makeAbsExpression(makeRand())->isDeterministic());
+
+  EXPECT_TRUE(makeStrlenExpression(makeVar())->isDeterministic());
+  EXPECT_FALSE(makeStrlenExpression(makeRand())->isDeterministic());
+
+  std::vector<SparqlExpression::Ptr> dets;
+  dets.push_back(makeVar());
+  dets.push_back(makeVar());
+  EXPECT_TRUE(makeCoalesceExpression(std::move(dets))->isDeterministic());
+  std::vector<SparqlExpression::Ptr> withRand;
+  withRand.push_back(makeVar());
+  withRand.push_back(makeRand());
+  EXPECT_FALSE(makeCoalesceExpression(std::move(withRand))->isDeterministic());
+
+  EXPECT_TRUE(SumExpression(false, makeVar()).isDeterministic());
+  EXPECT_FALSE(SumExpression(false, makeRand()).isDeterministic());
+
+  EXPECT_TRUE(SampleExpression(false, makeVar()).isDeterministic());
+  EXPECT_FALSE(SampleExpression(false, makeRand()).isDeterministic());
+
+  EXPECT_TRUE(GroupConcatExpression(false, makeVar(), ",").isDeterministic());
+  EXPECT_FALSE(GroupConcatExpression(false, makeRand(), ",").isDeterministic());
+
+  EXPECT_TRUE(DeviationExpression(makeVar()).isDeterministic());
+  EXPECT_FALSE(DeviationExpression(makeRand()).isDeterministic());
+
+  using E = EqualExpression;
+  EXPECT_TRUE(E(E::Children{makeVar(), makeVar()}).isDeterministic());
+  EXPECT_FALSE(E(E::Children{makeVar(), makeRand()}).isDeterministic());
+
+  std::vector<SparqlExpression::Ptr> args;
+  args.push_back(makeVar());
+  EXPECT_TRUE(InExpression(makeVar(), std::move(args)).isDeterministic());
+  args.clear();
+  args.push_back(makeRand());
+  EXPECT_FALSE(InExpression(makeVar(), std::move(args)).isDeterministic());
+
+  SparqlExpressionPimpl detPimpl{makeSharedVar(), "?x"};
+  EXPECT_TRUE(detPimpl.isDeterministic());
+  SparqlExpressionPimpl nonDetPimpl{std::make_shared<RandomExpression>(),
+                                    "RAND()"};
+  EXPECT_FALSE(nonDetPimpl.isDeterministic());
+
+  EXPECT_TRUE((PrefixRegexExpression{makeVar(), "prefix", Variable{"?x"}}
+                   .isDeterministic()));
+
+  EXPECT_TRUE((SingleUseExpression{Id::makeFromInt(1)}.isDeterministic()));
 }

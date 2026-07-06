@@ -219,6 +219,8 @@ class IndexScan final : public Operation {
   const Permutation& permutation() const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;
@@ -242,9 +244,10 @@ class IndexScan final : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
-  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
-  // `false` if prefilterd `BlockMetadataRanges` are contained.
-  bool canResultBeCachedImpl() const override;
+  // result of this `IndexScan` is only a subset of the result associated with
+  // its cache key (which is that of the unfiltered scan). Thus, this method
+  // returns `false` if prefiltered `BlockMetadataRanges` are contained.
+  bool resultDoesMatchCacheKey() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

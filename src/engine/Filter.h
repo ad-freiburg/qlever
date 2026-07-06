@@ -56,6 +56,8 @@ class Filter : public Operation {
   }
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override;
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {

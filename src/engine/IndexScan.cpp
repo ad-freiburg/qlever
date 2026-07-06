@@ -156,7 +156,7 @@ string IndexScan::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::canResultBeCachedImpl() const {
+bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
 };
 

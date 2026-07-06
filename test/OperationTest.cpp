@@ -7,11 +7,15 @@
 
 #include <optional>
 
+#include "engine/Bind.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -905,4 +909,45 @@ TEST(OperationTest, disableCachingGlobally) {
   // ONLY_IF_CACHED returns nullptr when caching is disabled.
   EXPECT_EQ(valuesForTesting.getResult(false, ComputationMode::ONLY_IF_CACHED),
             nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec();
+
+  ValuesForTesting values{qec, IdTable{1, qec->getAllocator()},
+                          std::vector<std::optional<Variable>>{Variable{"?x"}}};
+  EXPECT_TRUE(values.isDeterministic());
+
+  NeutralElementOperation neutral{qec};
+  EXPECT_TRUE(neutral.isDeterministic());
+
+  SparqlTripleSimple scanTriple{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+  EXPECT_TRUE(scan.isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicPropagatesFromChildren) {
+  using namespace ad_utility::testing;
+  using namespace sparqlExpression;
+  auto* qec = getQec();
+
+  // A BIND(RAND()) node is non-deterministic.
+  auto randBindTree = ad_utility::makeExecutionTree<Bind>(
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, IdTable{1, qec->getAllocator()},
+          std::vector<std::optional<Variable>>{Variable{"?x"}}),
+      parsedQuery::Bind{
+          SparqlExpressionPimpl{std::make_unique<RandomExpression>(), "RAND()"},
+          Variable{"?r"}});
+
+  EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
+
+  // Wrapping it in a Sort still yields non-deterministic.
+  auto sortedTree = ad_utility::makeExecutionTree<Sort>(
+      qec, randBindTree, std::vector<ColumnIndex>{});
+  EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }
