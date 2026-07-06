@@ -491,8 +491,10 @@ namespace {
 using ParsedTripleQueue =
     ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>;
 
-// A row with the components already mapped to IDs.
-using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
+// A row with the components already mapped to IDs. NOTE: Deliberately not
+// named `IdTriple`, which is a class with a similar purpose defined in
+// `index/IdTriple.h`.
+using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 
 // A batch of triples that have already been mapped to IDs by one mapper thread,
 // together with the number of input triples it was created from.
@@ -500,7 +502,7 @@ using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
 // added for language filters, text indices, etc.
 struct TransformedTripleBatch {
   size_t numInputTriples_;
-  std::vector<IdTriple> idTriples_;
+  std::vector<IdRow> idTriples_;
 };
 
 // Queue type that stores batches of triples that have already been mapped to
@@ -538,7 +540,7 @@ template <typename Mappers>
       if (!batch.has_value()) {
         return std::nullopt;
       }
-      std::vector<IdTriple> idTriples;
+      std::vector<IdRow> idTriples;
       idTriples.reserve(batch->size());
       for (auto& triple : batch.value()) {
         auto ids = mapper(std::move(triple));
