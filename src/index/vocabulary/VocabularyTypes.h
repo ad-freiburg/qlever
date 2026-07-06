@@ -135,7 +135,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
 
   std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
       indices | ql::views::transform([&vocab](size_t idx) -> std::string {
-        return vocab[idx];
+        return std::string{vocab[idx]};
       }));
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
