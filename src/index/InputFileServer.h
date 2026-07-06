@@ -69,26 +69,45 @@ class InputFileServer {
                                      AD_FWD(bodyGetter));
     }
   };
-  struct WebsocketHandlerDummy {
-    net::awaitable<void> operator()(auto&&...) const {
-      throw std::runtime_error("Websockets not implemented");
-      co_return;
-    }
-  };
-  struct WebsocketSupplier {
-    WebsocketHandlerDummy operator()(net::io_context&) const { return {}; }
-  };
 
-  // Parse the Content-Type header to determine the RDF filetype. Throws
+  // Parse the Content-Type header to determine the RDF filetype. Throw
   // std::runtime_error if the header is absent or not one of the explicitly
   // supported values.
   static qlever::Filetype filetypeFromContentType(const Request& request);
 
+  // The parts of an upload `Request` that determine the resulting
+  // `InputFileSpecification`, other than the body itself.
+  struct UploadRequestParams {
+    qlever::Filetype filetype_;
+    std::optional<std::string> graph_;
+    bool parseInParallel_ = false;
+    bool parseInParallelSetExplicitly_ = false;
+  };
+
+  // Parse the Content-Type, `graph`, and `Parse-In-Parallel` headers of an
+  // upload `request`. Throws `std::runtime_error` (via
+  // `filetypeFromContentType`) for an absent or unsupported Content-Type.
+  static UploadRequestParams parseUploadRequestHeaders(const Request& request);
+
   // Respond to a `Can-Upload` probe with 200 OK or 429 Too Many Requests.
   Response handleCanUploadQuery(const Request& request) const;
 
-  // Handle a `Finish-Index-Building: true` signal, call `queue_.finish()`.
-  Response handleFinishSignal(const Request& request);
+  // Handle a `Finish-Index-Building: true` signal: pull the first body chunk
+  // via `bodyGetter` to check that the body is actually empty (rather than
+  // trusting the `Content-Length` header, which might be absent or wrong),
+  // then call `queue_.finish()`.
+  net::awaitable<Response> handleFinishSignal(const Request& request,
+                                              auto& bodyGetter) {
+    auto chunk = co_await bodyGetter();
+    if (chunk.has_value()) {
+      co_return createStringResponse(
+          "Finish-Index-Building must be sent with an empty body.",
+          http::status::bad_request, request);
+    }
+    queue_.finish();
+    co_return createStringResponse("received signal for finishing",
+                                   http::status::ok, request);
+  }
 
   // Create an InputFileSpecification backed by a `HttpBodyBlockSource` and
   // enqueue it for index building. The `HttpBodyBlockSource` pulls the
@@ -98,12 +117,12 @@ class InputFileServer {
   // long as this coroutine frame is alive.
   net::awaitable<void> handleFileUpload(Request request, auto& send,
                                         auto& bodyGetter) {
-    qlever::Filetype filetype;
     // `co_await` is not allowed inside a `catch` handler, so the error
     // response is only built here and sent afterwards.
     std::optional<Response> unsupportedMediaTypeResponse;
+    std::optional<UploadRequestParams> params;
     try {
-      filetype = filetypeFromContentType(request);
+      params = parseUploadRequestHeaders(request);
     } catch (const std::runtime_error& e) {
       unsupportedMediaTypeResponse = createStringResponse(
           e.what(), http::status::unsupported_media_type, request);
@@ -112,12 +131,6 @@ class InputFileServer {
       co_await send(std::move(unsupportedMediaTypeResponse).value());
       co_return;
     }
-
-    std::optional<std::string> graph = [&request]() {
-      auto it = request.find("graph");
-      return it == request.end() ? std::nullopt
-                                 : std::optional{std::string{it->value()}};
-    }();
 
     ++numReceivedFiles_;
     std::string description =
@@ -143,14 +156,9 @@ class InputFileServer {
     qlever::InputFileSpecification spec{
         qlever::InputFileSpecification::BufferFactoryAndDescription{
             std::move(factory), std::move(description)},
-        filetype, std::move(graph)};
-
-    // Honour an explicit request to enable or disable parallel parsing.
-    auto pit = request.find("Parse-In-Parallel");
-    if (pit != request.end()) {
-      spec.parseInParallel_ = (pit->value() == "true" || pit->value() == "1");
-      spec.parseInParallelSetExplicitly_ = true;
-    }
+        params->filetype_, std::move(params->graph_)};
+    spec.parseInParallel_ = params->parseInParallel_;
+    spec.parseInParallelSetExplicitly_ = params->parseInParallelSetExplicitly_;
 
     auto pushStatus = queue_.pushIfNotFull(std::move(spec));
     switch (pushStatus) {
@@ -214,7 +222,7 @@ class InputFileServer {
       }
       auto it = request.find("Finish-Index-Building");
       if (it != request.end() && it->value() == "true") {
-        co_await send(handleFinishSignal(request));
+        co_await send(co_await handleFinishSignal(request, bodyGetter));
         co_return;
       }
       co_await handleFileUpload(std::move(request), send, bodyGetter);
@@ -232,11 +240,9 @@ class InputFileServer {
  public:
   explicit InputFileServer(unsigned short port, size_t maxQueueSize = 20)
       : queue_{maxQueueSize}, port_{port} {
-    if (maxQueueSize == 0) {
-      AD_LOG_WARN << "InputFileServer created with a zero queue size; the "
-                     "server will never accept file uploads."
-                  << std::endl;
-    }
+    AD_CONTRACT_CHECK(maxQueueSize > 0,
+                      "A zero queue size is nonsensical; the server would "
+                      "never accept any file uploads.");
   }
 
   // Start the HTTP server and return a range that yields the uploaded file

@@ -135,7 +135,7 @@ struct TestServer {
   InputFileServer server;
   ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> range;
   explicit TestServer(unsigned short port)
-      : server{port, 0}, range{server.run()} {}
+      : server{port, 1}, range{server.run()} {}
 };
 
 // Parameters for the upload-and-query parametrized test.
@@ -311,25 +311,43 @@ TEST(InputFileServer, FinishWithNonEmptyBody) {
 }
 
 // ____________________________________________________________________________
-// A server with zero queue size always returns 429 for Can-Upload and upload
-// requests.
-TEST(InputFileServer, ZeroQueueSize) {
+// A zero queue size is rejected by the constructor: it is a nonsensical
+// configuration; the server would never accept any file uploads.
+TEST(InputFileServer, ZeroQueueSizeIsRejected) {
+  EXPECT_ANY_THROW(InputFileServer(findFreePort(), 0));
+}
+
+// ____________________________________________________________________________
+// Once the (size-1) queue is at capacity, Can-Upload and further upload
+// requests return 429 Too Many Requests. Everything up to (and including)
+// those checks runs on this thread, before `range` is drained at all: the
+// spec's `HttpBodyBlockSource` doesn't need to be drained for its upload's
+// response to be sent (that happens first), but draining concurrently would
+// race with -- and could pop the one queue slot out from under -- the
+// still-full assertions below.
+TEST(InputFileServer, QueueFull) {
   auto port = findFreePort();
-  TestServer ts{port};
+  InputFileServer server{port, 1};
+  auto range = server.run();
 
   ASSERT_TRUE(waitForServer(port)) << "InputFileServer did not become ready";
 
-  // Can-Upload returns 429 because the queue is never ready.
+  // Fill the single queue slot with an upload that is not drained yet.
+  expectStatus(port, "<a> <b> <c>.", http::status::ok, "text/turtle");
+
+  // Can-Upload now returns 429 because the queue is full.
   EXPECT_EQ(canUploadStatus(port), http::status::too_many_requests);
 
-  // File uploads return 429.
-  expectStatus(port, "<a> <b> <c>.", http::status::too_many_requests,
+  // Further uploads are rejected with 429 too.
+  expectStatus(port, "<d> <e> <f>.", http::status::too_many_requests,
                "text/turtle");
 
-  // Finish the server before draining (queue.finish() makes pop() return
-  // nullopt immediately, so the range is empty without blocking).
   EXPECT_EQ(sendFinish(port).status, http::status::ok);
-  EXPECT_EQ(ql::ranges::distance(ts.range), 0);
+
+  // Only now drain the one queued spec, so its HTTP session can complete.
+  for (auto& spec : range) {
+    drainAndCountBytes(spec, ad_utility::MemorySize::bytes(1 << 16));
+  }
 }
 
 // ____________________________________________________________________________

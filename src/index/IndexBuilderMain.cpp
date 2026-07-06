@@ -221,8 +221,8 @@ int main(int argc, char** argv) {
       "`--kg-input-file`. POST request bodies are parsed as RDF; the "
       "Content-Type header selects the format (text/turtle, "
       "application/n-triples, application/n-quads). Send a request with "
-      "the `Finish-Index-Building: true` header to signal that all data "
-      "has been uploaded.");
+      "the `Finish-Index-Building: true` header (and an empty body) to "
+      "signal that all data has been uploaded.");
   add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "

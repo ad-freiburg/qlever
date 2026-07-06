@@ -126,27 +126,32 @@ qlever::Filetype InputFileServer::filetypeFromContentType(
 }
 
 // _____________________________________________________________________________
+InputFileServer::UploadRequestParams InputFileServer::parseUploadRequestHeaders(
+    const Request& request) {
+  UploadRequestParams params;
+  params.filetype_ = filetypeFromContentType(request);
+
+  auto graphIt = request.find("graph");
+  if (graphIt != request.end()) {
+    params.graph_ = std::string{graphIt->value()};
+  }
+
+  // Honour an explicit request to enable or disable parallel parsing.
+  auto parallelIt = request.find("Parse-In-Parallel");
+  if (parallelIt != request.end()) {
+    params.parseInParallel_ =
+        (parallelIt->value() == "true" || parallelIt->value() == "1");
+    params.parseInParallelSetExplicitly_ = true;
+  }
+  return params;
+}
+
+// _____________________________________________________________________________
 InputFileServer::Response InputFileServer::handleCanUploadQuery(
     const Request& request) const {
   auto status =
       queue_.canPush() ? http::status::ok : http::status::too_many_requests;
   return createStringResponse("Responding to Can-Upload query", status,
-                              request);
-}
-
-// _____________________________________________________________________________
-InputFileServer::Response InputFileServer::handleFinishSignal(
-    const Request& request) {
-  // In lazy mode the body is read after the response is sent, so we validate
-  // via the Content-Length header instead of inspecting the body directly.
-  auto it = request.find(http::field::content_length);
-  if (it != request.end() && it->value() != "0") {
-    return createStringResponse(
-        "Finish-Index-Building must be sent with an empty body.",
-        http::status::bad_request, request);
-  }
-  queue_.finish();
-  return createStringResponse("received signal for finishing", http::status::ok,
                               request);
 }
 
@@ -158,18 +163,13 @@ InputFileServer::run() {
       "InputFileServer::run() requires coroutine support (C++20).");
 #else
   auto server = std::make_shared<
-      HttpServer<BodyReadMode::Lazy, HttpHandler, WebsocketHandlerDummy>>(
-      port_, "0.0.0.0", 1, HttpHandler{this}, WebsocketSupplier{});
+      HttpServer<BodyReadMode::Lazy, HttpHandler, NoWebSocketHandler>>(
+      port_, "0.0.0.0", 1, HttpHandler{this}, NoWebSocketSupplier{});
   shutDown_ = [server]() { server->shutDown(); };
   serverThread_ = ad_utility::JThread{[server]() { server->run(); }};
-  auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds{500};
-  while (!server->serverIsReady()) {
-    if (std::chrono::steady_clock::now() >= deadline) {
-      throw std::runtime_error(
-          "InputFileServer did not become ready within 500 ms.");
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  if (!server->waitUntilReady(std::chrono::milliseconds{500})) {
+    throw std::runtime_error(
+        "InputFileServer did not become ready within 500 ms.");
   }
   isRunning_ = true;
   auto filesGenerator =
@@ -184,9 +184,7 @@ InputFileServer::run() {
 
 // _____________________________________________________________________________
 InputFileServer::~InputFileServer() {
-  AD_LOG_INFO << "Destroying the InputFileServer...." << std::endl;
   if (isRunning_) {
     shutDown_();
   }
-  AD_LOG_INFO << "... Done destroying the InputFileServer...." << std::endl;
 }
