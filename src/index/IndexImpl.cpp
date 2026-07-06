@@ -5,10 +5,12 @@
 
 #include "index/IndexImpl.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_join.h>
 
 #include <atomic>
 #include <cstdio>
+#include <functional>
 #include <future>
 #include <numeric>
 #include <optional>
@@ -22,7 +24,6 @@
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
@@ -31,6 +32,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ParallelExecutor.h"
 #include "util/ProgressBar.h"
+#include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
@@ -483,6 +485,80 @@ void IndexImpl::addInternalStatisticsToConfiguration(
   writeConfiguration();
 }
 
+namespace {
+// Queue type that stores batches of parsed triples that are not yet mapped to
+// IDs.
+using ParsedTripleQueue =
+    ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>;
+
+// A row with the components already mapped to IDs. NOTE: Deliberately not
+// named `IdTriple`, which is a class with a similar purpose defined in
+// `index/IdTriple.h`.
+using IdRow = std::array<Id, NumColumnsIndexBuilding>;
+
+// A batch of triples that have already been mapped to IDs by one mapper thread,
+// together with the number of input triples it was created from.
+// `numInputTriples_` is not redundant, as additional internal triples might be
+// added for language filters, text indices, etc.
+struct TransformedTripleBatch {
+  size_t numInputTriples_;
+  std::vector<IdRow> idTriples_;
+};
+
+// Queue type that stores batches of triples that have already been mapped to
+// IDs.
+using ResultTripleQueue =
+    ad_utility::data_structures::ThreadSafeQueue<TransformedTripleBatch>;
+
+// Start a single thread on `parserPool` that repeatedly calls `getBatch` and
+// pushes the parsed batches to `parsedQueue`, until the input is exhausted or
+// `parsedQueue` is closed from the consuming side. Return a lambda that waits
+// for all started tasks to finish on destruction (using `absl::Cleanup`).
+template <typename PB>
+[[nodiscard]] auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
+                                        PB& parserBatcher,
+                                        ParsedTripleQueue& parsedQueue) {
+  return ad_utility::runProducers(parserPool, parsedQueue, [&parserBatcher]() {
+    return parserBatcher.getBatch();
+  });
+}
+
+// Start one thread per `mapper` on `transformPool`. Each thread repeatedly pops
+// a batch of parsed triples from `parsedQueue`, converts all of them to IDs
+// using its dedicated `mapper`, and pushes the result to `resultQueue`. Return
+// a lambda that waits for all started tasks to finish on destruction (using
+// `absl::Cleanup`).
+template <typename Mappers>
+[[nodiscard]] auto mapTriples(ad_utility::TaskQueue<>& transformPool,
+                              Mappers& mappers, ParsedTripleQueue& parsedQueue,
+                              ResultTripleQueue& resultQueue) {
+  // Turn a single `mapper` into a producer that pops one batch of parsed
+  // triples and maps it to a `TransformedTripleBatch`.
+  auto makeProducer = [&parsedQueue](auto& mapper) {
+    return [&mapper, &parsedQueue]() -> std::optional<TransformedTripleBatch> {
+      auto batch = parsedQueue.pop();
+      if (!batch.has_value()) {
+        return std::nullopt;
+      }
+      std::vector<IdRow> idTriples;
+      idTriples.reserve(batch->size());
+      for (auto& triple : batch.value()) {
+        auto ids = mapper(std::move(triple));
+        idTriples.insert(idTriples.end(), ids.begin(), ids.end());
+      }
+      return TransformedTripleBatch{batch->size(), std::move(idTriples)};
+    };
+  };
+  return std::apply(
+      [&transformPool, &resultQueue, &makeProducer](auto&... mapper) {
+        return ad_utility::runProducers(transformPool, resultQueue,
+                                        makeProducer(mapper)...);
+      },
+      mappers);
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
@@ -520,6 +596,15 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   ItemAlloc itemAlloc(&cachingMemoryResource);
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
+
+  // Create the thread pools once so that they are reused across all
+  // partial-vocabulary iterations. One thread parses the input into batches of
+  // triples, `NUM_PARALLEL_ITEM_MAPS` threads concurrently convert the strings
+  // in these triples to IDs, each using its own `ItemMapManager`.
+  ad_utility::TaskQueue parserPool{1, 1};
+  ad_utility::TaskQueue transformPool{NUM_PARALLEL_ITEM_MAPS,
+                                      NUM_PARALLEL_ITEM_MAPS};
+
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -528,37 +613,42 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<NUM_PARALLEL_ITEM_MAPS>(
-          parserBatchSize_,
-          // when called, returns an optional to the next triple. If
-          // `linesPerPartial` triples were parsed, return std::nullopt. when
-          // the parser is unable to deliver triples, set parserExhausted to
-          // true and return std::nullopt. this is exactly the behavior we need,
-          // as a first step in the parallel Pipeline.
-          ParserBatcher(parser, linesPerPartial,
-                        [&]() { parserExhausted = true; }),
-          // get the Ids for the original triple and the possibly added language
-          // Tag triples using the provided HashMaps via itemArray. See
-          // documentation of the function for more details
-          getIdMapLambdas(itemArray, linesPerPartial,
-                          &(vocab_.getCaseComparator()), this, itemAlloc,
-                          addHasWordTriples_ ? &numHasWordTriples : nullptr));
+      // The parsed (but not yet mapped) batches are handed from the parser
+      // thread to the mapper threads via `parsedQueue`, the converted
+      // batches are handed back to this thread via `resultQueue`.
+      ParsedTripleQueue parsedQueue{NUM_PARALLEL_ITEM_MAPS};
+      ResultTripleQueue resultQueue{NUM_PARALLEL_ITEM_MAPS};
 
-      while (auto opt = p.getNextValue()) {
+      // When called, returns the next batch of triples, stopping after
+      // `linesPerPartial` triples. When the parser is exhausted, it sets
+      // `parserExhausted` to true (via the callback) and returns std::nullopt.
+      ParserBatcher parserBatcher{
+          parser, linesPerPartial,
+          [&parserExhausted]() { parserExhausted = true; }};
+
+      // The mappers that map a single triple (and the possibly added language
+      // tag triples) to IDs using the provided hash maps via `itemArray`. There
+      // is one mapper (and one map) per mapper thread.
+      auto mappers = getIdMapLambdas(
+          itemArray, linesPerPartial, &(vocab_.getCaseComparator()), this,
+          itemAlloc, addHasWordTriples_ ? &numHasWordTriples : nullptr);
+
+      // Start the background threads that parse the input and map it to ids.
+      auto parserCleanup =
+          consumeParserBatches(parserPool, parserBatcher, parsedQueue);
+      auto mapperCleanup =
+          mapTriples(transformPool, mappers, parsedQueue, resultQueue);
+
+      // Collect the mapped triples on this thread.
+      while (auto result = resultQueue.pop()) {
         numTriplesParsedTimer.cont();
-        const auto& triples = opt.value();
+        const auto& [numInputTriples, triples] = result.value();
         actualCurrentPartialSize += triples.size();
         localWriter.insert(localWriter.end(), triples.begin(), triples.end());
-        numTriplesParsed++;
+        numTriplesParsed += numInputTriples;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
-      }
-      AD_LOG_TIMING << "WaitTimes for Pipeline in msecs\n";
-      for (const auto& t : p.getWaitingTime()) {
-        AD_LOG_TIMING
-            << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
-            << " msecs" << std::endl;
       }
 
       parser->printAndResetQueueStatistics();
