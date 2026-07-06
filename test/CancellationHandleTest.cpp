@@ -41,7 +41,7 @@ TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 TEST(CancellationException, verifyConstructorMessageIsPassed) {
   auto message = "Message";
-  CancellationException exception{message};
+  CancellationException exception{MANUAL, message};
   EXPECT_STREQ(message, exception.what());
 }
 
@@ -54,12 +54,23 @@ TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationException, stateAccessorReturnsConstructorReason) {
+  EXPECT_EQ(CancellationException{TIMEOUT}.state(), TIMEOUT);
+  EXPECT_EQ(CancellationException{MANUAL}.state(), MANUAL);
+  // Custom message paired with a known reason keeps both.
+  CancellationException withReason{TIMEOUT, "estimate exceeded remaining time"};
+  EXPECT_EQ(withReason.state(), TIMEOUT);
+  EXPECT_STREQ(withReason.what(), "estimate exceeded remaining time");
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
   auto message = "Message";
   auto operation = "Operation";
   auto otherThing = "Other Thing";
   {
-    CancellationException exception{message};
+    CancellationException exception{MANUAL, message};
 
     exception.setOperation(operation);
     EXPECT_THAT(exception.what(),

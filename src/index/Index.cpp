@@ -47,13 +47,6 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getCardinality(
-    Id id, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
 RdfsVocabulary::AccessReturnType Index::indexToString(VocabIndex id) const {
   return pimpl_->indexToString(id);
 }
@@ -299,10 +292,4 @@ GraphNameManager& Index::graphNameManager() {
 // ____________________________________________________________________________
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
-}
-
-// ____________________________________________________________________________
-const std::optional<std::filesystem::path>&
-Index::getPersistedGraphNameManager() const {
-  return pimpl_->getPersistedGraphNameManager();
 }

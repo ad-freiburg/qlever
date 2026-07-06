@@ -29,10 +29,15 @@ class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> sortColumnIndices_;
+  // If `true`, this `Sort` was created from an explicit `INTERNAL SORT BY`
+  // clause. In that case we deliberately do not propagate a `LIMIT`/`OFFSET`
+  // to the subtree, because the user explicitly asked for the complete sorted
+  // result (see `handlesLimitOffset()`).
+  bool explicitSort_;
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       std::vector<ColumnIndex> sortColumnIndices);
+       std::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
 
  public:
   virtual std::string getDescriptor() const override;
@@ -72,8 +77,15 @@ class Sort : public Operation {
   // For a `Sort` with `LIMIT N`, any N rows are fine as long as they are
   // sorted: there is no user-defined order that the `LIMIT` is taken against
   // (user-facing `ORDER BY` goes through `OrderBy`, not `Sort`). So we can
-  // let the subtree compute only N rows and sort those.
-  bool supportsLimitOffset() const override { return true; }
+  // let the subtree compute only N rows and sort those. The exception is an
+  // explicit `INTERNAL SORT BY`: there the user explicitly requested the
+  // complete sorted result, so we do not handle (and hence do not propagate)
+  // the `LIMIT`/`OFFSET` here, but let it be applied externally on the full
+  // sorted output.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return explicitSort_ ? LimitOffsetHandling::NONE
+                         : LimitOffsetHandling::FULL;
+  }
 
   [[nodiscard]] size_t getResultWidth() const override;
 
@@ -89,6 +101,8 @@ class Sort : public Operation {
       const std::set<Variable>& variables) const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   virtual Result computeResult(bool requestLaziness) override;
