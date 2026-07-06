@@ -9,6 +9,7 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
