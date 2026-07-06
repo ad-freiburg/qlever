@@ -126,7 +126,7 @@ struct SetOfIdTableColumnElements {
           numOccurrencesIterator != numOccurrences_.end()) {
         (numOccurrencesIterator->second)++;
       } else {
-        numOccurrences_.emplace(id, uint64_t{1});
+        numOccurrences_.emplace(id, size_t{1});
         uniqueElements_.emplace_back(id);
       }
     });
@@ -670,27 +670,27 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "min-smaller-table-rows",
         "The minimum amount of rows for the smaller 'IdTable' in benchmarking "
         "tables.",
-        &configVariables_.minSmallerTableRows_, uint64_t{10000});
+        &configVariables_.minSmallerTableRows_, size_t{10000});
 
     decltype(auto) minBiggerTableRows = config.addOption(
         "min-bigger-table-rows",
         "The minimum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
-        &configVariables_.minBiggerTableRows_, uint64_t{100000});
+        &configVariables_.minBiggerTableRows_, size_t{100000});
     decltype(auto) maxBiggerTableRows = config.addOption(
         "max-bigger-table-rows",
         "The maximum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
-        &configVariables_.maxBiggerTableRows_, uint64_t{10000000});
+        &configVariables_.maxBiggerTableRows_, size_t{10000000});
 
-    decltype(auto) smallerTableNumColumns = config.addOption(
-        "smaller-table-num-columns",
-        "The amount of columns in the smaller IdTable.",
-        &configVariables_.smallerTableNumColumns_, uint64_t{20});
-    decltype(auto) biggerTableNumColumns = config.addOption(
-        "bigger-table-num-columns",
-        "The amount of columns in the bigger IdTable.",
-        &configVariables_.biggerTableNumColumns_, uint64_t{20});
+    decltype(auto) smallerTableNumColumns =
+        config.addOption("smaller-table-num-columns",
+                         "The amount of columns in the smaller IdTable.",
+                         &configVariables_.smallerTableNumColumns_, size_t{20});
+    decltype(auto) biggerTableNumColumns =
+        config.addOption("bigger-table-num-columns",
+                         "The amount of columns in the bigger IdTable.",
+                         &configVariables_.biggerTableNumColumns_, size_t{20});
 
     decltype(auto) overlapChance = config.addOption(
         "overlap-chance",
@@ -931,16 +931,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         minBiggerTableRows, maxBiggerTableRows);
 
     // Do we have at least 1 column?
-    config.addValidator(generateBiggerEqualLambda(uint64_t{1}, true),
-                        generateBiggerEqualLambdaDesc(smallerTableNumColumns,
-                                                      uint64_t{1}, true),
-                        generateBiggerEqualLambdaDesc(smallerTableNumColumns,
-                                                      uint64_t{1}, true),
-                        smallerTableNumColumns);
     config.addValidator(
-        generateBiggerEqualLambda(uint64_t{1}, true),
-        generateBiggerEqualLambdaDesc(biggerTableNumColumns, uint64_t{1}, true),
-        generateBiggerEqualLambdaDesc(biggerTableNumColumns, uint64_t{1}, true),
+        generateBiggerEqualLambda(size_t{1}, true),
+        generateBiggerEqualLambdaDesc(smallerTableNumColumns, size_t{1}, true),
+        generateBiggerEqualLambdaDesc(smallerTableNumColumns, size_t{1}, true),
+        smallerTableNumColumns);
+    config.addValidator(
+        generateBiggerEqualLambda(size_t{1}, true),
+        generateBiggerEqualLambdaDesc(biggerTableNumColumns, size_t{1}, true),
+        generateBiggerEqualLambdaDesc(biggerTableNumColumns, size_t{1}, true),
         biggerTableNumColumns);
 
     // Is `overlap-chance` bigger than 0?
@@ -1700,7 +1699,7 @@ class BmOnlyBiggerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         for (const size_t smallerTableNumRows : generateExponentInterval(
-                 uint64_t{10}, getConfigVariables().minSmallerTableRows_,
+                 size_t{10}, getConfigVariables().minSmallerTableRows_,
                  static_cast<size_t>(
                      static_cast<double>(
                          getConfigVariables().minBiggerTableRows_) /
@@ -1783,7 +1782,7 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              uint64_t{10},
+              size_t{10},
               ql::ranges::max(
                   static_cast<size_t>(
                       static_cast<double>(
@@ -1845,7 +1844,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     // Returns the amount of rows in the smaller `IdTable`, used for the
     // measurements in a given row.
     auto growthFunction = createDefaultGrowthLambda(
-        uint64_t{10}, getConfigVariables().minBiggerTableRows_);
+        size_t{10}, getConfigVariables().minBiggerTableRows_);
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
@@ -2111,7 +2110,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         for (const size_t biggerTableNumRows : generateExponentInterval(
-                 uint64_t{10}, getConfigVariables().minBiggerTableRows_,
+                 size_t{10}, getConfigVariables().minBiggerTableRows_,
                  approximateNumIdTableRows(
                      getConfigVariables().maxMemoryBiggerTable(),
                      getConfigVariables().biggerTableNumColumns_))) {
@@ -2139,7 +2138,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
           ql::ranges::reverse(smallerTableRows);
           const size_t lastSmallerTableRow{smallerTableRows.back()};
           auto growthFunction = createDefaultGrowthLambda(
-              uint64_t{10}, lastSmallerTableRow + uint64_t{1},
+              size_t{10}, lastSmallerTableRow + size_t{1},
               std::move(smallerTableRows));
 
           // Build the table.
