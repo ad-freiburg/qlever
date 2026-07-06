@@ -195,7 +195,7 @@ class File {
   // the offset itself.
   std::pair<off_t, off_t> getLastOffset() {
     AD_CONTRACT_CHECK(file_);
-    // read the last off_t
+    // Read the last off_t.
     const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
     off_t lastOffset;
     read(&lastOffset, sizeof(off_t), lastOffsetOffset);
