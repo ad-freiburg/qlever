@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
@@ -62,6 +63,24 @@ class CompactVectorOfStrings {
   using Writer = detail::CompactStringVectorWriter<data_type>;
   CompactVectorOfStrings() = default;
 
+  // Build a `CompactVectorOfStrings` as a non-owning, zero-copy view directly
+  // into the buffer of `serializer`, which must support zero-copy
+  // deserialization (see `ZeroCopyReadSerializer` in
+  // `util/Serializer/Serializer.h`). The returned object is only valid as
+  // long as the memory backing `serializer`'s buffer is valid and unchanged.
+  CPP_template(typename S)(
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+      static CompactVectorOfStrings fromZeroCopyDeserializer(S& serializer) {
+    CompactVectorOfStrings result;
+    result.data_ =
+        ad_utility::serialization::zeroCopyDeserializeToSpan<data_type>(
+            serializer);
+    result.offsets_ =
+        ad_utility::serialization::zeroCopyDeserializeToSpan<offset_type>(
+            serializer);
+    return result;
+  }
+
   explicit CompactVectorOfStrings(
       const std::vector<std::vector<data_type>>& input) {
     build(input);
@@ -71,26 +90,30 @@ class CompactVectorOfStrings {
 
   virtual ~CompactVectorOfStrings() = default;
 
-  // Append the elements from `input` to this `CompactVectorOfStrings`.
+  // Append the elements from `input` to this `CompactVectorOfStrings`. Only
+  // allowed if this object currently owns its storage (i.e. was not created
+  // via `fromZeroCopyDeserializer`).
   CPP_template(typename T)(
       requires ql::ranges::forward_range<T>&& ql::ranges::sized_range<T>&&
           ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
               SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
                         data_type>) void build(const T& input) {
+    auto& offsets = ownedOffsets();
+    auto& data = ownedData();
     // Also make room for the end offset of the last element.
-    offsets_.reserve(input.size() + 1);
+    offsets.reserve(input.size() + 1);
     size_t dataSize = 0;
     for (const auto& element : input) {
-      offsets_.push_back(dataSize);
+      offsets.push_back(dataSize);
       dataSize += element.size();
     }
     // The last offset is the offset right after the last element.
-    offsets_.push_back(dataSize);
+    offsets.push_back(dataSize);
 
-    data_.reserve(dataSize);
+    data.reserve(dataSize);
 
     for (const auto& el : input) {
-      data_.insert(data_.end(), el.begin(), el.end());
+      data.insert(data.end(), el.begin(), el.end());
     }
   }
 
@@ -102,9 +125,9 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
-  size_t size() const { return ready() ? offsets_.size() - 1 : 0; }
+  size_t size() const { return ready() ? offsetsSpan().size() - 1 : 0; }
 
-  bool ready() const { return !offsets_.empty(); }
+  bool ready() const { return !offsetsSpan().empty(); }
 
   /**
    * @brief operator []
@@ -113,22 +136,24 @@ class CompactVectorOfStrings {
    *         elements stored at the pointers target.
    */
   const value_type operator[](size_t i) const {
-    offset_type offset = offsets_[i];
-    const data_type* ptr = data_.data() + offset;
-    size_t size = offsets_[i + 1] - offset;
+    auto offsets = offsetsSpan();
+    offset_type offset = offsets[i];
+    const data_type* ptr = dataSpan().data() + offset;
+    size_t size = offsets[i + 1] - offset;
     return {ptr, size};
   }
 
   // Copy this class and apply the transformation `mappingFunction` to its
-  // elements.
+  // elements. The result always owns its storage.
   CPP_template(typename Func)(
       requires ad_utility::InvocableWithSimilarReturnType<Func, data_type,
                                                           data_type>)
       CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
-    clone.offsets_ = offsets_;
+    auto offsets = offsetsSpan();
+    clone.offsets_ = std::vector<offset_type>(offsets.begin(), offsets.end());
     clone.data_ = ::ranges::to_vector(
-        data_ | ql::views::transform(std::move(mappingFunction)));
+        dataSpan() | ql::views::transform(std::move(mappingFunction)));
     return clone;
   }
 
@@ -141,15 +166,55 @@ class CompactVectorOfStrings {
 
   using const_iterator = Iterator;
 
-  // Allow serialization via the ad_utility::serialization interface.
+  // Allow serialization via the ad_utility::serialization interface. Note:
+  // Reading always produces an object that owns its storage; use
+  // `fromZeroCopyDeserializer` to obtain a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
-    serializer | arg.data_;
-    serializer | arg.offsets_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      auto data = arg.dataSpan();
+      auto offsets = arg.offsetsSpan();
+      serializer | data;
+      serializer | offsets;
+    } else {
+      std::vector<data_type> data;
+      std::vector<offset_type> offsets;
+      serializer | data;
+      serializer | offsets;
+      arg.data_ = std::move(data);
+      arg.offsets_ = std::move(offsets);
+    }
   }
 
  private:
-  std::vector<data_type> data_;
-  std::vector<offset_type> offsets_;
+  // The storage either owns its elements (after `build()` or after reading
+  // from a regular, non-zero-copy serializer), or is a non-owning view into
+  // externally-owned memory (after `fromZeroCopyDeserializer`).
+  std::variant<std::vector<data_type>, ql::span<const data_type>> data_;
+  std::variant<std::vector<offset_type>, ql::span<const offset_type>>
+      offsets_;
+
+  ql::span<const data_type> dataSpan() const {
+    return std::visit(
+        [](const auto& x) -> ql::span<const data_type> {
+          return {x.data(), x.size()};
+        },
+        data_);
+  }
+
+  ql::span<const offset_type> offsetsSpan() const {
+    return std::visit(
+        [](const auto& x) -> ql::span<const offset_type> {
+          return {x.data(), x.size()};
+        },
+        offsets_);
+  }
+
+  // Access the owned vector alternatives. Throws (via `std::get`) if this
+  // object is currently a non-owning view, which is a programming error (a
+  // zero-copy view is read-only, so `build()`/`cloneAndRemap()` must not be
+  // called on it).
+  std::vector<data_type>& ownedData() { return std::get<0>(data_); }
+  std::vector<offset_type>& ownedOffsets() { return std::get<0>(offsets_); }
 };
 
 namespace detail {

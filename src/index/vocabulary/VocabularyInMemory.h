@@ -37,6 +37,17 @@ class VocabularyInMemory
   /// Construct the vocabulary from `Words`
   explicit VocabularyInMemory(Words words) : _words{std::move(words)} {}
 
+  /// Build a vocabulary as a non-owning, zero-copy view directly into the
+  /// buffer of `serializer`, which must support zero-copy deserialization
+  /// (see `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The
+  /// returned vocabulary is only valid as long as the memory backing
+  /// `serializer`'s buffer is valid and unchanged.
+  CPP_template(typename S)(
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+      static VocabularyInMemory fromZeroCopyDeserializer(S& serializer) {
+    return VocabularyInMemory{Words::fromZeroCopyDeserializer(serializer)};
+  }
+
   // Vocabularies are movable
   VocabularyInMemory& operator=(VocabularyInMemory&&) noexcept = default;
   VocabularyInMemory(VocabularyInMemory&&) noexcept = default;

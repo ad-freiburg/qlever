@@ -235,6 +235,81 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 }
 
 // _____________________________________________________________________________
+// Test that a combined blob (vocabulary + named result cache), written from
+// one `Qlever` instance, can be loaded into a completely different instance
+// (built from an unrelated index, so its on-disk vocabulary alone could not
+// possibly resolve the source instance's IRIs) and there produce correct
+// query results without loading any permutations.
+TEST(LibQlever, combinedBlob) {
+  std::string sourceFilename = "libQleverCombinedBlobSource.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(sourceFilename);
+    ofs << "<combinedBlobSubject> <combinedBlobPredicate> "
+           "\"combined blob literal\".";
+  }
+  IndexBuilderConfig sourceConfig;
+  sourceConfig.inputFiles_.push_back(
+      {sourceFilename, Filetype::Turtle, std::nullopt});
+  sourceConfig.baseName_ = "LibQlever.combinedBlobSource";
+  // `writeCombinedBlob` currently requires the in-memory, uncompressed
+  // vocabulary implementation (see `Vocabulary::writeAsZeroCopyBlob`).
+  sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
+  EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
+
+  std::vector<char> blob;
+  {
+    Qlever source{EngineConfig{sourceConfig}};
+    source.queryAndPinResultWithName(
+        "blobPin",
+        "SELECT ?s ?o WHERE { ?s <combinedBlobPredicate> ?o }");
+    EXPECT_NO_THROW(blob = source.writeCombinedBlob());
+    EXPECT_FALSE(blob.empty());
+  }
+
+  // Build a second, unrelated index with a disjoint vocabulary.
+  std::string targetFilename = "libQleverCombinedBlobTarget.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(targetFilename);
+    ofs << "<unrelatedSubject> <unrelatedPredicate> <unrelatedObject>.";
+  }
+  IndexBuilderConfig targetConfig;
+  targetConfig.inputFiles_.push_back(
+      {targetFilename, Filetype::Turtle, std::nullopt});
+  targetConfig.baseName_ = "LibQlever.combinedBlobTarget";
+  EXPECT_NO_THROW(Qlever::buildIndex(targetConfig));
+
+  EngineConfig targetEngineConfig{targetConfig};
+  targetEngineConfig.doNotLoadPermutations_ = true;
+  Qlever target{targetEngineConfig};
+
+  // Before loading the blob, the target's own (unrelated) vocabulary must not
+  // contain the source's IRIs/literals.
+  std::string cachedResultQuery =
+      "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.query(cachedResultQuery, ad_utility::MediaType::tsv),
+      HasSubstr("is not contained in the named result cache"));
+
+  EXPECT_NO_THROW(target.loadCombinedBlob(blob));
+
+  // The named cached result, and the vocabulary needed to correctly export
+  // its IDs as strings, must now come from the blob.
+  auto res = target.query(cachedResultQuery, ad_utility::MediaType::tsv);
+  EXPECT_EQ(res,
+           "?s\t?o\n<combinedBlobSubject>\t\"combined blob literal\"\n");
+
+  // Permutations are still not loaded, so a query needing them still throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.query("SELECT ?s WHERE { ?s <unrelatedPredicate> ?o }",
+                   ad_utility::MediaType::tsv),
+      HasSubstr("permutation to be loaded"));
+
+  // Loading a second blob on the same instance must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(target.loadCombinedBlob(blob),
+                               HasSubstr("must not be called more than once"));
+}
+
+// _____________________________________________________________________________
 TEST(LibQlever, disableCaching) {
   std::string filename = "libQleverDisableCaching.ttl";
   {

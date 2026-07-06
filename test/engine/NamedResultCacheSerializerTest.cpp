@@ -18,7 +18,6 @@
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
-using ::testing::Pointee;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
@@ -89,8 +88,14 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
 
   auto deserializedValue = serializeAndDeserializeValue(value);
 
-  // Check the result pointer is valid.
-  ASSERT_NE(deserializedValue.result_, nullptr);
+  // Check the result pointer is valid (the non-aligned serializer used here
+  // always deserializes into the owning `shared_ptr<const IdTable>`
+  // alternative, never a zero-copy view).
+  ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const IdTable>>(
+      deserializedValue.result_));
+  ASSERT_NE(
+      std::get<std::shared_ptr<const IdTable>>(deserializedValue.result_),
+      nullptr);
 
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
@@ -100,7 +105,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
               deserWords[i].toStringRepresentation());
   }
   // Check the result
-  EXPECT_THAT(deserializedValue.result_, Pointee(matchesIdTable(table)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
+              matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
               UnorderedElementsAreArray(varColMap));
   EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
@@ -168,14 +174,16 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   auto result1 = cache2.get("query-1");
   ASSERT_NE(result1, nullptr);
-  EXPECT_THAT(result1->result_, Pointee(matchesIdTable(table1)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result1->result_),
+              matchesIdTable(table1));
   EXPECT_THAT(result1->varToColMap_, UnorderedElementsAreArray(varColMap1));
   EXPECT_THAT(result1->resultSortedOn_, ElementsAre(0));
   EXPECT_EQ(result1->cacheKey_, "key1");
 
   auto result2 = cache2.get("query-2");
   ASSERT_NE(result2, nullptr);
-  EXPECT_THAT(result2->result_, Pointee(matchesIdTable(table2)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result2->result_),
+              matchesIdTable(table2));
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
   EXPECT_THAT(result2->resultSortedOn_, ElementsAre(1, 0));
   EXPECT_EQ(result2->cacheKey_, "key2");
