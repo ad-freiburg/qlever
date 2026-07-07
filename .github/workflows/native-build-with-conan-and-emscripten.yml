@@ -16,7 +16,7 @@ env:
   # https://github.com/emscripten-core/emsdk repository. We install emsdk
   # directly (rather than via the Conan recipe) because the Conan Center recipe
   # lags behind upstream — at time of writing it tops out at 3.1.73.
-  EMSDK_VERSION: "5.0.6"
+  EMSDK_VERSION: "6.0.2"
 
 jobs:
   build:
