@@ -56,7 +56,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         "\"POLYGON((1 1, 2 2, 3 3))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
     };
-    std::sort(testLiterals.begin(), testLiterals.end());
+    ql::ranges::sort(testLiterals);
 
     for (size_t i = 0; i < testLiterals.size(); i++) {
       auto lit = testLiterals[i];
@@ -99,10 +99,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     geoVocab.close();
   };
 
-  // Build a `GeoVocabulary` on disk under `filename`, fill it with a small set
-  // of WKT literals, and return those literals sorted (so index `i` holds
-  // `literals[i]`).
-  void setupGeoVocab(GeoVocabulary<T>& geoVocab) {
+  // Build a `GeoVocabulary` on disk , fill it with a small set of WKT literals.
+  GeoVocabulary<T> setupGeoVocab() {
+    GeoVocabulary<T> geoVocab;
     const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
     auto ww = geoVocab.makeDiskWriterPtr(filename);
     ww->readableName() = "test";
@@ -123,14 +122,14 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     }
     ww->finish();
     geoVocab.open(filename);
-    ASSERT_GE(geoVocab.size(), 4u);
+    EXPECT_GE(geoVocab.size(), 4u);
+    return geoVocab;
   }
 
   // `lookupBatch` must yield exactly the same strings as looking each index up
   // individually via `operator[]`.
   void testLookupBatch() {
-    GeoVocabulary<T> geoVocab;
-    setupGeoVocab(geoVocab);
+    auto geoVocab = setupGeoVocab();
 
     std::array<size_t, 5> indices{2, 0, 3, 1, 0};
     auto result = geoVocab.lookupBatch(indices);
@@ -145,8 +144,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // `lookupBatchesStreamed` must yield, for each batch, exactly the same
   // strings as the individual `operator[]` lookups for that batch's indices.
   void testLookupBatchesStreamed() {
-    GeoVocabulary<T> geoVocab;
-    setupGeoVocab(geoVocab);
+    auto geoVocab = setupGeoVocab();
 
     std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
     // `VocabLookupInput` takes ownership of the batches, so keep a copy of the

@@ -97,8 +97,7 @@ TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
 }
 
 TEST(VocabularyOnDisk, LowerUpperBoundNumeric) {
-  testUpperAndLowerBoundWithNumericComparator(
-      createVocabulary();
+  testUpperAndLowerBoundWithNumericComparator(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, AccessOperator) {
