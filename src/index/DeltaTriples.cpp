@@ -101,15 +101,13 @@ void DeltaTriples::eraseTriplesInPermutation(
   const auto& perm = index_.getPermutation(permutation);
   LocatedTriplesPerBlock& lts =
       locatedTriples_->getLocatedTriplesForPermutation<isInternal>(permutation);
-  // To `erase` in `LocatedTriplesPerBlock` we need the block index for which we
-  // need to locate the triples. `insertOrDelete` could be any value because
-  // `erase` because the `SortedSequence` only considers the triple. Here it is
-  // the actual value though.
+  // Find the `blockIndex` for each of the `triples`. `insertOrDelete` could be
+  // any value because `erase` because the `SortedSequence` only considers the
+  // triple. Here it is the actual value though.
   auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
       triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
       cancellationHandle);
-  // For somewhat efficient `erase` both `LocatedTriplesPerBlock` and
-  // `SortedSequence` need sorted elements.
+  // `LocatedTriplesPerBlock::erase` requires a sorted input.
   ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
   lts.erase(locatedTriples);
 }
@@ -121,26 +119,27 @@ nlohmann::json DeltaTriples::vacuum(
   // that only a part of the triples have been vacuumed, which is valid.
   using namespace ad_utility::use_value_identity;
 
-  auto removeTriples = [this](const std::vector<IdTriple<0>>& triples,
-                              bool insertOrDelete, auto& triplesToHandlesMap,
-                              auto isInternal) {
-    // This operation must not be interrupted so we ignore the
-    // CancellationHandle.
-    auto cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    // Erase located triples
-    for (auto permutation : Permutation::all<isInternal>()) {
-      eraseTriplesInPermutation(permutation, triples, insertOrDelete,
-                                isInternal, cancellationHandle);
-    }
+  // Remove the `triples` from all the permutations.
+  auto removeFromAllPermutations =
+      [this](const std::vector<IdTriple<0>>& triples, bool insertOrDelete,
+             auto& triplesToHandlesMap, auto isInternal) {
+        // This operation must not be interrupted so we ignore the
+        // CancellationHandle.
+        auto cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        // Erase located triples
+        for (auto permutation : Permutation::all<isInternal>()) {
+          eraseTriplesInPermutation(permutation, triples, insertOrDelete,
+                                    isInternal, cancellationHandle);
+        }
 
-    // Remove from handles map.
-    for (const auto& triple : triples) {
-      AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triple) == 1);
-    }
-  };
+        // Remove from handles map.
+        for (const auto& triple : triples) {
+          AD_CORRECTNESS_CHECK(triplesToHandlesMap.erase(triple) == 1);
+        }
+      };
   auto identifyTriplesToVacuum = [this, &cancellationHandle,
-                                  &removeTriples](auto isInternal) {
+                                  &removeFromAllPermutations](auto isInternal) {
     auto perm = Permutation::PSO;
     auto& basePerm = index_.getPermutation(perm);
     const auto& actualPerm =
@@ -150,11 +149,14 @@ nlohmann::json DeltaTriples::vacuum(
     auto [deletions, insertions, stats] =
         ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
     return std::make_pair(
-        [isInternal, this, &removeTriples, deletions = std::move(deletions),
+        [isInternal, this, &removeFromAllPermutations,
+         deletions = std::move(deletions),
          insertions = std::move(insertions)]() {
           auto& state = getState<isInternal>();
-          removeTriples(deletions, false, state.triplesDeleted_, isInternal);
-          removeTriples(insertions, true, state.triplesInserted_, isInternal);
+          removeFromAllPermutations(deletions, false, state.triplesDeleted_,
+                                    isInternal);
+          removeFromAllPermutations(insertions, true, state.triplesInserted_,
+                                    isInternal);
         },
         stats);
   };

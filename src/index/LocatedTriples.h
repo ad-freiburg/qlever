@@ -197,6 +197,11 @@ class LocatedTriplesPerBlock {
   // NOTE: `updateAugmentedMetadata()` must be called to update the block
   // metadata.
   void erase(size_t blockIndex, const LocatedTriple& lt);
+
+  // Removes the sorted `LocatedTriple`s from the `LocatedTriplesPerBlock`.
+  //
+  // NOTE: `updateAugmentedMetadata()` must be called to update the block
+  // metadata.
   void erase(ql::span<LocatedTriple> sortedTriples);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
@@ -211,7 +216,8 @@ class LocatedTriplesPerBlock {
 
   // Consolidate the located triples in all blocks. Forwards to
   // `SortedSequence`. Must be called before any sorted access
-  // (begin/end/size/mergeTriples/updateAugmentedMetadata).
+  // (begin/end/size/mergeTriples/updateAugmentedMetadata) if the
+  // `LocatedTriples` were modified since the last call to this function.
   void consolidateAllBlocks();
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to

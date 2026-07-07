@@ -423,7 +423,7 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
   return ::ranges::accumulate(
       map_ | ql::views::values |
           ql::views::transform(&LocatedTriples::sizeForTesting),
-      0UL, std::plus());
+      0UL);
 }
 
 // ____________________________________________________________________________
@@ -543,22 +543,24 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
 std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
     const LocatedTriplesPerBlock& oldBlocks) const {
   std::array<std::vector<IdTriple<0>>, 2> result;
-  auto addTriple = [&result](const IdTriple<0>& triple, bool insertion) {
-    result.at(insertion ? 0 : 1).push_back(triple);
+  auto addTriple = [&result](const LocatedTriple& lt) {
+    result.at(lt.insertOrDelete_ ? 0 : 1).push_back(lt.triple_);
   };
 
+  // All `DeltaTriples` that are in the new snapshot, but not in the old
+  // snapshot have been added or changed (from inserted to deleted or deleted to
+  // inserted) since the old snapshot and thus have to be returned.
   for (const auto& [blockIndex, currentTriples] : map_) {
     auto it = oldBlocks.map_.find(blockIndex);
     const LocatedTriples empty;
     const auto& oldTriplesSortedView = it != oldBlocks.map_.end()
                                            ? it->second.getSortedView()
                                            : empty.getSortedView();
-    ql::ranges::set_difference(currentTriples.getSortedView(),
-                               oldTriplesSortedView,
-                               ad_utility::IteratorForAssigmentOperator(
-                                   [&addTriple](const LocatedTriple& lt) {
-                                     addTriple(lt.triple_, lt.insertOrDelete_);
-                                   }));
+    // The default comparator compares the whole `LocatedTriple` with the
+    // `IdTriple` but also `insertOrDelete_`, so this gives the correct triples.
+    ql::ranges::set_difference(
+        currentTriples.getSortedView(), oldTriplesSortedView,
+        ad_utility::IteratorForAssigmentOperator(addTriple));
   }
   // Account for non-deterministic order introduced by hash map. (Or in case a
   // permutation that is not SPO was used).

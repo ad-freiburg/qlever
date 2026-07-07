@@ -390,7 +390,8 @@ class DeltaTriples {
   static LocatedTriplesDiff computeLocatedTriplesDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
 
-  // Erase multiple triples in a permutation.
+  // Drop multiple update triples in a permutation. Note: this is currently used
+  // for `vacuum`.
   void eraseTriplesInPermutation(
       Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
       bool insertOrDelete, auto isInternal,
