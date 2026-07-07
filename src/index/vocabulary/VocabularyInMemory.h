@@ -54,13 +54,10 @@ class VocabularyInMemory
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
-  // Look up multiple words by index in a single batch call. Uses the generic
-  // sequential fallback (see `VocabularyTypes.h`).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
-  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));
