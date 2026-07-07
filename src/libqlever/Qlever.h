@@ -261,6 +261,11 @@ class Qlever {
   // ParsedQuery::hasUpdateClause()); this function handles both cases
   // uniformly.
   //
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
+  //
   // TODO<joka921,damekt> The `timeLimit` is currently only used for
   // non-cancelable operations (in particular sorting). The time limit applies
   // from the time this function is called until the execution of the query

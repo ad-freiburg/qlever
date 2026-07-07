@@ -766,8 +766,8 @@ Server::PlannedQuery Server::planQuery(
   PlannedQuery plannedQuery = qlever().planQuery(
       std::move(operation), timeLimit, qec, std::move(handle), requestTimer);
 
-  auto& qet = plannedQuery.queryExecutionTree();
-  auto& runtimeInfoWholeQuery =
+  const auto& qet = plannedQuery.queryExecutionTree();
+  const auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
   auto timeForQueryPlanning = runtimeInfoWholeQuery.timeQueryPlanning;
   AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
