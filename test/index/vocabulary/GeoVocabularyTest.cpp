@@ -117,12 +117,13 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
     };
     // The underlying vocabularies require sorted input at write time.
-    std::sort(testLiterals.begin(), testLiterals.end());
+    ql::ranges::sort(testLiterals);
     for (size_t i = 0; i < testLiterals.size(); i++) {
       EXPECT_EQ(i, (*ww)(testLiterals[i], true));
     }
     ww->finish();
     geoVocab.open(filename);
+    ASSERT_GE(geoVocab.size(), 4u);
   }
 
   // `lookupBatch` must yield exactly the same strings as looking each index up
@@ -130,7 +131,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   void testLookupBatch() {
     GeoVocabulary<T> geoVocab;
     setupGeoVocab(geoVocab);
-    ASSERT_GE(geoVocab.size(), 4u);
 
     std::array<size_t, 5> indices{2, 0, 3, 1, 0};
     auto result = geoVocab.lookupBatch(indices);
@@ -147,7 +147,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   void testLookupBatchesStreamed() {
     GeoVocabulary<T> geoVocab;
     setupGeoVocab(geoVocab);
-    ASSERT_GE(geoVocab.size(), 4u);
 
     std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
     // `VocabLookupInput` takes ownership of the batches, so keep a copy of the
