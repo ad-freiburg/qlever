@@ -136,12 +136,15 @@ CPP_template(typename V1, typename V2, typename Compare = std::less<>,
       decision_ = decide();
       return *this;
     }
-    IteratorImpl operator++(int) requires(IsForwardIterator) {
-      IteratorImpl tmp = *this;
-      ++(*this);
-      return tmp;
+    auto operator++(int) {
+      if constexpr (IsForwardIterator) {
+        IteratorImpl tmp = *this;
+        ++(*this);
+        return tmp;
+      } else {
+        ++(*this);
+      }
     }
-    void operator++(int) requires(!IsForwardIterator) { ++(*this); }
 
     bool operator==(const IteratorImpl& o) const {
       return it1_ == o.it1_ && it2_ == o.it2_;
