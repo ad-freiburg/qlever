@@ -72,14 +72,13 @@ tools.build:cxxflags=['-fwasm-exceptions']
 # Make the EH mode part of each dependency's package_id, so changing it rebuilds
 # cached deps instead of silently linking them in a different EH mode.
 tools.info.package_id:confs=['tools.build:cxxflags', 'tools.build:cflags']
-# -m64 selects the wasm64 memory model (the non-deprecated spelling of the old
-# -sMEMORY64=1). -sMAXIMUM_MEMORY=8GB uses wasm64's ability to exceed the 4GB
+# -sMAXIMUM_MEMORY=8GB uses wasm64's ability to exceed the 4GB
 # wasm32 ceiling. -sSTACK_SIZE=8MB avoids startup stack overflows from QLever's
 # deep recursion (ANTLR parser, query planner); the default stack is far smaller.
 # -sUSE_ZLIB / -sUSE_BZIP2 supply the zlib/bzip2 headers the bundled spatialjoin
 # dep #includes; they are ports because zlib/bzip2 are not conan dependencies.
-tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-m64', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
-tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-m64', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
+tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
+tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
 # A package-specific list-conf replaces the global value rather than appending,
 # so boost must restate -m64 (which the wasm64 arch otherwise supplies to
 # CMake/autotools builds but not to boost's b2) alongside the EH mode.
