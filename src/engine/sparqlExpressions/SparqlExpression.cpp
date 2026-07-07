@@ -187,6 +187,12 @@ bool SparqlExpression::isInsideAggregate() const {
   return isInsideAggregate_;
 }
 
+// _____________________________________________________________________________
+bool SparqlExpression::worksOnAggregatedData(
+    const EvaluationContext* context) const {
+  return context->_isPartOfGroupBy && !isInsideAggregate();
+}
+
 // ________________________________________________________________
 bool SparqlExpression::isExistsExpression() const { return false; }
 
