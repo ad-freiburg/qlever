@@ -378,7 +378,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 20260107.1  # LTS 2026-01-07
+        GIT_TAG 255c84dadd029fd8ad25c5efb5933e47beaa00c7  # tag 20260107.1 (LTS 2026-01-07)
         EXCLUDE_FROM_ALL
 )
 
@@ -389,7 +389,7 @@ set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
-        GIT_TAG v0.13.1  #version 0.13.1
+        GIT_TAG a37aba69f14af676e9605cd9515c8aca6cef8342  # tag v0.13.1
         SYSTEM
         EXCLUDE_FROM_ALL
 )
