@@ -10,6 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
 // Forward declarations
