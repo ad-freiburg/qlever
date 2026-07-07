@@ -25,7 +25,7 @@ namespace detail {
 
 // CTRE regex patterns for C++17 compatibility
 constexpr ctll::fixed_string csvSpecialCharsRegex = "[\r\n\",]";
-constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
+constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\r\n\t]";
 constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
@@ -301,7 +301,7 @@ std::string escapeForCsv(std::string input) {
 // __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
   if (ctre::search<detail::tsvSpecialCharsRegex>(input)) [[unlikely]] {
-    absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
+    absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}, {"\r", "\\r"}}, &input);
   }
   return input;
 }
