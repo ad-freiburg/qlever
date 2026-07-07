@@ -241,7 +241,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
-  std::string basePath = "MergeVocabulary.mergeVocabularyAssertion";
+  std::string basePath = gtestCurrentTestName();
 
   auto writeUnorderedFile = [](const auto& path) {
     ad_utility::serialization::FileWriteSerializer partialVocab(path);
