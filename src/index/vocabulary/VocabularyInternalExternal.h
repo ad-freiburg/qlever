@@ -49,10 +49,12 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
+  //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
+  //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));

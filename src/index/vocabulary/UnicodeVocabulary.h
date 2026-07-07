@@ -31,10 +31,12 @@ class UnicodeVocabulary {
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
+  //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return _underlyingVocabulary.lookupBatch(indices);
   }
 
+  //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return _underlyingVocabulary.lookupBatchesStreamed(std::move(input));
   }

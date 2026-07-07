@@ -58,10 +58,12 @@ CPP_template(typename UnderlyingVocabulary,
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
+  //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
+  //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));
