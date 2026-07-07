@@ -25,6 +25,9 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
 
+  // TODO<ms2144> creating the disk writer pointer and writing a couple of
+  //  words could also be encapsulated? Does this encapsulation already exist,
+  //  maybe?
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
   writer("alpha", false);
@@ -65,13 +68,12 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 // the underlying vocabularies require sorted input at write time).
 void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
                 const std::string& filename) {
+  // TODO<ms2144> My AI says that we cannot delegate the writer pointer setup
+  // to `vocabulary_test::writeWordsAndFinish`, since the creation for the
+  // writerPtr differs across the different vocabularies. Is this true?
   VocabularyType type{vocabType};
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
-  auto& writer = *writerPtr;
-  for (const auto& word : {"alpha", "beta", "delta", "gamma"}) {
-    writer(word, false);
-  }
-  writer.finish();
+  vocabulary_test::writeWordsAndFinish(*writerPtr);
   vocab.open(filename, type);
 }
 }  // namespace

@@ -7,7 +7,10 @@
 
 #include <gmock/gmock.h>
 
+#include <array>
+
 #include "../../util/GTestHelpers.h"
+#include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
@@ -267,6 +270,23 @@ template <typename F>
 auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
+}
+
+// The default set of words written by `writeWordsAndFinish`.
+// Sorted lexicographically, since the underlying vocabularies require sorted
+// input at write time.
+inline constexpr std::array<std::string_view, 4> defaultTestWords{
+    "alpha", "beta", "delta", "gamma"};
+
+// Feed `words` into an already-constructed word `writer` and `finish()` it. The
+// `words` must be sorted.
+template <typename Writer>
+void writeWordsAndFinish(
+    Writer& writer, ql::span<const std::string_view> words = defaultTestWords) {
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
 }
 
 // Assert that the vocabulary contains `expectedWords[i]` at vocabulary index

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../../GeometryInfoTestHelpers.h"
+#include "VocabularyTestHelpers.h"
 #include "gmock/gmock.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -130,15 +131,10 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // individually via `operator[]`.
   void testLookupBatch() {
     auto geoVocab = setupGeoVocab();
-
     std::array<size_t, 5> indices{2, 0, 3, 1, 0};
     auto result = geoVocab.lookupBatch(indices);
-    ASSERT_EQ(result->size(), indices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      EXPECT_EQ((*result)[i], geoVocab[indices[i]]);
-    }
-
-    geoVocab.close();
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        geoVocab, result, indices);
   }
 
   // `lookupBatchesStreamed` must yield, for each batch, exactly the same
@@ -152,15 +148,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     const auto expectedBatches = batches;
     auto streamedResults =
         geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-    auto streamed = ::ranges::to_vector(streamedResults);
-    ASSERT_EQ(streamed.size(), expectedBatches.size());
-
-    for (size_t b = 0; b < expectedBatches.size(); ++b) {
-      ASSERT_EQ(streamed[b]->size(), expectedBatches[b].size());
-      for (size_t i = 0; i < expectedBatches[b].size(); ++i) {
-        EXPECT_EQ((*streamed[b])[i], geoVocab[expectedBatches[b][i]]);
-      }
-    }
+    vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+        geoVocab, streamedResults, expectedBatches);
 
     geoVocab.close();
   }

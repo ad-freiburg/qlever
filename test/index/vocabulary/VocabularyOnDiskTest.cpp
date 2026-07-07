@@ -180,10 +180,8 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
 
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
   auto result = vocab.lookupBatch(indices);
-  ASSERT_EQ(result->size(), indices.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    EXPECT_EQ((*result)[i], vocab[indices[i]]) << "at position " << i;
-  }
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(vocab, result,
+                                                                indices);
 }
 
 // An empty batch is an invalid request and must throw.
@@ -211,19 +209,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
   const auto expectedBatches = batches;
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-
-  size_t b = 0;
-  for (auto& result : streamed) {
-    ASSERT_LT(b, expectedBatches.size());
-    const auto& batchIndices = expectedBatches[b];
-    ASSERT_EQ(result->size(), batchIndices.size()) << "at batch " << b;
-    for (size_t i = 0; i < batchIndices.size(); ++i) {
-      EXPECT_EQ((*result)[i], vocab[batchIndices[i]])
-          << "at batch " << b << " position " << i;
-    }
-    ++b;
-  }
-  EXPECT_EQ(b, expectedBatches.size());
+  vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+      vocab, streamed, expectedBatches);
 }
 
 // An empty input stream (no batches) is valid and must produce no results.
@@ -232,10 +219,6 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   std::vector<std::vector<size_t>> noBatches;
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
-  size_t count = 0;
-  for ([[maybe_unused]] auto& r : streamed) {
-    ++count;
-  }
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "index/Vocabulary.h"
+#include "index/vocabulary/VocabularyTestHelpers.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/json.h"
 
@@ -165,6 +166,10 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 TEST(VocabularyTest, LookupBatch) {
   using ad_utility::VocabularyType;
   RdfsVocabulary v;
+  // TODO<ms2144>: In some of the other test cases for the vocabulary test
+  //  helpers we created helpers in order to encapsulate this.
+  //  Should we create a helper for this in the VocabularyTestHelpers.h
+  //  or create a helper for this in this file right here?
   v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
   ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
   auto filename = "vocTestLookupBatch.dat";
