@@ -773,6 +773,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   auto serverForTesting = makeServerForTesting(testIndexBase_);
+  // Config for the plain `Server` instances constructed below (not to be
+  // confused with the config of `serverForTesting` above).
   qlever::EngineConfig config;
   config.baseName_ = testIndexBase_;
 
@@ -794,7 +796,6 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 
   // Test the preloading of materialized views on server start.
   {
-    config.persistUpdates_ = false;
     config.preloadMaterializedViews_ = {"testViewForServerPreload"};
     qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
     Server server{4321, 1, "accessToken", config};
