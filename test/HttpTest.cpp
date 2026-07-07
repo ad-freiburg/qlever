@@ -332,19 +332,14 @@ TYPED_TEST(HttpServerBodyTest, HttpTest) {
 
 // Test the various `catch` clauses in `HttpServer::session`.
 TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
-  // We will interfere with the logging to test it, so we have to reset the
-  // logging after we are done.
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-
   // Do the following: Create an HttpServer that echoes the response and then
   // throws `exceptionObject`. Send an HTTP request to trigger the exception.
   // Capture the server log and return it for inspection.
   // Note: We need a separate server for each call because we must shut down
   // before reading the log to avoid a race condition on the logging stream.
   auto throwAndCaptureLog = [this](auto exceptionObject) {
-    std::stringstream logStream;
-    ad_utility::setGlobalLoggingStream(&logStream);
+    // We interfere with the logging to test it.
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
     // Convert the `exceptionObject` to an `exception_ptr`.
     std::exception_ptr exception;

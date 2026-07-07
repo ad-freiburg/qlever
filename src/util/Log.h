@@ -143,7 +143,8 @@ struct LogstreamChoice {
 };
 
 // After this call, every use of `AD_LOG_...` will use the specified stream.
-// Used in various tests to redirect or suppress logging output.
+// In tests use `setGlobalLoggingStreamForTesting` from `GTestHelpers.h` which
+// also restores the previous value.
 inline void setGlobalLoggingStream(std::ostream* stream) {
   LogstreamChoice::get().setStream(stream);
 }

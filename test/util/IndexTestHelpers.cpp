@@ -158,9 +158,10 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 // _____________________________________________________________________________
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
-  // these tests.
-  static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // these tests. The returned cleanup restores the previously active logging
+  // stream when it goes out of scope at the end of this function.
+  std::ostringstream ignoreLogStream;
+  auto logCleanup = setGlobalLoggingStreamForTesting(&ignoreLogStream);
   // Remove previous index files. This is necessary because if we previously
   // built the same index without patterns or all 6 permutations, we wouldn't
   // overwrite the patterns or the missing permutations. This would lead to a
@@ -305,7 +306,6 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
-  ad_utility::setGlobalLoggingStream(&std::cout);
 
   if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
