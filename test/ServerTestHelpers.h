@@ -126,20 +126,18 @@ class PersistentTestServer {
   }
 };
 
-// Helper function creating a simple config for testing.
-inline qlever::EngineConfig getDefaultConfig() {
-  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+// Helper function creating a config for testing with the given base name.
+inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
   qlever::EngineConfig config;
-  config.baseName_ = qec->getIndex().getOnDiskBase();
+  config.baseName_ = std::move(baseName);
   config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
   return config;
 }
 
-// Helper function creating a config for testing with the given base name.
-inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
-  auto config = getDefaultConfig();
-  config.baseName_ = std::move(baseName);
-  return config;
+// Helper function creating a simple config for testing.
+inline qlever::EngineConfig getDefaultConfig() {
+  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+  return getDefaultConfigWithName(qec->getIndex().getOnDiskBase());
 }
 
 // Test the HTTP request processing of the `Server` class. Each call creates a
