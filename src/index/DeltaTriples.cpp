@@ -101,9 +101,10 @@ void DeltaTriples::eraseTriplesInPermutation(
   const auto& perm = index_.getPermutation(permutation);
   LocatedTriplesPerBlock& lts =
       locatedTriples_->getLocatedTriplesForPermutation<isInternal>(permutation);
-  // Find the `blockIndex` for each of the `triples`. `insertOrDelete` could be
-  // any value because `erase` because the `SortedSequence` only considers the
-  // triple. Here it is the actual value though.
+  // Determine the `blockIndex` for each of the `triples` which is required for
+  // deletion. `insertOrDelete` could be any value because `erase` because the
+  // `SortedSequence` only considers the triple. Here it is the actual value
+  // though.
   auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
       triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
       cancellationHandle);
