@@ -34,6 +34,8 @@
 #include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
+using namespace qlever;
+
 using ad_utility::InputRangeTypeErased;
 
 namespace {

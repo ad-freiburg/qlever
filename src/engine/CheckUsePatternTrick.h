@@ -9,7 +9,7 @@
 
 #include "parser/ParsedQuery.h"
 
-namespace checkUsePatternTrick {
+namespace qlever::checkUsePatternTrick {
 
 // If the pattern trick can be applied, then this struct is used to communicate
 // the subject and predicate variable for the pattern trick.
@@ -59,6 +59,6 @@ bool isVariableContainedInGraphPatternOperation(
     const parsedQuery::GraphPatternOperation& operation,
     const SparqlTriple* tripleToIgnore);
 
-}  // namespace checkUsePatternTrick
+}  // namespace qlever::checkUsePatternTrick
 
 #endif  // QLEVER_SRC_ENGINE_CHECKUSEPATTERNTRICK_H

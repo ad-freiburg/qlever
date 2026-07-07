@@ -14,6 +14,8 @@
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever;
+
 using std::endl;
 using std::string;
 

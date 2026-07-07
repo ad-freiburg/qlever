@@ -13,6 +13,11 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
+using qlever::Id;
+using qlever::WordIndex;
+
 class ContextListMetaData {
  public:
   ContextListMetaData()
@@ -134,5 +139,7 @@ class TextMetaData {
     serializer | arg._blocks;
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_TEXTMETADATA_H

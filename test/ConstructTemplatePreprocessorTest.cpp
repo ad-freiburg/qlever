@@ -36,6 +36,7 @@ using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
 using namespace qlever::constructExport;
+using qlever::GraphTerm;
 using Triples = ad_utility::sparql_types::Triples;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;

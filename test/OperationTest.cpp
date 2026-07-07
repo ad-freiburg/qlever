@@ -25,6 +25,7 @@
 
 using namespace ad_utility::testing;
 using namespace ::testing;
+using namespace qlever;
 using ad_utility::CacheStatus;
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
@@ -337,6 +338,8 @@ TEST(OperationTest, estimatesForCachedResults) {
     EXPECT_EQ(qet->getCostEstimate(), 210u);
   }
 }
+
+namespace qlever {
 
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
@@ -843,6 +846,8 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
   runTest(10_B, 1_B, true, 10_B);
   runTest(1_B, 10_B, true, 1_B);
 }
+
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(OperationTest, disableCachingForOperation) {

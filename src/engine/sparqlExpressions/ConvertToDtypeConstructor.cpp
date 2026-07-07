@@ -26,7 +26,7 @@
   xsd:integer. If the conversion fails, the result is `undefined`.
 */
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 //______________________________________________________________________________
 // CONVERT TO NUMERIC
@@ -191,4 +191,4 @@ Expr makeConvertToDateExpression(Expr child) {
   return std::make_unique<ToXsdDate>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

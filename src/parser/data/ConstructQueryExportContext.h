@@ -10,8 +10,14 @@
 #include "rdfTypes/Variable.h"
 
 // Forward declarations to avoid cyclic dependencies
+namespace qlever {
 class Index;
+class LocalVocab;
+}  // namespace qlever
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
+
+using qlever::Index;
+using qlever::LocalVocab;
 
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {

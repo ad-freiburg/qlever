@@ -128,6 +128,7 @@ auto testAccessTokenCombinationsUrlEncoded = [](auto parse,
 
 }  // namespace
 
+namespace qlever {
 // _____________________________________________________________________________________________
 TEST(SparqlProtocolTest, parseGET) {
   auto parse =
@@ -550,3 +551,4 @@ TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect) {
                               GraphStoreOperation{iri(absl::StrCat(
                                   "<http://example.com", path, ">"))}));
 }
+}  // namespace qlever

@@ -38,6 +38,9 @@
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
 // file should not be included in header files.
 
+using qlever::CoordinateOutOfRangeException;
+using qlever::GeoPoint;
+
 namespace ad_utility::detail {
 
 using namespace ::util::geo;

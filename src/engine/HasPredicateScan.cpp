@@ -13,6 +13,8 @@
 #include "index/IndexImpl.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
+using namespace qlever;
+
 // Assert that the `type` is a valid value for the `ScanType` enum.
 static void checkType(HasPredicateScan::ScanType type) {
   using enum HasPredicateScan::ScanType;

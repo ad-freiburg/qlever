@@ -15,6 +15,7 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+using qlever::ValueId;
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,

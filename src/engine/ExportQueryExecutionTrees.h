@@ -23,6 +23,8 @@
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
+namespace qlever {
+
 // Class for computing the result of an already parsed and planned query and
 // exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
 //
@@ -189,5 +191,9 @@ class ExportQueryExecutionTrees {
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
   FRIEND_TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause);
 };
+
+}  // namespace qlever
+
+using qlever::ExportQueryExecutionTrees;
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

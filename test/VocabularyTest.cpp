@@ -11,6 +11,8 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/json.h"
 
+using namespace qlever;
+
 using json = nlohmann::json;
 using std::string;
 

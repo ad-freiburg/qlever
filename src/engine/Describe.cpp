@@ -11,6 +11,8 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,

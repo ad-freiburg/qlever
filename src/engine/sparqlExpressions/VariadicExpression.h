@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 // A base class for variadic expressions, i.e. expressions for which the number
 // of child expressions is only known at runtime. This class implements every
 // function except for `evaluate`. In particular, it manages the child
@@ -53,6 +53,6 @@ class VariadicExpression : public SparqlExpression {
   }
 };
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 #endif  // QLEVER_VARIADICEXPRESSION_H

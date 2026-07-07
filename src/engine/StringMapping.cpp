@@ -60,7 +60,7 @@ Id StringMapping::remapId(Id id) {
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
   // `dinstinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
+  return Id::makeFromLocalVocabIndex(reinterpret_cast<qlever::LocalVocabIndex>(
       distinctIndex << Id::numDatatypeBits));
 }
 

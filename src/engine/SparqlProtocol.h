@@ -8,6 +8,8 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/ParsedRequestBuilder.h"
 
+namespace qlever {
+
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
 // Graph Store and internal operations) according to the SPARQL specifications.
 class SparqlProtocol {
@@ -61,6 +63,10 @@ class SparqlProtocol {
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       RequestType& request);
 };
+
+}  // namespace qlever
+
+using qlever::SparqlProtocol;
 
 #endif
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

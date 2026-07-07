@@ -15,6 +15,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 
+namespace qlever {
+
 class Union : public Operation {
  private:
   /**
@@ -132,5 +134,9 @@ class Union : public Operation {
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
 };
+
+}  // namespace qlever
+
+using qlever::Union;
 
 #endif  // QLEVER_SRC_ENGINE_UNION_H

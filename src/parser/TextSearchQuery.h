@@ -169,7 +169,7 @@ struct TextIndexScanForWordConfiguration {
       std::ostream& os, const TextIndexScanForWordConfiguration& conf);
 };
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 class TextSearchException : public std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -246,6 +246,6 @@ struct TextSearchQuery : MagicServiceQuery {
   };
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H

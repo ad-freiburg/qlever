@@ -13,6 +13,8 @@
 #include "engine/StringMapping.h"
 #include "global/Id.h"
 
+using namespace qlever;
+
 using namespace qlever::binary_export;
 
 // _____________________________________________________________________________

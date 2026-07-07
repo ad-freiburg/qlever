@@ -9,6 +9,8 @@
 
 #include "global/ValueId.h"
 
+namespace qlever {
+
 using Id = ValueId;
 using Score = float;
 
@@ -21,5 +23,7 @@ using WordIndex = uint64_t;
 using WordOrEntityIndex = uint64_t;
 using TextBlockIndex = uint64_t;
 using CompressionCode = uint64_t;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_GLOBAL_ID_H

@@ -17,6 +17,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
 using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;

@@ -11,6 +11,8 @@
 #include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
+using namespace qlever;
+
 namespace {
 // A class that executes a passed function in its constructor.
 class Caller {

@@ -16,7 +16,7 @@ class MaterializedViewConfigException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // A `MagicServiceQuery` for performing a custom `IndexScan` on a
 // `MaterializedView`. Using the `SERVICE` version of this query, the user may
@@ -80,6 +80,6 @@ struct MaterializedViewQuery : MagicServiceQuery {
                           const TripleComponent& object);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_MATERIALIZEDVIEWQUERY_H

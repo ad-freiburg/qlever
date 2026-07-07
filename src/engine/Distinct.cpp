@@ -12,6 +12,8 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 using std::endl;
 using std::string;
 

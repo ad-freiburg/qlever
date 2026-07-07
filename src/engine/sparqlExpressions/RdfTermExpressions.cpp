@@ -4,7 +4,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::rdfExpressions {
 
 struct GetDatatypeImpl {
@@ -28,4 +28,4 @@ Expr makeDatatypeExpression(Expr child) {
   return std::make_unique<GetDatatype>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

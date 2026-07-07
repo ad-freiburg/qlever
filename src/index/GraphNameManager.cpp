@@ -13,6 +13,8 @@
 
 #include "util/Serializer/FileSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
                                    uint64_t nextUnallocatedGraph)
@@ -71,3 +73,5 @@ void from_json(const nlohmann::json& j, GraphNameManager& namespaceManager) {
   namespaceManager.nextUnallocatedGraph_ =
       j.at("allocatedGraphs").get<uint64_t>();
 }
+
+}  // namespace qlever

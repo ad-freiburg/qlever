@@ -19,6 +19,10 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
+using qlever::TextBlockIndex;
+
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
@@ -267,3 +271,5 @@ void IndexImpl::storeTextScoringParamsInConfiguration(
   configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;
   writeConfiguration();
 }
+
+}  // namespace qlever

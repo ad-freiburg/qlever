@@ -17,6 +17,8 @@
 #include "parser/data/Types.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 // Data container for parsed triples from the where clause.
 // It is templated on the predicate type, see the instantiations below.
 template <typename Predicate>
@@ -150,5 +152,7 @@ class SparqlTriple
     }
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

@@ -32,6 +32,10 @@
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
+using qlever::TripleComponent;
+using qlever::TripleComponentComparator;
+using qlever::VocabIndex;
+
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
 //

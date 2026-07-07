@@ -8,6 +8,8 @@
 #include "engine/UpdateMetadata.h"
 #include "index/IndexImpl.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,

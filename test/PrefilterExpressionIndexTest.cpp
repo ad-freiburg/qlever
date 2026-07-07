@@ -10,6 +10,8 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "util/GTestHelpers.h"
 
+using namespace qlever;
+
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
 using ad_utility::testing::DoubleId;
@@ -22,7 +24,7 @@ namespace {
 using namespace prefilterExpressions;
 using namespace makeFilterExpression;
 using namespace filterHelper;
-using namespace valueIdComparators;
+using namespace qlever::valueIdComparators;
 
 constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 

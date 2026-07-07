@@ -31,6 +31,7 @@ namespace {
 
 using namespace sparqlExpression;
 using ad_utility::testing::iri;
+using qlever::ParsedQuery;
 
 }  // namespace
 

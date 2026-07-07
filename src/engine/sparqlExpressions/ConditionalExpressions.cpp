@@ -11,7 +11,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerWarnings.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
 struct IfImpl {
@@ -246,4 +246,4 @@ SparqlExpression::Ptr makeCoalesceExpression(
   return std::make_unique<CoalesceExpression>(std::move(children));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

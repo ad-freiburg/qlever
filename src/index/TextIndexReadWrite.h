@@ -17,6 +17,13 @@
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
+using qlever::ContextListMetaData;
+using qlever::Id;
+using qlever::Posting;
+using qlever::TextBlockMetaData;
+using qlever::TextRecordIndex;
+using qlever::WordIndex;
+
 namespace textIndexReadWrite::detail {
 
 // This function contains the actual frequency compressed list reading and does

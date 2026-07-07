@@ -8,6 +8,8 @@
 #include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
   auto* qec = ad_utility::testing::getQec();

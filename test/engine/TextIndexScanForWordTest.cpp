@@ -19,6 +19,7 @@
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
+using namespace qlever;
 using ad_utility::source_location;
 namespace h = textIndexScanTestHelpers;
 using qlever::TextScoringMetric;

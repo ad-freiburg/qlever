@@ -57,6 +57,8 @@
 #include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
+using namespace qlever;
+
 namespace {
 // CTRE regex pattern for C++17 compatibility
 constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
@@ -65,7 +67,7 @@ constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 using namespace ad_utility::sparql_types;
 using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
-using namespace updateClause;
+using namespace qlever::updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = parsedQuery::SelectClause;

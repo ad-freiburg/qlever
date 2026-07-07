@@ -10,6 +10,8 @@
 #include "parser/ParserAndVisitorBase.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
   if (checkName && ad_utility::areExpensiveChecksEnabled) {
@@ -125,3 +127,5 @@ bool Variable::isValidVariableName(std::string_view var) {
     return false;
   }
 }
+
+}  // namespace qlever

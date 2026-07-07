@@ -7,6 +7,10 @@
 #include "backports/algorithm.h"
 #include "global/Constants.h"
 
+namespace qlever {
+
+using namespace qlever;
+
 // _____________________________________________________________________________
 void DocsDB::init(const std::string& fileName) {
   _dbFile.open(fileName.c_str(), "r");
@@ -43,3 +47,5 @@ std::string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
   _dbFile.read(line.data(), nofBytes, from);
   return line;
 }
+
+}  // namespace qlever

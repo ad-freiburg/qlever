@@ -54,6 +54,7 @@
 using ad_utility::source_location;
 
 namespace queryPlannerTestHelpers {
+using namespace qlever;
 using namespace ::testing;
 
 // Most of the following matchers work on `QueryExecutionTree`s, so we introduce
@@ -64,7 +65,7 @@ using QetMatcher = Matcher<const QueryExecutionTree&>;
 // `QueryExecutionTree` matches the given `matcher`.
 inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
   auto getRootOperation =
-      [](const QueryExecutionTree& tree) -> const ::Operation& {
+      [](const QueryExecutionTree& tree) -> const qlever::Operation& {
     return *tree.getRootOperation().get();
   };
   return ResultOf(getRootOperation, matcher);
@@ -81,7 +82,7 @@ QetMatcher RootOperation(M matcher) {
 CPP_template(typename... ChildArgs)(
     requires(...&& ql::concepts::same_as<QetMatcher,
                                          ChildArgs>))  //
-    inline Matcher<const ::Operation&> children(
+    inline Matcher<const qlever::Operation&> children(
         const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
@@ -150,7 +151,7 @@ constexpr auto IndexScan =
                         Pointee(AD_PROPERTY(MaterializedView, name,
                                             Eq(materializedView))))
           : AD_PROPERTY(Permutation, materializedView, Eq(nullptr));
-  return RootOperation<::IndexScan>(
+  return RootOperation<qlever::IndexScan>(
       AllOf(AD_PROPERTY(
                 IndexScan, permutation,
                 AllOf(AD_PROPERTY(Permutation, permutation, permutationMatcher),
@@ -168,22 +169,23 @@ constexpr auto IndexScan =
 
 // Match the `NeutralElementOperation`.
 constexpr auto NeutralElement = []() -> QetMatcher {
-  return MatchTypeAndOrderedChildren<::NeutralElementOperation>();
+  return MatchTypeAndOrderedChildren<qlever::NeutralElementOperation>();
 };
 
 constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          std::string word) -> QetMatcher {
-  return RootOperation<::TextIndexScanForWord>(AllOf(
-      AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(2 + ql::ends_with(word, '*'))),
-      AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
-      AD_PROPERTY(::TextIndexScanForWord, word, word)));
+  return RootOperation<qlever::TextIndexScanForWord>(
+      AllOf(AD_PROPERTY(qlever::TextIndexScanForWord, getResultWidth,
+                        Eq(2 + ql::ends_with(word, '*'))),
+            AD_PROPERTY(qlever::TextIndexScanForWord, textRecordVar,
+                        Eq(textRecordVar)),
+            AD_PROPERTY(qlever::TextIndexScanForWord, word, word)));
 };
 
 constexpr auto TextIndexScanForWordConf =
     [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
-  return RootOperation<::TextIndexScanForWord>(
-      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
+  return RootOperation<qlever::TextIndexScanForWord>(
+      AD_PROPERTY(qlever::TextIndexScanForWord, getConfig, conf));
 };
 
 // Matcher for the `TextLimit` Operation.
@@ -191,12 +193,13 @@ constexpr auto TextLimit =
     [](const size_t n, const QetMatcher& childMatcher,
        const Variable& textRecVar, const std::vector<Variable>& entityVars,
        const std::vector<Variable>& scoreVars) -> QetMatcher {
-  return RootOperation<::TextLimit>(AllOf(
-      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)), children(childMatcher),
-      AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
-      AD_PROPERTY(::TextLimit, getEntityVariables,
+  return RootOperation<qlever::TextLimit>(AllOf(
+      AD_PROPERTY(qlever::TextLimit, getTextLimit, Eq(n)),
+      children(childMatcher),
+      AD_PROPERTY(qlever::TextLimit, getTextRecordVariable, Eq(textRecVar)),
+      AD_PROPERTY(qlever::TextLimit, getEntityVariables,
                   UnorderedElementsAreArray(entityVars)),
-      AD_PROPERTY(::TextLimit, getScoreVariables,
+      AD_PROPERTY(qlever::TextLimit, getScoreVariables,
                   UnorderedElementsAreArray(scoreVars))));
 };
 
@@ -206,30 +209,32 @@ inline auto TextIndexScanForEntity =
   // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
   // here to test the contract-checks in entityVariable() and fixedEntity().
   if (std::holds_alternative<Variable>(entity)) {
-    return RootOperation<::TextIndexScanForEntity>(AllOf(
-        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+    return RootOperation<qlever::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(qlever::TextIndexScanForEntity, getResultWidth,
                     Eq(2 + std::holds_alternative<Variable>(entity))),
-        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
-        AD_PROPERTY(::TextIndexScanForEntity, entityVariable,
+        AD_PROPERTY(qlever::TextIndexScanForEntity, textRecordVar,
+                    Eq(textRecordVar)),
+        AD_PROPERTY(qlever::TextIndexScanForEntity, entityVariable,
                     std::get<Variable>(entity)),
-        AD_PROPERTY(::TextIndexScanForEntity, word, word),
-        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, false)));
+        AD_PROPERTY(qlever::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(qlever::TextIndexScanForEntity, hasFixedEntity, false)));
   } else {
-    return RootOperation<::TextIndexScanForEntity>(AllOf(
-        AD_PROPERTY(::TextIndexScanForEntity, getResultWidth,
+    return RootOperation<qlever::TextIndexScanForEntity>(AllOf(
+        AD_PROPERTY(qlever::TextIndexScanForEntity, getResultWidth,
                     Eq(2 + std::holds_alternative<Variable>(entity))),
-        AD_PROPERTY(::TextIndexScanForEntity, textRecordVar, Eq(textRecordVar)),
-        AD_PROPERTY(::TextIndexScanForEntity, fixedEntity,
+        AD_PROPERTY(qlever::TextIndexScanForEntity, textRecordVar,
+                    Eq(textRecordVar)),
+        AD_PROPERTY(qlever::TextIndexScanForEntity, fixedEntity,
                     std::get<std::string>(entity)),
-        AD_PROPERTY(::TextIndexScanForEntity, word, word),
-        AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
+        AD_PROPERTY(qlever::TextIndexScanForEntity, word, word),
+        AD_PROPERTY(qlever::TextIndexScanForEntity, hasFixedEntity, true)));
   }
 };
 
 constexpr auto TextIndexScanForEntityConf =
     [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
-  return RootOperation<::TextIndexScanForEntity>(
-      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
+  return RootOperation<qlever::TextIndexScanForEntity>(
+      AD_PROPERTY(qlever::TextIndexScanForEntity, getConfig, conf));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,
@@ -240,8 +245,9 @@ inline auto Bind = [](const QetMatcher& childMatcher,
             AD_FIELD(parsedQuery::Bind, _expression,
                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
                                  getDescriptor, Eq(expression))));
-  return RootOperation<::Bind>(AllOf(
-      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)), children(childMatcher)));
+  return RootOperation<qlever::Bind>(
+      AllOf(AD_PROPERTY(qlever::Bind, bind, AllOf(innerMatcher)),
+            children(childMatcher)));
 };
 
 // Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
@@ -253,13 +259,14 @@ struct CountAvailablePredicatesMatcher {
                   const Variable& countVar,
                   const ChildArgs&... childMatchers) const
       QL_CONCEPT_OR_NOTHING(requires(sizeof...(childMatchers) <= 1)) {
-    return RootOperation<::CountAvailablePredicates>(AllOf(
-        AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
-                    Eq(subjectColumnIdx)),
-        AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
-                    Eq(predicateVar)),
-        AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
-        children(childMatchers...)));
+    return RootOperation<qlever::CountAvailablePredicates>(
+        AllOf(AD_PROPERTY(qlever::CountAvailablePredicates, subjectColumnIndex,
+                          Eq(subjectColumnIdx)),
+              AD_PROPERTY(qlever::CountAvailablePredicates, predicateVariable,
+                          Eq(predicateVar)),
+              AD_PROPERTY(qlever::CountAvailablePredicates, countVariable,
+                          Eq(countVar)),
+              children(childMatchers...)));
   }
 };
 constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
@@ -311,14 +318,16 @@ inline auto IndexScanFromStrings =
 
 // For the following Join algorithms the order of the children is not
 // important.
-inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
-inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
+inline auto MultiColumnJoin =
+    MatchTypeAndUnorderedChildren<qlever::MultiColumnJoin>;
+inline auto Join = MatchTypeAndUnorderedChildren<qlever::Join>;
 
-constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<qlever::OptionalJoin>;
 
-constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
+constexpr auto NeutralOptional =
+    MatchTypeAndOrderedChildren<qlever::NeutralOptional>;
 
-constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
+constexpr auto Minus = MatchTypeAndOrderedChildren<qlever::Minus>;
 
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
@@ -328,13 +337,13 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
   auto collectChildrenRecursive = [](const QueryExecutionTree& tree,
                                      Vec& children, const auto& self) -> void {
     const Operation* operation = tree.getRootOperation().get();
-    auto join = dynamic_cast<const ::Join*>(operation);
-    auto multiColJoin = dynamic_cast<const ::MultiColumnJoin*>(operation);
+    auto join = dynamic_cast<const qlever::Join*>(operation);
+    auto multiColJoin = dynamic_cast<const qlever::MultiColumnJoin*>(operation);
     // Also allow the INTERNAL SORT BY operations that are needed for the
     // joins.
     // TODO<joka921> is this the right place to also check that those have
     // the correct columns?
-    auto sort = dynamic_cast<const ::Sort*>(operation);
+    auto sort = dynamic_cast<const qlever::Sort*>(operation);
     if (!join && !sort && !multiColJoin) {
       children.push_back(tree);
     } else {
@@ -354,7 +363,7 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
 };
 
 inline auto CartesianProductJoin =
-    MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
+    MatchTypeAndUnorderedChildren<qlever::CartesianProductJoin>;
 
 inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
   return AllOf(AD_FIELD(TransitivePathSide, value_, Eq(side.value_)),
@@ -369,7 +378,7 @@ struct TransitivePath {
   auto operator()(TransitivePathSide left, TransitivePathSide right,
                   size_t minDist, size_t maxDist,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::TransitivePathBase>(
+    return RootOperation<qlever::TransitivePathBase>(
         AllOf(children(childMatchers...),
               AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
               AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
@@ -403,17 +412,18 @@ struct PathSearch {
       QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(PathSearchConfiguration config, bool sourceBound,
                   bool targetBound, const ChildArgs&... childMatchers) const {
-    return RootOperation<::PathSearch>(AllOf(
-        children(childMatchers...),
-        AD_PROPERTY(::PathSearch, getConfig, PathSearchConfigMatcher(config)),
-        AD_PROPERTY(::PathSearch, isSourceBound, Eq(sourceBound)),
-        AD_PROPERTY(::PathSearch, isTargetBound, Eq(targetBound))));
+    return RootOperation<qlever::PathSearch>(
+        AllOf(children(childMatchers...),
+              AD_PROPERTY(qlever::PathSearch, getConfig,
+                          PathSearchConfigMatcher(config)),
+              AD_PROPERTY(qlever::PathSearch, isSourceBound, Eq(sourceBound)),
+              AD_PROPERTY(qlever::PathSearch, isTargetBound, Eq(targetBound))));
   }
 };
 constexpr inline PathSearch pathSearch;
 
 inline auto ValuesClause = [](std::string cacheKey) {
-  return RootOperation<::Values>(
+  return RootOperation<qlever::Values>(
       AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };
 
@@ -428,19 +438,20 @@ struct SpatialJoinMatcher {
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::SpatialJoin>(AllOf(
+    return RootOperation<qlever::SpatialJoin>(AllOf(
         children(childMatchers...),
-        AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
+        AD_PROPERTY(qlever::SpatialJoin, onlyForTestingGetTask,
                     Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
-        AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
+        AD_PROPERTY(qlever::SpatialJoin, onlyForTestingGetVariables,
                     Eq(std::pair(left, right))),
-        AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
+        AD_PROPERTY(qlever::SpatialJoin, onlyForTestingGetDistanceVariable,
                     Eq(distanceVariable)),
-        AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
+        AD_PROPERTY(qlever::SpatialJoin, onlyForTestingGetPayloadVariables,
                     Eq(payloadVariables)),
-        AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
-        AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
-        AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
+        AD_PROPERTY(qlever::SpatialJoin, getAlgorithm, Eq(algorithm)),
+        AD_PROPERTY(qlever::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(qlever::SpatialJoin, getSubstitutesFilterOp,
+                    Eq(Substitute))));
   }
 };
 constexpr inline SpatialJoinMatcher spatialJoin;
@@ -459,45 +470,47 @@ static constexpr auto GroupBy =
     return result;
   };
 
-  return RootOperation<::GroupBy>(
+  return RootOperation<qlever::GroupBy>(
       AllOf(children(childMatcher),
-            AD_PROPERTY(::GroupBy, groupByVariables,
+            AD_PROPERTY(qlever::GroupBy, groupByVariables,
                         UnorderedElementsAreArray(groupByVariables)),
-            AD_PROPERTY(::GroupBy, aliases,
+            AD_PROPERTY(qlever::GroupBy, aliases,
                         ResultOf(aliasesToStrings, ContainerEq(aliases)))));
 };
 
 // Match a sort operation. Currently, this is only required by the binary
 // search version of the transitive path operation. This matcher checks only
 // the children of the sort operation.
-inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
+inline auto Sort = MatchTypeAndUnorderedChildren<qlever::Sort>;
 
 // Match a `Filter` operation. The matching of the expression is currently
 // only done via the descriptor.
 constexpr auto Filter = [](std::string_view descriptor,
                            const QetMatcher& childMatcher) {
-  return RootOperation<::Filter>(
-      AllOf(children(childMatcher),
-            AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
+  return RootOperation<qlever::Filter>(AllOf(
+      children(childMatcher),
+      AD_PROPERTY(qlever::Operation, getDescriptor, HasSubstr(descriptor))));
 };
 
 // Match an `OrderBy` operation
-constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
-                            const QetMatcher& childMatcher) {
-  return RootOperation<::OrderBy>(
-      AllOf(children(childMatcher),
-            AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
-};
+constexpr auto OrderBy =
+    [](const qlever::OrderBy::SortedVariables& sortedVariables,
+       const QetMatcher& childMatcher) {
+      return RootOperation<qlever::OrderBy>(
+          AllOf(children(childMatcher),
+                AD_PROPERTY(qlever::OrderBy, getSortedVariables,
+                            Eq(sortedVariables))));
+    };
 
 // Match a `UNION` operation.
-constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+constexpr auto Union = MatchTypeAndOrderedChildren<qlever::Union>;
 
 // Match a `DISTINCT` operation.
 constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
                              const QetMatcher& childMatcher) {
-  return RootOperation<::Distinct>(
+  return RootOperation<qlever::Distinct>(
       AllOf(children(childMatcher),
-            AD_PROPERTY(::Distinct, getDistinctColumns,
+            AD_PROPERTY(qlever::Distinct, getDistinctColumns,
                         UnorderedElementsAreArray(distinctColumns))));
 };
 
@@ -505,15 +518,16 @@ constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
 inline QetMatcher Describe(
     const Matcher<const parsedQuery::Describe&>& describeMatcher,
     const QetMatcher& childMatcher) {
-  return RootOperation<::Describe>(
+  return RootOperation<qlever::Describe>(
       AllOf(children(childMatcher),
-            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+            AD_PROPERTY(qlever::Describe, getDescribe, describeMatcher)));
 }
 
 // Match an `ExistsJoin`
 inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
                              const QetMatcher& rightChild) {
-  return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
+  return RootOperation<qlever::ExistsJoin>(
+      AllOf(children(leftChild, rightChild)));
 }
 
 // Match an `ExplicitIdTableOperation`, but only test its size estimate (which
@@ -521,9 +535,9 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
 // this operation can be found in `ExplicitIdTableOperationTest.cpp` and
 // `NamedResultCacheTest.cpp`.
 inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
-  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
+  auto p = AD_PROPERTY(qlever::ExplicitIdTableOperation, sizeEstimate,
                        ::testing::Eq(sizeEstimate));
-  return RootOperation<::ExplicitIdTableOperation>(p);
+  return RootOperation<qlever::ExplicitIdTableOperation>(p);
 }
 
 //
@@ -534,7 +548,7 @@ inline QetMatcher QetWithWarnings(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });
   return AllOf(RootOperationBase(
-                   AD_PROPERTY(::Operation, collectWarnings,
+                   AD_PROPERTY(qlever::Operation, collectWarnings,
                                UnorderedElementsAreArray(warningMatchers))),
                actualMatcher);
 }
@@ -596,7 +610,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
         // Construct index scan
         SparqlTripleSimple triple{{*vars[0]}, {equalTo}, {*vars[1]}};
         SubtreePlan plan{getQec(),
-                         std::make_shared<::IndexScan>(
+                         std::make_shared<qlever::IndexScan>(
                              getQec(), Permutation::Enum::PSO, triple)};
 
         // Set marker for included filter

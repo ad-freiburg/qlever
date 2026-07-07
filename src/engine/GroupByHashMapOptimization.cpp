@@ -4,6 +4,8 @@
 
 #include "engine/GroupByHashMapOptimization.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 [[nodiscard]] ValueId AvgAggregationData::calculateResult(
     [[maybe_unused]] const LocalVocabContext& context,

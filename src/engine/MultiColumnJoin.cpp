@@ -11,6 +11,9 @@
 #include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever;
+using namespace qlever::joinHelpers;
+
 using std::endl;
 using std::string;
 

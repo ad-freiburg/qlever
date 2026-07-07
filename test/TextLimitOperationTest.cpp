@@ -13,6 +13,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const ColumnIndex& textRecordColumn,

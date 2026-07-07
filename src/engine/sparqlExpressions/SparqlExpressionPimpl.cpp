@@ -9,7 +9,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // __________________________________________________________________________
 SparqlExpressionPimpl::SparqlExpressionPimpl(
@@ -137,4 +137,4 @@ std::vector<SparqlExpression*> SparqlExpressionPimpl::getExistsExpressions() {
   _pimpl->getExistsExpressions(result);
   return result;
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

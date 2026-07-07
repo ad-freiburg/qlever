@@ -29,6 +29,8 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+namespace qlever {
+
 namespace groupBy::detail {
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 class LazyGroupByRange;
@@ -645,5 +647,9 @@ template <typename A>
 CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
+
+}  // namespace qlever
+
+using qlever::GroupByImpl;
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBYIMPL_H

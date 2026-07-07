@@ -16,6 +16,8 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace {
 
 using ad_utility::source_location;
@@ -1330,6 +1332,7 @@ std::pair<size_t, size_t> getThreadCountAndTaskSize(
 }
 }  // namespace ad_utility
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
   auto threads = std::thread::hardware_concurrency();
@@ -1368,6 +1371,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(ScanSpecAndBlocks, removePrefix) {

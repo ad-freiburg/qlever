@@ -18,6 +18,8 @@
 using ctll::fixed_string;
 using namespace ctre::literals;
 
+namespace qlever {
+
 /**
  * @brief Holds the Compile-Time-Regexes for the Turtle Grammar used by the
  * TokenizerCTRE
@@ -353,5 +355,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     }
   };
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TOKENIZERCTRE_H

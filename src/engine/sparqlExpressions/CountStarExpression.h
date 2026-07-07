@@ -9,7 +9,7 @@
 
 // Return a `SparqlExpression::Ptr` that implements the `COUNT(*)` and
 // `COUNT(DISTINCT *)` function.
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 class CountStarExpression : public SparqlExpression {
  private:
   bool distinct_;
@@ -38,6 +38,8 @@ class CountStarExpression : public SparqlExpression {
 };
 
 SparqlExpression::Ptr makeCountStarExpression(bool distinct);
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_COUNTSTAREXPRESSION_H

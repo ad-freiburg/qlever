@@ -27,6 +27,10 @@
 #include "util/ValueIdentity.h"
 
 namespace ql::exportIds {
+using qlever::Id;
+using qlever::Index;
+using qlever::IndexImpl;
+using qlever::LocalVocab;
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;

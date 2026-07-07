@@ -17,7 +17,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/GeoSparqlHelpers.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 NARY_EXPRESSION(
@@ -357,7 +357,7 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker
 // problems

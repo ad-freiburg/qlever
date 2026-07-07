@@ -18,7 +18,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueId.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 namespace detail {
 
@@ -106,6 +106,8 @@ class StdevExpression : public StdevExpressionBase {
 
 using detail::StdevExpression;
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H

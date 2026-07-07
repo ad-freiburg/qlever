@@ -10,6 +10,8 @@
 #include "engine/Operation.h"
 #include "parser/TextSearchQuery.h"
 
+namespace qlever {
+
 // This operation retrieves all text records from the fulltext index that
 // contain a certain word or prefix.
 class TextIndexScanForWord : public Operation {
@@ -62,5 +64,9 @@ class TextIndexScanForWord : public Operation {
 
   void setVariableToColumnMap();
 };
+
+}  // namespace qlever
+
+using qlever::TextIndexScanForWord;
 
 #endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORWORD_H

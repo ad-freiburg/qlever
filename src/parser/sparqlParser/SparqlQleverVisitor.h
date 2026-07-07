@@ -24,6 +24,13 @@
 #define EOF std::char_traits<char>::eof()
 #include "util/BlankNodeManager.h"
 
+namespace RdfEscaping = qlever::RdfEscaping;
+namespace parsedQuery = qlever::parsedQuery;
+namespace updateClause = qlever::updateClause;
+using qlever::Quads;
+
+namespace qlever {
+
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
  * a `ParsedQuery`.
@@ -731,5 +738,7 @@ class SparqlQleverVisitor {
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

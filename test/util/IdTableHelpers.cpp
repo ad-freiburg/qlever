@@ -14,6 +14,8 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,

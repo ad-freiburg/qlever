@@ -11,7 +11,8 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 
-using namespace parsedQuery;
+using namespace qlever::parsedQuery;
+using qlever::SparqlTriple;
 
 namespace {
 

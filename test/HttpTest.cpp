@@ -20,6 +20,7 @@
 #include "util/jthread.h"
 
 using namespace ad_utility::httpUtils;
+using namespace qlever;
 using namespace boost::beast::http;
 using ::testing::HasSubstr;
 

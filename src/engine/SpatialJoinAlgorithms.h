@@ -26,6 +26,11 @@
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
+using qlever::GeoPoint;
+using qlever::PreparedSpatialJoinParams;
+using qlever::SpatialJoin;
+using qlever::SpatialJoinBoundingBoxColumns;
+
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;

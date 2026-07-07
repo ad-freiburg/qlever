@@ -13,7 +13,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 class SparqlExpression;
 struct EvaluationContext;
@@ -147,6 +147,8 @@ class SparqlExpressionPimpl {
   // TODO<joka921> Why can't this be a unique_ptr.
   std::shared_ptr<SparqlExpression> _pimpl;
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SPARQLEXPRESSIONPIMPL_H

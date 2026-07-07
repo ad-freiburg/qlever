@@ -7,6 +7,9 @@
 
 #include "global/RuntimeParameters.h"
 
+using qlever::getRuntimeParameter;
+using qlever::RuntimeParameters;
+
 ad_utility::MemorySize getRequestBodyLimit() {
   return getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
 }

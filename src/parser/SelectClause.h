@@ -12,7 +12,7 @@
 #include "parser/Alias.h"
 #include "rdfTypes/Variable.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 /// Base class for common functionality of `SelectClause` and `ConstructClause`.
 struct ClauseBase {
@@ -88,6 +88,6 @@ struct SelectClause : ClauseBase {
   /// then deleted from the SELECT clause
   void deleteAliasesButKeepVariables();
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_SELECTCLAUSE_H

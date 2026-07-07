@@ -8,6 +8,8 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
 void IdTableUtils::sort(IdTable& idTable,
@@ -83,3 +85,5 @@ size_t IdTableUtils::countDistinct(
   auto numDuplicates = std::accumulate(counter.begin(), counter.end(), 0ULL);
   return input.numRows() - numDuplicates;
 }
+
+}  // namespace qlever

@@ -8,6 +8,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "engine/GroupByHashMapOptimization.h"
 
+using namespace qlever;
+
 namespace {
 auto I = ad_utility::testing::IntId;
 auto D = ad_utility::testing::DoubleId;

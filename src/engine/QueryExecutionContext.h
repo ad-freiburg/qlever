@@ -23,6 +23,8 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
+namespace qlever {
+
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
 class CacheValue {
@@ -269,5 +271,14 @@ class QueryExecutionContext
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
 };
+
+}  // namespace qlever
+
+using qlever::Index;
+using qlever::LocalVocabContext;
+using qlever::LocatedTriplesSharedState;
+using qlever::LocatedTriplesState;
+using qlever::QueryExecutionContext;
+using qlever::QueryResultCache;
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

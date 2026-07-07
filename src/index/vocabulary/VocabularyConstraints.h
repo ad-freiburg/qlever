@@ -16,8 +16,12 @@
 // preserved if new vocabulary implementations or new instantiations of the
 // nested vocabulary types are added to QLever.
 
-// Forward declaration for concepts below.
-class PolymorphicVocabulary;
+using qlever::CompressedVocabulary;
+using qlever::GeoVocabulary;
+using qlever::PolymorphicVocabulary;
+using qlever::SplitVocabulary;
+using qlever::VocabularyInMemory;
+using qlever::VocabularyInternalExternal;
 
 // Only the `SplitVocabulary` currently needs a special handling for
 // `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may

@@ -18,7 +18,7 @@
 #include "util/Forward.h"
 #include "util/VariantRangeFilter.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // _____________________________________________________________________________
 std::string SparqlValues::variablesToString() const {
@@ -91,4 +91,4 @@ void BasicGraphPattern::collectAllContainedVariables(
   }
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

@@ -18,6 +18,8 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
+namespace qlever {
+
 // A set of edges of the implicit graph of a transitive path operation together
 // with the graph IRI of the source node of each edge. The edges are sorted by
 // graph and then by source node. That way, we can efficiently find a given
@@ -101,6 +103,11 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
     return {&alternativelySortedSubtree_, 1};
   }
 };
+
+}  // namespace qlever
+
+using qlever::BinSearchMap;
+using qlever::TransitivePathBinSearch;
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 

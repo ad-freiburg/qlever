@@ -23,6 +23,8 @@
 #include "util/GTestHelpers.h"
 #include "util/TypeTraits.h"
 
+using namespace qlever;
+
 namespace valueGetterTestHelpers {
 
 const std::string ttl = R"(

@@ -10,7 +10,9 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
-namespace sparqlExpression::relational {
+namespace valueIdComparators = qlever::valueIdComparators;
+
+namespace qlever::sparqlExpression::relational {
 
 using valueIdComparators::Comparison;
 
@@ -104,9 +106,9 @@ class InExpression : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
-}  // namespace sparqlExpression::relational
+}  // namespace qlever::sparqlExpression::relational
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 // Define aliases for the six relevant relational expressions.
 using LessThanExpression =
     relational::RelationalExpression<valueIdComparators::Comparison::LT>;
@@ -132,6 +134,8 @@ using InExpression = relational::InExpression;
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H

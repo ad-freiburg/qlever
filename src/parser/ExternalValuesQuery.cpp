@@ -14,7 +14,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
@@ -87,4 +87,4 @@ std::string ExternalValuesQuery::extractName(const std::string& serviceIri) {
   return name;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

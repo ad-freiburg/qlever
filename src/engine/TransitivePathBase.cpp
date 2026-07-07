@@ -29,6 +29,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TransitivePathBase::TransitivePathBase(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,

@@ -20,6 +20,8 @@
 #include "util/Synchronized.h"
 #include "util/json.h"
 
+namespace qlever {
+
 // Generates new graphs with a fixed prefix that don't exist yet. Currently,
 // the graphs are of the form `{prefix}/{ascending number}`.
 // NOTE: this is currently not actively used.
@@ -76,5 +78,7 @@ class GraphNameManager {
                                               nextUnallocatedGraph_,
                                               filenameForPersisting_);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H

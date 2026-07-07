@@ -11,6 +11,8 @@
 #include "index/DeltaTriples.h"
 #include "util/HashMap.h"
 
+namespace qlever {
+
 class SparqlTriple;
 class SparqlTripleSimple;
 
@@ -325,5 +327,9 @@ class IndexScan final : public Operation {
   // the permutation column index is 5.
   VariableToColumnMap computePermutationColumnIndices() const;
 };
+
+}  // namespace qlever
+
+using qlever::IndexScan;
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

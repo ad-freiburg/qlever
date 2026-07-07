@@ -26,8 +26,16 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
-// Forward declarations
+// Forward declaration.
 class IdTable;
+
+using namespace std::string_view_literals;
+
+namespace qlever {
+
+using qlever::ColumnIndex;
+using qlever::Id;
+using qlever::ValueId;
 
 class LocatedTriplesPerBlock;
 
@@ -532,8 +540,6 @@ class CompressedRelationWriter {
               isInitializedWithCorrectNumberOfThreads);
 };
 
-using namespace std::string_view_literals;
-
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
 class CompressedRelationReader {
@@ -970,5 +976,7 @@ class CompressedRelationReader {
  * that the given permutation has.
  * 2. Then add assertions that we only get valid column indices specified.
  */
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATION_H

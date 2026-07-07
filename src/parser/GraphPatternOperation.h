@@ -27,13 +27,15 @@
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
+namespace qlever {
 // First some forward declarations.
 // TODO<joka921> More stuff should consistently be in the `parsedQuery`
 // namespace.
 class SparqlTriple;
 class ParsedQuery;
+}  // namespace qlever
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 class GraphPattern;
 
@@ -233,6 +235,6 @@ struct GraphPatternOperation
   }
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H

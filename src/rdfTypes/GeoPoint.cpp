@@ -12,6 +12,8 @@
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
   // Ensure valid lat and lng values
@@ -107,3 +109,5 @@ std::string GeoPoint::toStringRepresentation() const {
 std::pair<std::string, const char*> GeoPoint::toStringAndType() const {
   return std::pair(toStringRepresentation(), GEO_WKT_LITERAL.data());
 };
+
+}  // namespace qlever

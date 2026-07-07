@@ -24,6 +24,8 @@
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
 
+using namespace qlever;
+
 using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test

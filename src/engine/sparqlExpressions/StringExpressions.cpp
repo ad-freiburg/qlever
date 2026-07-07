@@ -18,7 +18,11 @@
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
-namespace sparqlExpression {
+using qlever::EncodedIriManager;
+using qlever::TokenizerCtre;
+using qlever::TurtleParser;
+
+namespace qlever::sparqlExpression {
 namespace detail::string_expressions {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -724,4 +728,4 @@ Expr makeConvertToStringExpression(Expr child) {
   return std::make_unique<StrExpressionImpl>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

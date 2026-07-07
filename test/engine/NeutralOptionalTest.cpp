@@ -11,6 +11,8 @@
 #include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(NeutralOptional, getChildren) {
   auto* qec = ad_utility::testing::getQec();

@@ -7,6 +7,8 @@
 #include "../../util/TripleComponentTestHelpers.h"
 #include "parser/data/GraphTerm.h"
 
+using namespace qlever;
+
 namespace {
 
 constexpr auto iri = ad_utility::testing::iri;

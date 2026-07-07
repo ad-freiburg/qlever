@@ -13,6 +13,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/HashSet.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(GeoPoint, GeoPoint) {
   GeoPoint g = GeoPoint(70.5, 130.2);

@@ -19,6 +19,7 @@
 #define QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
 
 namespace deltaTriplesTestHelpers {
+using namespace qlever;
 
 // A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
 // `DeltaTriples`.

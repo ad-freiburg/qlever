@@ -33,8 +33,16 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+
+using namespace qlever;
 #include "util/ProgressBar.h"
 #include "util/Views.h"
+
+using qlever::CompressedRelationMetadata;
+using qlever::CompressedRelationWriter;
+using qlever::EncodedIriManager;
+using qlever::LocatedTriplesPerBlockAllPermutations;
+using qlever::SparqlParser;
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(

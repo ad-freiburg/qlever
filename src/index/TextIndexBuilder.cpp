@@ -14,6 +14,8 @@
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 void TextIndexBuilder::buildTextIndexFile(
     const std::optional<std::pair<std::string, std::string>>& wordsAndDocsFile,
@@ -545,5 +547,7 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   ofs << offsetsIn.rdbuf();
   AD_LOG_INFO << "DocsDB done.\n";
 }
+
+}  // namespace qlever
 
 #endif

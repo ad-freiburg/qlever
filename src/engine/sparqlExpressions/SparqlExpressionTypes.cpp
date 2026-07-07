@@ -6,7 +6,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
@@ -85,9 +85,9 @@ const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
   return _qec.getLocalVocabContext();
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 // _____________________________________________________________________________
 bool isConstantExpressionResult(const ExpressionResult& res) {
@@ -98,4 +98,4 @@ bool isConstantExpressionResult(const ExpressionResult& res) {
       res);
 }
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail

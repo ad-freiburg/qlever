@@ -19,6 +19,8 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 
 auto pqLoad = [](std::string url, bool silent = false) {

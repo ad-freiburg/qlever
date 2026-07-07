@@ -15,6 +15,8 @@
 // namespace such that argument-dependent lookup can find them within `gtest`.
 namespace ad_utility {
 
+using qlever::GeoPoint;
+
 // _____________________________________________________________________________
 inline void PrintTo(const Centroid& centroid, std::ostream* os) {
   auto& s = *os;

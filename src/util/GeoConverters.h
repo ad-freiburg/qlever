@@ -24,6 +24,8 @@
 // `libspatialjoin`.
 namespace geometryConverters {
 
+using qlever::GeoPoint;
+
 using CoordType = double;
 
 // Helper function to convert `GeoPoint` objects to `S2Point`.

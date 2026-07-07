@@ -12,6 +12,8 @@
 #include "engine/SortedUnionImpl.h"
 #include "util/ChunkedForLoop.h"
 
+using namespace qlever;
+
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,

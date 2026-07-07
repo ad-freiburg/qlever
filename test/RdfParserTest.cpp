@@ -24,6 +24,8 @@
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 
+using namespace qlever;
+
 using std::string;
 using namespace std::literals;
 using ad_utility::use_type_identity::ti;
@@ -61,6 +63,8 @@ bool isNegativeInfinity(const TripleComponent& value) {
   return std::isinf(d) && d < 0;
 }
 }  // namespace
+
+namespace qlever {
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
@@ -1816,3 +1820,5 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
               ::testing::HasSubstr("Logging first 1000 unparsed characters"));
   EXPECT_THAT(log, ::testing::HasSubstr(trailingGarbage));
 }
+
+}  // namespace qlever

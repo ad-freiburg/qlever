@@ -10,7 +10,7 @@
 #include "backports/three_way_comparison.h"
 #include "parser/sparqlParser/DatasetClause.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // A struct for the FROM [NAMED] clause in queries, and the `USING [NAMED]` and
 // `WITH` clauses from `SPARQL Update`.
@@ -88,6 +88,6 @@ struct DatasetClauses {
                                               namedGraphs_, emptyDummy_,
                                               defaultGraphSpecifiedUsingWith_)
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_DATASETCLAUSES_H

@@ -17,6 +17,8 @@
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
 
+namespace qlever {
+
 // _____________________________________________________________________
 Permutation::Permutation(Enum permutation, Allocator allocator,
                          std::optional<std::string> readableName)
@@ -299,3 +301,5 @@ ColumnIndexAndTypeInfo::UndefStatus Permutation::getColumnUndefStatus(
              ? ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined
              : ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
 }
+
+}  // namespace qlever

@@ -17,6 +17,8 @@
 #include "parser/data/Types.h"
 #include "util/HashSet.h"
 
+namespace qlever {
+
 // Strongly typed enum for controlling whether stripped variables are explicitly
 // stored as stripped in this class, or completely hidden. (this is used to
 // distinguish between subqueries and "ordinary" operations that just strip
@@ -316,14 +318,18 @@ class QueryExecutionTree {
   }
 };
 
+}  // namespace qlever
+
+using qlever::QueryExecutionTree;
+
 namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
 template <typename Operation, typename... Args>
-std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, Args&&... args) {
-  return std::make_shared<QueryExecutionTree>(
+std::shared_ptr<qlever::QueryExecutionTree> makeExecutionTree(
+    qlever::QueryExecutionContext* qec, Args&&... args) {
+  return std::make_shared<qlever::QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility

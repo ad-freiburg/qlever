@@ -18,6 +18,12 @@
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
+
+using qlever::ParsedQuery;
+using qlever::PropertyPath;
+using qlever::SparqlTriple;
+using qlever::TripleComponent;
+using qlever::Variable;
 #include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"

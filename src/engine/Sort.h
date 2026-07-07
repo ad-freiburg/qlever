@@ -17,6 +17,8 @@
 #include "engine/Result.h"
 #include "index/LocalVocab.h"
 
+namespace qlever {
+
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
 // different from the `semantic` order that is computed by ORDER BY. For
@@ -136,5 +138,9 @@ class Sort : public Operation {
 
   std::string getCacheKeyImpl() const override;
 };
+
+}  // namespace qlever
+
+using qlever::Sort;
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

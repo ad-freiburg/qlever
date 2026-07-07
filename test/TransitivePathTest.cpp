@@ -20,6 +20,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 using ad_utility::testing::getQec;
 namespace {
 auto V = ad_utility::testing::VocabId;

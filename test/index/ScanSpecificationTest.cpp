@@ -8,6 +8,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "index/ScanSpecification.h"
 
+using namespace qlever;
+
 TEST(ScanSpecification, getters) {
   Id i = Id::makeFromInt(42);
   Id j = Id::makeFromInt(47);

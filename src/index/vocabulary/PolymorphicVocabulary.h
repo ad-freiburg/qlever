@@ -22,6 +22,8 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
+namespace qlever {
+
 // A vocabulary that can at runtime choose between different vocabulary
 // implementations. The only restriction is, that a vocabulary can only be read
 // from disk with the same implementation that it was written to.
@@ -174,5 +176,7 @@ class PolymorphicVocabulary {
     std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H

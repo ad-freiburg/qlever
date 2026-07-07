@@ -11,6 +11,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 class MultiColumnJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -80,5 +82,9 @@ class MultiColumnJoin : public Operation {
 
   void computeSizeEstimateAndMultiplicities();
 };
+
+}  // namespace qlever
+
+using qlever::MultiColumnJoin;
 
 #endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H

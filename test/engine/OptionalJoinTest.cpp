@@ -29,6 +29,7 @@
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
+using namespace qlever;
 namespace {
 auto V = VocabId;
 constexpr auto U = Id::makeUndefined();

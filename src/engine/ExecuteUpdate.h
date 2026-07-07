@@ -13,6 +13,8 @@
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
+namespace qlever {
+
 class ExecuteUpdate {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -84,5 +86,9 @@ class ExecuteUpdate {
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
 };
+
+}  // namespace qlever
+
+using qlever::ExecuteUpdate;
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

@@ -46,6 +46,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,

@@ -16,6 +16,8 @@
 #include "util/BitUtils.h"
 
 namespace ad_utility {
+using qlever::GeoPoint;
+using qlever::ValueId;
 
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.

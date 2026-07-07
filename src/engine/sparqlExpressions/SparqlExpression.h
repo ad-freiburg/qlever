@@ -13,7 +13,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "rdfTypes/Variable.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // Virtual base class for an arbitrary Sparql Expression which holds the
 // structure of the expression as well as the logic to evaluate this expression
@@ -184,6 +184,8 @@ class SparqlExpression {
   // child of this expression is deterministic.
   bool areChildrenDeterministic() const;
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H

@@ -23,6 +23,8 @@
 #include "util/CopyableSynchronization.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 class ExternalValues;
@@ -645,5 +647,13 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };
+
+}  // namespace qlever
+
+using qlever::ComputationMode;
+using qlever::LimitOffsetHandling;
+using qlever::Operation;
+using qlever::QueryExecutionTree;
+namespace parsedQuery = qlever::parsedQuery;
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

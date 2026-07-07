@@ -10,6 +10,8 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 static constexpr auto U = Id::makeUndefined();
 

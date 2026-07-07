@@ -4,6 +4,8 @@
 
 #include "parser/PropertyPath.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 PropertyPath::MinMaxPath& PropertyPath::MinMaxPath::operator=(
     const MinMaxPath& other) {
@@ -160,3 +162,5 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
   p.writeToStream(out);
   return out;
 }
+
+}  // namespace qlever

@@ -22,6 +22,8 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 
+using namespace qlever;
+
 using std::size_t;
 using std::string;
 

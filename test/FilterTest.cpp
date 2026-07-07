@@ -18,6 +18,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using namespace qlever;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 

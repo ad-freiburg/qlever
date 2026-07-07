@@ -71,7 +71,7 @@ std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
   return std::get<Variable>(entity);
 };
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void TextSearchQuery::checkSubjectIsVariable(std::string_view predString,
@@ -314,4 +314,4 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
   return output;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

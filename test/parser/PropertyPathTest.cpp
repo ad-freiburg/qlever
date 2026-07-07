@@ -7,6 +7,7 @@
 #include "parser/PropertyPath.h"
 
 using ad_utility::triple_component::Iri;
+using qlever::PropertyPath;
 
 namespace {
 auto iri1 = Iri::fromIriref("<http://example.org/path1>");

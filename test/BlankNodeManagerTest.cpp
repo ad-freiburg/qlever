@@ -15,6 +15,8 @@
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace ad_utility {
 
 // ____________________________________________________________________________

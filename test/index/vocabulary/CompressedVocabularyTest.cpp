@@ -13,6 +13,8 @@
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace vocabulary_test;

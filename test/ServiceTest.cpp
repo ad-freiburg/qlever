@@ -28,6 +28,8 @@
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
+using namespace qlever;
+
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
@@ -149,6 +151,7 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }
 
+namespace qlever {
 // Tests that `computeResult` behaves as expected.
 TEST_F(ServiceTest, computeResult) {
   // These tests are randomized, and there used to be an error that was found by
@@ -528,6 +531,7 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
       Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST_F(ServiceTest, computeResultNoVariables) {
@@ -751,6 +755,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
       absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }
 
+namespace qlever {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
   auto cleanup =
@@ -961,6 +966,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
            ->idTables()) {
   }
 }
+}  // namespace qlever
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, clone) {

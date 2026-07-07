@@ -17,6 +17,8 @@
 using re2::RE2;
 using namespace std::string_literals;
 
+namespace qlever {
+
 /** holds all the google re2 regexes that correspond to all terminals in the
  * turtle grammar cannot be static since google regexes have to be constructed
  * at runtime
@@ -365,5 +367,7 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TOKENIZER_H

@@ -23,6 +23,9 @@
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
+using qlever::DatasetClause;
+using qlever::EncodedIriManager;
+using qlever::SparqlParser;
 using ::testing::ElementsAre;
 using ::testing::EndsWith;
 using ::testing::Eq;
@@ -1616,6 +1619,7 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 // TODO<joka921> Unit tests that also test for the export of text records from
 // the text index and thus systematically fill the coverage gaps.
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto idTable = makeIdTableFromVector({{42}, {1337}});
@@ -1934,6 +1938,7 @@ TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
   ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet2);
   EXPECT_EQ(limit._offset, 0);
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {

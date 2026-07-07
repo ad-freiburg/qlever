@@ -23,6 +23,8 @@
 #include "util/ReadableNumberFacet.h"
 #include "util/json.h"
 
+using namespace qlever;
+
 using std::string;
 
 namespace po = boost::program_options;

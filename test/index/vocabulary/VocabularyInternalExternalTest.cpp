@@ -10,6 +10,8 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
+using namespace qlever;
+
 namespace {
 using namespace vocabulary_test;
 

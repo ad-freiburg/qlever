@@ -34,16 +34,18 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
+// Forward declaration for testing.
+namespace serverTestHelpers {
+struct SimulateHttpRequest;
+}
+
+namespace qlever {
+
 template <typename Operation>
 CPP_concept QueryOrUpdate =
     ad_utility::SameAsAny<Operation,
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
-
-// Forward declaration for testing.
-namespace serverTestHelpers {
-struct SimulateHttpRequest;
-}
 
 //! The HTTP Server used.
 class Server {
@@ -379,5 +381,9 @@ class Server {
     return qlever().indexAndViewsSnapshot();
   }
 };
+
+}  // namespace qlever
+
+using qlever::Server;
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

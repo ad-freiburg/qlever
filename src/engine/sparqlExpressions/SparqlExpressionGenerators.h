@@ -26,7 +26,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
@@ -313,7 +313,7 @@ inline auto makeStringResultGetter(LocalVocab* localVocab) {
 Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
                         LocalVocab* localVocab);
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 // If `QLEVER_CHEAPER_COMPILATION` is set the inline definition of
 // `idOrLiteralOrIriToId` lives in a separate .cpp (to avoid instantiating the

@@ -21,6 +21,8 @@
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
 
@@ -200,5 +202,9 @@ class SpatialJoin : public Operation {
 
   bool substitutesFilterOp_ = false;
 };
+
+}  // namespace qlever
+
+using qlever::SpatialJoin;
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

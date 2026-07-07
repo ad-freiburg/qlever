@@ -6,7 +6,15 @@
 
 #include "index/TextScoringEnum.h"
 
+using qlever::Id;
+using qlever::Posting;
+using qlever::Score;
+using qlever::TextBlockMetaData;
+using qlever::TextRecordIndex;
 using qlever::TextScoringMetric;
+using qlever::VocabIndex;
+using qlever::WordIndex;
+using qlever::WordVocabIndex;
 namespace textIndexReadWrite::detail {
 
 // _____________________________________________________________________________

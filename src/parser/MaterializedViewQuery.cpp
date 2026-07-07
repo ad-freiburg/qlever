@@ -12,7 +12,7 @@
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 static constexpr std::string_view prefixColumnParam = "column-";
 
@@ -112,4 +112,4 @@ ad_utility::HashSet<Variable> MaterializedViewQuery::getVarsToKeep() const {
   return varsToKeep;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

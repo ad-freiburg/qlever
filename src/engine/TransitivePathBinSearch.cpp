@@ -13,6 +13,8 @@
 
 #include "engine/TransitivePathBase.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
                            ql::span<const Id> targetIds,

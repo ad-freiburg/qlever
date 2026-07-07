@@ -13,7 +13,7 @@
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void MagicServiceQuery::addBasicPattern(const BasicGraphPattern& pattern) {
@@ -82,4 +82,4 @@ std::string_view MagicServiceQuery::extractParameterName(
   return asStringViewUnsafe(paramString);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

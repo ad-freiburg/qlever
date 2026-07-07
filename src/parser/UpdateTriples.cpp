@@ -4,7 +4,7 @@
 
 #include "parser/UpdateTriples.h"
 
-namespace updateClause {
+namespace qlever::updateClause {
 
 // _____________________________________________________________________________
 UpdateTriples::UpdateTriples(Vec triples, LocalVocab localVocab)
@@ -23,4 +23,4 @@ UpdateTriples& UpdateTriples::operator=(const UpdateTriples& rhs) {
   localVocab_ = rhs.localVocab_.clone();
   return *this;
 }
-}  // namespace updateClause
+}  // namespace qlever::updateClause

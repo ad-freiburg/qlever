@@ -13,6 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "parser/Alias.h"
 
+namespace qlever {
+
 // This is a class that follows the PIMPL idiom and wraps the actual
 // `GroupByImpl` class. It exposes only the constructors and virtual member
 // functions. Forward declaration of the impl class
@@ -62,5 +64,9 @@ class GroupBy : public Operation {
 
   std::unique_ptr<GroupByImpl> _impl;
 };
+
+}  // namespace qlever
+
+using qlever::GroupBy;
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H

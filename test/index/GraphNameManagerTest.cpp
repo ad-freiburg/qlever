@@ -17,6 +17,8 @@
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 TEST(GraphNameManager, allocateNewGraph) {
   {
@@ -103,3 +105,5 @@ TEST(GraphNameManager, readFromDisk) {
     ad_utility::deleteFile("state_file");
   }
 }
+
+}  // namespace qlever

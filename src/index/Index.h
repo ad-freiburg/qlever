@@ -23,8 +23,18 @@
 #include "util/CancellationHandle.h"
 #include "util/json.h"
 
-// Forward declarations.
+// Forward declaration.
 class IdTable;
+
+namespace qlever {
+
+using qlever::Id;
+using qlever::Score;
+using qlever::TextRecordIndex;
+using qlever::VocabIndex;
+using qlever::WordIndex;
+
+// Forward declarations.
 class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesState;
@@ -245,5 +255,7 @@ class Index {
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H

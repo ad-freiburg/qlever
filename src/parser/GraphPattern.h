@@ -12,7 +12,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // Forward declarations.
 struct GraphPatternOperation;
@@ -61,6 +61,6 @@ class GraphPattern {
   // TextLimitMetaObject
   ad_utility::HashMap<Variable, TextLimitMetaObject> textLimits_;
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_GRAPHPATTERN_H

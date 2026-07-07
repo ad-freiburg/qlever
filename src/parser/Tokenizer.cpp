@@ -4,6 +4,8 @@
 
 #include "parser/Tokenizer.h"
 
+namespace qlever {
+
 // _______________________________________________________
 std::pair<bool, std::string> Tokenizer::getNextToken(const RE2& reg) {
   std::string match = "";
@@ -111,3 +113,5 @@ const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
       "Illegal switch value in Tokenizer::getNextToken. This should never "
       "happen");
 }
+
+}  // namespace qlever

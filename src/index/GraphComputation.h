@@ -19,6 +19,9 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 
+using qlever::ColumnIndex;
+using qlever::Id;
+
 // Helper function to compute the distinct graphs contained in a block. Returns
 // `nullopt` if there are more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`
 // distinct graphs, otherwise returns the distinct graphs as a vector. The

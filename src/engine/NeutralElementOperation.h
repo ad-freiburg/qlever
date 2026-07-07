@@ -7,6 +7,8 @@
 
 #include "engine/Operation.h"
 
+namespace qlever {
+
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
 /// variables (which means it has 0 columns).
 class NeutralElementOperation : public Operation {
@@ -60,5 +62,9 @@ class NeutralElementOperation : public Operation {
     return {};
   };
 };
+
+}  // namespace qlever
+
+using qlever::NeutralElementOperation;
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H

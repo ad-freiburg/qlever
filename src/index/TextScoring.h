@@ -8,6 +8,14 @@
 #include "index/Index.h"
 #include "parser/WordsAndDocsFileParser.h"
 
+namespace qlever {
+
+using qlever::DocLengthMap;
+using qlever::DocumentIndex;
+using qlever::InvertedIndex;
+using qlever::TextRecordIndex;
+using qlever::WordIndex;
+
 // This class is used to calculate tf-idf and bm25 scores and use them in the
 // building of the text index.
 class ScoreData {
@@ -80,5 +88,7 @@ class ScoreData {
                                  : 0;
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_TEXTSCORING_H

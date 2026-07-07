@@ -15,6 +15,7 @@
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
+using namespace qlever;
 using ad_utility::source_location;
 
 namespace {

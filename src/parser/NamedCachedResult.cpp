@@ -23,7 +23,7 @@ std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
   return std::string{view};
 }
 }  // namespace
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // _____________________________________________________________________________
 NamedCachedResult::NamedCachedResult(const TripleComponent::Iri& iri)
@@ -48,4 +48,4 @@ void NamedCachedResult::throwBecauseNotEmpty() {
   throw std::runtime_error{
       "The body of a named cache query request must be empty"};
 }
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

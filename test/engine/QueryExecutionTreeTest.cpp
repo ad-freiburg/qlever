@@ -14,6 +14,7 @@
 #include "engine/Union.h"
 
 using namespace ad_utility::testing;
+using namespace qlever;
 
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, getVariableColumn) {

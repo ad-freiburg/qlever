@@ -19,7 +19,10 @@
 namespace {
 
 using namespace ::testing;
-using parsedQuery::VariableCounter;
+using qlever::EncodedIriManager;
+using qlever::SparqlParser;
+using qlever::Variable;
+using qlever::parsedQuery::VariableCounter;
 using V = Variable;
 
 // Apply `VariableCounter` to the root graph pattern of the given SPARQL query.

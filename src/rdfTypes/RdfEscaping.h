@@ -14,7 +14,7 @@
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
-namespace RdfEscaping {
+namespace qlever::RdfEscaping {
 /// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
 /// '\\' by an escaped backslash "\\\\". This is the minimal amount of escaping
 /// that has to be done in order to store strings in a line-based text file.
@@ -162,6 +162,6 @@ NormalizedString normalizeIriWithoutBrackets(std::string_view input);
 // If it starts with an @, the leading @ character will be removed.
 NormalizedString normalizeLanguageTag(std::string_view input);
 
-}  // namespace RdfEscaping
+}  // namespace qlever::RdfEscaping
 
 #endif  // QLEVER_RDFESCAPING_H

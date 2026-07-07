@@ -6,6 +6,8 @@
 
 #include "index/IndexImpl.h"
 
+using qlever::SparqlTripleSimple;
+
 namespace {
 
 // Return true if the string representation of the `iri` starts with '@' or

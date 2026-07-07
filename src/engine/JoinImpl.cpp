@@ -35,6 +35,8 @@
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever;
+
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
 using std::endl;

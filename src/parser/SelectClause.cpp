@@ -8,7 +8,8 @@
 #include "util/Algorithm.h"
 #include "util/OverloadCallOperator.h"
 
-using namespace parsedQuery;
+using namespace qlever::parsedQuery;
+using qlever::Alias;
 
 // ____________________________________________________________________
 // TODO<joka921, qup42> use a better mechanism to remove duplicates in the

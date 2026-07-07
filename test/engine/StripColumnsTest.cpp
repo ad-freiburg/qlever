@@ -18,6 +18,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
 
+using namespace qlever;
+
 namespace {
 using Vars = std::vector<std::optional<Variable>>;
 using namespace ad_utility::testing;

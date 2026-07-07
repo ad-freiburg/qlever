@@ -8,6 +8,8 @@
 #include "global/ValueId.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
   LocalVocab result;
@@ -151,3 +153,5 @@ bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
   };
   return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets_, c);
 }
+
+}  // namespace qlever

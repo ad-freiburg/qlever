@@ -4,7 +4,7 @@
 
 #include "parser/DatasetClauses.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // _____________________________________________________________________________
 DatasetClauses DatasetClauses::fromClauses(
@@ -82,4 +82,4 @@ DatasetClauses DatasetClauses::getDatasetClauseForVariableGraphClause() const {
   return result;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

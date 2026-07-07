@@ -23,6 +23,8 @@
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 
+using namespace qlever;
+
 using nlohmann::json;
 
 namespace {
@@ -41,6 +43,8 @@ auto parseQuery(std::string query,
 }
 
 }  // namespace
+
+namespace qlever {
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
                   {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
@@ -403,6 +407,7 @@ TEST(ServerTest, checkAccessToken) {
   };
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 MATCHER_P2(HeaderFieldIs, field, matcher,

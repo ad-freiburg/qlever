@@ -7,6 +7,8 @@
 #include "global/Constants.h"
 #include "util/ReadableNumberFacet.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 std::vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
@@ -84,3 +86,5 @@ void TextMetaData::addBlock(const TextBlockMetaData& md) {
 off_t TextMetaData::getOffsetAfter() {
   return _blocks.back()._entityCl._lastByte + 1;
 }
+
+}  // namespace qlever

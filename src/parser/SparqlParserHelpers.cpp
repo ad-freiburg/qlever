@@ -11,7 +11,7 @@
 
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
-namespace sparqlParserHelpers {
+namespace qlever::sparqlParserHelpers {
 using std::string;
 
 namespace detail {
@@ -126,4 +126,4 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   output += view.substr(lastPos);
   return output;
 }
-}  // namespace sparqlParserHelpers
+}  // namespace qlever::sparqlParserHelpers

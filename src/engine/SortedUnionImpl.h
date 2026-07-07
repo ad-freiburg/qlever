@@ -13,6 +13,8 @@
 #include "engine/idTable/IdTable.h"
 #include "index/LocalVocab.h"
 
+using qlever::Union;
+
 namespace sortedUnion {
 // Helper struct that has the same layout as `Result::IdTableVocabPair` but
 // doesn't own the data.

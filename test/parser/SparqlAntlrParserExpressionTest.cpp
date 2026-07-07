@@ -22,7 +22,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 namespace {
-using namespace sparqlParserHelpers;
+using namespace qlever::sparqlParserHelpers;
 using namespace sparqlParserTestHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;

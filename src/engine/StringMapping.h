@@ -16,8 +16,10 @@
 #include "global/Id.h"
 #include "util/HashMap.h"
 
+namespace qlever {
 // Forward declaration
 class Index;
+}  // namespace qlever
 
 namespace qlever::binary_export {
 // A helper class for the efficient binary export, that collects the unique

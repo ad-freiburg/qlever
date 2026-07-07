@@ -10,7 +10,11 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
-namespace sparqlExpression {
+using qlever::Id;
+using qlever::ValueId;
+namespace valueIdComparators = qlever::valueIdComparators;
+
+namespace qlever::sparqlExpression {
 using valueIdComparators::Comparison;
 // For `T == VectorWithMemoryLimit<U>`, `ValueType<T>` is `U`. For any other
 // type `T`, `ValueType<T>` is `T`.
@@ -214,6 +218,8 @@ inline const auto compareIdsOrStrings =
     }
   }
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H

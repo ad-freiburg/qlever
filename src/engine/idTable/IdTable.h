@@ -28,6 +28,8 @@
 #include "util/Views.h"
 
 namespace columnBasedIdTable {
+using qlever::ColumnIndex;
+using qlever::Id;
 // The `IdTable` class is QLever's central data structure. It is used to store
 // all intermediate and final query results in the ID space.
 //

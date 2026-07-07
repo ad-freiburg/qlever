@@ -14,6 +14,9 @@
 // Lambdas to simply create an `Id` with a given value and type during unit
 // tests.
 namespace ad_utility::testing {
+using qlever::LocalVocabEntry;
+using qlever::TextRecordIndex;
+using qlever::WordVocabIndex;
 
 inline auto UndefId = []() { return Id::makeUndefined(); };
 inline auto IntId = [](const auto& i) { return Id::makeFromInt(i); };

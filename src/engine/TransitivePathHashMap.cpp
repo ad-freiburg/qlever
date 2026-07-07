@@ -13,6 +13,8 @@
 #include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 HashMapWrapper::HashMapWrapper(
     Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)

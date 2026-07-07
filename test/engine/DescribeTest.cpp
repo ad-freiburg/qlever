@@ -12,6 +12,8 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 
 namespace {

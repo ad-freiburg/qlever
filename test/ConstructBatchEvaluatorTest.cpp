@@ -12,6 +12,8 @@
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace qlever::constructExport;

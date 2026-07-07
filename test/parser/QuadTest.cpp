@@ -9,6 +9,7 @@
 #include "parser/Quads.h"
 
 using namespace ad_utility::testing;
+using namespace qlever;
 // _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =

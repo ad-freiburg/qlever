@@ -16,6 +16,9 @@
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
+using qlever::Permutation;
+using qlever::SparqlTripleSimple;
+
 namespace SpatialJoinTestHelpers {
 
 constexpr inline auto makePointLiteral = [](std::string_view c1,

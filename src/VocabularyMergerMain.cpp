@@ -7,6 +7,11 @@
 
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
+#include "rdfTypes/RdfEscaping.h"
+
+namespace RdfEscaping = qlever::RdfEscaping;
+using qlever::TripleComponentComparator;
+using qlever::VocabularyOnDisk;
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {

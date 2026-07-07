@@ -18,6 +18,8 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 /*
  * @brief Join two IdTables using the given join function and return
  * the result.

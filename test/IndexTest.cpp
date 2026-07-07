@@ -19,6 +19,8 @@
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 
+namespace qlever {
+
 using namespace ad_utility::testing;
 using namespace std::string_literals;
 
@@ -957,3 +959,5 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }
+
+}  // namespace qlever

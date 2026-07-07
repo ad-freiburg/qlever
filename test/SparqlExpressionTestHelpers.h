@@ -10,7 +10,14 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 
-namespace sparqlExpression {
+using qlever::BlankNodeIndex;
+using qlever::ColumnIndex;
+using qlever::Id;
+using qlever::LocalVocab;
+using qlever::ValueId;
+namespace valueIdComparators = qlever::valueIdComparators;
+
+namespace qlever::sparqlExpression {
 
 // Make a `ValueId` from an int/ a double. Shorter name, as it will be used
 // often.
@@ -137,7 +144,7 @@ struct TestContext {
     return result;
   }
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 // Add output for `SetOfIntervals for Gtest.
 namespace ad_utility {

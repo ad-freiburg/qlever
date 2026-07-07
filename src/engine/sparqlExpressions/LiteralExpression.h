@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/TypeTraits.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 /// An expression with a single value, for example a numeric (42.0) or boolean
@@ -300,6 +300,8 @@ inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
 
 }  // namespace detail
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H

@@ -17,6 +17,8 @@
 #include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 
+namespace qlever {
+
 // Transform SPARQL Graph Store Protocol requests to their equivalent
 // ParsedQuery (SPARQL Query or Update).
 class GraphStoreProtocol {
@@ -292,6 +294,11 @@ class GraphStoreProtocol {
     }
   }
 };
+
+}  // namespace qlever
+
+using qlever::GraphStoreProtocol;
+
 #endif
 
 #endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

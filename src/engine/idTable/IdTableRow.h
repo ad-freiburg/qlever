@@ -20,6 +20,8 @@
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
+using qlever::Id;
+
 namespace columnBasedIdTable {
 
 // A simple tag enum to differentiate between "views" (non-owning data

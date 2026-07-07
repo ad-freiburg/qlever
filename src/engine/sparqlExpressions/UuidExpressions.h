@@ -11,9 +11,10 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::uuidExpression {
 
+using qlever::LocalVocabEntry;
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
@@ -91,6 +92,8 @@ using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 using UuidExpression = detail::uuidExpression::UuidExpression;
 using StrUuidExpression = detail::uuidExpression::StrUuidExpression;
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H

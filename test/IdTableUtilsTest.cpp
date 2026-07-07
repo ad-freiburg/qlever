@@ -14,6 +14,8 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(IdTableUtils, countDistinct) {
   auto alloc = ad_utility::testing::makeAllocator();

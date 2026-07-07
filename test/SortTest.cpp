@@ -20,6 +20,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using ad_utility::source_location;

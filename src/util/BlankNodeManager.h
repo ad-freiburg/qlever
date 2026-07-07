@@ -28,6 +28,10 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 
+using qlever::BlankNodeIndex;
+using qlever::Datatype;
+using qlever::ValueId;
+
 namespace ad_utility {
 /*
  * Manager class owned by an `Index` to manage currently available indices for

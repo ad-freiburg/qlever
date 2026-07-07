@@ -14,6 +14,8 @@
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression;
 
 namespace {
@@ -237,7 +239,7 @@ CPP_template(Comparison Comp, typename A, typename B)(
 
 // Implementation of the member functions of the `RelationalExpression` class
 // using the above functions.
-namespace sparqlExpression::relational {
+namespace qlever::sparqlExpression::relational {
 // ____________________________________________________________________________
 template <Comparison Comp>
 ExpressionResult RelationalExpression<Comp>::evaluate(
@@ -576,9 +578,9 @@ template class RelationalExpression<Comparison::EQ>;
 template class RelationalExpression<Comparison::NE>;
 template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
-}  // namespace sparqlExpression::relational
+}  // namespace qlever::sparqlExpression::relational
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
@@ -633,4 +635,4 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
   return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

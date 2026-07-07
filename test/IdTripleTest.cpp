@@ -10,6 +10,8 @@
 #include "./util/IdTestHelpers.h"
 #include "global/IdTriple.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 
 TEST(IdTripleTest, constructors) {

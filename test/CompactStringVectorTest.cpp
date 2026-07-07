@@ -11,6 +11,8 @@
 #include "backports/iterator.h"
 #include "global/Pattern.h"
 
+using namespace qlever;
+
 namespace {
 
 // _____________________________________________________________________________

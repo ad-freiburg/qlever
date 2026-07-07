@@ -20,6 +20,8 @@
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
+using namespace qlever;
+
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 

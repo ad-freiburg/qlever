@@ -20,6 +20,12 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
+using qlever::EncodedIriManager;
+using qlever::PathSearchAlgorithm;
+using qlever::PathSearchConfiguration;
+using qlever::SparqlParser;
+using qlever::TransitivePathSide;
+
 namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;

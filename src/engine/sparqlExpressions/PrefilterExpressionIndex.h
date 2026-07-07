@@ -21,6 +21,19 @@
 #include "index/Vocabulary.h"
 #include "util/Iterators.h"
 
+using qlever::BlockMetadataRanges;
+using qlever::BlockMetadataSpan;
+using qlever::CompressedBlockMetadata;
+using qlever::Datatype;
+using qlever::Id;
+using qlever::LocalVocab;
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
+using qlever::RdfsVocabulary;
+using qlever::TripleComponent;
+using qlever::ValueId;
+namespace valueIdComparators = qlever::valueIdComparators;
+
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
 // available metadata (see CompressedBlockMetadata in CompressedRelation.h)

@@ -15,6 +15,8 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
   std::visit(
@@ -157,3 +159,5 @@ Id TripleComponent::toValueId(const IndexImpl& index,
       LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
                       Id::makeFromVocabIndex(upper), index)));
 }
+
+}  // namespace qlever

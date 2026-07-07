@@ -23,7 +23,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 #ifndef QLEVER_CHEAPER_COMPILATION
 inline
@@ -37,6 +37,6 @@ inline
       value);
 }
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORSIMPL_H

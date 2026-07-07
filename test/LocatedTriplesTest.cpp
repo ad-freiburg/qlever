@@ -22,6 +22,7 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+namespace qlever {
 namespace {
 auto V = ad_utility::testing::VocabId;
 // A default graph used in this test.
@@ -1101,3 +1102,5 @@ TEST_F(LocatedTriplesTest, computeDiff) {
                       IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}},
                       IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}})));
 }
+
+}  // namespace qlever

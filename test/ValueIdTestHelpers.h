@@ -9,6 +9,10 @@
 #include "global/ValueId.h"
 #include "util/Random.h"
 
+using qlever::TextRecordIndex;
+using qlever::ValueId;
+using qlever::WordVocabIndex;
+
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS
 static constexpr size_t numElements = 10'000;

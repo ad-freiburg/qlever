@@ -8,6 +8,8 @@
 #include "parser/SparqlParser.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace {
 using namespace checkUsePatternTrick;
 using ad_utility::source_location;

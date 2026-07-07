@@ -24,6 +24,8 @@
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
+using namespace qlever;
+
 namespace {
 // CTRE regex patterns for C++17 compatibility
 constexpr ctll::fixed_string selectPatternRegex = "[ \t\r\n]*SELECT";

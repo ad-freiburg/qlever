@@ -6,6 +6,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(
     QueryExecutionContext* qec, TextIndexScanForWordConfiguration config)

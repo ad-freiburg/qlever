@@ -14,6 +14,8 @@
 #include "util/BitUtils.h"
 #include "util/SourceLocation.h"
 
+namespace qlever {
+
 /// Exception type for construction of GeoPoints that have invalid values
 struct CoordinateOutOfRangeException : public std::exception {
  private:
@@ -94,5 +96,7 @@ class GeoPoint {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoPoint, lat_, lng_)
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_GEOPOINT_H

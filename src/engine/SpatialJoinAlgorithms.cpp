@@ -42,6 +42,8 @@
 
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
+using qlever::getRuntimeParameter;
+using qlever::RuntimeParameters;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(

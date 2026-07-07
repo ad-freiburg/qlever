@@ -23,6 +23,8 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 
+using namespace qlever;
+
 namespace {
 auto V = ad_utility::testing::VocabId;
 // A default/dummy graph used for several tests.

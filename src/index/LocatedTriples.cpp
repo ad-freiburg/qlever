@@ -20,6 +20,8 @@
 #include "util/Log.h"
 #include "util/ValueIdentity.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     ql::span<const IdTriple<0>> triples,
@@ -538,3 +540,5 @@ std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
 
   return result;
 }
+
+}  // namespace qlever

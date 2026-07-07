@@ -14,7 +14,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/CryptographicHashUtils.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 template <typename NaryOperation>
 class NaryExpressionStronglyTyped : public SparqlExpression {
@@ -414,6 +414,6 @@ using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.
 using TernaryBool = EffectiveBooleanValueGetter::Result;
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H

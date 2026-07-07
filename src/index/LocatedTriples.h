@@ -21,6 +21,11 @@
 #include "util/HashMap.h"
 #include "util/TimeTracer.h"
 
+namespace qlever {
+
+using qlever::Id;
+using qlever::IdTriple;
+
 class Permutation;
 
 struct NumAddedAndDeleted {
@@ -316,5 +321,7 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 //
 // 3. If the triple is larger than all triples in the permutation, the block
 // index is one after the largest block index.
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_LOCATEDTRIPLES_H

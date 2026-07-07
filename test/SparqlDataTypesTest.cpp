@@ -24,6 +24,7 @@
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
+using qlever::GraphTerm;
 
 namespace {
 

@@ -8,6 +8,8 @@
 #include "engine/IndexScan.h"
 #include "index/IndexImpl.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,

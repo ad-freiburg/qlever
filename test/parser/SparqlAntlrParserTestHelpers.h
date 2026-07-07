@@ -30,8 +30,11 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
+using namespace qlever;
+
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
+namespace qlever {
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   using Iri = ad_utility::triple_component::Iri;
   std::visit(
@@ -53,9 +56,10 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
       static_cast<const GraphTermBase&>(graphTerm));
   return out;
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 inline std::ostream& operator<<(std::ostream& out,
                                 const parsedQuery::Bind& bind) {
   out << "Bind " << bind._expression.getDescriptor() << " as "
@@ -77,8 +81,9 @@ inline void PrintTo(const parsedQuery::GraphPattern& pattern,
   s << ::testing::PrintToString(pattern._graphPatterns);
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
+namespace qlever {
 inline void PrintTo(const Alias& alias, std::ostream* os) {
   (*os) << alias.getDescriptor();
 }
@@ -90,6 +95,7 @@ inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
   (*os) << "Graph pattern:";
   PrintTo(pq._rootGraphPattern, os);
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 
@@ -109,7 +115,7 @@ inline std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 inline std::ostream& operator<<(
     std::ostream& out,
@@ -117,7 +123,7 @@ inline std::ostream& operator<<(
   out << "Expression:" << expression.getDescriptor();
   return out;
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 // _____________________________________________________________________________
 
@@ -171,7 +177,7 @@ namespace matchers {
 
 using testing::Matcher;
 // short namespace alias
-namespace p = parsedQuery;
+namespace p = qlever::parsedQuery;
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -948,7 +954,7 @@ inline auto VisibleVariables =
   return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
 };
 
-using namespace updateClause;
+using namespace qlever::updateClause;
 
 // Match a `updateClause::GraphUpdate` clause.
 inline auto MatchGraphUpdate(
@@ -1006,11 +1012,12 @@ auto inline GraphRefIri = [](const std::string& iri) {
 };
 
 inline auto Quads = [](const ad_utility::sparql_types::Triples& freeTriples,
-                       const std::vector<Quads::GraphBlock>& graphs)
-    -> Matcher<const ::Quads&> {
-  return AllOf(
-      AD_FIELD(Quads, freeTriples_, testing::ElementsAreArray(freeTriples)),
-      AD_FIELD(Quads, graphTriples_, testing::ElementsAreArray(graphs)));
+                       const std::vector<qlever::Quads::GraphBlock>& graphs)
+    -> Matcher<const qlever::Quads&> {
+  return AllOf(AD_FIELD(qlever::Quads, freeTriples_,
+                        testing::ElementsAreArray(freeTriples)),
+               AD_FIELD(qlever::Quads, graphTriples_,
+                        testing::ElementsAreArray(graphs)));
 };
 
 // Some helper matchers for testing SparqlExpressions
@@ -1203,7 +1210,7 @@ inline auto AddAll = [](const ad_utility::triple_component::Iri& from,
 
 namespace sparqlParserTestHelpers {
 
-using namespace sparqlParserHelpers;
+using namespace qlever::sparqlParserHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;

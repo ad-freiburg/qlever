@@ -17,6 +17,8 @@
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 
+namespace qlever {
+
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
@@ -778,5 +780,9 @@ class QueryPlanner {
   // explicit IRI in the `GRAPH` clause, or via `FROM NAMED`).
   qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
+
+}  // namespace qlever
+
+using qlever::QueryPlanner;
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

@@ -25,6 +25,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
+namespace qlever {
+
 // The different Datatypes that a `ValueId` (see below) can encode.
 // Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
 // and check whether you have to add it to the `isDatatypeTrivial` function
@@ -530,7 +532,7 @@ class ValueId {
  private:
   // Compares a vocabulary index with a local vocabulary index range.
   static ql::strong_ordering compareVocabAndLocalVocab(
-      LocalVocabEntry::IdProxy vocabIndex, ::LocalVocabIndex localVocabIndex) {
+      LocalVocabEntry::IdProxy vocabIndex, LocalVocabIndex localVocabIndex) {
     auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
     if (vocabIndex < lowerBound) {
       return ql::strong_ordering::less;
@@ -567,5 +569,7 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_GLOBAL_VALUEID_H

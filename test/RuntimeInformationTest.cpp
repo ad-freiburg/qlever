@@ -7,6 +7,8 @@
 
 #include "engine/RuntimeInformation.h"
 
+using namespace qlever;
+
 using namespace std::chrono_literals;
 
 // ________________________________________________________________

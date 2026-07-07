@@ -9,6 +9,11 @@
 
 #include "global/RuntimeParameters.h"
 
+using qlever::getRuntimeParameter;
+using qlever::globalRuntimeParameters;
+using qlever::RuntimeParameters;
+using qlever::setRuntimeParameter;
+
 // Set the runtime parameter specified by the `ParameterPtr` to the given
 // `Value` and return a cleanup that will restore the original value of the
 // parameter when it is destroyed.

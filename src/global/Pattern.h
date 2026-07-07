@@ -26,6 +26,8 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 /**
  * @brief This represents a set of relations of a single entity.
  *        (e.g. a set of books that all have an author and a title).
@@ -38,11 +40,15 @@ struct Pattern : std::vector<Id> {
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
 };
 
+}  // namespace qlever
+
 namespace detail {
 template <typename DataT>
 struct CompactStringVectorWriter;
 
 }
+
+namespace qlever {
 
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
@@ -59,7 +65,7 @@ class CompactVectorOfStrings {
   using vector_type = std::conditional_t<std::is_same_v<data_type, char>,
                                          std::string, std::vector<data_type>>;
 
-  using Writer = detail::CompactStringVectorWriter<data_type>;
+  using Writer = ::detail::CompactStringVectorWriter<data_type>;
   CompactVectorOfStrings() = default;
 
   explicit CompactVectorOfStrings(
@@ -152,13 +158,16 @@ class CompactVectorOfStrings {
   std::vector<offset_type> offsets_;
 };
 
+}  // namespace qlever
+
 namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
 // file.
 template <typename data_type>
 struct CompactStringVectorWriter {
  private:
-  using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
+  using offset_type =
+      typename qlever::CompactVectorOfStrings<data_type>::offset_type;
 
   // The data members are encapsulated in a separate struct to make the
   // definition of the move-assignment operator easier. NOTE: If you add
@@ -255,10 +264,10 @@ static_assert(
 
 // Hashing support for the `Pattern` class.
 template <>
-struct std::hash<Pattern> {
-  std::size_t operator()(const Pattern& p) const noexcept {
+struct std::hash<qlever::Pattern> {
+  std::size_t operator()(const qlever::Pattern& p) const noexcept {
     std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p.data()), sizeof(Id) * p.size());
+        reinterpret_cast<const char*>(p.data()), sizeof(qlever::Id) * p.size());
     return hash<std::string_view>()(s);
   }
 };

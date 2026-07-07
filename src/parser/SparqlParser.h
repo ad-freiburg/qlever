@@ -10,6 +10,8 @@
 #include "parser/ParsedQuery.h"
 #include "util/BlankNodeManager.h"
 
+namespace qlever {
+
 // The SPARQL parser used by QLever. The actual parsing is delegated to a parser
 // that is based on ANTLR4, which recognises the complete SPARQL 1.1 QL grammar.
 // For valid SPARQL queries that are not supported by QLever a reasonable error
@@ -28,5 +30,7 @@ class SparqlParser {
       const EncodedIriManager* encodedIriManager, std::string update,
       const std::vector<DatasetClause>& datasets = {});
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_H

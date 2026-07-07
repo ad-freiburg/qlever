@@ -16,6 +16,8 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)

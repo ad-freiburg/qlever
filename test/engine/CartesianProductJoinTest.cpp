@@ -19,6 +19,7 @@
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
+using namespace qlever;
 using ad_utility::source_location;
 constexpr size_t CHUNK_SIZE = 1'000;
 using O = std::optional<size_t>;

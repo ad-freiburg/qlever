@@ -18,6 +18,8 @@
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
 using ad_utility::source_location;

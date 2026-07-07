@@ -11,6 +11,8 @@
 #include "global/IndexTypes.h"
 
 namespace textIndexScanTestHelpers {
+using qlever::Score;
+using qlever::TextRecordIndex;
 // NOTE: this function exploits a "lucky accident" that allows us to
 // obtain the textRecord using indexToString.
 // TODO: Implement a more elegant/stable version

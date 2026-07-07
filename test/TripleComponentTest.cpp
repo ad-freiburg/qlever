@@ -14,6 +14,8 @@
 #include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
 
+namespace qlever {
+
 using namespace std::literals;
 using namespace ad_utility::testing;
 namespace {
@@ -341,3 +343,5 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(false, match("false"));
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }
+
+}  // namespace qlever

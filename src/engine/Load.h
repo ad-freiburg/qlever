@@ -14,6 +14,8 @@
 #include "parser/ParsedQuery.h"
 #include "util/http/HttpClient.h"
 
+namespace qlever {
+
 // This class implements the SPARQL UPDATE `LOAD` operation. It reads a turtle
 // document from a remote URL via HTTP and converts it to an `IdTable`.
 class Load final : public Operation {
@@ -91,6 +93,8 @@ class Load final : public Operation {
   // Allows overriding the `getResultFunction_` for testing purposes.
   void resetGetResultFunctionForTesting(SendRequestType func);
 };
+
+}  // namespace qlever
 
 #endif
 #endif  // QLEVER_LOAD_H

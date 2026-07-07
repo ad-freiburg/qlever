@@ -13,6 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPatternOperation.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 StripColumns::StripColumns(QueryExecutionContext* ctx,
                            std::shared_ptr<QueryExecutionTree> child,

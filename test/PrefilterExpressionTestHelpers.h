@@ -101,6 +101,8 @@ constexpr inline auto inExpr = isInExpression;
 constexpr inline auto prefixRegex = makePrefixRegexExpression;
 
 namespace filterHelper {
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
 //______________________________________________________________________________
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`

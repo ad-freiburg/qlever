@@ -15,6 +15,8 @@
 #include "global/Pattern.h"
 #include "parser/ParsedQuery.h"
 
+namespace qlever {
+
 class HasPredicateScan : public Operation {
  public:
   enum class ScanType {
@@ -128,5 +130,9 @@ class HasPredicateScan : public Operation {
   static std::shared_ptr<QueryExecutionTree> makePatternScan(
       QueryExecutionContext* qec, TripleComponent subject, Variable object);
 };
+
+}  // namespace qlever
+
+using qlever::HasPredicateScan;
 
 #endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

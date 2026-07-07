@@ -38,6 +38,8 @@
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 
+namespace qlever {
+
 enum class TurtleParserIntegerOverflowBehavior {
   Error,
   OverflowingToDouble,
@@ -778,5 +780,7 @@ class RdfMultifileParser : public RdfParserBase {
   void parseFileAndPushBatches(const qlever::InputFileSpecification& file,
                                ad_utility::MemorySize bufferSize);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

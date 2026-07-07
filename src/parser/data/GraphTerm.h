@@ -19,6 +19,8 @@
 #include "rdfTypes/Iri.h"
 #include "util/VisitMixin.h"
 
+namespace qlever {
+
 using GraphTermBase = std::variant<Literal, BlankNode,
                                    ad_utility::triple_component::Iri, Variable>;
 
@@ -60,5 +62,7 @@ class GraphTerm : public GraphTermBase,
     });
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_GRAPHTERM_H

@@ -13,6 +13,8 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+using namespace qlever;
+
 namespace {
 auto I = ad_utility::testing::IntId;
 }
@@ -133,6 +135,7 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
   EXPECT_EQ(resultTable, makeIdTableFromVector({{3, 11}}, I));
 }
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
   auto* qec = ad_utility::testing::getQec();
@@ -161,3 +164,4 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
               VariantWith<sparqlExpression::VectorWithMemoryLimit<Gc>>(
                   ElementsAre(AD_FIELD(Gc, separator_, Eq("|")))));
 }
+}  // namespace qlever

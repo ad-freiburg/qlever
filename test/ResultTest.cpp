@@ -8,6 +8,8 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
 using ::testing::Combine;

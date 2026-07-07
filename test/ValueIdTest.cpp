@@ -20,6 +20,8 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+using namespace qlever;
+
 struct ValueIdTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };

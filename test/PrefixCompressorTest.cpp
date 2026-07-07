@@ -8,6 +8,8 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 TEST(PrefixCompressor, CompressionPreservesWords) {
   PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alph", "alpha", "al"});

@@ -6,7 +6,7 @@
 
 #include "parser/GraphPatternAnalysis.h"
 
-namespace graphPatternAnalysis {
+namespace qlever::graphPatternAnalysis {
 
 // _____________________________________________________________________________
 BasicGraphPatternsInvariantTo::BasicGraphPatternsInvariantTo(
@@ -41,4 +41,4 @@ bool BasicGraphPatternsInvariantTo::variableAppearsAtMostOnce(
   return it == counts.end() || it->second <= 1;
 }
 
-}  // namespace graphPatternAnalysis
+}  // namespace qlever::graphPatternAnalysis

@@ -11,6 +11,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 class Minus : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -126,5 +128,9 @@ class Minus : public Operation {
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
 };
+
+}  // namespace qlever
+
+using qlever::Minus;
 
 #endif  // QLEVER_SRC_ENGINE_MINUS_H

@@ -36,6 +36,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/IdTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 using ad_utility::source_location;
 // Some useful shortcuts for the tests below.

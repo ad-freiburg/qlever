@@ -16,6 +16,8 @@
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
+namespace qlever {
+
 using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
 
 namespace detail {
@@ -427,6 +429,10 @@ class TransitivePathImpl : public TransitivePathBase {
     return ::ranges::views::zip(input, graphInput);
   }
 };
+
+}  // namespace qlever
+
+using qlever::TransitivePathImpl;
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 

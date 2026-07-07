@@ -10,6 +10,8 @@ using AntlrParser = SparqlAutomaticParser;
 
 using BnodeMgr = ad_utility::BlankNodeManager*;
 
+namespace qlever {
+
 namespace {
 // _____________________________________________________________________________
 // Parse the given string as the given clause. If the datasets are not empty,
@@ -61,3 +63,5 @@ std::vector<ParsedQuery> SparqlParser::parseUpdate(
   return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
                         std::move(update), datasets);
 }
+
+}  // namespace qlever

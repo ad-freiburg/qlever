@@ -44,6 +44,8 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
+using namespace qlever;
+
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
 

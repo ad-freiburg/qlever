@@ -13,6 +13,10 @@
 
 namespace compressedRelationHelpers {
 
+using qlever::CompressedRelationMetadata;
+using qlever::CompressedRelationWriter;
+using qlever::Id;
+
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
 

@@ -12,6 +12,8 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 
+namespace qlever {
+
 // An operation that owns its explicit `Result` via `shared_ptr`s and just
 // returns this result when `computeResult` is called.
 class ExplicitIdTableOperation : public Operation {
@@ -49,5 +51,9 @@ class ExplicitIdTableOperation : public Operation {
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 };
+
+}  // namespace qlever
+
+using qlever::ExplicitIdTableOperation;
 
 #endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H

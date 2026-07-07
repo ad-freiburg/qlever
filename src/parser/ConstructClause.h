@@ -12,7 +12,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 struct ConstructClause : ClauseBase {
   ad_utility::sparql_types::Triples triples_;
 
@@ -28,6 +28,6 @@ struct ConstructClause : ClauseBase {
            ql::views::transform(ad_utility::get<Variable>);
   }
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H

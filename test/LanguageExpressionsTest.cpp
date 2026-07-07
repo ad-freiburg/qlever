@@ -13,6 +13,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression;
 using ad_utility::source_location;
 using ad_utility::testing::DateId;

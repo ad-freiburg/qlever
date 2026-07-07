@@ -19,6 +19,8 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
+using qlever::Variable;
+
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.

@@ -20,6 +20,8 @@
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 // A class for maintaining a local vocabulary, which conceptually is a set of
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
 // from the input data). The implementation is subtle and quite clever:
@@ -229,5 +231,7 @@ class LocalVocab {
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

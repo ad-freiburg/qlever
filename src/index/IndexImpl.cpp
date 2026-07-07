@@ -38,6 +38,8 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
+namespace qlever {
+
 using std::array;
 using namespace ad_utility::memory_literals;
 
@@ -2100,3 +2102,5 @@ nlohmann::json IndexImpl::recomputeStatistics(
   // allocation start value during the next index rebuild.
   return configuration;
 }
+
+}  // namespace qlever

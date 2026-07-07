@@ -12,6 +12,10 @@
 #include "global/Constants.h"
 #include "util/Log.h"
 
+namespace qlever {
+
+using qlever::ColumnIndex;
+
 class IdTableUtils {
  public:
   template <size_t WIDTH>
@@ -65,5 +69,7 @@ class IdTableUtils {
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_IDTABLEUTILS_H

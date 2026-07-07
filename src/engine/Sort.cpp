@@ -20,6 +20,8 @@
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 // Type alias for the external sorter.
 //
 // TODO: The `SortByColumns` has runtime state (the vector of column indices).

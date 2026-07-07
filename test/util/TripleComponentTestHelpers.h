@@ -9,6 +9,7 @@
 #include "parser/TripleComponent.h"
 
 namespace ad_utility::testing {
+using qlever::TripleComponent;
 
 // Create a valid `TripleComponent::Literal` that can then be stored in a
 // `TripleComponent`. The contents of the literal are obtained by normalizing

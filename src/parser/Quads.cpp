@@ -7,6 +7,8 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/UpdateClause.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________________
 Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
   AD_CORRECTNESS_CHECK(ql::starts_with(label, "_:"));
@@ -78,7 +80,7 @@ Quads::toGraphPatternOperations() const {
         triple[2].toTripleComponent()));
   };
 
-  using namespace parsedQuery;
+  using namespace qlever::parsedQuery;
   std::vector<GraphPatternOperation> operations;
   operations.emplace_back(
       BasicGraphPattern{ad_utility::transform(freeTriples_, toSparqlTriple)});
@@ -133,3 +135,5 @@ void Quads::forAllVariables(absl::FunctionRef<void(const Variable&)> f) {
   ql::ranges::for_each(graphTriples_, visitGraphBlock);
   ql::ranges::for_each(freeTriples_, visitTriple);
 }
+
+}  // namespace qlever

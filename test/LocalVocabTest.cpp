@@ -32,6 +32,8 @@
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
 

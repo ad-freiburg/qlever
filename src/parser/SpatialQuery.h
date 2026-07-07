@@ -10,7 +10,7 @@
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 class SpatialSearchException : public std::runtime_error {
   // Constructors have to be explicitly inherited
@@ -101,6 +101,6 @@ SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
 
 }  // namespace detail
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_SPATIALQUERY_H

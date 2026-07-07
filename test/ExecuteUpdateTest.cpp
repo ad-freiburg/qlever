@@ -217,6 +217,7 @@ TEST(ExecuteUpdate, executeUpdate) {
   }
 }
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   // For each test suite the `qec` and the `defaultGraphId` have to be set
@@ -654,3 +655,4 @@ TEST(ExecuteUpdate, setMinus) {
   expect({IdTriple(1, 2, 3)},
          {IdTriple(1, 2, 3), IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {});
 }
+}  // namespace qlever

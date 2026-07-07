@@ -17,6 +17,8 @@
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // Class representing property paths. This includes simple IRIs as a baseline,
 // alternative paths, sequence paths, inverse paths, negated paths, and paths
 // with minimum and maximum lengths.
@@ -174,5 +176,7 @@ class PropertyPath {
 
 // Allow the `PropertyPath` to be printed to an output stream.
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

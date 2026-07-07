@@ -20,6 +20,8 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 
+namespace qlever {
+
 // The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
 
@@ -224,5 +226,7 @@ class WordWriterBase {
   // The base classes have to implement the actual logic for `finish` here.
   virtual void finishImpl() = 0;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

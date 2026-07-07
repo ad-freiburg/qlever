@@ -10,6 +10,7 @@
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
+using namespace qlever;
 using ad_utility::testing::makeAllocator;
 using V = Variable;
 

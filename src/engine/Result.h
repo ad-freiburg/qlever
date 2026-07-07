@@ -19,6 +19,8 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
 
+namespace qlever {
+
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is either a table accessible via `idTableView()` or can be consumed through a
@@ -340,5 +342,10 @@ class Result {
   // generator.
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
+
+}  // namespace qlever
+
+using qlever::LocalVocab;
+using qlever::Result;
 
 #endif  // QLEVER_SRC_ENGINE_RESULT_H

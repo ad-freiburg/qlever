@@ -19,6 +19,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 using ad_utility::testing::makeAllocator;
 auto Int = ad_utility::testing::IntId;

@@ -24,6 +24,8 @@
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // An exception is thrown when an index in an old, no longer supported binary
 // format is read.
 class WrongFormatException : public std::exception {
@@ -169,5 +171,7 @@ class IndexMetaData {
     serializer | arg.numDistinctCol0_;
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXMETADATA_H

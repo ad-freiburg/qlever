@@ -44,6 +44,10 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/json.h"
 
+namespace qlever {
+
+using qlever::TextBlockIndex;
+
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -884,5 +888,7 @@ class IndexImpl {
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState) const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

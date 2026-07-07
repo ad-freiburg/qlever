@@ -24,6 +24,11 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
+using qlever::IndexImpl;
+using qlever::LocalVocab;
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
+
 namespace ad_utility {
 
 namespace detail {

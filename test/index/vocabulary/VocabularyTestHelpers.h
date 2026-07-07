@@ -11,6 +11,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
+namespace qlever {
 // human-readable output for the `WordAndIndex` class within GTest.
 inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
   auto& os = *osPtr;
@@ -22,8 +23,10 @@ inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
     os << wi.index();
   }
 }
+}  // namespace qlever
 
 namespace vocabulary_test {
+using qlever::WordAndIndex;
 
 // Can be used to compare arbitrary vocabularies to each other and to
 // `std::vector<string>`.

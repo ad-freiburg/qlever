@@ -20,6 +20,7 @@
  * /brief Some helpers to parse request URLs in QLever.
  */
 namespace ad_utility::url_parser {
+using qlever::DatasetClause;
 
 // A map that stores the values for parameters. Parameters can be specified
 // multiple times with different values.

@@ -9,7 +9,9 @@
 #include "parser/UpdateTriples.h"
 #include "util/CompilerWarnings.h"
 
-using namespace updateClause;
+using namespace qlever;
+
+using namespace qlever::updateClause;
 using V = Variable;
 
 // _____________________________________________________________________________

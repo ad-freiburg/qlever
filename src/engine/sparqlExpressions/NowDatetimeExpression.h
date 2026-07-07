@@ -8,7 +8,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/DateYearDuration.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // The expression `NOW()` is evaluated within NowDatetimeExpression.h.
 // `NowDatetimeExpression` has to be explicitly constructed from a
@@ -41,6 +41,8 @@ class NowDatetimeExpression : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NOWDATETIMEEXPRESSION_H

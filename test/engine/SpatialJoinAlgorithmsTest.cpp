@@ -29,6 +29,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;

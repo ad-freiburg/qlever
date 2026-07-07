@@ -18,7 +18,7 @@
 // extracting information from expressions of the form `geof:distance(?a, ?b) <=
 // constant`.
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // Helper struct for `getGeoFunctionExpressionParameters`
 struct GeoFunctionCall {
@@ -48,6 +48,8 @@ struct GeoDistanceCall : public GeoFunctionCall {
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr);
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H

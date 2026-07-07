@@ -7,6 +7,8 @@
 #include "./util/GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/StringSortComparator.h"
+
+using namespace qlever;
 using namespace std::literals;
 using ad_utility::source_location;
 

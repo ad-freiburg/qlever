@@ -30,7 +30,11 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
+using qlever::CoordinateOutOfRangeException;
+
 using namespace std::chrono_literals;
+
+namespace qlever {
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
@@ -1434,3 +1438,5 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
+
+}  // namespace qlever

@@ -27,9 +27,24 @@
 #include "util/Synchronized.h"
 
 // Forward declarations
+namespace qlever {
 class QueryExecutionContext;
 class QueryExecutionTree;
 class IndexScan;
+}  // namespace qlever
+
+using qlever::DeltaTriples;
+using qlever::IndexMetaData;
+using qlever::ParsedQuery;
+using qlever::SparqlTriple;
+using qlever::SparqlTripleSimple;
+namespace parsedQuery = qlever::parsedQuery;
+using qlever::LocalVocabEntry;
+using qlever::LocatedTriplesSharedState;
+using qlever::LocatedTriplesState;
+using qlever::Permutation;
+
+namespace qlever {
 
 // For the future, materialized views save their version. If we change something
 // about the way materialized views are stored, we can break the existing ones
@@ -335,5 +350,11 @@ class MaterializedViewsManager {
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
+
+}  // namespace qlever
+
+using qlever::MaterializedView;
+using qlever::MaterializedViewsManager;
+using qlever::MaterializedViewWriter;
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

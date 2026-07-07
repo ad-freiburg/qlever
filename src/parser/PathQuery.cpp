@@ -10,7 +10,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void PathQuery::addParameter(const SparqlTriple& triple) {
@@ -113,4 +113,4 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
       numPathsPerTarget_};
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

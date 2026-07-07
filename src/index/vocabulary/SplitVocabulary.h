@@ -21,6 +21,10 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
+using qlever::ValueId;
+
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
 // the SplitVocabulary should be used. The underlying vocabularies except 0
@@ -328,5 +332,7 @@ using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
                     detail::splitVocabulary::GeoFilenameFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

@@ -24,6 +24,8 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
+namespace qlever {
+
 template <typename IndexT = WordVocabIndex>
 class IdRange {
  public:
@@ -261,5 +263,7 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                                   TripleComponentComparator, VocabIndex>;
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_H

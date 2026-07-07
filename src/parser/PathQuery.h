@@ -12,9 +12,11 @@
 // should live, or do we need a forward declaration here?
 #include "engine/PathSearch.h"
 
+namespace qlever {
 class SparqlTriple;
+}  // namespace qlever
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 class PathSearchException : public std::runtime_error {
   // Constructors have to be explicitly inherited
@@ -84,6 +86,6 @@ struct PathQuery : MagicServiceQuery {
   constexpr std::string_view name() const override { return "path search"; };
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_PATHQUERY_H

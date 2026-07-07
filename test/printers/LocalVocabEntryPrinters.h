@@ -11,10 +11,12 @@
 
 #include "index/LocalVocabEntry.h"
 
+namespace qlever {
 // _____________________________________________________________________________
 inline void PrintTo(const LocalVocabEntry& word, std::ostream* os) {
   auto& s = *os;
   s << word.toStringRepresentation();
 }
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_PRINTERS_LOCALVOCABENTRYPRINTERS_H

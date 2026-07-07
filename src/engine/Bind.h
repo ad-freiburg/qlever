@@ -9,6 +9,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
+namespace qlever {
+
 // BIND operation.
 class Bind : public Operation {
  public:
@@ -59,5 +61,9 @@ class Bind : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+}  // namespace qlever
+
+using qlever::Bind;
 
 #endif  // QLEVER_SRC_ENGINE_BIND_H

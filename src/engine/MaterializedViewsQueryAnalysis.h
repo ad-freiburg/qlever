@@ -19,14 +19,21 @@
 #include "util/StringPairHashMap.h"
 
 // Forward declarations to prevent cyclic dependencies.
+namespace qlever {
 class MaterializedView;
 class IndexScan;
+}  // namespace qlever
+
+using qlever::ParsedQuery;
+using qlever::SparqlTriple;
+using qlever::TripleComponent;
+using qlever::Variable;
 
 // _____________________________________________________________________________
 namespace materializedViewsQueryAnalysis {
 
-using ViewPtr = std::shared_ptr<const MaterializedView>;
-using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
+using ViewPtr = std::shared_ptr<const qlever::MaterializedView>;
+using qlever::graphPatternAnalysis::BasicGraphPatternsInvariantTo;
 using VariableToTripleIndices =
     ad_utility::HashMap<Variable, std::vector<size_t>>;
 
@@ -57,7 +64,7 @@ struct StarInfo {
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
-  std::shared_ptr<IndexScan> indexScan_;
+  std::shared_ptr<qlever::IndexScan> indexScan_;
   std::vector<size_t> coveredTriples_;
 
   // ___________________________________________________________________________
@@ -100,7 +107,7 @@ class QueryPatternCache {
 
   // Construct an `IndexScan` for a single chain join given the necessary
   // information from both the materialized view and the user's query.
-  std::shared_ptr<IndexScan> makeScanForSingleChain(
+  std::shared_ptr<qlever::IndexScan> makeScanForSingleChain(
       QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
       std::optional<Variable> chain, Variable object) const;
 
@@ -108,7 +115,7 @@ class QueryPatternCache {
   // object that maps the columns of the materialized view to the subject and
   // object variable names from the user query. This assumes that the `starView`
   // represents the appropriate star join.
-  std::shared_ptr<IndexScan> makeScanForStar(
+  std::shared_ptr<qlever::IndexScan> makeScanForStar(
       QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 

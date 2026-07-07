@@ -13,7 +13,7 @@
 // This module contains helpers for analyzing the structure of graph patterns.
 
 // _____________________________________________________________________________
-namespace graphPatternAnalysis {
+namespace qlever::graphPatternAnalysis {
 
 // Check whether a given `GraphPatternOperation` is invariant with respect to
 // the variable usage in the surrounding `GraphPattern`, meaning that removing
@@ -47,7 +47,7 @@ struct BasicGraphPatternsInvariantTo {
   template <typename T>
   bool operator()(const T&) const {
     // The presence of any of these operations might remove or duplicate rows.
-    namespace pq = parsedQuery;
+    namespace pq = qlever::parsedQuery;
     static_assert(
         ad_utility::SimilarToAny<
             T, pq::Optional, pq::Union, pq::Subquery, pq::TransPath,
@@ -63,6 +63,6 @@ struct BasicGraphPatternsInvariantTo {
   bool variableAppearsAtMostOnce(const Variable& var) const;
 };
 
-}  // namespace graphPatternAnalysis
+}  // namespace qlever::graphPatternAnalysis
 
 #endif  // QLEVER_SRC_PARSER_GRAPHPATTERNANALYSIS_H_

@@ -15,6 +15,8 @@
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 namespace {
 
 using ad_utility::source_location;

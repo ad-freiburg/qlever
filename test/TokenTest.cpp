@@ -12,6 +12,10 @@
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/RdfEscaping.h"
 
+namespace RdfEscaping = qlever::RdfEscaping;
+using qlever::TurtleToken;
+using qlever::TurtleTokenCtre;
+
 using std::string;
 TEST(TokenTest, Numbers) {
   TurtleToken t;
@@ -342,6 +346,7 @@ TEST(TokenizerTest, Consume) {
   ASSERT_EQ(match, s);
 }
 
+namespace qlever {
 TEST(TokenizerTest, WhitespaceAndComments) {
   TurtleToken t;
   using c = TurtleTokenCtre;
@@ -379,6 +384,7 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     ASSERT_EQ(tok.data().data() - s.data(), 27);
   }
 }
+}  // namespace qlever
 
 TEST(Escaping, normalizeRDFLiteral) {
   {

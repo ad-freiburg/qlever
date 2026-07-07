@@ -15,6 +15,8 @@
 #include "util/ConcurrentCache.h"
 #include "util/json.h"
 
+namespace qlever {
+
 /// A class to store information about the status of an operation (result size,
 /// time to compute, status, etc.). Also contains the functionality to print
 /// that information nicely formatted and to export it to JSON.
@@ -159,5 +161,10 @@ struct RuntimeInformationWholeQuery {
   friend void to_json(nlohmann::ordered_json& j,
                       const RuntimeInformationWholeQuery& rti);
 };
+
+}  // namespace qlever
+
+using qlever::RuntimeInformation;
+using qlever::RuntimeInformationWholeQuery;
 
 #endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H

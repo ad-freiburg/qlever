@@ -15,6 +15,10 @@
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 
+using qlever::ColumnIndex;
+using qlever::Id;
+using qlever::LocalVocab;
+
 namespace ad_utility {
 // The implementations of the join algorithms (merge/zipper join, galloping
 // join) in `JoinAlgorithms.h` assume that their inputs only consist of the join

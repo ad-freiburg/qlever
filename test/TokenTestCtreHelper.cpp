@@ -4,7 +4,7 @@
 
 #include "parser/TokenizerCtre.h"
 
-using T = TurtleTokenCtre;
+using T = qlever::TurtleTokenCtre;
 
 // ___________________________________
 bool TokenTestCtreHelper::matchInteger(std::string_view s) {

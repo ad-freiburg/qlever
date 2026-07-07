@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
+namespace qlever {
+
 using std::string;
 
 // _____________________________________________________________________________
@@ -71,3 +73,5 @@ void VocabularyInMemoryBinSearch::WordWriter::finish() {
   writer_.finish();
   offsetWriter_.finish();
 }
+
+}  // namespace qlever

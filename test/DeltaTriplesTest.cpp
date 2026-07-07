@@ -24,6 +24,7 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+namespace qlever {
 namespace {
 using namespace deltaTriplesTestHelpers;
 
@@ -1244,3 +1245,5 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
                              newGraph));
 }
 #endif
+
+}  // namespace qlever

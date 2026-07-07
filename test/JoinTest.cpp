@@ -33,6 +33,7 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
 using ad_utility::testing::makeAllocator;
 namespace {
 

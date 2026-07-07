@@ -9,6 +9,8 @@
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+
+using namespace qlever;
 using Vocab = VocabularyInMemory;
 
 namespace {

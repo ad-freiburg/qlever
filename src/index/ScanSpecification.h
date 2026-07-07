@@ -12,6 +12,8 @@
 #include "index/LocalVocab.h"
 #include "parser/TripleComponent.h"
 
+namespace qlever {
+
 // Forward declaration
 class IndexImpl;
 class Index;
@@ -111,5 +113,7 @@ class ScanSpecificationAsTripleComponent {
   // Getter for testing.
   const GraphFilter& graphFilter() const { return graphFilter_; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_SCANSPECIFICATION_H

@@ -12,6 +12,8 @@
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 QL_CONCEPT_OR_NOTHING(
@@ -162,5 +164,7 @@ bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
     return false;
   }
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

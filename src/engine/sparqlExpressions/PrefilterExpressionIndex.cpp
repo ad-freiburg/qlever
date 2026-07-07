@@ -18,6 +18,8 @@
 #include "util/ConstexprMap.h"
 #include "util/OverloadCallOperator.h"
 
+using namespace qlever;
+
 namespace prefilterExpressions {
 
 using LVE = LocalVocabEntry;
@@ -530,7 +532,7 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     [[maybe_unused]] const LocalVocabContext& context,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     bool getTotalComplement) const {
-  using namespace valueIdComparators;
+  using namespace qlever::valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
   LocalVocab localVocab{};

@@ -12,7 +12,7 @@
 #include "sparqlParser/generated/SparqlAutomaticParser.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
-namespace sparqlParserHelpers {
+namespace qlever::sparqlParserHelpers {
 
 template <typename ResultOfParse>
 struct ResultOfParseAndRemainingText {
@@ -65,5 +65,5 @@ struct ParserAndVisitorBase {
                                          std::string{remainingString}};
   }
 };
-}  // namespace sparqlParserHelpers
+}  // namespace qlever::sparqlParserHelpers
 #endif  // QLEVER_SRC_PARSER_PARSERANDVISITORBASE_H

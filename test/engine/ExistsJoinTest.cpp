@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
+using namespace qlever;
 using namespace ad_utility::testing;
 
 namespace {
@@ -829,6 +830,7 @@ TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
       ad_utility::Exception);
 }
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   auto* qec = getQec();
@@ -860,6 +862,7 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   EXPECT_THAT(existsJoin.joinColumns_,
               ::testing::ElementsAre(std::array<ColumnIndex, 2>{0, 0}));
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {

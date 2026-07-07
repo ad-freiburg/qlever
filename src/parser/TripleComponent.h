@@ -25,8 +25,6 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
-class IndexImpl;
-
 namespace ad_utility::detail {
 
 template <typename T, typename U>
@@ -37,6 +35,10 @@ CPP_concept MoveAssignableWith =
     CPP_requires_ref(MoveAssignableWithRequires, T, U);
 
 }  // namespace ad_utility::detail
+
+namespace qlever {
+
+class IndexImpl;
 
 // A wrapper around a `std::variant` that can hold the different types that the
 // subject, predicate, or object of a triple can have in the Turtle Parser.
@@ -264,5 +266,7 @@ class TripleComponent {
     }
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TRIPLECOMPONENT_H

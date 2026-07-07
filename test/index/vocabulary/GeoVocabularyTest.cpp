@@ -13,6 +13,8 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/File.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace geoInfoTestHelpers;

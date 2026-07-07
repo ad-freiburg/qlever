@@ -21,6 +21,12 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
+using qlever::CompactVectorOfStrings;
+using qlever::Id;
+using qlever::Pattern;
+
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.
 struct PatternStatistics {
@@ -195,5 +201,7 @@ class PatternCreator {
     return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_PATTERNCREATOR_H

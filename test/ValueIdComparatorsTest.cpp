@@ -12,8 +12,8 @@
 #include "global/ValueIdComparators.h"
 #include "util/Random.h"
 
-using namespace valueIdComparators;
-namespace valueIdComparators {
+using namespace qlever::valueIdComparators;
+namespace qlever::valueIdComparators {
 inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   switch (c) {
     using enum Comparison;
@@ -38,7 +38,7 @@ inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   }
   return str;
 }
-}  // namespace valueIdComparators
+}  // namespace qlever::valueIdComparators
 using ad_utility::source_location;
 
 struct ValueIdComparators : public ::testing::Test {

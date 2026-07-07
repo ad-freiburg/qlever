@@ -17,6 +17,8 @@
 #include "gtest/gtest.h"
 #include "index/Index.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression;
 using namespace ad_utility::testing;
 using ad_utility::source_location;

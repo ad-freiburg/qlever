@@ -7,7 +7,7 @@
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 std::vector<const Variable*> SparqlExpression::containedVariables() const {
@@ -213,4 +213,4 @@ void SparqlExpression::getExistsExpressions(
     std::vector<SparqlExpression*>& result) {
   getExistsExpressionsImpl(*this, result);
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

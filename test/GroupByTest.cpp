@@ -36,6 +36,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 using ::testing::Eq;
 using ::testing::Optional;

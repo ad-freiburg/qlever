@@ -4,7 +4,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -191,4 +191,4 @@ SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child) {
   return std::make_unique<SecondsExpression>(std::move(child));
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

@@ -25,6 +25,8 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 template <bool isInternal>
 const LocatedTriplesPerBlock&
@@ -800,3 +802,5 @@ DeltaTriples::LocatedTriplesDiff DeltaTriples::computeLocatedTriplesDiff(
                             std::move(internalInsertions),
                             std::move(internalDeletions)};
 }
+
+}  // namespace qlever

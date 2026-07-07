@@ -9,6 +9,8 @@
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+
 namespace {
 // Get `num` random indices in the range `[min, max]`. Additionally, add the min
 // and the max to the result explicitly, to automaticlaly test corner cases.0

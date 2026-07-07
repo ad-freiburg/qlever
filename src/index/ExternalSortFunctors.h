@@ -21,6 +21,9 @@
 #ifdef QLEVER_CHEAPER_COMPILATION
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
+
+using qlever::ColumnIndex;
+using qlever::Id;
 #endif
 
 template <int i0, int i1, int i2, bool hasGraphColumn = true>

@@ -9,6 +9,8 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 
+using qlever::Id;
+
 namespace ad_utility::testing {
 // Create an unlimited allocator.
 inline ad_utility::AllocatorWithLimit<Id> makeAllocator(

@@ -14,6 +14,8 @@
 
 using namespace std::chrono_literals;
 
+namespace qlever {
+
 // __________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
@@ -257,3 +259,5 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
     absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
   }
 }
+
+}  // namespace qlever

@@ -15,7 +15,7 @@
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
 
-namespace valueIdComparators {
+namespace qlever::valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
@@ -658,6 +658,6 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
   }
 }
 
-}  // namespace valueIdComparators
+}  // namespace qlever::valueIdComparators
 
 #endif  // QLEVER_VALUEIDCOMPARATORS_H

@@ -21,6 +21,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
 

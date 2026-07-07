@@ -23,7 +23,7 @@
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
 // expressions are hidden in the respective `.cpp` file to reduce compile times.
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2);
@@ -218,6 +218,8 @@ SparqlExpression::Ptr makeConcatExpression(
 constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

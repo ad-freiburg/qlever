@@ -17,6 +17,8 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/StringUtils.h"
 
+namespace qlever {
+
 // TODO<joka921> Include the relevant constants directly here.
 
 /// Compression and decompression of words given a codebook of common prefixes.
@@ -108,5 +110,7 @@ class PrefixCompressor {
 
   const auto& prefixToCode() const { return prefixToCode_; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_PREFIXCOMPRESSOR_H

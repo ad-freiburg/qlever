@@ -309,7 +309,7 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
                         {T, F, T, T, T, U, U}, true);
 }
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 // Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
 // is not a simple prefix regex).
 TEST(RegexExpression, getPrefixRegex) {
@@ -354,7 +354,7 @@ TEST(RegexExpression, makePrefixMatchExpression) {
       makePrefixMatchExpression(variable("?x"), variable("?not_a_constant")),
       HasSubstr("static string literals"), std::runtime_error);
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 // _____________________________________________________________________________
 auto testPrefixRegexUnorderedColumn =

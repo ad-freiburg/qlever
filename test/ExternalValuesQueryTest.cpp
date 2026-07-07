@@ -16,8 +16,10 @@
 #include "util/GTestHelpers.h"
 
 namespace {
-using parsedQuery::ExternalValuesException;
-using parsedQuery::ExternalValuesQuery;
+using qlever::PropertyPath;
+using qlever::SparqlTriple;
+using qlever::parsedQuery::ExternalValuesException;
+using qlever::parsedQuery::ExternalValuesQuery;
 using namespace ::testing;
 using V = Variable;
 

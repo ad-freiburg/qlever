@@ -11,7 +11,11 @@
 #include "parser/Alias.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 using GroupKey =
     std::variant<sparqlExpression::SparqlExpressionPimpl, Alias, Variable>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_GROUPKEY_H

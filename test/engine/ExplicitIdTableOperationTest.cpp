@@ -17,6 +17,8 @@
 #include "global/ValueId.h"
 #include "parser/TripleComponent.h"
 
+using namespace qlever;
+
 using ad_utility::testing::makeAllocator;
 using ad_utility::testing::VocabId;
 using ::testing::ElementsAre;

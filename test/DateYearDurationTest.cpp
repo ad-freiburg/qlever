@@ -13,6 +13,8 @@
 #include "util/DateYearDuration.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 using ad_utility::source_location;
 
 namespace {

@@ -17,9 +17,11 @@
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "global/ValueIdComparators.h"
 
+using namespace qlever;
+
 using namespace std::literals;
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 void ensureIsSimpleLiteral(
     const ad_utility::triple_component::Literal& literal) {
@@ -84,9 +86,9 @@ struct RegexImpl {
 using RegexExpression =
     string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
@@ -379,4 +381,4 @@ SparqlExpression::Ptr makePrefixMatchExpression(
       variableExpression->value());
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

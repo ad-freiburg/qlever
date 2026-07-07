@@ -11,6 +11,8 @@
 #include "./util/GTestHelpers.h"
 #include "parser/WordsAndDocsFileParser.h"
 
+using namespace qlever;
+
 // All lambdas and type aliases used in this file contained here
 namespace {
 

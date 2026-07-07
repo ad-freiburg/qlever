@@ -12,6 +12,8 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+using namespace qlever;
+
 namespace {
 auto V = ad_utility::testing::VocabId;
 auto I = ad_utility::testing::IntId;

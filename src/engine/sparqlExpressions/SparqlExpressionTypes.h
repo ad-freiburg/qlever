@@ -21,7 +21,9 @@
 #include "util/TypeTraits.h"
 #include "util/VisitMixin.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
 
 // A std::vector<T, AllocatorWithLimit> with deleted copy constructor
 // and copy assignment. Used in the SparqlExpression module, where we want
@@ -470,6 +472,8 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
 }
 
 }  // namespace detail
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
+
+namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H

@@ -15,6 +15,8 @@
 #include "parser/UpdateTriples.h"
 #include "parser/data/Types.h"
 
+namespace qlever {
+
 // A class for the intermediate parsing results of `quads`. Provides utilities
 // for converting the quads into the required formats. The Quads/Triples can be
 // used as `vector<GraphPatternOperation>` (Query Body in `DELETE WHERE`) or
@@ -64,3 +66,5 @@ struct Quads {
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;
 };
+
+}  // namespace qlever

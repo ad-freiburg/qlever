@@ -12,6 +12,9 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
+using qlever::ValueId;
+namespace valueIdComparators = qlever::valueIdComparators;
+
 // _____________________________________________________________________________
 // For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.

@@ -18,6 +18,8 @@
 #include "util/Random.h"
 #include "util/Timer.h"
 
+using namespace qlever;
+
 // ___________________________________________________________________
 IdTable createRandomIdTable(
     size_t numRows, size_t numColumns,

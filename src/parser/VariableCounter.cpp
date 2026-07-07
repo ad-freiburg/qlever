@@ -11,7 +11,7 @@
 
 #include "util/VariantRangeFilter.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const GraphPattern& gp) {
@@ -175,4 +175,4 @@ void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

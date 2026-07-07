@@ -15,6 +15,11 @@
 #include "util/Log.h"
 #include "util/json.h"
 
+namespace qlever {
+
+using qlever::Datatype;
+using qlever::Id;
+
 namespace detail {
 // Match `repr` against the pattern `([0-9]+)>` and return the digit
 // substring as a `string_view` into `repr` on success, or `std::nullopt` if
@@ -353,5 +358,7 @@ struct AlwaysOnPrefixes {
 };
 using EncodedIriManager =
     EncodedIriManagerImpl<Id::numDataBits, 8, AlwaysOnPrefixes>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H

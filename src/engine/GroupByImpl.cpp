@@ -35,7 +35,9 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
-namespace groupBy::detail {
+using namespace qlever;
+
+namespace qlever::groupBy::detail {
 
 template <typename T>
 CPP_requires(HasResize, requires(T& val)(val.resize(std::declval<size_t>())));
@@ -234,7 +236,7 @@ class LazyGroupByRange
                             std::move(currentLocalVocab_)};
   }
 };
-}  // namespace groupBy::detail
+}  // namespace qlever::groupBy::detail
 
 using groupBy::detail::VectorOfAggregationData;
 

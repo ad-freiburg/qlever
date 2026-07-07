@@ -11,6 +11,8 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {

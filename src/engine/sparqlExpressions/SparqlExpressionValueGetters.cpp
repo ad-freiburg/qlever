@@ -629,7 +629,7 @@ CPP_template_out_def(typename RequestedInfo)(
 };
 
 // Explicit instantiations
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
 template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
 template struct GeometryInfoValueGetter<ad_utility::Centroid>;
@@ -637,7 +637,7 @@ template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
 template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 //______________________________________________________________________________
 std::optional<int64_t> IntValueGetter::operator()(
@@ -673,7 +673,7 @@ TypeErasedValueGetter<ValueGetter>::operator()(ExpressionResult res,
 
 // Explicit instantiations of `TypeErasedValueGetter` for all value getter
 // classes.
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 template struct TypeErasedValueGetter<NumericValueGetter>;
 template struct TypeErasedValueGetter<IsValidValueGetter>;
 template struct TypeErasedValueGetter<EffectiveBooleanValueGetter>;
@@ -718,4 +718,4 @@ template struct TypeErasedValueGetter<RegexValueGetter>;
 template struct TypeErasedValueGetter<AlwaysTrueValueGetter>;
 template struct TypeErasedValueGetter<NumericOrDateValueGetter>;
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail

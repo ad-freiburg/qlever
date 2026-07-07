@@ -23,6 +23,11 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
+using qlever::getRuntimeParameter;
+using qlever::RuntimeParameters;
+
 using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
@@ -1886,3 +1891,5 @@ void CompressedRelationReader::LazyScanMetadata::aggregate(
   numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
   numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
 }
+
+}  // namespace qlever

@@ -18,6 +18,8 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 class IndexImpl;
 using LocalVocabContext = IndexImpl;
 
@@ -147,5 +149,7 @@ class alignas(16) LocalVocabEntry
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

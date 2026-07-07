@@ -14,6 +14,8 @@
 
 #include "engine/JoinImpl.h"
 
+using namespace qlever;
+
 using std::string;
 
 // _____________________________________________________________________________

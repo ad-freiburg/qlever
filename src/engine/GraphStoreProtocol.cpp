@@ -8,6 +8,8 @@
 #include "parser/Tokenizer.h"
 #include "util/http/beast.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 void GraphStoreProtocol::throwUnsupportedMediatype(
     const std::string_view& mediatype) {

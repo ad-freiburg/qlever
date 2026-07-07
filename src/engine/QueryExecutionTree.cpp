@@ -18,6 +18,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 
+using namespace qlever;
+
 using std::string;
 
 using parsedQuery::SelectClause;

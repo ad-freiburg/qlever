@@ -71,7 +71,9 @@
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
-namespace p = parsedQuery;
+using namespace qlever;
+
+namespace p = qlever::parsedQuery;
 namespace {
 
 using ad_utility::makeExecutionTree;

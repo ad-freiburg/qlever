@@ -16,7 +16,7 @@
 #include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
-namespace p = parsedQuery;
+namespace p = qlever::parsedQuery;
 
 using Var = Variable;
 namespace {

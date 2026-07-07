@@ -9,6 +9,8 @@
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 
+using namespace qlever;
+
 using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;
 

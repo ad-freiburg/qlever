@@ -8,6 +8,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // The implementation of an "EXISTS join", which we use to realize the semantics
 // of the SPARQL `EXISTS` function. The join takes two subtrees as input, and
 // returns the left subtree with an additional boolean column that is `true` iff
@@ -130,5 +132,9 @@ class ExistsJoin : public Operation {
   FRIEND_TEST(ExistsJoin,
               addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
+
+}  // namespace qlever
+
+using qlever::ExistsJoin;
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

@@ -37,6 +37,10 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+
+using qlever::EncodedIriManager;
+using qlever::SparqlParser;
+using qlever::SparqlTriple;
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
@@ -498,6 +502,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 }
 
 // _____________________________________________________________________________
+namespace qlever {
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
@@ -767,7 +772,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_ANY_THROW(testPermutation.setMaterializedView(view));
   }
 }
+}  // namespace qlever
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
@@ -925,6 +932,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         ::testing::HasSubstr("The name for the view may not be empty"));
   }
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTestLarge, LazyScan) {

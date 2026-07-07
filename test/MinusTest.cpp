@@ -19,6 +19,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 auto V = ad_utility::testing::VocabId;
 constexpr auto U = Id::makeUndefined();

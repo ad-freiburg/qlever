@@ -14,6 +14,9 @@
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
+
+using qlever::globalRuntimeParameters;
+
 namespace ad_utility {
 
 // Shared body for the boost::program_options `validate` overloads whose only

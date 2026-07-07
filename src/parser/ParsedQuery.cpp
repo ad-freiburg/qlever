@@ -21,6 +21,8 @@
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
 using std::string;
 using std::vector;
 
@@ -563,3 +565,5 @@ void ParsedQuery::addWarningOrThrow(std::string warning) {
     addWarning(std::move(warning));
   }
 }
+
+}  // namespace qlever

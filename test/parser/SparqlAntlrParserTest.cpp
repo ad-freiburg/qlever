@@ -22,6 +22,8 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace {
 using namespace sparqlParserTestHelpers;
 using std::string;
@@ -1224,6 +1226,7 @@ TEST(SparqlParser, ConstructQuery) {
 }
 
 // _____________________________________________________________________________
+namespace qlever {
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   static ad_utility::BlankNodeManager blankNodeManager;
   SparqlQleverVisitor visitor{
@@ -1236,6 +1239,7 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
       visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
       ad_utility::Exception);
 }
+}  // namespace qlever
 
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {

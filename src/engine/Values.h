@@ -10,6 +10,8 @@
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
+namespace qlever {
+
 class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
@@ -71,5 +73,9 @@ class Values : virtual public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+}  // namespace qlever
+
+using qlever::Values;
 
 #endif  // QLEVER_SRC_ENGINE_VALUES_H

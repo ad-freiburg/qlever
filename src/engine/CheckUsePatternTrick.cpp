@@ -8,7 +8,7 @@
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
 
-namespace checkUsePatternTrick {
+namespace qlever::checkUsePatternTrick {
 // __________________________________________________________________________
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
@@ -26,7 +26,7 @@ bool isVariableContainedInGraphPattern(
   return ql::ranges::any_of(graphPattern._graphPatterns, check);
 }
 
-namespace p = parsedQuery;
+namespace p = qlever::parsedQuery;
 
 // __________________________________________________________________________
 bool isVariableContainedInGraphPatternOperation(
@@ -287,4 +287,4 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
                                       patternTrickData.predicateVariable_};
   return patternTrickTuple;
 }
-}  // namespace checkUsePatternTrick
+}  // namespace qlever::checkUsePatternTrick

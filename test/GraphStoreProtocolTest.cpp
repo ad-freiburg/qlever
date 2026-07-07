@@ -53,6 +53,7 @@ const EncodedIriManager* encodedIriManager() {
 }
 }  // namespace
 
+namespace qlever {
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPostAndTsop) {
   auto runTests = [](auto transform, bool isInsertion) {
@@ -506,3 +507,4 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       graphQuery._originalString,
       testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
 }
+}  // namespace qlever

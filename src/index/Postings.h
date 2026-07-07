@@ -8,6 +8,10 @@
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 
+namespace qlever {
+
 using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_POSTINGS_H

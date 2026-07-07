@@ -24,6 +24,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
 
+using namespace qlever;
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
 
@@ -600,6 +601,7 @@ void cleanFilesWithPrefix(std::string_view prefix) {
 }
 }  // namespace
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
   cleanFilesWithPrefix("my-name");
@@ -677,3 +679,4 @@ TEST(IndexRebuilder, serverIntegration) {
 
   threadPool.join();
 }
+}  // namespace qlever

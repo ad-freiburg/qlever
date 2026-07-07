@@ -12,6 +12,8 @@
 #include "util/Forward.h"
 #include "util/MmapVector.h"
 
+using namespace qlever;
+
 namespace {
 using namespace vocabulary_test;
 

@@ -20,6 +20,8 @@
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 class JoinImpl : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> left_;
@@ -200,5 +202,9 @@ class JoinImpl : public Operation {
   ad_utility::AddCombinedRowToIdTable makeRowAdder(
       std::function<void(IdTable&, LocalVocab&)> callback) const;
 };
+
+}  // namespace qlever
+
+using qlever::JoinImpl;
 
 #endif  // QLEVER_SRC_ENGINE_JOINIMPL_H

@@ -7,7 +7,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-namespace sparqlExpression::detail::string_expressions {
+namespace qlever::sparqlExpression::detail::string_expressions {
 
 // Template for an expression that works on string literals. The arguments are
 // the same as those to `NaryExpression` with the difference that the value
@@ -73,6 +73,6 @@ using LiteralExpressionImpl =
     StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
                              LiteralValueGetterWithoutStrFunction, N, Function,
                              AdditionalNonStringValueGetters...>;
-}  // namespace sparqlExpression::detail::string_expressions
+}  // namespace qlever::sparqlExpression::detail::string_expressions
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STRINGEXPRESSIONSHELPER_H

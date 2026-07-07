@@ -25,6 +25,12 @@
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 
+namespace qlever {
+
+using qlever::Id;
+using qlever::IdTriple;
+using qlever::LocalVocabIndex;
+
 // Typedef for one `LocatedTriplesPerBlock` object for each of the six
 // permutations.
 template <bool isInternal>
@@ -441,5 +447,7 @@ class DeltaTriplesManager {
                              OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H
