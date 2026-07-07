@@ -25,7 +25,6 @@
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
 #include "util/ValueIdentity.h"
-#include "util/http/MediaTypes.h"
 
 namespace ql::exportIds {
 
