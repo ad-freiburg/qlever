@@ -120,7 +120,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 inline auto setLoglevelForTesting(LogLevel level) {
   auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
       level.value(), std::memory_order_relaxed);
-  return absl::MakeCleanup([previous] {
+  return absl::Cleanup([previous] {
     ::ad_utility::detail::runtimeLogLevel.store(previous,
                                                 std::memory_order_relaxed);
   });
@@ -134,7 +134,7 @@ inline auto setLoglevelForTesting(LogLevel level) {
 inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
   auto* previous = &ad_utility::LogstreamChoice::get().getStream();
   ad_utility::setGlobalLoggingStream(stream);
-  return absl::MakeCleanup(
+  return absl::Cleanup(
       [previous] { ad_utility::setGlobalLoggingStream(previous); });
 }
 
@@ -148,9 +148,12 @@ inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
 inline auto setGlobalLoggingStreamToStringStream() {
   auto stream = std::make_shared<std::ostringstream>();
   auto& streamRef = *stream;
+  // `setGlobalLoggingStreamForTesting` cannot be used here because we have to
+  // move the shared pointer to the string stream into the cleanup to keep it
+  // alive.
   auto* previous = &ad_utility::LogstreamChoice::get().getStream();
   ad_utility::setGlobalLoggingStream(stream.get());
-  auto cleanup = absl::MakeCleanup([previous, stream = std::move(stream)] {
+  auto cleanup = absl::Cleanup([previous, stream = std::move(stream)] {
     ad_utility::setGlobalLoggingStream(previous);
   });
   return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
