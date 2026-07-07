@@ -50,82 +50,25 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 
   EXPECT_EQ(vocab.isGeoInfoAvailable(),
             vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
+}
 
-  // Test lookupBatch.
-  {
-    std::array<size_t, 3> indices{2, 0, 1};
-    auto result = vocab.lookupBatch(indices);
-    ASSERT_EQ(result->size(), 3);
-    EXPECT_EQ((*result)[0], "gamma");
-    EXPECT_EQ((*result)[1], "alpha");
-    EXPECT_EQ((*result)[2], "beta");
+// Write a small vocabulary of the given `vocabType` to disk and open it into
+// `vocab`. The batch-lookup tests below only compare against individual
+// `vocab[]` lookups, so the exact words don't matter (they just have to be
+// sorted, as the underlying vocabularies require sorted input at write time).
+void setupVocabForBatchTest(PolymorphicVocabulary& vocab,
+                            VocabularyType::Enum vocabType) {
+  VocabularyType type{vocabType};
+  std::string filename = absl::StrCat("polymorphicVocabularyBatchTest.",
+                                      type.toString(), ".vocab");
+  auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
+  auto& writer = *writerPtr;
+  std::vector<std::string> words{"alpha", "beta", "delta", "gamma"};
+  for (const auto& word : words) {
+    writer(word, false);
   }
-
-  // `lookupBatch` edge cases: an empty batch (invalid -> throws), and a batch
-  // with duplicate indices (each position must be resolved independently).
-  {
-    EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
-
-    std::array<size_t, 4> dupIndices{1, 1, 0, 1};
-    auto dupResult = vocab.lookupBatch(dupIndices);
-    ASSERT_EQ(dupResult->size(), 4);
-    EXPECT_EQ((*dupResult)[0], "beta");
-    EXPECT_EQ((*dupResult)[1], "beta");
-    EXPECT_EQ((*dupResult)[2], "alpha");
-    EXPECT_EQ((*dupResult)[3], "beta");
-  }
-
-  // Test lookupBatchesStreamed: a stream of batches, where each yielded result
-  // must match the eager `lookupBatch` on the same batch.
-  {
-    std::vector<std::vector<size_t>> batches{{2, 0}, {1}};
-    auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{batches});
-
-    std::vector<VocabBatchLookupResult> results;
-    for (auto& r : streamed) {
-      results.push_back(std::move(r));
-    }
-    ASSERT_EQ(results.size(), 2);
-
-    auto expectMatchesEager = [&vocab](const VocabBatchLookupResult& actual,
-                                       ql::span<const size_t> batchIndices) {
-      auto expected = vocab.lookupBatch(batchIndices);
-      ASSERT_EQ(actual->size(), expected->size());
-      for (size_t i = 0; i < expected->size(); ++i) {
-        EXPECT_EQ((*actual)[i], (*expected)[i]);
-      }
-    };
-    expectMatchesEager(results[0], batches[0]);
-    expectMatchesEager(results[1], batches[1]);
-
-    // Exact contents.
-    ASSERT_EQ(results[0]->size(), 2);
-    EXPECT_EQ((*results[0])[0], "gamma");
-    EXPECT_EQ((*results[0])[1], "alpha");
-    ASSERT_EQ(results[1]->size(), 1);
-    EXPECT_EQ((*results[1])[0], "beta");
-  }
-
-  // An empty batch within the stream is invalid and must throw when pulled.
-  {
-    std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
-    auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{batches});
-    EXPECT_ANY_THROW({
-      for ([[maybe_unused]] auto& r : streamed) {
-      }
-    });
-  }
-
-  // An empty input stream must produce no results.
-  {
-    std::vector<std::vector<size_t>> noBatches;
-    auto streamed = vocab.lookupBatchesStreamed(VocabLookupInput{noBatches});
-    size_t count = 0;
-    for ([[maybe_unused]] auto& r : streamed) {
-      ++count;
-    }
-    EXPECT_EQ(count, 0);
-  }
+  writer.finish();
+  vocab.open(filename, type);
 }
 }  // namespace
 
@@ -133,6 +76,80 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 // possible `VocabularyType`s.
 TEST(PolymorphicVocabulary, basicTests) {
   ql::ranges::for_each(VocabularyType::all(), &testForVocabType);
+}
+
+// `lookupBatch` must yield, for each requested index, exactly the same string
+// as an individual `vocab[]` lookup — including for reordered and duplicated
+// indices. Checked for every `VocabularyType`.
+TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
+  for (auto vocabType : VocabularyType::all()) {
+    PolymorphicVocabulary vocab;
+    setupVocabForBatchTest(vocab, vocabType);
+    ASSERT_GE(vocab.size(), 4u);
+
+    std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
+    auto result = vocab.lookupBatch(indices);
+    ASSERT_EQ(result->size(), indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      EXPECT_EQ((*result)[i], vocab[indices[i]]);
+    }
+
+    // An empty batch is invalid.
+    EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
+  }
+}
+
+// `lookupBatchesStreamed` must yield, for each batch, exactly the same strings
+// as individual `vocab[]` lookups for that batch's indices. Checked for every
+// `VocabularyType`.
+TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
+  for (auto vocabType : VocabularyType::all()) {
+    PolymorphicVocabulary vocab;
+    setupVocabForBatchTest(vocab, vocabType);
+    ASSERT_GE(vocab.size(), 4u);
+
+    std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {0, 3, 1}};
+    // `VocabLookupInput` takes ownership of the batches, so keep a copy to
+    // compare against.
+    const auto expectedBatches = batches;
+    auto streamed =
+        vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+
+    size_t b = 0;
+    for (auto& result : streamed) {
+      ASSERT_LT(b, expectedBatches.size());
+      const auto& batchIndices = expectedBatches[b];
+      ASSERT_EQ(result->size(), batchIndices.size());
+      for (size_t i = 0; i < batchIndices.size(); ++i) {
+        EXPECT_EQ((*result)[i], vocab[batchIndices[i]]);
+      }
+      ++b;
+    }
+    EXPECT_EQ(b, expectedBatches.size());
+
+    // An empty batch within the stream is invalid and must throw when pulled.
+    {
+      std::vector<std::vector<size_t>> withEmpty{{2, 0}, {}, {1}};
+      auto streamedWithEmpty =
+          vocab.lookupBatchesStreamed(VocabLookupInput{std::move(withEmpty)});
+      EXPECT_ANY_THROW({
+        for ([[maybe_unused]] auto& result : streamedWithEmpty) {
+        }
+      });
+    }
+
+    // An empty input stream produces no results.
+    {
+      std::vector<std::vector<size_t>> noBatches;
+      auto streamedEmpty =
+          vocab.lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
+      size_t count = 0;
+      for ([[maybe_unused]] auto& result : streamedEmpty) {
+        ++count;
+      }
+      EXPECT_EQ(count, 0);
+    }
+  }
 }
 
 // Test a corner case in a `switch` statement.

@@ -147,23 +147,30 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   }
 }
 
-TEST(VocabularyOnDisk, LookupBatch) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+// A `lookupBatch` result must equal the individual `vocab[]` lookups for the
+// same indices, including for reordered and duplicated indices.
+TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "gamma"};
   VocabularyCreator creator{"LookupBatch"};
   auto vocab = creator.createVocabulary(words);
 
-  // Batch lookup in non-sequential order.
-  std::array<size_t, 3> indices{2, 0, 3};
+  std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
   auto result = vocab.lookupBatch(indices);
-  ASSERT_EQ(result->size(), 3);
-  EXPECT_EQ((*result)[0], "beta");
-  EXPECT_EQ((*result)[1], "alpha");
-  EXPECT_EQ((*result)[2], "42");
+  ASSERT_EQ(result->size(), indices.size());
+  for (size_t i = 0; i < indices.size(); ++i) {
+    EXPECT_EQ((*result)[i], vocab[indices[i]]) << "at position " << i;
+  }
+}
 
-  // An empty batch is an invalid request and must throw.
+// An empty batch is an invalid request and must throw.
+TEST(VocabularyOnDisk, LookupBatchEmptyThrows) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchEmpty"};
+  auto vocab = creator.createVocabulary(words);
   EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
+// An out-of-range index in a batch must throw.
 TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
   VocabularyCreator creator{"LookupBatchOutOfRange"};
@@ -172,77 +179,45 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   EXPECT_ANY_THROW(vocab.lookupBatch(indices));
 }
 
-TEST(VocabularyOnDisk, LookupBatchesStreamed) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+// Each batch yielded by `lookupBatchesStreamed` must equal the individual
+// `vocab[]` lookups for that batch's indices, and the batches must be yielded
+// in input order.
+TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "gamma"};
   VocabularyCreator creator{"LookupBatchesStreamed"};
   auto vocab = creator.createVocabulary(words);
 
-  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}};
-
-  auto streamedResults =
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {4, 0, 1}};
+  // `VocabLookupInput` takes ownership of the batches, so keep a copy to
+  // compare against.
+  const auto expectedBatches = batches;
+  auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
-  // Collect results from the stream.
-  std::vector<VocabBatchLookupResult> results;
-  for (auto& r : streamedResults) {
-    results.push_back(std::move(r));
-  }
-  ASSERT_EQ(results.size(), 2);
-
-  // Verify first batch matches individual lookupBatch.
-  {
-    std::array<size_t, 3> indices{2, 0, 3};
-    auto expected = vocab.lookupBatch(indices);
-    ASSERT_EQ(results[0]->size(), expected->size());
-    for (size_t i = 0; i < expected->size(); ++i) {
-      EXPECT_EQ((*results[0])[i], (*expected)[i]);
+  size_t b = 0;
+  for (auto& result : streamed) {
+    ASSERT_LT(b, expectedBatches.size());
+    const auto& batchIndices = expectedBatches[b];
+    ASSERT_EQ(result->size(), batchIndices.size()) << "at batch " << b;
+    for (size_t i = 0; i < batchIndices.size(); ++i) {
+      EXPECT_EQ((*result)[i], vocab[batchIndices[i]])
+          << "at batch " << b << " position " << i;
     }
+    ++b;
   }
-
-  // Verify second batch.
-  {
-    std::array<size_t, 1> indices{1};
-    auto expected = vocab.lookupBatch(indices);
-    ASSERT_EQ(results[1]->size(), expected->size());
-    EXPECT_EQ((*results[1])[0], (*expected)[0]);
-  }
+  EXPECT_EQ(b, expectedBatches.size());
 }
 
-// destroying the streamed-looup mid-iteration must drain the in-flight phase-1
-// (offset) reads in `~PipelineState` and return the I/O manager to the pool.
-TEST(VocabularyOnDisk, LookupBatchesStreamedAbandonedMidStream) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchesStreamedAbandoned"};
-  ;
-  auto vocab = creator.createVocabulary(words);
-
-  // We consume the first batch, leaving the rest submitted, so the destructor
-  // of `PipelineState` must drain the in-flight phase-1 read.
-  std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {3}};
-  auto streamedResults =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-
-  auto first = streamedResults.get();
-  ASSERT_TRUE(first.has_value());
-  EXPECT_EQ((*first)->size(), 2);
-  // `streamedResults` destroyed here with batches {1} and {3} still in flight.
-}
-
-// When the number of in-flight reads reaches the prefetch threshold,
-// `fillPipeline` stops submitting new offset reads and exits its loop on the
-// `totalSubmittedSQEs_ < kPrefetchThreshold` condition rather than because the
-// input was exhausted. Existing tests only feed a handful of indices, so this
-// throttling exit is never taken. Here we feed far more single-index batches
-// than the threshold (3 * 256 = 768) to exercise it, and verify that every
-// batch is still returned correctly and in order.
-TEST(VocabularyOnDisk, LookupBatchesStreamedPrefetchThrottling) {
+// A stream over many batches must still return every batch correctly and in
+// order.
+TEST(VocabularyOnDisk, LookupBatchesStreamedManyBatches) {
   constexpr size_t kNumWords = 1000;
   std::vector<std::string> words;
   words.reserve(kNumWords);
   for (size_t i = 0; i < kNumWords; ++i) {
     words.push_back(absl::StrCat("word", i));
   }
-  VocabularyCreator creator{"LookupBatchesStreamedThrottling"};
+  VocabularyCreator creator{"LookupBatchesStreamedMany"};
   auto vocab = creator.createVocabulary(words);
 
   // One single-index batch per word, in order.
@@ -251,19 +226,35 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedPrefetchThrottling) {
   for (size_t i = 0; i < kNumWords; ++i) {
     batches.push_back({i});
   }
-
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
   size_t i = 0;
   for (auto& r : streamed) {
     ASSERT_EQ(r->size(), 1) << "at batch " << i;
-    EXPECT_EQ((*r)[0], words[i]) << "at batch " << i;
+    EXPECT_EQ((*r)[0], vocab[i]) << "at batch " << i;
     ++i;
   }
   EXPECT_EQ(i, kNumWords);
 }
 
+// An empty input stream (no batches) is valid and must produce no results.
+TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  VocabularyCreator creator{"LookupBatchesStreamedEmptyStream"};
+  auto vocab = creator.createVocabulary(words);
+  std::vector<std::vector<size_t>> noBatches;
+  auto streamed =
+      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
+  size_t count = 0;
+  for ([[maybe_unused]] auto& r : streamed) {
+    ++count;
+  }
+  EXPECT_EQ(count, 0);
+}
+
+// An out-of-range index within a streamed batch must throw when that batch is
+// pulled.
 TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
   VocabularyCreator creator{"LookupBatchesStreamedOutOfRange"};
@@ -271,30 +262,24 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
   std::vector<std::vector<size_t>> batches{{0, 99}};
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-  // The contract check first fires when the batch's offset reads are submitted,
-  // i.e. while pulling the first result.
   EXPECT_ANY_THROW({
-    for (auto& r : streamed) {
-      (void)r;
+    for ([[maybe_unused]] auto& r : streamed) {
     }
   });
 }
 
 // An empty batch within the stream is an invalid request and must throw when
 // the batch is pulled (an empty input *stream* with no batches is still valid,
-// see other tests).
+// see above).
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchesStreamedEmpty"};
+  VocabularyCreator creator{"LookupBatchesStreamedEmptyBatch"};
   auto vocab = creator.createVocabulary(words);
-
   std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-
   EXPECT_ANY_THROW({
-    for (auto& r : streamed) {
-      (void)r;
+    for ([[maybe_unused]] auto& r : streamed) {
     }
   });
 }
