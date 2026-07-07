@@ -58,9 +58,7 @@ CPP_template(typename UnderlyingVocabulary,
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
-  // Look up multiple words by index in a single batch call. Uses the generic
-  // sequential fallback (see `VocabularyTypes.h`); each word is decompressed
-  // via the ordinary `operator[]`.
+  // Look up multiple words by index in a single batch call.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
