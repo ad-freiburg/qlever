@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -253,9 +254,36 @@ class Qlever {
   // explained above.
   explicit Qlever(const EngineConfig& config);
 
-  // Parse and plan the given `query`.
+  using PlannedQuery = qlever::PlannedQuery;
+
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
   //
-  // NOTE: This is useful as a separate function for the following reasons.
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery planQuery(
+      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation).
+  //
+  // NOTES: This is useful as a separate function for the following reasons.
   //
   // 1. Using a `PlannedQuery`, one can execute a `query` multiple times without
   // having to parse and plan it again.
@@ -268,15 +296,12 @@ class Qlever {
   //
   // TODO<joka921,damekt> The `timeLimit` is currently only used for
   // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time `parseAndPlanQuery` is called until the execution of the
-  // query has finished. This might be very unintuitive when the `PlannedQuery`
-  // is stored for later execution.
-  // This is not an issue for now (only the `Server` actually imposes time
-  // limits and then executes the queries right away), but should be addressed
-  // in the future once the timeout management also is moved into the `QLever`
-  // class.
-  using PlannedQuery = qlever::PlannedQuery;
-
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       ad_utility::SharedCancellationHandle handle =
