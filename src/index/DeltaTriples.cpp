@@ -755,6 +755,12 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
     }
   }
 }
+
+// _____________________________________________________________________________
+void DeltaTriples::remapIdForTesting(
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+  remapId(idMapping, id);
+}
 #endif
 
 // _____________________________________________________________________________

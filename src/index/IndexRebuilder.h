@@ -14,11 +14,15 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerExtensions.h"
+#include "util/Exception.h"
 
 namespace qlever {
 
@@ -26,8 +30,20 @@ namespace indexRebuilder {
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
-Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+// rebuild. To make `AD_ALWAYS_INLINE` work properly, this function has to be
+// defined in the header.
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  size_t offset = ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
+                              std::less{}));
+  return Id::makeFromVocabIndex(
+      VocabIndex::make(original.getVocabIndex().get() + offset));
+}
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
 // id space left by random allocation of blank node ids. Return an empty
