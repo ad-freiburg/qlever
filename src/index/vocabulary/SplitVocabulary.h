@@ -166,14 +166,12 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  // Look up multiple words by index in a single batch call. Uses the generic
-  // sequential fallback (see `VocabularyTypes.h`); each `operator[]` resolves
-  // the marker bits and dispatches to the correct underlying vocabulary.
+  //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
-  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
+  //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));
