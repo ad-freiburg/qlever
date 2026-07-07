@@ -9,7 +9,7 @@
 
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
-    QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
+    QueryExecutionContext* ctx, IdTableOrView table,
     VariableToColumnMap variables, std::vector<ColumnIndex> sortedColumns,
     LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
@@ -26,9 +26,36 @@ ExplicitIdTableOperation::ExplicitIdTableOperation(
 }
 
 // _____________________________________________________________________________
+IdTableView<0> ExplicitIdTableOperation::viewOf(const IdTableOrView& table) {
+  return std::visit(
+      [](const auto& arg) -> IdTableView<0> {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, std::shared_ptr<const IdTable>>) {
+          AD_CONTRACT_CHECK(arg != nullptr);
+          return arg->template asStaticView<0>();
+        } else {
+          static_assert(std::is_same_v<T, IdTableView<0>>);
+          return arg;
+        }
+      },
+      table);
+}
+
+// _____________________________________________________________________________
 Result ExplicitIdTableOperation::computeResult(
     [[maybe_unused]] bool requestLaziness) {
-  return {idTable_, resultSortedOn(), localVocab_.clone()};
+  // Pass the `shared_ptr<const IdTable>` alternative through to `Result`
+  // as-is (instead of converting it to a view) so that `Result` keeps its own
+  // independent claim on the underlying `IdTable` via reference counting,
+  // rather than depending on this `ExplicitIdTableOperation` to stay alive.
+  // The `IdTableView<0>` alternative is passed through unchanged; its
+  // lifetime is guaranteed by whoever created the view (e.g. the `Qlever`
+  // instance that owns the deserialized blob).
+  return std::visit(
+      [this](const auto& arg) -> Result {
+        return {arg, resultSortedOn(), localVocab_.clone()};
+      },
+      idTable_);
 }
 
 // _____________________________________________________________________________
@@ -48,7 +75,7 @@ std::string ExplicitIdTableOperation::getDescriptor() const {
 
 // _____________________________________________________________________________
 size_t ExplicitIdTableOperation::getResultWidth() const {
-  return idTable_->numColumns();
+  return idTableView().numColumns();
 }
 
 // The result is ready immediately.
@@ -67,7 +94,9 @@ float ExplicitIdTableOperation::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-bool ExplicitIdTableOperation::knownEmptyResult() { return idTable_->empty(); }
+bool ExplicitIdTableOperation::knownEmptyResult() {
+  return idTableView().empty();
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {

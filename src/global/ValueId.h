@@ -449,8 +449,15 @@ class ValueId {
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
-  /// framework.
-  AD_SERIALIZE_FRIEND_FUNCTION(ValueId) { serializer | arg._bits; }
+  /// framework. `ValueId` consists of a single trivially-copyable `_bits`
+  /// member with no padding, so it is serialized as a raw byte copy via the
+  /// generic `TriviallySerializable` mechanism (see `Serializer.h`), which
+  /// also enables the bulk and zero-copy (de)serialization paths for
+  /// `std::vector<ValueId>`/`ql::span<ValueId>`. Note: This must be the only
+  /// way `ValueId` opts into the serialization framework -- additionally
+  /// defining a custom `AD_SERIALIZE_FRIEND_FUNCTION` would make every call
+  /// to `serialize(serializer, someValueId)` ambiguous.
+  friend void allowTrivialSerialization(ValueId, auto);
 
   /// Similar to `std::visit` for `std::variant`. First gets the datatype and
   /// then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
