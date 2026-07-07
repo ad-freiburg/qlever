@@ -14,6 +14,7 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include "util/Exception.h"
@@ -65,39 +66,16 @@ std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
 }
 
 // ____________________________________________________________________________
-AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
-    std::unique_ptr<AsyncBlockSource> inner, std::string endRegex)
+AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
+    std::unique_ptr<AsyncBlockSource> inner, EndPositionFinder findEndPosition,
+    std::string description)
     : AsyncBlockSource{inner->getBlocksize()},
       inner_{std::move(inner)},
-      endRegex_{endRegex},
-      endRegexAsString_{std::move(endRegex)} {}
+      findEndPosition_{std::move(findEndPosition)},
+      description_{std::move(description)} {}
 
 // ____________________________________________________________________________
-std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
-    const Block& vec, const re2::RE2& regex) {
-  size_t inputSize = vec.size();
-  AD_CORRECTNESS_CHECK(inputSize > 0);
-  size_t chunkSize = std::min<size_t>(1000, inputSize);
-  re2::StringPiece regexResult;
-  bool match = false;
-  while (true) {
-    auto startIdx = inputSize - chunkSize;
-    auto regexInput = re2::StringPiece{vec.data() + startIdx, chunkSize};
-
-    match = RE2::PartialMatch(regexInput, regex, &regexResult);
-    if (match || chunkSize == inputSize) {
-      break;
-    }
-    chunkSize = std::min(chunkSize * 2, inputSize);
-  }
-  if (!match) {
-    return std::nullopt;
-  }
-  return regexResult.data() + regexResult.size() - vec.data();
-}
-
-// ____________________________________________________________________________
-void AsyncEndRegexBlockSource::asyncGetNextBlockImpl(Handler handler) {
+void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
   // Assemble the result block from `remainder_` and `rawInput[0,
   // endPosition)`, update `remainder_` to `rawInput[endPosition, end)`, and
   // pass the result to `handler`.
@@ -150,17 +128,20 @@ void AsyncEndRegexBlockSource::asyncGetNextBlockImpl(Handler handler) {
         }
         Block rawInput = std::move(*rawOpt);
 
-        auto endPosition = findRegexNearEnd(rawInput, endRegex_);
+        // Search for the end of the last statement near the end of the raw
+        // block.
+        auto endPosition = findEndPosition_(
+            std::string_view{rawInput.data(), rawInput.size()});
         if (endPosition.has_value()) {
           assembleResult(handler, rawInput, endPosition.value());
           return;
         }
 
-        // No regex match. Peek at the next raw block to decide how to handle
-        // this: if the inner source has more data, the current block is too
-        // short for a full statement and parsing must fail. If the inner
-        // source is exhausted, the current block is the last one; return it
-        // without requiring a match.
+        // No boundary found. Peek at the next raw block to decide how to
+        // handle this: if the inner source has more data, the current block
+        // is too short for a full statement and parsing must fail. If the
+        // inner source is exhausted, the current block is the last one;
+        // return it without requiring a match.
         AsyncBlockSource::callAsyncGetNextBlockImpl(
             *inner_,
             [this, handler = std::move(handler), rawInput = std::move(rawInput),
@@ -175,10 +156,9 @@ void AsyncEndRegexBlockSource::asyncGetNextBlockImpl(Handler handler) {
                 // large" error.
                 auto rawSize = rawInput.size();
                 handler(std::make_exception_ptr(std::runtime_error{absl::StrCat(
-                            "The regex ", endRegexAsString_,
-                            " which marks the end of a statement was not found "
-                            "in the current input batch (that was not the last "
-                            "one) of size ",
+                            "No statement boundary (", description_,
+                            ") was found in the current input batch (which "
+                            "was not the last one) of size ",
                             ad_utility::insertThousandSeparator(
                                 std::to_string(rawSize), ','),
                             "; possible fixes are: "

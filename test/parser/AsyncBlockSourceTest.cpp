@@ -40,6 +40,26 @@ std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
   return result;
 }
 
+// Scan `sv` from the back and return the position right after the last digit
+// that is immediately followed by a lowercase letter, or `std::nullopt` if
+// there is no such digit.
+std::optional<size_t> findDigitFollowedByLetter(std::string_view sv) {
+  for (size_t i = sv.size(); i-- > 1;) {
+    if (sv[i] >= 'a' && sv[i] <= 'z' && sv[i - 1] >= '0' && sv[i - 1] <= '9') {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+// Scan `sv` from the back and return the position right after the last
+// character in the range `x`-`z`, or `std::nullopt` if there is none.
+std::optional<size_t> findXToZ(std::string_view sv) {
+  size_t pos = sv.find_last_of("xyz");
+  return pos == std::string_view::npos ? std::nullopt
+                                       : std::optional<size_t>{pos + 1};
+}
+
 }  // namespace
 
 // ________________________________________________________
@@ -62,7 +82,7 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
 }
 
 // ________________________________________________________
-TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
+TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
   std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "ab1cde23fgh";
@@ -72,37 +92,36 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 5_B;
   {
-    // Blocks always end with a digit. The regex `([0-9])[a-z]` matches a
-    // digit followed by a letter, the `AsyncEndRegexBlockSource` always cuts
-    // after the first capture group in the regex, so after the number that
-    // precedes a letter.
-    qp::AsyncEndRegexBlockSource buf(
+    // Blocks always end with a number that is followed by a letter. The
+    // `AsyncStatementBoundaryBlockSource` cuts after the last digit that
+    // precedes a letter, as determined by `findDigitFollowedByLetter`.
+    qp::AsyncStatementBoundaryBlockSource buf(
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
-        "([0-9])[a-z]");
+        findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
   }
   {
-    // The following regex is not found in the data, and the data is too
+    // The following pattern is not found in the data, and the data is too
     // large for one block, so the parsing fails.
-    qp::AsyncEndRegexBlockSource buf(
+    qp::AsyncStatementBoundaryBlockSource buf(
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
-        "([x-z])");
+        findXToZ, "a letter from x to z");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        drainAllBlocks(buf),
-        ::testing::ContainsRegex("which marks the end of a statement"));
+        drainAllBlocks(buf), ::testing::ContainsRegex("No statement boundary"));
   }
   {
     // The same example but with a larger blocksize, s.t. the complete input
-    // fits into a single block. In this case it is no error that the regex
+    // fits into a single block. In this case it is no error that the pattern
     // can never be found.
-    qp::AsyncEndRegexBlockSource buf(std::make_unique<qp::AsyncFileBlockSource>(
-                                         pool.get_executor(), 100_B, filename),
-                                     "([x-z])");
+    qp::AsyncStatementBoundaryBlockSource buf(
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(), 100_B,
+                                                   filename),
+        findXToZ, "a letter from x to z");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
@@ -111,7 +130,7 @@ TEST(AsyncEndRegexBlockSource, CutsAtRegexBoundary) {
 }
 
 // ________________________________________________________
-TEST(AsyncEndRegexBlockSource, LongLookahead) {
+TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
   std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "abcdef1";
@@ -124,10 +143,12 @@ TEST(AsyncEndRegexBlockSource, LongLookahead) {
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 2000_B;
   {
-    qp::AsyncEndRegexBlockSource buf(
+    // The only position that ends a statement is far from the end of the block,
+    // so the manual scan has to look back across many bytes.
+    qp::AsyncStatementBoundaryBlockSource buf(
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
-        "([0-9])[a-z]");
+        findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{{'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');
     auto actual = drainAllBlocks(buf);
