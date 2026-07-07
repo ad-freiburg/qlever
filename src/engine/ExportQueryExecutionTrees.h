@@ -52,7 +52,7 @@ class ExportQueryExecutionTrees {
   // specified by the `mediaType`. Supported formats for this function are CSV,
   // TSV, Turtle, NTriples, Binary, SparqlJSON, QLeverJSON. Note that the Binary
   // format can only be used with SELECT queries and the Turtle and NTriples
-  // format can only be used with CONSTRUCT queries. Invalid `mediaType`s and
+  // formats can only be used with CONSTRUCT queries. Invalid `mediaType`s and
   // invalid combinations of `mediaType` and the query type will throw. The
   // result is returned as a `generator` that lazily computes the serialized
   // result in large chunks of bytes.

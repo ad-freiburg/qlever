@@ -769,12 +769,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
-
-  static constexpr std::array supportedFormatsForTemplateInstantiation{
+  // The mediatypes for which this function template may be instantiated.
+  static constexpr std::array staticallySupportedFormats{
       octetStream, csv,    tsv,      sparqlXml,         sparqlJson,
       qleverJson,  turtle, ntriples, binaryQleverExport};
-  static_assert(
-      ad_utility::contains(supportedFormatsForTemplateInstantiation, format));
+  static_assert(ad_utility::contains(staticallySupportedFormats, format));
 
   if constexpr (!ad_utility::contains(supportedMediaTypesForConstructQueries,
                                       format)) {
