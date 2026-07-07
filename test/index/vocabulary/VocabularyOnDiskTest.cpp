@@ -69,10 +69,21 @@ auto createVocabulary(std::string filename) {
   };
 }
 
+// TODO<ms2144> I think we can make use of `createVocabulary` here. But for that
+// I need to fully understand the notation of the method above first.
 VocabularyOnDisk createVocabularyFromWords(
     const std::vector<std::string>& words) {
   VocabularyCreator creator{absl::StrCat(gtestCurrentTestName(), ".dat")};
   return creator.createVocabulary(words);
+}
+
+// TODO<ms2144> I think we can make use of `createVocabulary` here. But for that
+// I need to fully understand the notation of the method above first.
+auto createVocabulary() {
+  return [c = VocabularyCreator{absl::StrCat(gtestCurrentTestName(), ".dat")}](
+             auto&&... args) mutable {
+    return c.createVocabulary(AD_FWD(args)...);
+  };
 }
 
 VocabularyOnDisk createExampleVocabulary() {
@@ -82,28 +93,27 @@ VocabularyOnDisk createExampleVocabulary() {
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
-  testUpperAndLowerBoundWithStdLess(createVocabulary("lowerUpperBoundStdLess"));
+  testUpperAndLowerBoundWithStdLess(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      createVocabulary("lowerUpperBoundNumeric"));
+      createVocabulary();
 }
 
 TEST(VocabularyOnDisk, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(createVocabulary("AccessOperator"));
+  testAccessOperatorForUnorderedVocabulary(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, AccessOperatorWithNonContiguousIds) {
   std::vector<std::string> words{"game",  "4",      "nobody", "33",
                                  "alpha", "\n\1\t", "222",    "1111"};
   std::vector<uint64_t> ids{2, 4, 8, 16, 17, 19, 42, 42 * 42 + 7};
-  testAccessOperatorForUnorderedVocabulary(
-      createVocabulary("AccessOperatorWithNonContiguousIds"));
+  testAccessOperatorForUnorderedVocabulary(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {
-  testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
+  testEmptyVocabulary(createVocabulary());
 }
 
 // Older versions of QLever stored the offsets file as an
