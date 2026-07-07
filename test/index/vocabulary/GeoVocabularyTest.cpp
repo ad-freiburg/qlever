@@ -152,10 +152,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     const auto expectedBatches = batches;
     auto streamedResults =
         geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-    std::vector<VocabBatchLookupResult> streamed;
-    for (auto& r : streamedResults) {
-      streamed.push_back(std::move(r));
-    }
+    auto streamed = ::ranges::to_vector(streamedResults);
     ASSERT_EQ(streamed.size(), expectedBatches.size());
 
     for (size_t b = 0; b < expectedBatches.size(); ++b) {
@@ -169,6 +166,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   }
 };
 
+// Instantiate every TYPED_TEST in the `GeoVocabularyUnderlyingVocabTypedTest`
+// test suite once for each type in `GeoVocabularyUnderlyingVocabTypes`.
 TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
                  GeoVocabularyUnderlyingVocabTypes);
 
