@@ -24,9 +24,7 @@ namespace http = boost::beast::http;
 using ReqT = http::request<http::string_body>;
 using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 
-// Convert the body of an `http::response` into a string. Free function so it
-// can be used by both `PersistentTestServer` and the backwards-compatible
-// `SimulateHttpRequest`.
+// Convert the body of an `http::response` into a string.
 inline std::string responseBodyToString(
     ad_utility::httpUtils::streamable_body::value_type body) {
   // The range overload doesn't work because it takes a const Range& but
@@ -37,18 +35,18 @@ inline std::string responseBodyToString(
                        respWithCommonIterators.end(), "");
 }
 
-// Test the HTTP request processing of the `Server` class using a persistent
-// `Server` instance. In contrast to `SimulateHttpRequest`, the underlying
-// `Server` lives for the whole lifetime of this object. This allows executing
-// multiple operations (e.g. a `SELECT` after an `UPDATE`) or inspecting the
-// state of the `Server` and `DeltaTriples` after the request.
-class PersistentTestServer {
+// Test the HTTP request processing of the `Server` class. The underlying
+// `Server` lives for the whole lifetime of this object, so multiple operations
+// can be executed against the same server (e.g. a `SELECT` after an `UPDATE`),
+// and the state of the `Server` and `DeltaTriples` can be inspected after each
+// request.
+class ServerForTesting {
   std::unique_ptr<Server> server_;
 
  public:
-  explicit PersistentTestServer(size_t numThreads, std::string accessToken,
-                                const qlever::EngineConfig& config,
-                                bool noAccessCheck = false)
+  explicit ServerForTesting(size_t numThreads, std::string accessToken,
+                            const qlever::EngineConfig& config,
+                            bool noAccessCheck = false)
       : server_{std::make_unique<Server>(
             4321, numThreads, std::move(accessToken), config, noAccessCheck)} {}
 
@@ -70,15 +68,10 @@ class PersistentTestServer {
     server_->configureQueryEventLog(path);
   }
 
-  static std::string bodyToString(
-      ad_utility::httpUtils::streamable_body::value_type body) {
-    return responseBodyToString(std::move(body));
-  }
-
-  // Apply `Server::process` on the given request and return the raw
+  // Apply `Server::process` on the given request and return the
   // `http::response`. A fresh `io_context` and `QueryHub` are created per
-  // request, but the `Server` itself persists across calls.
-  ResT processRaw(const ReqT& request) {
+  // request, but the `Server` itself is reused across calls.
+  ResT process(const ReqT& request) {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
@@ -97,40 +90,32 @@ class PersistentTestServer {
     io.run();
     return fut.get();
   }
-
-  // Given an HTTP request, apply the `Server::process` method on this request
-  // and if the response is a JSON, parse and return it. Otherwise
-  // `std::nullopt` is returned.
-  std::optional<nlohmann::json> operator()(const ReqT& request) {
-    auto response = processRaw(request);
-
-    // Check `Content-type`: currently only `application/json` is supported.
-    auto it = response.find(http::field::content_type);
-    if (it != response.end()) {
-      // We check `starts_with` instead of `==` because a `charset=utf-8` could
-      // follow.
-      if (!it->value().starts_with("application/json")) {
-        return std::nullopt;
-      }
-    }
-
-    return std::optional{
-        nlohmann::json::parse(bodyToString(std::move(response.body())))};
-  }
-
-  // Apply `Server::process` on the given request and return the body of the
-  // response as a string.
-  std::string processAsString(const ReqT& request) {
-    auto response = processRaw(request);
-    return bodyToString(std::move(response.body()));
-  }
 };
+
+// If the given response is a JSON (according to its `Content-type` header),
+// parse its body and return it. Otherwise return `std::nullopt`.
+inline std::optional<nlohmann::json> responseBodyAsJson(ResT response) {
+  // Check `Content-type`: currently only `application/json` is supported.
+  auto it = response.find(http::field::content_type);
+  if (it != response.end()) {
+    // We check `starts_with` instead of `==` because a `charset=utf-8` could
+    // follow.
+    if (!it->value().starts_with("application/json")) {
+      return std::nullopt;
+    }
+  }
+  return std::optional{
+      nlohmann::json::parse(responseBodyToString(std::move(response.body())))};
+}
 
 // Helper function creating a config for testing with the given base name.
 inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
   qlever::EngineConfig config;
   config.baseName_ = std::move(baseName);
   config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
+  // Never persist updates to disk in tests (would leave files behind after the
+  // test). Tests that explicitly test the persistence can override this.
+  config.persistUpdates_ = false;
   return config;
 }
 
@@ -140,51 +125,19 @@ inline qlever::EngineConfig getDefaultConfig() {
   return getDefaultConfigWithName(qec->getIndex().getOnDiskBase());
 }
 
-// Test the HTTP request processing of the `Server` class. Each call creates a
-// fresh `Server` on the given test index, runs a single request, and discards
-// it. For multiple requests that share state or for inspecting the server state
-// afterwards, use `PersistentTestServer` instead.
-struct SimulateHttpRequest {
-  std::string indexBaseName_;
-  // Optional: write the server's query start/end events to this file so a test
-  // can read them back. Empty leaves the event log unconfigured.
-  std::optional<std::filesystem::path> eventLogPath_ = std::nullopt;
-
-  static std::string bodyToString(
-      ad_utility::httpUtils::streamable_body::value_type body) {
-    return responseBodyToString(std::move(body));
+// Create a `ServerForTesting` on the test index with the given `baseName`.
+// If `eventLogPath` is given, the server's query start/end events are written
+// to that file.
+inline ServerForTesting makeServerForTesting(
+    std::string baseName,
+    std::optional<std::filesystem::path> eventLogPath = std::nullopt) {
+  ServerForTesting server{1, "accessToken",
+                          getDefaultConfigWithName(std::move(baseName))};
+  if (eventLogPath.has_value()) {
+    server.configureQueryEventLog(*eventLogPath);
   }
-
-  // Build a throwaway `PersistentTestServer`.
-  PersistentTestServer makeServer() const {
-    auto config = getDefaultConfigWithName(indexBaseName_);
-    config.persistUpdates_ = false;
-    PersistentTestServer server{1, "accessToken", config, false};
-    if (eventLogPath_.has_value()) {
-      server.configureQueryEventLog(*eventLogPath_);
-    }
-    return server;
-  }
-
-  // Apply `Server::process` on the given request and return the raw
-  // `http::response`.
-  ResT processRaw(const ReqT& request) const {
-    return makeServer().processRaw(request);
-  }
-
-  // Given an HTTP request, apply the `Server::process` method on this request
-  // and if the response is a JSON, parse and return it. Otherwise
-  // `std::nullopt` is returned.
-  std::optional<nlohmann::json> operator()(const ReqT& request) const {
-    return makeServer()(request);
-  }
-
-  // Apply `Server::process` on the given request and return the body of the
-  // response as a string.
-  std::string processAsString(const ReqT& request) const {
-    return makeServer().processAsString(request);
-  }
-};
+  return server;
+}
 
 }  // namespace serverTestHelpers
 
