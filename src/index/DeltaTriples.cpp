@@ -106,8 +106,7 @@ void DeltaTriples::eraseTriplesInPermutation(
   // interface erases all matching triples, independent of that flag. We still
   // need to pass a value for it though as the erase API reuses the
   // `LocatedTriple` type which always needs this flag.
-  static constexpr bool insertOrDeleteDummyValue =
-      false;  // or true, depending on your mood
+  static constexpr bool insertOrDeleteDummyValue = false;
   auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
       triples, perm.metaData().blockData(), perm.keyOrder(),
       insertOrDeleteDummyValue, cancellationHandle);
@@ -211,7 +210,7 @@ void DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     cancellationHandle->throwIfCancelled();
     tracer.endTrace("locateTriples");
     tracer.beginTrace("addToLocatedTriples");
-    lt[static_cast<size_t>(permutation)].add(std::move(locatedTriples), tracer);
+    lt[static_cast<size_t>(permutation)].add(locatedTriples, tracer);
     cancellationHandle->throwIfCancelled();
     tracer.endTrace("addToLocatedTriples");
     tracer.endTrace(Permutation::toString(permutation));

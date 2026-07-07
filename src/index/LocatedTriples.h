@@ -148,7 +148,7 @@ class LocatedTriplesPerBlock {
   // TODO: Since the average number of located triples per block is usually
   // small, this estimate is usually fine. We could get better estimates in
   // constant time by maintaining a counter for each of these two numbers in
-  // `SortedSequence` and update these counters for each consolidate
+  // `SortedSequence` and update these counters for each consolidation.
   // However, note that that would still be an estimate because 1. the triple
   // might be counted twice between the parts and 2. at this point we do not
   // know whether an insertion or deletion is actually effective.
@@ -207,8 +207,7 @@ class LocatedTriplesPerBlock {
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriplesForTesting() const;
 
-  // Get the number of blocks with a non-empty set of located triples. This is
-  // equivalent to "any located triples at all.
+  // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
 
   // Return whether there are any updates at all.

@@ -164,7 +164,7 @@ class DeltaTriples {
   };
 
   // TODO<qup42>: investigate whether we still need the state at all and whether
-  // it can be replace with `HashMap<Triple, insertedOrDeleted>`
+  // it can be replaced by a `HashMap<Triple, insertedOrDeleted>`.
   TriplesSets<false> triplesSetsNormal_;
   TriplesSets<true> triplesSetsInternal_;
 
@@ -292,8 +292,8 @@ class DeltaTriples {
   // Consolidate the located triples in all permutations. Must be called after a
   // batch of insertTriples/deleteTriples, before any query access or metadata
   // update.
-  // Note: This function allows doing updates more efficiently but is
-  // expensive should only be called once at the end.
+  // Note: This function allows doing updates more efficiently, but it is
+  // expensive and should only be called once at the end.
   void consolidateAll();
 
   // Update the block metadata.
