@@ -17,7 +17,10 @@
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/vocabulary/VocabularyType.h"
+#include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -506,6 +509,31 @@ TEST(IndexTest, processTriple) {
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, ZeroCopyVocabularyBlob) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto& vocab = index.getNonConstVocabForTesting();
+  vocab.resetToType(ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
+  vocab.createFromSet(words, "indexTestZeroCopyVocabularyBlob.dat");
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  index.writeVocabularyToZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  IndexImpl otherIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  otherIndex.loadVocabularyFromZeroCopyBlob(readSerializer);
+
+  const auto& readVocab = otherIndex.getVocab();
+  ASSERT_EQ(vocab.size(), readVocab.size());
+  for (size_t i = 0; i < vocab.size(); ++i) {
+    EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
+  }
+  ad_utility::deleteFile("indexTestZeroCopyVocabularyBlob.dat");
 }
 
 TEST(IndexTest, NumDistinctEntities) {
