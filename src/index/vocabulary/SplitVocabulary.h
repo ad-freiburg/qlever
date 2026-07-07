@@ -166,12 +166,10 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
-  //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));
