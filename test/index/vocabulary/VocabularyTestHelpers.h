@@ -326,7 +326,7 @@ void assertLookupResultMatchesVocabularyAtIndices(
       return vocab[i];
     } else {
       using IndexType = typename Vocab::IndexType;
-      return vocab[typename IndexType::make(i)];
+      return vocab[IndexType::make(i)];
     }
   };
 
