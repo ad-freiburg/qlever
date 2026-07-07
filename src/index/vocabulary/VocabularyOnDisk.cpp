@@ -72,8 +72,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 
   // Compute string sizes and total buffer size.
   size_t totalSize = 0;
-  for (size_t i = 0; i < numIndices; ++i) {
-    totalSize += offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
+  for (const OffsetPair& p : offsetPairs) {
+    totalSize += p.nextOffset_ - p.offset_;
   }
 
   // Phase 2: Read string data via io_uring (reusing the same manager).

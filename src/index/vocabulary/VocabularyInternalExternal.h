@@ -55,7 +55,7 @@ class VocabularyInternalExternal {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
-  // Streaming variant of `lookupBatch`, using the generic sequential fallback.
+  // Streaming variant of `lookupBatch`.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
                                                          std::move(input));
