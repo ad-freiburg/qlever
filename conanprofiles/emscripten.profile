@@ -69,7 +69,6 @@ tools.build:compiler_executables={"c": "emcc", "cpp": "em++"}
 # validation. Hence `-fwasm-exceptions` appears in the compile flags, the link
 # flags, the boost override, and the package_id below.
 tools.build:cxxflags=['-fwasm-exceptions']
-tools.build:cflags=['-fwasm-exceptions']
 # Make the EH mode part of each dependency's package_id, so changing it rebuilds
 # cached deps instead of silently linking them in a different EH mode.
 tools.info.package_id:confs=['tools.build:cxxflags', 'tools.build:cflags']
