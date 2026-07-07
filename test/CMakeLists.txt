@@ -348,7 +348,12 @@ addLinkAndDiscoverTest(ServiceTest engine)
 
 addLinkAndDiscoverTest(LoadTest engine)
 
+# HttpTest is disabled for Emscripten: emsdk 6.0.2 miscompiles the boost::beast
+# websocket coroutine code under both Wasm EH modes (legacy: wasm-opt rejects an
+# invalid `rethrow`; standard EH: the WebAssemblyLateEHPrepare backend pass segfaults).
+if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
