@@ -1694,7 +1694,7 @@ TEST(ParserTest, unionGraphAsDefaultGraphRuntimeParameter) {
 
   // The `USING` clause of a SPARQL Update is deliberately not affected by
   // this `RuntimeParameter`: an update without a `USING`/`WITH` clause will
-  // always only affect the `ql-default-graph`, even if the union graph is the
+  // always only affect the `ql:default-graph`, even if the union graph is the
   // default for queries.
   ad_utility::BlankNodeManager bnm;
   EncodedIriManager ev;
