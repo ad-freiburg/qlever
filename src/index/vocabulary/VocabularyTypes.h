@@ -139,7 +139,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer() = std::move(words);
-  data->views() = ::ranges::to<std::vector>(
+  data->views() = ::ranges::to_vector(
       data->buffer() |
       ql::views::transform(ad_utility::staticCast<std::string_view>));
 

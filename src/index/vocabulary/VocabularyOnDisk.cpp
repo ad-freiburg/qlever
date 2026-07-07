@@ -4,6 +4,7 @@
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <util/Views.h>
 
 #include <algorithm>
@@ -51,6 +52,16 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 
   auto manager = ioManagers_->pop().value();
 
+  // Return the `manager` to the pool on every exit path (including exceptions,
+  // e.g. an out-of-range index below), so we never leak an `IoManager` (and its
+  // io_uring buffers) out of the pool.
+  absl::Cleanup returnManager{[this, &manager]() {
+    ad_utility::terminateIfThrows(
+        [this, &manager]() { ioManagers_->push(std::move(manager)); },
+        "returning the `IoManager` to the pool in "
+        "`VocabularyOnDisk::lookupBatch`");
+  }};
+
   // Phase 1: For each requested index `i`, read its offset together with the
   // next offset (which bounds the string) as one 16-byte pair from `.offsets`.
   struct OffsetPair {
@@ -75,25 +86,27 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
   std::vector<size_t> sizes(numIndices);
   std::vector<uint64_t> fileOffsets(numIndices);
-  for (size_t i = 0; i < numIndices; ++i) {
-    sizes[i] = offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
-    fileOffsets[i] = offsetPairs[i].offset_;
+  for (auto&& [size, fileOffset, offsetPair] :
+       ::ranges::views::zip(sizes, fileOffsets, offsetPairs)) {
+    size = offsetPair.nextOffset_ - offsetPair.offset_;
+    fileOffset = offsetPair.offset_;
   }
 
   auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer().resize(std::accumulate(sizes.begin(), sizes.end(), size_t{0}));
+  data->buffer().resize(
+      ::ranges::accumulate(sizes.begin(), sizes.end(), size_t{0}));
   data->views().resize(numIndices);
 
   std::vector<char*> targets(numIndices);
   size_t bufferOffset = 0;
-  for (size_t i = 0; i < numIndices; ++i) {
-    targets[i] = data->buffer().data() + bufferOffset;
-    data->views()[i] = std::string_view(targets[i], sizes[i]);
-    bufferOffset += sizes[i];
+  for (auto&& [target, view, size] :
+       ::ranges::views::zip(targets, data->views(), sizes)) {
+    target = data->buffer().data() + bufferOffset;
+    view = std::string_view(target, size);
+    bufferOffset += size;
   }
 
   manager->wait(manager->addBatch(file_.fd(), sizes, fileOffsets, targets));
-  ioManagers_->push(std::move(manager));
 
   return VocabBatchLookupData::asResult(std::move(data));
 }
