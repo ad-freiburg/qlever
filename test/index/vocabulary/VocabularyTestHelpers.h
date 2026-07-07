@@ -321,9 +321,18 @@ void assertLookupResultMatchesVocabularyAtIndices(
     const Indices& indices) {
   ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
 
+  auto at = [&](size_t i) -> decltype(auto) {
+    if constexpr (requires { vocab[i]; }) {
+      return vocab[i];
+    } else {
+      using IndexType = typename Vocab::IndexType;
+      return vocab[typename IndexType::make(i)];
+    }
+  };
+
   for (const auto& [resultWord, idx] :
        ::ranges::views::zip(*lookupResult, indices)) {
-    EXPECT_EQ(resultWord, vocab[idx]) << " at  vocabulary index " << idx;
+    EXPECT_EQ(resultWord, at(idx)) << " at  vocabulary index " << idx;
   }
 }
 

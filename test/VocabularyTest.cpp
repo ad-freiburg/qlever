@@ -180,10 +180,8 @@ TEST(VocabularyTest, LookupBatch) {
   auto result = v.lookupBatch(indices);
   EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
 
-  // Each batch result must match the single-index `operator[]`.
-  for (size_t i = 0; i < indices.size(); ++i) {
-    EXPECT_EQ((*result)[i], v[VocabIndex::make(indices[i])]);
-  }
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(v, result,
+                                                                indices);
 
   // An empty batch is an invalid request and must throw.
   EXPECT_ANY_THROW(v.lookupBatch(ql::span<const size_t>{}));
@@ -191,7 +189,7 @@ TEST(VocabularyTest, LookupBatch) {
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v.lookupBatch(dup);
-  EXPECT_THAT((*result), ::testing::ElementsAre("ab", "ab", "a"));
+  EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
 
   ad_utility::deleteFile(filename);
 }
@@ -199,7 +197,7 @@ TEST(VocabularyTest, LookupBatch) {
 // _____________________________________________________________________________
 TEST(VocabularyTest, LookupBatchesStreamed) {
   using ad_utility::VocabularyType;
-  // TODO<ms2144>: extract into helper?
+  // TODO<ms2144>: extract into helper? DUPLICATION
   RdfsVocabulary v;
   v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
   ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
