@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWithAndEndsWith.h"
 #include "index/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
@@ -113,40 +112,15 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   auto comp = [&comparator](const auto& a, const auto& b) {
     return comparator(a, b, TripleComponentComparator::Level::TOTAL);
   };
-  // Test that the comparison between `a` and  `b` always yields the same
-  // result, no matter if it is done on the level of strings or on `SortKey`s.
-  auto assertConsistent = [&comparator, &comp](
-                              const auto& a, const auto& b,
-                              source_location l = AD_CURRENT_SOURCE_LOC()) {
-    auto tr = generateLocationTrace(l);
-    bool ab = comp(a, b);
-    bool ba = comp(b, a);
-    auto aSplit = comparator.extractAndTransformComparable(
-        a, TripleComponentComparator::Level::TOTAL);
-    auto bSplit = comparator.extractAndTransformComparable(
-        b, TripleComponentComparator::Level::TOTAL);
-    EXPECT_EQ(ab, comp(aSplit, bSplit));
-    EXPECT_EQ(ab, comp(a, bSplit));
-    EXPECT_EQ(ab, comp(aSplit, b));
-
-    EXPECT_EQ(ba, comp(bSplit, aSplit));
-    EXPECT_EQ(ba, comp(b, aSplit));
-    EXPECT_EQ(ba, comp(bSplit, a));
-  };
-
-  auto assertTrue = [&comp, &assertConsistent](
-                        const auto& a, const auto& b,
-                        source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto assertTrue = [&comp](const auto& a, const auto& b,
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_TRUE(comp(a, b));
-    assertConsistent(a, b);
   };
-  auto assertFalse = [&comp, &assertConsistent](
-                         const auto& a, const auto& b,
-                         source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto assertFalse = [&comp](const auto& a, const auto& b,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_FALSE(comp(a, b));
-    assertConsistent(a, b);
   };
 
   // strange casings must not affect order
@@ -268,64 +242,53 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_FALSE(comp("@u2", "\"@u2"));
 }
 
-TEST(LocaleManager, PrefixSortKey) {
-  SimpleStringComparator comp("en", "US", true);
-  LocaleManager locIgnorePunct = comp.getLocaleManager();
-  LocaleManager locRespectPunct("en", "US", false);
+// ______________________________________________________________________________________________
+TEST(LocaleManagerTest, CountPrimaryCollationElements) {
+  LocaleManager loc("en", "US", false);
+  EXPECT_EQ(loc.countPrimaryCollationElements(""), 0u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("hello"), 5u);
+  // Accented characters count as one primary element each.
+  EXPECT_EQ(loc.countPrimaryCollationElements("héllo"), 5u);
+  // Multi-byte UTF-8: é = U+00E9 = 2 bytes, still 1 primary element.
+  EXPECT_EQ(loc.countPrimaryCollationElements("\xc3\xa9"), 1u);
+  // Punctuation has raw primary weight even with ignorePunctuation=true,
+  // because CollationElementIterator returns raw weights; UCOL_SHIFTED is only
+  // applied during comparison, not during element iteration.
+  EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 6u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 11u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("..."), 3u);
+}
 
-  auto print = []([[maybe_unused]] const auto& s) {
-    // The following code can be used for convenient debug output.
-    /*
-    for (const auto& ch : s) {
-      std::cout << int(ch) << ' ';
-    }
-    std::cout << std::endl;
-     */
-  };
+// ______________________________________________________________________________________________
+TEST(LocaleManagerTest, PrimaryCollationPrefixLength) {
+  LocaleManager loc("en", "US", false);
 
-  // Assert that all possible prefix sort keys of `s` are indeed prefixes
-  // of the `SortKey` of `s`.
-  auto testSortKeysForLocale = [print](std::string_view s,
-                                       const LocaleManager& loc) {
-    auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
-    print(complete);
-    for (size_t i = 0; i < s.size(); ++i) {
-      auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
-      (void)numCodepoints;
-      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
-      print(partial.get());
-    }
-  };
+  // Edge cases.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hello", 0), 0u);
+  EXPECT_EQ(loc.primaryCollationPrefixLength("", 5), 0u);
+  // Fewer elements than requested: return the full string length.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hi", 10), 2u);
 
-  auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
-                       &locRespectPunct](std::string_view s) {
-    testSortKeysForLocale(s, locIgnorePunct);
-    testSortKeysForLocale(s, locRespectPunct);
-  };
+  // Basic ASCII: one byte per codepoint, one primary element per letter.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 5u);
+  // 6th element is the space, so offset includes it.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 6), 6u);
 
-  testSortKeys("original");
-  testSortKeys("Häll!!ö.ö");
+  // Multi-byte UTF-8: é = U+00E9 = 2 bytes but 1 primary element.
+  // "héllo" = h(1) + é(2) + l(1) + l(1) + o(1) = 6 bytes total.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 1), 1u);  // "h"
+  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 2), 3u);  // "hé"
+  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 5), 6u);  // "héllo"
 
-  testSortKeys("vivæ");
-  testSortKeys("vivae");
-  testSortKeys("vivaret");
+  // "." has raw primary weight, so it counts as element 1.
+  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 1), 1u);  // "."
+  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 6), 6u);  // ".hello"
 
-  testSortKeys("viɡorous");
-  testSortKeys("vigorous");
-
-  // Show the current limitations:
-  // The words vivæ and vivae compare equal on the primary level, but they
-  // get different prefixSortKeys for prefix length 4, because "ae" are two
-  // codepoints, whereas "æ" is one.
-  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
-  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
-
-  ASSERT_GT(a.size(), b.size());
-  ASSERT_TRUE(a.starts_with(b));
-  // Also test the defaulted consistent comparison.
-  ASSERT_GT(a, b);
-  ASSERT_EQ(a, a);
-  ASSERT_NE(a, b);
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
+  // Round-trip: countPrimaryCollationElements(s) elements should cover all of
+  // s.
+  for (std::string_view s :
+       {"hello"sv, "héllo"sv, ".hello"sv, "hello world"sv}) {
+    size_t n = loc.countPrimaryCollationElements(s);
+    EXPECT_EQ(loc.primaryCollationPrefixLength(s, n), s.size());
+  }
 }

@@ -7,23 +7,25 @@
 #ifndef QLEVER_STRINGSORTCOMPARATOR_H
 #define QLEVER_STRINGSORTCOMPARATOR_H
 
+#include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+#include <unicode/coleitr.h>
 #include <unicode/coll.h>
 #include <unicode/locid.h>
 #include <unicode/normalizer2.h>
-#include <unicode/unistr.h>
-#include <unicode/unorm2.h>
+#include <unicode/stringpiece.h>
+#include <unicode/tblcoll.h>
+#include <unicode/utf8.h>
 #include <unicode/utypes.h>
 
+#include <cstdint>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 
-#include "backports/StartsWithAndEndsWith.h"
-#include "backports/algorithm.h"
-#include "backports/memory_resource.h"
-#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
-#include "util/Exception.h"
 #include "util/StringUtils.h"
 
 /**
@@ -45,48 +47,6 @@ class LocaleManager {
            // into account and then the result by strcmp. that way two strings
            // that have a different byte representation never compare equal
   };
-
-  /**
-   * A strong typedef for a string that contains unicode collation weights for
-   * another string. The actual storage can be a `std::string` or a
-   * `std::string_view`.
-   */
-  // TODO<GCC12> As soon as we have constexpr std::string, this class can
-  //  become constexpr.
-  using U8String = std::basic_string<uint8_t>;
-  using U8StringView = std::basic_string_view<uint8_t>;
-
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, U8String, U8StringView>) class SortKeyImpl {
-   public:
-    SortKeyImpl() = default;
-    explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
-    [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
-    constexpr T& get() noexcept { return sortKey_; }
-
-    // Comparison of sort key is done lexicographically on the byte values
-    // of member `sortKey_`
-    template <typename U>
-    [[nodiscard]] int compare(const SortKeyImpl<U>& rhs) const noexcept {
-      return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
-    }
-
-    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
-
-    /// Is this sort key a prefix of another sort key. Note: This does not imply
-    /// any guarantees on the relation of the underlying strings.
-    bool starts_with(const SortKeyImpl& rhs) const noexcept {
-      return ql::starts_with(get(), rhs.get());
-    }
-
-    /// Return the number of bytes in the `SortKey`
-    std::string::size_type size() const noexcept { return get().size(); }
-
-   private:
-    T sortKey_;
-  };
-  using SortKey = SortKeyImpl<std::basic_string<uint8_t>>;
-  using SortKeyView = SortKeyImpl<std::basic_string_view<uint8_t>>;
 
   /// Copy constructor
   LocaleManager(const LocaleManager& rhs)
@@ -147,116 +107,10 @@ class LocaleManager {
                             const Level level) const {
     UErrorCode err = U_ZERO_ERROR;
     auto idx = static_cast<uint8_t>(level);
-    auto res = compToInd(
+    auto res = static_cast<int>(
         _collator[idx]->compareUTF8(toStringPiece(a), toStringPiece(b), err));
     raise(err);
     return res;
-  }
-
-  /**
-   * @brief Compare two WeightStrings. These have to be extracted by a call to
-   * getSortKey using the same level specification and on the same LocaleManager
-   * otherwise the behavior is undefined
-   * @param a
-   * @param b
-   * @param level This parameter is ignored but required to have a symmetric
-   * interface
-   * @return <0 iff a<b , >0 iff a>b,  0 iff a==b
-   */
-  template <typename T, typename U>
-  static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
-                     [[maybe_unused]] const Level = Level::PRIMARY) {
-    return a.compare(b);
-  }
-
-  /**
-   * @brief Transform a UTF-8 string into a `SortKey`.
-   *
-   * We need this wrapper because ICU internally only works on utf16 and does
-   * not create c++ strings in large parts of the API
-   * @param s A UTF-8 encoded string.
-   * @param level The Collation Level for which we want to create the SortKey
-   * @return A `SortKey` s.t. compare(s, t, level) ==
-   * compare(getSortKey(s, level), getSortKey(t, level))
-   */
-  SortKey getSortKey(std::string_view s, const Level level) const {
-    auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
-    auto& col = *_collator[static_cast<uint8_t>(level)];
-    std::vector<uint8_t> sortKeyBuffer;
-    // The actual computation of the sort key is very expensive, so we first
-    // allocate a buffer that is typically large enough to store the sort key.
-    static constexpr size_t maxBufferSize = std::numeric_limits<int32_t>::max();
-    sortKeyBuffer.resize(std::min(50 * s.size(), maxBufferSize));
-    static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
-    static constexpr auto intMax = std::numeric_limits<int32_t>::max();
-    auto sz = col.getSortKey(utf16, sortKeyBuffer.data(),
-                             static_cast<int32_t>(sortKeyBuffer.size()));
-    AD_CONTRACT_CHECK(sz >= 0);
-    // If the buffer was large enough, we only have to copy the sort key to the
-    // destination. Otherwise, we now know the exact size of the sort key and
-    // can retrigger the computation.
-    if (static_cast<size_t>(sz) > sortKeyBuffer.size()) {
-      sortKeyBuffer.clear();
-      sortKeyBuffer.resize(sz);
-      AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
-      auto actualSz =
-          col.getSortKey(utf16, (sortKeyBuffer.data()),
-                         static_cast<int32_t>(sortKeyBuffer.size()));
-      AD_CONTRACT_CHECK(actualSz ==
-                        static_cast<decltype(sz)>(sortKeyBuffer.size()));
-    }
-    // since this is a c-api we still have a trailing '\0'. Trimming this is
-    // necessary for the prefix range to work correct.
-    AD_CORRECTNESS_CHECK(sz > 0);
-    --sz;
-    SortKey result;
-    U8String& resultView = result.get();
-    resultView.insert(resultView.end(), sortKeyBuffer.data(),
-                      sortKeyBuffer.data() + sz);
-    return result;
-  }
-
-  /// Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
-  /// \param s The input of which we want to obtain a sort key.
-  /// \param prefixLength Obtain a SortKey for `prefixLength` many relevant
-  /// characters
-  ///               (see below).
-  /// \return A `SortKey` that is a prefix of the `SortKey` for `s` w.r.t
-  ///         `Level::PRIMARY` and that also is a `SortKey` for a prefix "p"
-  ///         of `s`. "p" is the minimal prefix of `s` which consists of
-  ///         at least `prefixLength` codepoints and whose SortKey fulfills the
-  ///         first condition. Codepoints, which do not contribute to the
-  ///         `SortKey` because they are irrelevant for the `PRIMARY` level do
-  ///         not count towards `prefixLength`. The first element of the return
-  ///         value is the actual number of (contributing) codepoints in "p". If
-  ///         `s` contains less than `prefixLength` contributing codepoints,
-  ///         then {totalNumberOfContributingCodepoints, completeSortKey} is
-  ///         returned.
-  [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
-      std::string_view s, size_t prefixLength) const {
-    size_t numContributingCodepoints = 0;
-    SortKey sortKey;
-    size_t prefixLengthSoFar = 1;
-    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
-    while (numContributingCodepoints < prefixLength ||
-           !completeSortKey.starts_with(sortKey)) {
-      auto [numCodepoints, prefix] =
-          ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
-      auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
-      if (nextLongerSortKey != sortKey) {
-        // The `SortKey` changed by adding a codepoint, so that codepoint
-        // was contributing.
-        numContributingCodepoints++;
-        sortKey = std::move(nextLongerSortKey);
-      }
-      if (numCodepoints < prefixLengthSoFar) {
-        // We have checked the complete string without finding a sufficiently
-        // long contributing prefix.
-        break;
-      }
-      prefixLengthSoFar++;
-    }
-    return {numContributingCodepoints, std::move(sortKey)};
   }
 
   /**
@@ -293,6 +147,25 @@ class LocaleManager {
     _normalizer->normalizeUTF8(0, toStringPiece(input), sink, nullptr, err);
     raise(err);
     return res;
+  }
+
+  // Count the number of primary-weight collation elements (non-zero primary
+  // order) in a UTF-8 encoded string. Returns raw ICU element weights;
+  // UCOL_SHIFTED is not applied here, so variable characters (e.g.,
+  // punctuation) are still counted even when ignorePunctuation is true.
+  [[nodiscard]] size_t countPrimaryCollationElements(
+      std::string_view text) const {
+    return walkPrimaryElements(text, std::numeric_limits<size_t>::max())
+        .numElements;
+  }
+
+  // Return the byte length of the shortest UTF-8 prefix of `text` that
+  // contains exactly `numPrimaryElements` primary-weight collation elements.
+  // If `text` has fewer than `numPrimaryElements` primary elements, returns
+  // `text.size()`.
+  [[nodiscard]] size_t primaryCollationPrefixLength(
+      std::string_view text, size_t numPrimaryElements) const {
+    return walkPrimaryElements(text, numPrimaryElements).byteOffset;
   }
 
  private:
@@ -359,25 +232,73 @@ class LocaleManager {
     }
   }
 
-  // convert LESS EQUAL GREATER from icu to -1, 0, +1 to make results compatible
-  // to std::strcmp
-  static int compToInd(const UCollationResult res) {
-    switch (res) {
-      case UCOL_LESS:
-        return -1;
-      case UCOL_EQUAL:
-        return 0;
-      case UCOL_GREATER:
-        return 1;
-    }
-    throw std::runtime_error(
-        "Illegal value for UCollationResult. This should never happen!");
-  }
-
   /* This conversion is needed for "older" versions of ICU, e.g. ICU60 which is
    * contained in Ubuntu's LTS repositories */
   static icu::StringPiece toStringPiece(std::string_view s) {
     return icu::StringPiece(s.data(), s.size());
+  }
+
+  // Create a `icu::CollationElementIterator` for the given UTF-8 string.
+  std::unique_ptr<icu::CollationElementIterator> makeCollationElementIterator(
+      std::string_view input) const {
+    auto& collator = *_collator[static_cast<uint8_t>(Level::PRIMARY)];
+    icu::UnicodeString ustr =
+        icu::UnicodeString::fromUTF8(toStringPiece(input));
+    return std::unique_ptr<icu::CollationElementIterator>{
+        dynamic_cast<icu::RuleBasedCollator&>(collator)
+            .createCollationElementIterator(ustr)};
+  }
+
+  struct PrimaryWalkResult {
+    size_t numElements;
+    size_t byteOffset;
+  };
+
+  // Iterate through primary collation elements of `text`, stopping after
+  // `targetCount` non-ignorable primary elements (or at end-of-string).
+  // Returns the number of primary elements seen and the UTF-8 byte offset
+  // directly after the last one (`text.size()` if the string ended first).
+  [[nodiscard]] PrimaryWalkResult walkPrimaryElements(
+      std::string_view text, size_t targetCount) const {
+    if (targetCount == 0) {
+      return {0, 0};
+    }
+    UErrorCode err = U_ZERO_ERROR;
+    auto iter = makeCollationElementIterator(text);
+    size_t count = 0;
+    while (true) {
+      int32_t elem = iter->next(err);
+      raise(err);
+      if (elem == icu::CollationElementIterator::NULLORDER) {
+        break;
+      }
+      if (icu::CollationElementIterator::primaryOrder(elem) != 0) {
+        ++count;
+        if (count == targetCount) {
+          return {count, utf16OffsetToUtf8ByteOffset(text, iter->getOffset())};
+        }
+      }
+    }
+    return {count, text.size()};
+  }
+
+  // Walk the UTF-8 bytes of `utf8String`, counting UTF-16 code units, and
+  // return the byte offset that corresponds to `utf16Offset` UTF-16 code units
+  // from the start.
+  static size_t utf16OffsetToUtf8ByteOffset(std::string_view utf8String,
+                                            int32_t utf16Offset) {
+    const char* s = utf8String.data();
+    int32_t byteIdx = 0;
+    int32_t utf16Count = 0;
+    int32_t len = static_cast<int32_t>(utf8String.size());
+    while (byteIdx < len && utf16Count < utf16Offset) {
+      UChar32 c;
+      int32_t next = byteIdx;
+      U8_NEXT(s, next, len, c);
+      utf16Count += c > 0xFFFF ? 2 : 1;
+      byteIdx = next;
+    }
+    return static_cast<size_t>(byteIdx);
   }
 };
 
@@ -429,67 +350,6 @@ class SimpleStringComparator {
     return a.compare(b);
   }
 
-  /**
-   * @brief Compare a UTF-8 encoded string and a SortKey on the Primary Level
-   * CAVEAT: The Level l argument IS IGNORED
-   *
-   * Since this class only exports WeightStrings on the PRIMARY level via the
-   * transformToFirstPossibleBiggerValue method, we also always use the PRIMARY
-   * level for this function to avoid mistakes
-   * The Level argument is therefore ignored but left in as a dummy to make the
-   * getLowerBoundLambda api of the Vocabulary easier.
-   * @TODO<joka921> Allow prefix ranges on different levels.
-   * @param a A UTF-8 encoded string
-   * @param b This Weight string has to be obtained by a previous call to
-   * transformToFirstPossibleBiggerValue
-   * @
-   * @return true iff a comes before the string whose SortKey is b
-   */
-  bool operator()(std::string_view a, const LocaleManager::SortKey& b,
-                  [[maybe_unused]] const Level l) const {
-    auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
-    auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
-    return cmp < 0;
-  }
-
-  // This method is left undefined on purpose, as it is only used for
-  // constraints checking in the <ranges> header for the UnicodeVocabulary
-  // class.
-  bool operator()(const LocaleManager::SortKey& a, std::string_view s,
-                  [[maybe_unused]] const Level l = Level::PRIMARY) const;
-
-  // Same goes for this function (undefined on purpose).
-  bool operator()(const LocaleManager::SortKey& a,
-                  const LocaleManager::SortKey& b,
-                  [[maybe_unused]] Level level = Level::PRIMARY) const;
-
-  /**
-   * @brief Transform a string s to the SortKey of the first possible
-   * string that compares greater to s according to the held locale on the
-   * PRIMARY level (other levels will cause an assertion fail.
-   *
-   * This is needed for calculating whether one string is a prefix of another
-   * CAVEAT: This currently only supports the primary collation Level!!!
-   * <TODO<joka921>: Implement this on every level, either by fixing ICU or by
-   * hacking the collation strings
-   *
-   * @param s A UTF-8 encoded string
-   * @return the PRIMARY level SortKey of the first possible string greater than
-   * s
-   */
-  [[nodiscard]] LocaleManager::SortKey transformToFirstPossibleBiggerValue(
-      std::string_view s, const Level level) const {
-    AD_CONTRACT_CHECK(level == Level::PRIMARY);
-    auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
-    unsigned char last = transformed.get().back();
-    if (last < std::numeric_limits<unsigned char>::max()) {
-      transformed.get().back() += 1;
-    } else {
-      transformed.get().push_back('\0');
-    }
-    return transformed;
-  }
-
   /// Obtain access to the held LocaleManager
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _locManager;
@@ -526,53 +386,19 @@ class TripleComponentComparator {
   /// Construct according to the default locale in "../global/Constants.h"
   TripleComponentComparator() = default;
 
-  /**
-   * @brief An entry of the Vocabulary, split up into its components and
-   * possibly converted to a format that is easier to compare
-   *
-   * @tparam InnerString either LocaleManager::SortKey or std::string_view.
-   * Both variants differ greatly in their usage. Details can be found after the
-   * class definition, together with the explicit aliases `SplitVal` and
-   * `SplitValOwning` for the template instantiations that are actually used.
-   * the template instantiations
-   * @tparam LanguageTag and FullString, either `std::string` or
-   * `std::string_view`. They are used as deterministic tie breaks on the
-   * `TOTAL` sort level.
-   */
-  template <class InnerString, class LanguageTag, class FullString>
-  struct SplitValBase {
-    SplitValBase() = default;
-    SplitValBase(char fst, InnerString trans, LanguageTag l,
-                 FullString fullInputForTotalComparison)
-        : firstOriginalChar_(fst),
-          transformedVal_(std::move(trans)),
-          langtag_(std::move(l)),
-          fullInput_{std::move(fullInputForTotalComparison)} {}
-
-    /// The first char of the original value, used to distinguish between
-    /// different datatypes
-    char firstOriginalChar_ = '\0';
-    InnerString transformedVal_;  /// The original inner value, possibly
-                                  /// transformed by a locale().
-    LanguageTag langtag_;         /// The language tag, possibly empty.
-    FullString fullInput_;
+  // An entry of the Vocabulary, split up into its components. Used internally
+  // to implement `compare(std::string_view, std::string_view)` so that
+  // datatype/language tag tiebreaking is handled consistently.
+  struct SplitVal {
+    // The first char of the original value, used to distinguish between
+    // different datatypes
+    char firstOriginalChar_;
+    // The original inner value.
+    std::string_view innerValue_;
+    // The language tag, possibly empty.
+    std::string_view langtag_;
+    std::string_view fullInput_;
   };
-
-  /**
-   * This value owns all its contents.
-   * The inner value is the SortKey of the original inner value according to the
-   * held Locale. This is used to transform the inner value and to safely pass
-   * it around, e.g. when performing prefix comparisons in the vocabulary
-   */
-  using SplitVal =
-      SplitValBase<LocaleManager::SortKey, std::string, std::string>;
-
-  /**
-   * This only holds string_views to substrings of a string.
-   * Currently we only use this inside this class
-   */
-  using SplitValNonOwning =
-      SplitValBase<std::string_view, std::string_view, std::string_view>;
 
   /**
    * \brief Compare two elements from the Vocabulary.
@@ -583,44 +409,15 @@ class TripleComponentComparator {
     return compare(a, b, level) < 0;
   }
 
-  /**
-   * @brief Compare a string_view from the vocabulary to a SplitVal that was
-   * previously transformed
-   * @param a Element of the vocabulary
-   * @param spB this splitVal must have been obtained by a call to
-   * extractAndTransformComparable
-   * @param level
-   * @return a comes before the original value of spB in the vocabulary
-   */
-  bool operator()(std::string_view a, const SplitVal& spB,
-                  const Level level) const {
-    auto spA = extractAndTransformComparable(a, level);
-    return compare(spA, spB, level) < 0;
-  }
-
-  // Same operator, but with switched argument types.
-  bool operator()(const SplitVal& spA, std::string_view b,
-                  const Level level) const {
-    auto spB = extractAndTransformComparable(b, level);
-    return compare(spA, spB, level) < 0;
-  }
-
-  template <typename A, typename B, typename C>
-  bool operator()(const SplitValBase<A, B, C>& a,
-                  const SplitValBase<A, B, C>& b, const Level level) const {
-    return compare(a, b, level) < 0;
-  }
-
-  /// Compare two string_views from the Vocabulary. Return value according to
-  /// std::strcmp
+  // Compare two string_views from the Vocabulary. Return value according to
+  // std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
-    auto splitA = extractComparable<SplitValNonOwning>(a, level);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level);
+    auto splitA = extractComparable(a);
+    auto splitB = extractComparable(b);
     // We have to have a total ordering of unique elements in the vocabulary,
     // so if they compare equal according to the locale, use strcmp
-    auto cmp = compare(splitA, splitB, level);
-    return cmp;
+    return compare(splitA, splitB, level);
   }
 
   // Total comparison, using the "is external" flags as a tiebreaker. The
@@ -638,25 +435,9 @@ class TripleComponentComparator {
     return aIsExternal && !bIsExternal;
   }
 
-  /**
-   * @brief Split a literal or iri into its components and convert the inner
-   * value according to the held locale
-   */
-  [[nodiscard]] SplitVal extractAndTransformComparable(
-      std::string_view a, const Level level) const {
-    return extractComparable<SplitVal>(a, level);
-  }
-
-  /**
-   * @brief the inner comparison logic
-   *
-   * First compares the datatypes by the firstOriginalChar_, then the inner
-   * value and then the language tags
-   * @return <0 iff a<b, 0 iff a==b, >0 iff a>b
-   */
-  template <class A, class B, typename C>
-  [[nodiscard]] int compare(const SplitValBase<A, B, C>& a,
-                            const SplitValBase<A, B, C>& b,
+  // First compares the datatypes by the firstOriginalChar_, then the inner
+  // value and then the language tags.
+  [[nodiscard]] int compare(const SplitVal& a, const SplitVal& b,
                             const Level level) const {
     if (auto res =
             std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
@@ -664,10 +445,7 @@ class TripleComponentComparator {
       return res;  // different data types, decide on the datatype
     }
 
-    if (int res =
-            // this correctly dispatches between SortKeys (already transformed)
-            // and string_views (not-transformed, perform unicode collation)
-        _locManager.compare(a.transformedVal_, b.transformedVal_, level);
+    if (int res = _locManager.compare(a.innerValue_, b.innerValue_, level);
         res != 0 || level != Level::TOTAL) {
       return res;  // actual value differs
     }
@@ -680,44 +458,6 @@ class TripleComponentComparator {
     // Only if two literals are bytewise equal, we compare by the langtag or
     // datatype.
     return a.langtag_.compare(b.langtag_);
-  }
-
-  /**
-   *
-   * @brief Transform a string s from the vocabulary to the SplitVal of the
-   * first possible vocabulary string that compares greater to s according to
-   * the held locale on the PRIMARY level (other levels will cause an assertion
-   * fail.)
-   *
-   * This is needed for calculating whether one string is a prefix of another
-   * CAVEAT: This currently only supports the primary collation Level!!!
-   * <TODO<joka921>: Implement this on every level, either by fixing ICU or by
-   * hacking the collation strings
-   *
-   * @param s A UTF-8 encoded string that contains an element of an RDF triple
-   * @param level must be Level::PRIMARY
-   * @return the PRIMARY level SortKey of the first possible string greater than
-   * s
-   */
-  [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
-      std::string_view s, const Level level) const {
-    AD_CONTRACT_CHECK(level == Level::PRIMARY);
-    auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
-    // The `firstOriginalChar_` is either " or < or @
-    AD_CONTRACT_CHECK(
-        static_cast<unsigned char>(transformed.firstOriginalChar_) <
-        std::numeric_limits<unsigned char>::max());
-    if (transformed.transformedVal_.get().empty()) {
-      transformed.firstOriginalChar_ += 1;
-    } else {
-      unsigned char last = transformed.transformedVal_.get().back();
-      if (last < std::numeric_limits<unsigned char>::max()) {
-        transformed.transformedVal_.get().back() += 1;
-      } else {
-        transformed.transformedVal_.get().push_back('\1');
-      }
-    }
-    return transformed;
   }
 
   /// obtain const access to the held LocaleManager
@@ -733,23 +473,14 @@ class TripleComponentComparator {
     return _locManager.normalizeUtf8(sv);
   }
 
-  /// handle to the default collation level
-  Level& defaultLevel() { return _defaultLevel; }
-  [[nodiscard]] const Level& defaultLevel() const { return _defaultLevel; }
-
  private:
   LocaleManager _locManager;
-  Level _defaultLevel = Level::IDENTICAL;
 
-  /* Split a string into its components to prepare collation.
-   * SplitValType = SplitVal will transform the inner string according to the
-   * locale SplitValTye = SplitValNonOwning will leave the inner string as is.
-   */
-  template <class SplitValType>
-  [[nodiscard]] SplitValType extractComparable(
-      std::string_view a, [[maybe_unused]] const Level level) const {
-    std::string_view res = a;
-    const char first = a.empty() ? char{0} : a[0];
+  /// Split a string into its components (datatype-indicator first char, inner
+  /// value, language tag) to prepare locale-aware collation.
+  [[nodiscard]] static SplitVal extractComparable(std::string_view fullInput) {
+    std::string_view res = fullInput;
+    const char first = fullInput.empty() ? char{0} : fullInput[0];
     std::string_view langtag;
     if (first == '"') {
       // only remove the first character in case of literals that always start
@@ -768,14 +499,7 @@ class TripleComponentComparator {
         langtag = "";
       }
     }
-    if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string{langtag},
-              std::string{a}};
-    } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {first, res, langtag, a};
-    } else {
-      static_assert(ad_utility::alwaysFalse<SplitValType>);
-    }
+    return {first, res, langtag, fullInput};
   }
 };
 
