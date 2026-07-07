@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -277,11 +278,15 @@ class Qlever {
   // class.
   using PlannedQuery = qlever::PlannedQuery;
 
-  // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         std::optional<TimeLimit> timeLimit,
-                         QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
+  PlannedQuery planQuery(
+      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},

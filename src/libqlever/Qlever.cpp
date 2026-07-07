@@ -6,6 +6,7 @@
 
 #include "libqlever/Qlever.h"
 
+#include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -207,16 +208,16 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQuery&& operation, std::optional<TimeLimit> timeLimit,
-    QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle) const {
+    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
 
   qp.setEnablePatternTrick(enablePatternTrick_);
-  auto qet = qp.createExecutionTree(operation);
+  auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
-  PlannedQuery plannedQuery = {std::move(operation), std::move(qet), qec};
+  PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
   // Propagate the `cancellationHandle` and the `timeLimit` through the
@@ -224,6 +225,14 @@ PlannedQuery Qlever::planQuery(
   rootOperation.recursivelySetCancellationHandle(std::move(handle));
   if (timeLimit.has_value()) {
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
+  }
+
+  if (requestTimer.has_value()) {
+    auto& qet = plannedQuery.queryExecutionTree();
+    auto timeForQueryPlanning = requestTimer->msecs();
+    auto& runtimeInfoWholeQuery =
+        qet.getRootOperation()->getRuntimeInfoWholeQuery();
+    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
   }
   return plannedQuery;
 }
@@ -243,7 +252,8 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr, handle);
+  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
+                   std::move(handle));
 }
 
 // ___________________________________________________________________________
