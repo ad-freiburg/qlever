@@ -9,6 +9,7 @@
 #include "index/Vocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -109,6 +110,76 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
                                   "`SplitVocabulary`");
   }
 }
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  // Partition indices by marker: for each marker, collect the vocabIndex
+  // values and track original positions.
+  std::array<std::vector<size_t>, numberOfVocabs> unmarkedIndicesPerVocab;
+  std::array<std::vector<size_t>, numberOfVocabs> originalIndices;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    auto marker = getMarker(indices[i]);
+    unmarkedIndicesPerVocab[marker].push_back(getVocabIndex(indices[i]));
+    originalIndices[marker].push_back(i);
+  }
+
+  // Perform batch lookup on each underlying vocabulary that has indices.
+  std::array<VocabBatchLookupResult, numberOfVocabs> resultsPerVocab;
+  for (uint8_t m = 0; m < numberOfVocabs; ++m) {
+    if (!unmarkedIndicesPerVocab[m].empty()) {
+      resultsPerVocab[m] = std::visit(
+          [&](const auto& vocab) {
+            return vocab.lookupBatch(
+                ql::span<const size_t>{unmarkedIndicesPerVocab[m]});
+          },
+          underlying_[m]);
+    }
+  }
+
+  // Merge results back into original order. We need a custom holder that
+  // keeps the sub-results alive since our string_views point into them.
+  struct MergedData {
+    std::array<VocabBatchLookupResult, numberOfVocabs> subResults_;
+    std::vector<std::string_view> views_;
+    ql::span<std::string_view> span_;
+  };
+  auto merged = std::make_shared<MergedData>();
+  merged->subResults_ = std::move(resultsPerVocab);
+  merged->views_.resize(indices.size());
+
+  for (uint8_t m = 0; m < numberOfVocabs; ++m) {
+    if (merged->subResults_[m]) {
+      const auto& resultSpan = *merged->subResults_[m];
+      for (size_t j = 0; j < originalIndices[m].size(); ++j) {
+        merged->views_[originalIndices[m][j]] = resultSpan[j];
+      }
+    }
+  }
+
+  merged->span_ = ql::span<std::string_view>{merged->views_};
+  return VocabBatchLookupResult(merged, &merged->span_);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+VocabLookupOutput SplitVocabulary<SF, SFN, S...>::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
+      [this, input = std::move(
+                 input)]() mutable -> std::optional<VocabBatchLookupResult> {
+        if (auto batch = input.get()) {
+          return lookupBatch(*batch);
+        }
+        return std::nullopt;
+      })};
+}
+
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 QL_CONCEPT_OR_NOTHING(

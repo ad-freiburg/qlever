@@ -1,6 +1,11 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2024-2026 The QLever Authors, in particular:
+// 2024-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
@@ -41,6 +46,18 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
   WordAndIndex result{words_[idx], indices_[idx]};
   if (idx > 0) {
     result.previousIndex() = indices_[idx - 1];
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<std::vector<std::optional<std::string_view>>>
+VocabularyInMemoryBinSearch::lookupBatch(ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  auto result = std::make_shared<std::vector<std::optional<std::string_view>>>(
+      indices.size());
+  for (size_t i = 0; i < indices.size(); ++i) {
+    (*result)[i] = (*this)[indices[i]];
   }
   return result;
 }

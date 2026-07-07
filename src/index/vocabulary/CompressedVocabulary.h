@@ -1,6 +1,11 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022-2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2022-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
@@ -12,6 +17,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/Generator.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -56,6 +62,58 @@ CPP_template(typename UnderlyingVocabulary,
   std::string operator[](uint64_t idx) const {
     return compressionWrapper_.decompress(
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
+  }
+
+  // Look up multiple words by index in a single batch call. Each compressed
+  // word is decompressed directly into memory allocated from a PMR
+  // monotonic_buffer_resource, avoiding per-word heap allocations.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    // Get all compressed words from the underlying vocabulary.
+    auto compressedResult = underlyingVocabulary_.lookupBatch(indices);
+    auto& compressedViews = *compressedResult;
+
+    // Compute total compressed size for the buffer estimate.
+    size_t totalCompressedSize = 0;
+    for (size_t i = 0; i < compressedViews.size(); ++i) {
+      totalCompressedSize += compressedViews[i].size();
+    }
+
+    // Create the result object and give it PMR-backed storage. The
+    // monotonic_buffer_resource pre-allocates a buffer sized for the estimated
+    // total decompressed data; `buffer()` owns it for the result's lifetime.
+    auto data = std::make_shared<PmrVocabBatchLookupData>();
+    // FSST decompresses at most 8x per pass. That's why we multiply
+    // `totalCompressedSize` by `8` here.
+    data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>(
+        totalCompressedSize * 8 + 256);
+    auto* resource = data->buffer().get();
+    data->views().resize(indices.size());
+
+    // Scratch buffer for intermediate decompression passes (e.g. FSST^2).
+    // Reused across all words.
+    constexpr size_t kScratchSize = 1 << 16;  // 65 kB
+    auto scratchBuf = std::make_unique<char[]>(kScratchSize);
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+      // FSST decompresses at most 8x per pass; for FSST^2 max is 64x.
+      size_t maxDecompressedWordSize = compressedViews[i].size() * 64 + 64;
+      auto wordBuf =
+          static_cast<char*>(resource->allocate(maxDecompressedWordSize, 1));
+      size_t written = compressionWrapper_.decompressInto(
+          compressedViews[i], getDecoderIdx(indices[i]), wordBuf,
+          maxDecompressedWordSize, scratchBuf.get(), kScratchSize);
+      data->views()[i] = std::string_view(wordBuf, written);
+    }
+
+    return PmrVocabBatchLookupData::asResult(std::move(data));
+  }
+
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return VocabLookupOutput{ql::views::transform(
+        ad_utility::allView(std::move(input)),
+        [this](std::vector<size_t>& batch) { return lookupBatch(batch); })};
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }

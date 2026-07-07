@@ -1,6 +1,11 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024-2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2024-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
@@ -80,6 +85,18 @@ struct DecoderMultiplexer {
     return decoders_.at(decoderIndex).decompress(compressed);
     ENABLE_CLANG_WARNINGS
   }
+
+  // Decompress into a caller-provided buffer. Extra arguments (e.g., scratch
+  // buffer pointers) are forwarded to the decoder's `decompressInto`.
+  template <typename... Args>
+  size_t decompressInto(std::string_view compressed, size_t decoderIndex,
+                        char* output, size_t outputCapacity,
+                        Args&&... args) const {
+    return decoders_.at(decoderIndex)
+        .decompressInto(compressed, output, outputCapacity,
+                        std::forward<Args>(args)...);
+  }
+
   size_t numDecoders() const { return decoders_.size(); }
   const Decoders& getDecoders() const { return decoders_; }
 };

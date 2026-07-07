@@ -70,6 +70,17 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
+  // Look up multiple words by index in a single batch call. Delegates to the
+  // underlying vocabulary.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return literals_.lookupBatch(indices);
+  }
+
+  // Streaming variant of lookupBatch. Delegates to the underlying vocabulary.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return literals_.lookupBatchesStreamed(std::move(input));
+  }
+
   // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 

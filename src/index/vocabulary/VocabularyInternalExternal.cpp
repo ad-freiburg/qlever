@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+#include "util/Iterators.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -11,6 +13,81 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
     return std::string{fromInternal.value()};
   }
   return externalVocab_[i];
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  // Step 1: Look up all indices in the internal (RAM) vocabulary.
+  auto internalResult = internalVocab_.lookupBatch(indices);
+
+  // Step 2: Identify which indices were not found in the internal vocabulary.
+  std::vector<size_t> missingIndices;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    if (!(*internalResult)[i].has_value()) {
+      missingIndices.push_back(indices[i]);
+    }
+  }
+
+  // Step 3: Look up the missing indices in the external (disk) vocabulary.
+  VocabBatchLookupResult externalResult;
+  if (!missingIndices.empty()) {
+    externalResult = externalVocab_.lookupBatch(missingIndices);
+  }
+
+  // Step 4: Combine results. We need a struct that keeps both the internal and
+  // external results alive, since our string_views point into their memory.
+  struct CombinedData {
+    // Keeps the internal view objects alive, but NOT their underlying storage:
+    // that storage lives in `internalVocab_`s RAM, owned by this instance,
+    // which must outlive the returned `VocabBatchLookupResult`.
+    decltype(internalResult) internal_;
+    // Owns the disk buffer that the external views point into, keeping it.
+    // alive.
+    VocabBatchLookupResult external_;
+    std::vector<std::string_view> views_;  // the merged view list
+    ql::span<std::string_view> span_;      // a span over `views`
+  };
+
+  // Hand ownership of both source results to `combined` so it keeps their data
+  // alive. Size `views` to hold one merged entry per input index.
+  auto combined = std::make_shared<CombinedData>();
+  combined->internal_ = std::move(internalResult);
+  combined->external_ = std::move(externalResult);
+  combined->views_.resize(indices.size());
+
+  // Merge: take each word form the internal result if present, otherwise pull
+  // the next external result.
+  size_t externalIdx = 0;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    if ((*combined->internal_)[i].has_value()) {
+      combined->views_[i] = (*combined->internal_)[i].value();
+    } else {
+      combined->views_[i] = (*combined->external_)[externalIdx++];
+    }
+  }
+
+  // Expose a `span` via an aliasing shared_ptr that shares `combined`s
+  // refcount: dereferencing the result yields the span over the merged `views`,
+  // while holding it keeps the whole `CombinedData` alive, and thus the
+  // underlying storage those merged `views` point into.
+  combined->span_ = ql::span<std::string_view>{combined->views_};
+  auto* spanPtr = &combined->span_;
+  return VocabBatchLookupResult(std::move(combined), spanPtr);
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput VocabularyInternalExternal::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable(
+      [this, input = std::move(
+                 input)]() mutable -> std::optional<VocabBatchLookupResult> {
+        if (auto batch = input.get()) {
+          return lookupBatch(*batch);
+        }
+        return std::nullopt;
+      })};
 }
 
 // _____________________________________________________________________________

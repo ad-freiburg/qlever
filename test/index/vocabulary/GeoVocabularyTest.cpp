@@ -80,6 +80,59 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     checkGeoVocabContents(geoVocab);
 
+    // Test lookupBatch.
+    {
+      std::array<size_t, 2> indices{1, 0};
+      auto result = geoVocab.lookupBatch(indices);
+      ASSERT_EQ(result->size(), 2);
+      EXPECT_EQ((*result)[0], testLiterals[1]);
+      EXPECT_EQ((*result)[1], testLiterals[0]);
+
+      // An empty batch is an invalid request and must throw.
+      EXPECT_ANY_THROW(geoVocab.lookupBatch(ql::span<const size_t>{}));
+    }
+
+    // Test `lookupBatchesStreamed`.
+    {
+      auto numInputBatchesPulled = std::make_shared<size_t>(0);
+      std::vector<std::vector<size_t>> batches{{1, 0}, {2}, {3}};
+
+      // an input range that records how many batches have been pulled so far.
+      auto input = VocabLookupInput{ad_utility::InputRangeFromGetCallable{
+          [numInputBatchesPulled, batches = std::move(batches),
+           next = size_t{0}]() mutable -> std::optional<std::vector<size_t>> {
+            if (next >= batches.size()) {
+              return std::nullopt;
+            }
+            ++(*numInputBatchesPulled);
+            return batches[next++];
+          }}};
+
+      auto streamedResults = geoVocab.lookupBatchesStreamed(std::move(input));
+
+      // Nothing is pulled before iteration begins.
+      EXPECT_EQ(*numInputBatchesPulled, 0);
+
+      std::vector<VocabBatchLookupResult> results;
+      size_t expectedPulled = 0;
+      for (auto& r : streamedResults) {
+        ++expectedPulled;
+        // On-demand: receiving the k-th result has pulled exactly k input
+        // batches. An eager implementation would already show all 3 here.
+        EXPECT_EQ(*numInputBatchesPulled, expectedPulled);
+        results.push_back(std::move(r));
+      }
+
+      ASSERT_EQ(results.size(), 3);
+      ASSERT_EQ(results[0]->size(), 2);
+      EXPECT_EQ((*results[0])[0], testLiterals[1]);
+      EXPECT_EQ((*results[0])[1], testLiterals[0]);
+      ASSERT_EQ(results[1]->size(), 1);
+      EXPECT_EQ((*results[1])[0], testLiterals[2]);
+      ASSERT_EQ(results[2]->size(), 1);
+      EXPECT_EQ((*results[2])[0], testLiterals[3]);
+    }
+
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
     ASSERT_EQ(geoVocab.getUnderlyingVocabulary().size(), testLiterals.size());
