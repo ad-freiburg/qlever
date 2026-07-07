@@ -229,7 +229,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
           if constexpr (ad_utility::isSimilar<T, ValueId>) {
             return matchesPrefix(childResult);
             // Hash-map based or lazy GROUP BY implementations can lead to the
-            // child to be replaced with `sparqlExpression::VectorIdExpression`.
+            // child being replaced by `sparqlExpression::VectorIdExpression`.
             // In this case, we have to apply the prefix check to each value in
             // the vector.
           } else if constexpr (ad_utility::isSimilar<
