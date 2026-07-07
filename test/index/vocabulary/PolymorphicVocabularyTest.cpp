@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../../util/FileTestHelpers.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
 using ad_utility::VocabularyType;
@@ -52,19 +53,15 @@ void testForVocabType(VocabularyType::Enum vocabType) {
             vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
 }
 
-// Write a small vocabulary of the given `vocabType` to disk and open it into
-// `vocab`. The batch-lookup tests below only compare against individual
-// `vocab[]` lookups, so the exact words don't matter (they just have to be
-// sorted, as the underlying vocabularies require sorted input at write time).
-void setupVocabForBatchTest(PolymorphicVocabulary& vocab,
-                            VocabularyType::Enum vocabType) {
+// Write a small vocabulary of the given `vocabType` to `filename` and open it
+// into `vocab`. The exact words don't matter (they only have to be sorted, as
+// the underlying vocabularies require sorted input at write time).
+void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
+                const std::string& filename) {
   VocabularyType type{vocabType};
-  std::string filename = absl::StrCat("polymorphicVocabularyBatchTest.",
-                                      type.toString(), ".vocab");
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
-  std::vector<std::string> words{"alpha", "beta", "delta", "gamma"};
-  for (const auto& word : words) {
+  for (const auto& word : {"alpha", "beta", "delta", "gamma"}) {
     writer(word, false);
   }
   writer.finish();
@@ -79,12 +76,11 @@ TEST(PolymorphicVocabulary, basicTests) {
 }
 
 // `lookupBatch` must yield, for each requested index, exactly the same string
-// as an individual `vocab[]` lookup — including for reordered and duplicated
-// indices. Checked for every `VocabularyType`.
+// as an individual `vocab[]` lookup. Checked for every `VocabularyType`.
 TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     PolymorphicVocabulary vocab;
-    setupVocabForBatchTest(vocab, vocabType);
+    setupVocab(vocab, vocabType);
     ASSERT_GE(vocab.size(), 4u);
 
     std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
@@ -105,7 +101,7 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     PolymorphicVocabulary vocab;
-    setupVocabForBatchTest(vocab, vocabType);
+    setupVocab(vocab, vocabType);
     ASSERT_GE(vocab.size(), 4u);
 
     std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {0, 3, 1}};
