@@ -10,6 +10,7 @@
 #include <array>
 #include <deque>
 #include <fstream>
+#include <numeric>
 
 #include "global/Constants.h"
 #include "util/ExceptionHandling.h"
@@ -48,61 +49,51 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   AD_CONTRACT_CHECK(!indices.empty());
   const size_t numIndices = indices.size();
 
-  // Phase 1: Read offset pairs via io_uring from the .offsets file.
-  // For each index i, read offsets_[i] and offsets_[i+1] (16 bytes) at file
-  // position i * sizeof(uint64_t).
+  auto manager = ioManagers_->pop().value();
+
+  // Phase 1: For each requested index `i`, read its offset together with the
+  // next offset (which bounds the string) as one 16-byte pair from `.offsets`.
   struct OffsetPair {
     uint64_t offset_;
     uint64_t nextOffset_;
   };
   std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> offsetSizes(numIndices, sizeof(OffsetPair));
-  std::vector<uint64_t> offsetFileOffsets(numIndices);
-  std::vector<char*> offsetTargets(numIndices);
-  for (size_t i = 0; i < numIndices; ++i) {
-    AD_CONTRACT_CHECK(indices[i] < size());
-    offsetFileOffsets[i] = indices[i] * sizeof(uint64_t);
-    offsetTargets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
+  {
+    std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
+    std::vector<uint64_t> fileOffsets(numIndices);
+    std::vector<char*> targets(numIndices);
+    for (size_t i = 0; i < numIndices; ++i) {
+      AD_CONTRACT_CHECK(indices[i] < size());
+      fileOffsets[i] = indices[i] * sizeof(uint64_t);
+      targets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
+    }
+    manager->wait(
+        manager->addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
   }
 
-  auto manager = ioManagers_->pop().value();
-  auto offsetHandle = manager->addBatch(offsetsFile_.fd(), offsetSizes,
-                                        offsetFileOffsets, offsetTargets);
-  manager->wait(offsetHandle);
-
-  // Compute string sizes and total buffer size.
-  size_t totalSize = 0;
-  for (const OffsetPair& p : offsetPairs) {
-    totalSize += p.nextOffset_ - p.offset_;
-  }
-
-  // Phase 2: Read string data via io_uring (reusing the same manager).
-  auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer().resize(totalSize);
-  data->views().resize(numIndices);
-
+  // Phase 2: Read the string data. String `i` starts at `offset_` with length
+  // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
   std::vector<size_t> sizes(numIndices);
   std::vector<uint64_t> fileOffsets(numIndices);
-  std::vector<char*> targetPointers(numIndices);
-  {
-    size_t bufferOffset = 0;
-    for (size_t i = 0; i < numIndices; ++i) {
-      sizes[i] = offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
-      fileOffsets[i] = offsetPairs[i].offset_;
-      targetPointers[i] = data->buffer().data() + bufferOffset;
-      bufferOffset += sizes[i];
-    }
-  }
-
-  auto stringHandle =
-      manager->addBatch(file_.fd(), sizes, fileOffsets, targetPointers);
-  manager->wait(stringHandle);
-  ioManagers_->push(std::move(manager));
-
-  // Build string_views pointing into the buffer.
   for (size_t i = 0; i < numIndices; ++i) {
-    data->views()[i] = std::string_view(targetPointers[i], sizes[i]);
+    sizes[i] = offsetPairs[i].nextOffset_ - offsetPairs[i].offset_;
+    fileOffsets[i] = offsetPairs[i].offset_;
   }
+
+  auto data = std::make_shared<VocabBatchLookupData>();
+  data->buffer().resize(std::accumulate(sizes.begin(), sizes.end(), size_t{0}));
+  data->views().resize(numIndices);
+
+  std::vector<char*> targets(numIndices);
+  size_t bufferOffset = 0;
+  for (size_t i = 0; i < numIndices; ++i) {
+    targets[i] = data->buffer().data() + bufferOffset;
+    data->views()[i] = std::string_view(targets[i], sizes[i]);
+    bufferOffset += sizes[i];
+  }
+
+  manager->wait(manager->addBatch(file_.fd(), sizes, fileOffsets, targets));
+  ioManagers_->push(std::move(manager));
 
   return VocabBatchLookupData::asResult(std::move(data));
 }
