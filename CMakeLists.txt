@@ -480,6 +480,11 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
+# On Emscripten, gtest's pthread support causes various issues with threads and
+# gtest (hangs and crashes); disable it. Tests run single-threaded under node.
+if (EMSCRIPTEN)
+    set(gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
