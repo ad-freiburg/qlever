@@ -561,7 +561,7 @@ MATCHER(PairwiseUnequal, "contains no duplicate elements") {
 // _____________________________________________________________________________
 TEST(ServerTest, gspPost) {
   // TODO<qup42> test more thoroughly including the exact delta triples state
-  auto baseName = "ServerTest_gspPost";
+  auto baseName = gtestCurrentTestName();
   makeTestIndex(baseName, "");
   PersistentTestServer testServer{1, "accessToken",
                                   getDefaultConfigWithName(baseName)};
