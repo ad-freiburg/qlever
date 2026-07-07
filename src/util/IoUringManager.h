@@ -85,7 +85,7 @@ class BatchManager {
   void wait(BatchHandle handle) { policy_.wait(handle); }
 
  private:
-  ReadPolicy policy_;
+  [[no_unique_address]] ReadPolicy policy_;
   BatchHandle nextBatchHandle_ = 0;
 
   template <typename Span0, typename... Spans>
