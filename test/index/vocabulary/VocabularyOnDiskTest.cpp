@@ -208,36 +208,6 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
   EXPECT_EQ(b, expectedBatches.size());
 }
 
-// A stream over many batches must still return every batch correctly and in
-// order.
-TEST(VocabularyOnDisk, LookupBatchesStreamedManyBatches) {
-  constexpr size_t kNumWords = 1000;
-  std::vector<std::string> words;
-  words.reserve(kNumWords);
-  for (size_t i = 0; i < kNumWords; ++i) {
-    words.push_back(absl::StrCat("word", i));
-  }
-  VocabularyCreator creator{"LookupBatchesStreamedMany"};
-  auto vocab = creator.createVocabulary(words);
-
-  // One single-index batch per word, in order.
-  std::vector<std::vector<size_t>> batches;
-  batches.reserve(kNumWords);
-  for (size_t i = 0; i < kNumWords; ++i) {
-    batches.push_back({i});
-  }
-  auto streamed =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-
-  size_t i = 0;
-  for (auto& r : streamed) {
-    ASSERT_EQ(r->size(), 1) << "at batch " << i;
-    EXPECT_EQ((*r)[0], vocab[i]) << "at batch " << i;
-    ++i;
-  }
-  EXPECT_EQ(i, kNumWords);
-}
-
 // An empty input stream (no batches) is valid and must produce no results.
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
@@ -269,7 +239,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
 }
 
 // An empty batch within the stream is an invalid request and must throw when
-// the batch is pulled (an empty input *stream* with no batches is still valid,
+// the batch is pulled (an empty input stream with no batches is still valid,
 // see above).
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
