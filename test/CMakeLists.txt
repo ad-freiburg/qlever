@@ -242,6 +242,8 @@ addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
+addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
+
 addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
