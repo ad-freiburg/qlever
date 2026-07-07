@@ -61,6 +61,7 @@ TEST(GenericCharTraits, ByteRoundTrip) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, AssignEqLt) {
   WrappedChar c{};
   WrappedTraits::assign(c, WrappedChar{'x'});
@@ -79,6 +80,7 @@ TEST(GenericCharTraits, AssignEqLt) {
   EXPECT_TRUE(ByteTraits::lt(uint8_t{'a'}, uint8_t{0x80}));
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, Compare) {
   auto a = makeArray<ByteTraits>({'a', 'b', 'c'});
   auto b = makeArray<ByteTraits>({'a', 'b', 'c'});
@@ -95,6 +97,7 @@ TEST(GenericCharTraits, Compare) {
   EXPECT_GT(ByteTraits::compare(high.data(), low.data(), 1), 0);
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, Length) {
   auto s = makeArray<ByteTraits>({'a', 'b', 'c', '\0'});
   EXPECT_EQ(ByteTraits::length(s.data()), 3u);
@@ -103,6 +106,7 @@ TEST(GenericCharTraits, Length) {
   EXPECT_EQ(ByteTraits::length(empty.data()), 0u);
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, Find) {
   auto s = makeArray<ByteTraits>({'a', 'b', 'c'});
   EXPECT_EQ(ByteTraits::find(s.data(), 3, uint8_t{'b'}), s.data() + 1);
@@ -111,6 +115,7 @@ TEST(GenericCharTraits, Find) {
   EXPECT_EQ(ByteTraits::find(s.data(), 0, uint8_t{'a'}), nullptr);
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, MoveCopy) {
   auto src = makeArray<ByteTraits>({'a', 'b', 'c', 'd'});
 
@@ -131,6 +136,7 @@ TEST(GenericCharTraits, MoveCopy) {
   EXPECT_EQ(ByteTraits::compare(overlap.data(), expected.data(), 3), 0);
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, AssignFill) {
   std::vector<uint8_t> buf(4, 0);
   EXPECT_EQ(ByteTraits::assign(buf.data(), 4, uint8_t{'z'}), buf.data());
@@ -138,6 +144,7 @@ TEST(GenericCharTraits, AssignFill) {
   EXPECT_EQ(ByteTraits::compare(buf.data(), expected.data(), 4), 0);
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, IntType) {
   // `to_int_type` must yield the unsigned byte value (0..255) and round-trip
   // through `to_char_type`.
@@ -152,6 +159,7 @@ TEST(GenericCharTraits, IntType) {
   EXPECT_FALSE(ByteTraits::eq_int_type(42, 43));
 }
 
+// _____________________________________________________________________________
 TEST(GenericCharTraits, Eof) {
   EXPECT_EQ(ByteTraits::eof(), -1);
   // `not_eof(eof())` must map to a value that is distinct from `eof()`.
