@@ -214,7 +214,8 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   auto results = ::ranges::to_vector(std::move(streamed));
   ASSERT_EQ(results.size(), 2);
 
-  // Each streamed result must match the eager `lookupBatch`.
+  // TODO<ms2144> I think this can be refactored with the new helpers.
+  //  Each streamed result must match the eager `lookupBatch`.
   auto expectedMatchesEager = [&v](const VocabBatchLookupResult& actual,
                                    ql::span<const size_t> batchIndices) {
     auto expected = v.lookupBatch(batchIndices);
@@ -223,14 +224,17 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
       EXPECT_EQ((*actual)[i], (*expected)[i]);
     }
   };
+  // TODO<ms2144> I think this can be refactored with the new helpers.
   expectedMatchesEager(results[0], batches[0]);
   expectedMatchesEager(results[1], batches[1]);
 
-  // Exact contents
+  // TODO<ms2144> I think this can be refactored with the new helpers.
+  //  Exact contents
   EXPECT_THAT((*results[0]), ::testing::ElementsAre("ba", "a"));
   EXPECT_THAT((*results[1]), ::testing::ElementsAre("car"));
 
-  // An empty batch within the stream is invalid and must throw when pulled.
+  // TODO<ms2144> I think this can be refactored with the new helpers.
+  //  An empty batch within the stream is invalid and must throw when pulled.
   std::vector<std::vector<size_t>> batchesWithEmpty{{2, 0}, {}, {3}};
   auto streamedWithEmpty =
       v.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
@@ -239,7 +243,10 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
     }
   });
 
-  // Empty input stream -> no results.
+  // TODO<ms2144> TODO: check whether we test for every vocabulary type that
+  //  an empty input stream for the streamed lookup case yields no results.
+  //  I am not sure whether we are doing that currently.
+  //  Empty input stream -> no results.
   std::vector<std::vector<size_t>> noBatches;
   auto empty = v.lookupBatchesStreamed(VocabLookupInput{noBatches});
   EXPECT_EQ(ql::ranges::distance(empty), 0);
