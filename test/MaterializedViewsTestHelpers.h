@@ -102,7 +102,9 @@ class MaterializedViewsTest : public ::testing::Test {
   // an `IdTable` with the same column ordering as the columns in the `SELECT`
   // statement.
   IdTable getQueryResultAsIdTable(std::string query) {
-    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(std::move(query));
+    auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
+    auto qet = plannedQuery.sharedQueryExecutionTree();
+    auto& parsed = plannedQuery.parsedQuery();
 
     // Get the visible variables' column indices in the correct order.
     if (!parsed.hasSelectClause()) {
@@ -188,8 +190,8 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(*qet, matcher);
+  auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
+  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
 };
 
 // _____________________________________________________________________________

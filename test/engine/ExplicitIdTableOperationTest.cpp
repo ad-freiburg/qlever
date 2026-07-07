@@ -113,6 +113,14 @@ TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
   EXPECT_TRUE(varMap.contains(Variable("?var1")));
 }
 
+// _____________________________________________________________________________
+TEST_F(ExplicitIdTableOperationTest, isDeterministic) {
+  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+                              testSortedColumns_, testLocalVocab_.clone(),
+                              testCacheKey_);
+  EXPECT_TRUE(op.isDeterministic());
+}
+
 TEST_F(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());

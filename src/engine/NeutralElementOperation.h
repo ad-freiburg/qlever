@@ -46,6 +46,8 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
