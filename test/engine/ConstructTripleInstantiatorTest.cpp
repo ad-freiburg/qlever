@@ -503,19 +503,19 @@ TEST(CreateStringTriple, ReturnsFormattedTerms) {
 // `formatTriple` selects the serialization from the `ad_utility::MediaType`.
 // For `ntriples` every literal whose datatype is not xsd:string must explicitly
 // carry its datatype IRI ("value"^^<datatype>); only string and language-tagged
-// literals are written without one.
+// literals are written without a datatype tag.
 //
 // This follows from the W3C RDF N-Triples grammar: a literal with neither a
 // language tag (`@...`) nor a datatype IRI (`^^<...>`) is a *simple literal*
 // whose datatype is DEFINED to be xsd:string. Emitting a string which is not of
 // type xsd:string as a bare quoted value (e.g. "42") would lead to that literal
 // being defined to have datatype xsd:string. A string literal needs no
-// annotation because xsd:string is already that default.
-// A language-tagged literal is defined to be of datatype
+// annotation because xsd:string is already that default. A language-tagged
+// literal is defined to be of datatype
 // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString.
 
 // _____________________________________________________________________________
-TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
+TEST(FormatTriple, NTriplesPlainStringObjectCarriesNoDatatypeAnnotation) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"")};
   const std::string expected = "<http://s> <http://p> \"hello\" .\n";
@@ -523,7 +523,7 @@ TEST(FormatTriple, NTriplesPlainStringObjectHasNoDatatype) {
 }
 
 // _____________________________________________________________________________
-TEST(FormatTriple, NTriplesLanguageTaggedObjectCarriesNoDatatype) {
+TEST(FormatTriple, NTriplesLanguageTaggedObjectCarriesNoDatatypeAnnotation) {
   auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                                 makeTerm("\"hello\"@en")};
   const std::string expected = "<http://s> <http://p> \"hello\"@en .\n";

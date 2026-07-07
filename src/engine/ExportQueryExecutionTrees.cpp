@@ -62,7 +62,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
   if (!ad_utility::contains(
           ExportQueryExecutionTrees::supportedMediaTypesForAskQueries,
           mediaType)) {
-    AD_THROW(absl::StrCat("ASK queries are not supported for",
+    AD_THROW(absl::StrCat("ASK queries are not supported for ",
                           ad_utility::toString(mediaType)));
   }
 
