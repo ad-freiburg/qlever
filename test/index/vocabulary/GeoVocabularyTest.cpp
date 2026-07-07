@@ -148,7 +148,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     GeoVocabulary<T> geoVocab;
     setupGeoVocab(geoVocab);
     ASSERT_GE(geoVocab.size(), 4u);
-    ;
 
     std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
     // `VocabLookupInput` takes ownership of the batches, so keep a copy of the
