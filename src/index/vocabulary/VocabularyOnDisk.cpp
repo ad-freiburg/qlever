@@ -5,13 +5,8 @@
 #include "index/vocabulary/VocabularyOnDisk.h"
 
 #include <absl/cleanup/cleanup.h>
-#include <util/Views.h>
 
-#include <algorithm>
 #include <array>
-#include <deque>
-#include <fstream>
-#include <numeric>
 
 #include "global/Constants.h"
 #include "util/ExceptionHandling.h"
@@ -114,10 +109,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     VocabLookupInput rangeOfIndexBatches) const {
-  return VocabLookupOutput{
-      ad_utility::OwningView{std::move(rangeOfIndexBatches)} |
-      ql::views::transform(
-          [this](const auto& indices) { return lookupBatch(indices); })};
+  return ad_utility::vocabulary::lookupBatchesStreamed(
+      *this, std::move(rangeOfIndexBatches));
 }
 
 // _____________________________________________________________________________
