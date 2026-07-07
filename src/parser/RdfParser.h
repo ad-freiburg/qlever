@@ -15,6 +15,7 @@
 
 #include <future>
 #include <locale>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 
@@ -43,6 +44,18 @@ enum class TurtleParserIntegerOverflowBehavior {
   OverflowingToDouble,
   AllToDouble
 };
+
+namespace detail {
+// Find the end of the last match of the regex `[\r\n]+` in `input`, or
+// `std::nullopt` if there is no match. Used to split a block of input at a line
+// break.
+std::optional<size_t> findEndOfLastNewline(std::string_view input);
+
+// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
+// `std::nullopt` if there is no match. Used to split a block of input at a
+// Turtle statement boundary.
+std::optional<size_t> findEndOfLastStatement(std::string_view input);
+}  // namespace detail
 
 struct TurtleTriple {
   // The subject can be IRI or BlankNode, but the IRI can also be directly
@@ -519,11 +532,12 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
-  // testing interface, only works when parsing from an utf8-string
-  // return the current position of the tokenizer in the input string
-  // can be used to test if the advancing of the tokenizer works
-  // as expected
-  size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
+  // Testing interface, only works when parsing from a UTF-8 string.
+  // Return the current position of the tokenizer in the input string.
+  // Can be used to test if the advancing of the tokenizer works as expected.
+  size_t getPosition() const {
+    return this->tok_.data().data() - tmpToParse_.data();
+  }
 
   // Disable use of @base, @prefix and multiline string literals for turtle
   // parsers during parallel parsing.
