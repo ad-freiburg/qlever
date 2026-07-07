@@ -62,13 +62,11 @@ TEST(InputFileSpecification, FactorySource) {
 
 // _____________________________________________________________________________
 TEST(InputFileSpecification, FiletypeFromMediaType) {
-  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::turtle),
-            Filetype::Turtle);
-  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::ntriples),
-            Filetype::Turtle);
-  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::nquads),
-            Filetype::NQuad);
-  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::json), std::nullopt);
+  using enum ad_utility::MediaType;
+  EXPECT_EQ(filetypeFromMediaType(turtle), Filetype::Turtle);
+  EXPECT_EQ(filetypeFromMediaType(ntriples), Filetype::Turtle);
+  EXPECT_EQ(filetypeFromMediaType(nquads), Filetype::NQuad);
+  EXPECT_EQ(filetypeFromMediaType(json), std::nullopt);
 }
 
 // _____________________________________________________________________________

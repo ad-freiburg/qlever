@@ -13,11 +13,12 @@ namespace qlever {
 
 // _____________________________________________________________________________
 std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType) {
+  using enum ad_utility::MediaType;
   switch (mediaType) {
-    case ad_utility::MediaType::turtle:
-    case ad_utility::MediaType::ntriples:
+    case turtle:
+    case ntriples:
       return Filetype::Turtle;
-    case ad_utility::MediaType::nquads:
+    case nquads:
       return Filetype::NQuad;
     default:
       return std::nullopt;
