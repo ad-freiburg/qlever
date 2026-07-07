@@ -26,10 +26,10 @@ namespace qlever {
 // An enum to distinguish between `Turtle` and `NQuad` files.
 enum class Filetype { Turtle, NQuad };
 
-// Convert a `MediaType` (e.g. as parsed from an HTTP `Content-Type` header,
-// see `InputFileServer::filetypeFromContentType`) to the `Filetype` used for
-// selecting an RDF parser. Returns `nullopt` for any `MediaType` that isn't a
-// supported RDF input format (e.g. `json`, `csv`).
+// Convert a `MediaType` (e.g. as parsed from an HTTP `Content-Type` header)
+// to the `Filetype` used for selecting an RDF parser. Returns `nullopt` for
+// any `MediaType` that isn't a supported RDF input format (e.g. `json`,
+// `csv`).
 std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType);
 
 // Specify a single input file or stream for the index builder. The source of

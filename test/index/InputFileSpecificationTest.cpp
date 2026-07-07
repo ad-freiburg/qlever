@@ -61,6 +61,17 @@ TEST(InputFileSpecification, FactorySource) {
 }
 
 // _____________________________________________________________________________
+TEST(InputFileSpecification, FiletypeFromMediaType) {
+  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::turtle),
+            Filetype::Turtle);
+  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::ntriples),
+            Filetype::Turtle);
+  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::nquads),
+            Filetype::NQuad);
+  EXPECT_EQ(filetypeFromMediaType(ad_utility::MediaType::json), std::nullopt);
+}
+
+// _____________________________________________________________________________
 TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
   std::filesystem::path tmpFile =
       std::filesystem::temp_directory_path() / "qlever_ifs_test.ttl";

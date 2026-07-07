@@ -39,6 +39,12 @@ TEST(AcceptHeaderParser, singleType) {
   ASSERT_EQ(c[0], MediaType::json);
 }
 
+TEST(AcceptHeaderParser, singleTypeNQuads) {
+  auto c = parseAcceptHeader("application/n-quads");
+  ASSERT_EQ(c.size(), 1u);
+  ASSERT_EQ(c[0], MediaType::nquads);
+}
+
 TEST(AcceptHeaderParser, multipleTypes) {
   auto c = parseAcceptHeader("application/json,text/plain   ,  text/csv");
   ASSERT_EQ(c.size(), 3u);

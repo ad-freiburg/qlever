@@ -113,6 +113,14 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
             "SPARQL Graph Store HTTP Protocol in QLever."));
     AD_EXPECT_THROW_WITH_MESSAGE(
         transform(ad_utility::testing::makePostRequest(
+                      "/?default", "application/this-media-type-does-not-exist",
+                      "fantasy"),
+                  DEFAULT{}),
+        testing::HasSubstr(
+            "Not a single media type known to this parser was "
+            "detected in \"application/this-media-type-does-not-exist\"."));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        transform(ad_utility::testing::makePostRequest(
                       "/?default", "application/unknown", "fantasy"),
                   DEFAULT{}),
         testing::HasSubstr("Not a single media type known to this parser was "
@@ -208,6 +216,15 @@ TEST(GraphStoreProtocolTest, transformPut) {
       testing::HasSubstr(
           "Mediatype \"application/n-quads\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPut(
+          ad_utility::testing::makePostRequest(
+              "/?default", "application/this-media-type-does-not-exist",
+              "fantasy"),
+          DEFAULT{}, index),
+      testing::HasSubstr(
+          "Not a single media type known to this parser was "
+          "detected in \"application/this-media-type-does-not-exist\"."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makePostRequest(
