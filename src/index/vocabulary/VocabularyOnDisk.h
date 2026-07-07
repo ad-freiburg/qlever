@@ -82,10 +82,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // size`.
   std::string operator[](uint64_t idx) const;
 
-  // Get the number of words in the vocabulary.
   // Look up multiple words by their vocabulary index in a single batch.
-  // Makes use of `ioManagers_` to which the IO-Lookup is delegated. `io_uring`
-  // is used, if the build supports it.
+  // Make use of `ioManagers_` to which the IO-Lookup is delegated. `io_uring`
+  // is used if available.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   // Streaming variant of lookupBatch: accepts a lazy stream of batches and
@@ -145,6 +144,25 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
+
+  // A word's start offset and the start offset of the following word (which
+  // marks the end of the word), stored contiguously in the `.offsets` file.
+  struct OffsetPair {
+    uint64_t offset_;
+    uint64_t nextOffset_;
+  };
+
+  // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
+  // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
+  std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchIoManager& manager,
+                                          ql::span<const size_t> indices) const;
+
+  // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
+  // string data from `file_` into one contiguous buffer in a single batched
+  // read via `manager`, and return it as a `VocabBatchLookupResult`.
+  VocabBatchLookupResult readStrings(
+      ad_utility::BatchIoManager& manager,
+      ql::span<const OffsetPair> offsetPairs) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

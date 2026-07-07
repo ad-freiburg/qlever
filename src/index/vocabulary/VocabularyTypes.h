@@ -127,11 +127,11 @@ template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Materialize the words as owning `std::string`s (`operator[]` may return
-  // one) and move them into the result's `std::vector<std::string>` buffer. The
-  // views then point at those strings; no byte copying into a contiguous buffer
-  // is needed. Building the views after the move is safe: moving the vector
-  // does not relocate the contained strings.
+  // Materialize the words as owning `std::string`s and move them into the
+  // result's `std::vector<std::string>` buffer. The views then point at those
+  // strings; no byte copying into a contiguous buffer is needed. Building the
+  // views after the move is safe: moving the vector does not relocate the
+  // contained strings.
 
   std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
       indices | ql::views::transform(

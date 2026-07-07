@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include <absl/cleanup/cleanup.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -13,6 +15,7 @@
 
 using json = nlohmann::json;
 using std::string;
+using ::testing::ElementsAre;
 
 // _____________________________________________________________________________
 TEST(VocabularyTest, getIdForWordTest) {
@@ -31,7 +34,7 @@ TEST(VocabularyTest, getIdForWordTest) {
     ad_utility::deleteFile(filename);
   }
 
-  // with case insensitive ordering
+  // with case-insensitive ordering
   TextVocabulary voc;
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
@@ -170,11 +173,7 @@ TEST(VocabularyTest, LookupBatch) {
   // Sorted order: a=0, ab=1, ba=2, car=3. Look up in shuffled order.
   std::vector<size_t> indices{2, 0, 3, 1};
   auto result = v.lookupBatch(indices);
-  ASSERT_EQ(result->size(), 4);
-  EXPECT_EQ((*result)[0], "ba");
-  EXPECT_EQ((*result)[1], "a");
-  EXPECT_EQ((*result)[2], "car");
-  EXPECT_EQ((*result)[3], "ab");
+  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
 
   // Each batch result must match the single-index `operator[]`.
   for (size_t i = 0; i < indices.size(); ++i) {
@@ -187,10 +186,7 @@ TEST(VocabularyTest, LookupBatch) {
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v.lookupBatch(dup);
-  ASSERT_EQ(dupResult->size(), 3);
-  EXPECT_EQ((*dupResult)[0], "ab");
-  EXPECT_EQ((*dupResult)[1], "ab");
-  EXPECT_EQ((*dupResult)[2], "a");
+  EXPECT_THAT((*result), ::testing::ElementsAre("ab", "ab", "a"));
 
   ad_utility::deleteFile(filename);
 }
@@ -198,20 +194,21 @@ TEST(VocabularyTest, LookupBatch) {
 // _____________________________________________________________________________
 TEST(VocabularyTest, LookupBatchesStreamed) {
   using ad_utility::VocabularyType;
+  // TODO<ms2144>: extract into helper?
   RdfsVocabulary v;
   v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
   ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
   auto filename = "vocTestLookupBatchesStreamed.dat";
   v.createFromSet(s, filename);
 
+  absl::Cleanup deleteFileCleanup{
+      [&filename]() { ad_utility::deleteFile(filename); }};
+
   // Two batches: mixed and single.
   std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
   auto streamed = v.lookupBatchesStreamed(VocabLookupInput{batches});
 
-  std::vector<VocabBatchLookupResult> results;
-  for (auto& r : streamed) {
-    results.push_back(std::move(r));
-  }
+  auto results = ::ranges::to_vector(std::move(streamed));
   ASSERT_EQ(results.size(), 2);
 
   // Each streamed result must match the eager `lookupBatch`.
@@ -227,11 +224,8 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   expectedMatchesEager(results[1], batches[1]);
 
   // Exact contents
-  ASSERT_EQ(results[0]->size(), 2);
-  EXPECT_EQ((*results[0])[0], "ba");
-  EXPECT_EQ((*results[0])[1], "a");
-  ASSERT_EQ(results[1]->size(), 1);
-  EXPECT_EQ((*results[1])[0], "car");
+  EXPECT_THAT((*results[0]), ::testing::ElementsAre("ba", "a"));
+  EXPECT_THAT((*results[1]), ::testing::ElementsAre("car"));
 
   // An empty batch within the stream is invalid and must throw when pulled.
   std::vector<std::vector<size_t>> batchesWithEmpty{{2, 0}, {}, {3}};
@@ -245,11 +239,5 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   // Empty input stream -> no results.
   std::vector<std::vector<size_t>> noBatches;
   auto empty = v.lookupBatchesStreamed(VocabLookupInput{noBatches});
-  size_t count = 0;
-  for ([[maybe_unused]] auto& r : empty) {
-    ++count;
-  }
-  EXPECT_EQ(count, 0);
-
-  ad_utility::deleteFile(filename);
+  EXPECT_EQ(ql::ranges::distance(empty), 0);
 }

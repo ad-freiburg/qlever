@@ -40,45 +40,33 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 }
 
 // _____________________________________________________________________________
-VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
-    ql::span<const size_t> indices) const {
-  AD_CONTRACT_CHECK(!indices.empty());
+std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
+    ad_utility::BatchIoManager& manager, ql::span<const size_t> indices) const {
+  // For each requested index `i`, read its offset together with the next offset
+  // (which bounds the string) as one 16-byte pair from `.offsets`.
   const size_t numIndices = indices.size();
-
-  auto manager = ioManagers_->pop().value();
-
-  // Return the `manager` to the pool on every exit path (including exceptions,
-  // e.g. an out-of-range index below), so we never leak an `IoManager` (and its
-  // io_uring buffers) out of the pool.
-  absl::Cleanup returnManager{[this, &manager]() {
-    ad_utility::terminateIfThrows(
-        [this, &manager]() { ioManagers_->push(std::move(manager)); },
-        "returning the `IoManager` to the pool in "
-        "`VocabularyOnDisk::lookupBatch`");
-  }};
-
-  // Phase 1: For each requested index `i`, read its offset together with the
-  // next offset (which bounds the string) as one 16-byte pair from `.offsets`.
-  struct OffsetPair {
-    uint64_t offset_;
-    uint64_t nextOffset_;
-  };
   std::vector<OffsetPair> offsetPairs(numIndices);
-  {
-    std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
-    std::vector<uint64_t> fileOffsets(numIndices);
-    std::vector<char*> targets(numIndices);
-    for (size_t i = 0; i < numIndices; ++i) {
-      AD_CONTRACT_CHECK(indices[i] < size());
-      fileOffsets[i] = indices[i] * sizeof(uint64_t);
-      targets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
-    }
-    manager->wait(
-        manager->addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
+  std::vector<uint64_t> fileOffsets(numIndices);
+  std::vector<char*> targets(numIndices);
+  for (auto&& [fileOffset, index, target, offsetPair] :
+       ::ranges::views::zip(fileOffsets, indices, targets, offsetPairs)) {
+    AD_CONTRACT_CHECK(index < size());
+    fileOffset = index * sizeof(uint64_t);
+    target = reinterpret_cast<char*>(&offsetPair);
   }
+  manager.wait(
+      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+  return offsetPairs;
+}
 
-  // Phase 2: Read the string data. String `i` starts at `offset_` with length
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::readStrings(
+    ad_utility::BatchIoManager& manager,
+    ql::span<const OffsetPair> offsetPairs) const {
+  // Read the string data. String `i` starts at `offset_` with length
   // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
+  const size_t numIndices = offsetPairs.size();
   std::vector<size_t> sizes(numIndices);
   std::vector<uint64_t> fileOffsets(numIndices);
   for (auto&& [size, fileOffset, offsetPair] :
@@ -88,8 +76,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   }
 
   auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer().resize(
-      ::ranges::accumulate(sizes.begin(), sizes.end(), size_t{0}));
+  data->buffer().resize(::ranges::accumulate(sizes, size_t{0}));
   data->views().resize(numIndices);
 
   std::vector<char*> targets(numIndices);
@@ -101,9 +88,28 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     bufferOffset += size;
   }
 
-  manager->wait(manager->addBatch(file_.fd(), sizes, fileOffsets, targets));
-
+  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targets));
   return VocabBatchLookupData::asResult(std::move(data));
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  auto manager = ioManagers_->pop().value();
+  // Return the `manager` to the pool on every exit path (including exceptions,
+  // e.g. an out-of-range index in phase 1), so we never leak an `IoManager`
+  // (and its io_uring buffers) out of the pool.
+  absl::Cleanup returnManager{[this, &manager]() {
+    ad_utility::terminateIfThrows(
+        [this, &manager]() { ioManagers_->push(std::move(manager)); },
+        "returning the `IoManager` to the pool in "
+        "`VocabularyOnDisk::lookupBatch`");
+  }};
+
+  auto offsetPairs = readOffsetPairs(*manager, indices);
+  return readStrings(*manager, offsetPairs);
 }
 
 // _____________________________________________________________________________

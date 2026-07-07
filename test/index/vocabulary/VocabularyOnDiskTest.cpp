@@ -1,23 +1,29 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022-2026 Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de), UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include "../../util/GTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
-#include "util/Generator.h"
 #include "util/MmapVector.h"
 
 namespace {
 using namespace vocabulary_test;
 
-// Store a VocabularyOnDisk and read it back from file. For each instance of
+// Store a `VocabularyOnDisk` and read it back from file. For each instance of
 // `VocabularyCreator` that exists at the same time, a different filename has to
 // be chosen.
 class VocabularyCreator {
@@ -62,6 +68,17 @@ auto createVocabulary(std::string filename) {
     return c.createVocabulary(AD_FWD(args)...);
   };
 }
+
+VocabularyOnDisk createVocabularyFromWords(
+    const std::vector<std::string>& words) {
+  VocabularyCreator creator{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  return creator.createVocabulary(words);
+}
+
+VocabularyOnDisk createExampleVocabulary() {
+  return createVocabularyFromWords({"alpha", "delta", "beta", "42"});
+}
+
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
@@ -150,9 +167,7 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
 // A `lookupBatch` result must equal the individual `vocab[]` lookups for the
 // same indices, including for reordered and duplicated indices.
 TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "gamma"};
-  VocabularyCreator creator{"LookupBatch"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
 
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
   auto result = vocab.lookupBatch(indices);
@@ -164,17 +179,13 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
 
 // An empty batch is an invalid request and must throw.
 TEST(VocabularyOnDisk, LookupBatchEmptyThrows) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchEmpty"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
   EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
 // An out-of-range index in a batch must throw.
 TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchOutOfRange"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
   std::array<size_t, 2> indices{0, 99};
   EXPECT_ANY_THROW(vocab.lookupBatch(indices));
 }
@@ -183,9 +194,7 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
 // `vocab[]` lookups for that batch's indices, and the batches must be yielded
 // in input order.
 TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "gamma"};
-  VocabularyCreator creator{"LookupBatchesStreamed"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
 
   std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {4, 0, 1}};
   // `VocabLookupInput` takes ownership of the batches, so keep a copy to
@@ -210,9 +219,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
 
 // An empty input stream (no batches) is valid and must produce no results.
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchesStreamedEmptyStream"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
@@ -220,15 +227,13 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   for ([[maybe_unused]] auto& r : streamed) {
     ++count;
   }
-  EXPECT_EQ(count, 0);
+  EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
 // An out-of-range index within a streamed batch must throw when that batch is
 // pulled.
 TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchesStreamedOutOfRange"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{0, 99}};
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
@@ -242,9 +247,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
 // the batch is pulled (an empty input stream with no batches is still valid,
 // see above).
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
-  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
-  VocabularyCreator creator{"LookupBatchesStreamedEmptyBatch"};
-  auto vocab = creator.createVocabulary(words);
+  auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
   auto streamed =
       vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
