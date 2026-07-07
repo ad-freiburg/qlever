@@ -11,8 +11,8 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include "util/Exception.h"
@@ -53,40 +53,16 @@ std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
 }
 
 // ____________________________________________________________________________
-AsyncEndRegexBlockSource::AsyncEndRegexBlockSource(
+AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
     const net::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
-    std::string endRegex)
+    EndPositionFinder findEndPosition, std::string description)
     : AsyncBlockSource{exec, inner->getBlocksize()},
       inner_{std::move(inner)},
-      endRegex_{endRegex},
-      endRegexAsString_{std::move(endRegex)} {}
+      findEndPosition_{std::move(findEndPosition)},
+      description_{std::move(description)} {}
 
 // ____________________________________________________________________________
-std::optional<size_t> AsyncEndRegexBlockSource::findRegexNearEnd(
-    const Block& vec, const re2::RE2& regex) {
-  size_t inputSize = vec.size();
-  AD_CORRECTNESS_CHECK(inputSize > 0);
-  size_t chunkSize = std::min<size_t>(1000, inputSize);
-  re2::StringPiece regexResult;
-  bool match = false;
-  while (true) {
-    auto startIdx = inputSize - chunkSize;
-    auto regexInput = re2::StringPiece{vec.data() + startIdx, chunkSize};
-
-    match = RE2::PartialMatch(regexInput, regex, &regexResult);
-    if (match || chunkSize == inputSize) {
-      break;
-    }
-    chunkSize = std::min(chunkSize * 2, inputSize);
-  }
-  if (!match) {
-    return std::nullopt;
-  }
-  return regexResult.data() + regexResult.size() - vec.data();
-}
-
-// ____________________________________________________________________________
-std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
+std::optional<ByteBlock> AsyncStatementBoundaryBlockSource::getNextBlockImpl() {
   // Mark the source exhausted and return whatever is left in `remainder_`.
   auto returnRemainder = [this]() -> std::optional<ByteBlock> {
     exhausted_ = true;
@@ -122,14 +98,15 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
     return result;
   };
 
-  // Search for the regex near the end of the raw block.
-  auto endPosition = findRegexNearEnd(rawInput, endRegex_);
+  // Search for the end of the last statement near the end of the raw block.
+  auto endPosition =
+      findEndPosition_(std::string_view{rawInput.data(), rawInput.size()});
   if (endPosition.has_value()) {
-    // Regex found: return remainder_ + rawInput[0..endPosition).
+    // End found: return remainder_ + rawInput[0..endPosition).
     return assembleResult(endPosition.value());
   }
 
-  // No regex match. Peek at the next raw block to decide how to handle this:
+  // No boundary found. Peek at the next raw block to decide how to handle this:
   // if the inner source has more data, the current block is too short for a
   // full statement and parsing must fail. If the inner source is exhausted,
   // the current block is the last one; return it without requiring a match.
@@ -138,9 +115,9 @@ std::optional<ByteBlock> AsyncEndRegexBlockSource::getNextBlockImpl() {
     // Inner source has more data: this is a real "statement too large" error.
     auto rawSize = rawInput.size();
     throw std::runtime_error{absl::StrCat(
-        "The regex ", endRegexAsString_,
-        " which marks the end of a statement was not found in the "
-        "current input batch (that was not the last one) of size ",
+        "No statement boundary (", description_,
+        ") was found in the current input batch (which was not the last one) "
+        "of size ",
         ad_utility::insertThousandSeparator(std::to_string(rawSize), ','),
         "; possible fixes are: "
         "use `--parser-buffer-size` to increase the buffer size or "
