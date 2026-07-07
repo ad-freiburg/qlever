@@ -163,6 +163,8 @@ class DeltaTriples {
     TriplesSet triplesDeleted_;
   };
 
+  // TODO<qup42>: investigate whether we still need the state at all and whether
+  // it can be replace with `HashMap<Triple, insertedOrDeleted>`
   TriplesSets<false> triplesSetsNormal_;
   TriplesSets<true> triplesSetsInternal_;
 
@@ -390,13 +392,11 @@ class DeltaTriples {
   static LocatedTriplesDiff computeLocatedTriplesDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
 
-  // Drop multiple update triples in a permutation. Iff `insertOrDelete` is
-  // `true` the `triples` being deleted are insertions.
+  // Drop multiple update triples in a permutation.
   // Note: This is currently used for `vacuum`.
   void eraseTriplesInPermutation(
       Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-      bool insertOrDelete, auto isInternal,
-      ad_utility::SharedCancellationHandle cancellationHandle);
+      auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle);
 
   friend class DeltaTriplesManager;
   FRIEND_TEST(DeltaTriplesTest, remapId);

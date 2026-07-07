@@ -94,20 +94,23 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 void DeltaTriples::eraseTriplesInPermutation(
     Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-    bool insertOrDelete, auto isInternal,
-    ad_utility::SharedCancellationHandle cancellationHandle) {
+    auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle) {
   // The requested `Permutation` and `LocatedTriplesPerBlock` for that
   // permutation from which the triples are erased.
   const auto& perm = index_.getPermutation(permutation);
   LocatedTriplesPerBlock& lts =
       locatedTriples_->getLocatedTriplesForPermutation<isInternal>(permutation);
   // Determine the `blockIndex` for each of the `triples` which is required for
-  // deletion. `insertOrDelete` could be any value because `erase` because the
-  // `SortedSequence` only considers the triple. Here it is the actual value
-  // though.
+  // deletion.
+  // Note: The value for `insertOrDelete` is never used, because the `erase`
+  // interface erases all matching triples, independent of that flag. We still
+  // need to pass a value for it though as the erase API reuses the
+  // `LocatedTriple` type which always needs this flag.
+  static constexpr bool insertOrDeleteDummyValue =
+      false;  // or true, depending on your mood
   auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-      triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
-      cancellationHandle);
+      triples, perm.metaData().blockData(), perm.keyOrder(),
+      insertOrDeleteDummyValue, cancellationHandle);
   // `LocatedTriplesPerBlock::erase` requires a sorted input.
   ql::ranges::sort(locatedTriples, {}, &LocatedTriple::triple_);
   lts.erase(locatedTriples);
@@ -122,16 +125,16 @@ nlohmann::json DeltaTriples::vacuum(
 
   // Remove the `triples` from all the permutations.
   auto removeFromAllPermutations =
-      [this](const std::vector<IdTriple<0>>& triples, bool insertOrDelete,
-             auto& triplesToHandlesMap, auto isInternal) {
+      [this](const std::vector<IdTriple<0>>& triples, auto& triplesToHandlesMap,
+             auto isInternal) {
         // This operation must not be interrupted so we ignore the
         // CancellationHandle.
         auto cancellationHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         // Erase located triples
         for (auto permutation : Permutation::all<isInternal>()) {
-          eraseTriplesInPermutation(permutation, triples, insertOrDelete,
-                                    isInternal, cancellationHandle);
+          eraseTriplesInPermutation(permutation, triples, isInternal,
+                                    cancellationHandle);
         }
 
         // Remove from handles map.
@@ -154,9 +157,9 @@ nlohmann::json DeltaTriples::vacuum(
          deletions = std::move(deletions),
          insertions = std::move(insertions)]() {
           auto& state = getState<isInternal>();
-          removeFromAllPermutations(deletions, false, state.triplesDeleted_,
+          removeFromAllPermutations(deletions, state.triplesDeleted_,
                                     isInternal);
-          removeFromAllPermutations(insertions, true, state.triplesInserted_,
+          removeFromAllPermutations(insertions, state.triplesInserted_,
                                     isInternal);
         },
         stats);

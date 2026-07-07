@@ -198,8 +198,8 @@ class LocatedTriplesPerBlock {
   // metadata.
   void erase(size_t blockIndex, const LocatedTriple& lt);
 
-  // Removes the sorted `LocatedTriple`s from the `LocatedTriplesPerBlock`.
-  //
+  // Overload of erase above that removes multiple triples at once.
+  // PRECONDITION: `sortedTriples` must be sorted.
   // NOTE: `updateAugmentedMetadata()` must be called to update the block
   // metadata.
   void erase(ql::span<LocatedTriple> sortedTriples);

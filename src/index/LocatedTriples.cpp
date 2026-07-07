@@ -423,7 +423,7 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
   return ::ranges::accumulate(
       map_ | ql::views::values |
           ql::views::transform(&LocatedTriples::sizeForTesting),
-      0UL);
+      size_t{0});
 }
 
 // ____________________________________________________________________________
@@ -547,17 +547,19 @@ std::array<std::vector<IdTriple<0>>, 2> LocatedTriplesPerBlock::computeDiff(
     result.at(lt.insertOrDelete_ ? 0 : 1).push_back(lt.triple_);
   };
 
-  // All `DeltaTriples` that are in the new snapshot, but not in the old
-  // snapshot have been added or changed (from inserted to deleted or deleted to
-  // inserted) since the old snapshot and thus have to be returned.
+  // Compute all `LocatedTriples` that are in the new snapshot, but not in the
+  // old snapshot requires comparing by the `IdTriple` but also
+  // `insertOrDelete_`. Such triples have been newly inserted, newly deleted or
+  // changed (from inserted to deleted or vice versa) since the old snapshot.
   for (const auto& [blockIndex, currentTriples] : map_) {
     auto it = oldBlocks.map_.find(blockIndex);
     const LocatedTriples empty;
     const auto& oldTriplesSortedView = it != oldBlocks.map_.end()
                                            ? it->second.getSortedView()
                                            : empty.getSortedView();
-    // The default comparator compares the whole `LocatedTriple` with the
-    // `IdTriple` but also `insertOrDelete_`, so this gives the correct triples.
+    // The default comparator compares the whole `LocatedTriple` with
+    // `IdTriple`, `insertOrDelete_` and `blockIndex_`. When the `IdTriple`s are
+    // equal the `blockIndex_` is also the same, so this does the right thing.
     ql::ranges::set_difference(
         currentTriples.getSortedView(), oldTriplesSortedView,
         ad_utility::IteratorForAssigmentOperator(addTriple));
