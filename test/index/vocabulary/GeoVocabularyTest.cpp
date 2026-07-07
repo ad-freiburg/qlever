@@ -155,8 +155,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   }
 };
 
-// Instantiate every TYPED_TEST in the `GeoVocabularyUnderlyingVocabTypedTest`
-// test suite once for each type in `GeoVocabularyUnderlyingVocabTypes`.
 TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
                  GeoVocabularyUnderlyingVocabTypes);
 
