@@ -320,7 +320,6 @@ void assertLookupResultMatchesVocabularyAtIndices(
     const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
     const Indices& indices) {
   ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
-  ;
 
   for (const auto& [resultWord, idx] :
        ::ranges::views::zip(*lookupResult, indices)) {
