@@ -50,7 +50,8 @@ class ResourceMonitor {
 
   // Open the TSV at `path` (header written unless appending to a
   // non-empty file) and start sampling. Throws if called more than
-  // once or if the file cannot be opened.
+  // once, if the file cannot be opened, or if `interval` is not
+  // positive.
   void start(const std::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval = std::chrono::seconds{1});
 
