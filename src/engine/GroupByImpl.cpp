@@ -808,7 +808,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           locatedTriplesState());
-  bool hasLocatedTriples = locTriples.numTriples() > 0;
+  bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
 

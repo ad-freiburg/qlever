@@ -225,15 +225,20 @@ auto Server::cancelAfterDeadline(
     TimeLimit timeLimit)
     -> QL_CONCEPT_OR_NOTHING(
         ad_utility::InvocableWithExactReturnType<void>) auto {
-  net::steady_timer timer{timerExecutor_, timeLimit};
+  // The timer must not be moved once `async_wait` has registered a
+  // `wait_op` against its implementation: the queued op references the
+  // original impl by address, and moving the timer leaves the op
+  // dangling in the scheduler's queue. Wrap in `shared_ptr` so the
+  // timer object stays put.
+  auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
 
-  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
-                       const boost::system::error_code&) {
+  timer->async_wait([cancellationHandle = std::move(cancellationHandle)](
+                        const boost::system::error_code&) {
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
   });
-  return [timer = std::move(timer)]() mutable { timer.cancel(); };
+  return [timer = std::move(timer)]() { timer->cancel(); };
 }
 
 // _____________________________________________________________________________
