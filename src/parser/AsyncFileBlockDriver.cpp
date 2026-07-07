@@ -20,7 +20,6 @@ AsyncFileBlockDriver::AsyncFileBlockDriver(
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize blocksize, std::string endRegex) {
   fileBuffer_ = std::make_unique<AsyncEndRegexBlockSource>(
-      ioPool_.get_executor(),
       spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
       std::move(endRegex));
   pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);
