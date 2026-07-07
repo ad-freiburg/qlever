@@ -269,6 +269,61 @@ auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
 }
 
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `indices[i]`, for all positions `i`.
+template <typename Vocab, typename Indices>
+void assertVocabularyMatchesAtIndices(
+    const Vocab& vocab, const Indices& indices,
+    std::initializer_list<std::string_view> expectedWords) {
+  ASSERT_EQ(ql::ranges::distance(indices), expectedWords.size());
+
+  for (const auto& [idx, expectedWord] :
+       ::ranges::views::zip(indices, expectedWords)) {
+    EXPECT_EQ(std::string{vocab[idx]}, expectedWord)
+        << "at vocabulary index " << idx;
+  }
+}
+
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `i`, for all indices `i` in `[0, expectedWords.size())`.
+template <typename Vocab>
+void assertVocabularyMatchesContiguousIndices(
+    const Vocab& vocab, std::initializer_list<std::string_view> expectedWords) {
+  assertVocabularyMatchesAtIndices(
+      vocab, ql::views::iota(size_t{0}, expectedWords.size()), expectedWords);
+}
+
+// Assert that `lookupResult[i]` equals `vocab[indices[i]]`, for all positions
+// `i`.
+template <typename Vocab, typename Indices>
+void assertLookupResultMatchesVocabularyAtIndices(
+    const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
+    const Indices& indices) {
+  ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
+  ;
+
+  for (const auto& [resultWord, idx] :
+       ::ranges::views::zip(*lookupResult, indices)) {
+    EXPECT_EQ(resultWord, vocab[idx]) << " at  vocabulary index " << idx;
+  }
+}
+
+// Assert that every streamed lookup result equals the individual `vocab[]`
+// lookups for the corresponding batch in `expectedBatches`, and that the
+// batches are yielded in order.
+template <typename Vocab, typename ExpectedBatches>
+void assertStreamedLookupMatchesVocabularyAtIndices(
+    const Vocab& vocab, VocabLookupOutput& streamedResults,
+    const ExpectedBatches& expectedBatches) {
+  auto results = ::ranges::to_vector(streamedResults);
+  ASSERT_EQ(results.size(), expectedBatches.size());
+
+  for (const auto& [result, indices] :
+       ::ranges::views::zip(results, expectedBatches)) {
+    assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  }
+}
+
 }  // namespace vocabulary_test
 
 #endif  // QLEVER_VOCABULARYTESTHELPERS_H

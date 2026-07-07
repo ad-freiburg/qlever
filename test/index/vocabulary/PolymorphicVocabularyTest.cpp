@@ -1,10 +1,18 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 - 2026, The QLever Authors, in particular:
+//
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
 #include "../../util/FileTestHelpers.h"
+#include "VocabularyTestHelpers.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
 using ad_utility::VocabularyType;
@@ -28,9 +36,8 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   vocab.open(filename, type);
   EXPECT_EQ(vocab.size(), 3);
 
-  EXPECT_EQ(vocab[0], "alpha");
-  EXPECT_EQ(vocab[1], "beta");
-  EXPECT_EQ(vocab[2], "gamma");
+  vocabulary_test::assertVocabularyMatchesContiguousIndices(
+      vocab, {"alpha", "beta", "gamma"});
 
   auto wI = vocab.lower_bound("alx", ql::ranges::less{});
   EXPECT_EQ(wI.index(), 1);
@@ -87,10 +94,8 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 
     std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
     auto result = vocab.lookupBatch(indices);
-    ASSERT_EQ(result->size(), indices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      EXPECT_EQ((*result)[i], vocab[indices[i]]);
-    }
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(vocab, result,
+                                                                  indices);
   }
 }
 
@@ -110,17 +115,8 @@ TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
     auto streamed =
         vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
 
-    size_t b = 0;
-    for (auto& result : streamed) {
-      ASSERT_LT(b, expectedBatches.size());
-      const auto& indices = expectedBatches[b];
-      ASSERT_EQ(result->size(), indices.size());
-      for (size_t i = 0; i < indices.size(); ++i) {
-        EXPECT_EQ((*result)[i], vocab[indices[i]]);
-      }
-      ++b;
-    }
-    EXPECT_EQ(b, expectedBatches.size());
+    vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+        vocab, streamed, expectedBatches);
   }
 }
 
