@@ -31,17 +31,17 @@ class VocabularyInMemory
   Words _words;
 
  public:
-  /// Construct an empty vocabulary
+  // Construct an empty vocabulary
   VocabularyInMemory() = default;
 
-  /// Construct the vocabulary from `Words`
+  // Construct the vocabulary from `Words`
   explicit VocabularyInMemory(Words words) : _words{std::move(words)} {}
 
-  /// Build a vocabulary as a non-owning, zero-copy view directly into the
-  /// buffer of `serializer`, which must support zero-copy deserialization
-  /// (see `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The
-  /// returned vocabulary is only valid as long as the memory backing
-  /// `serializer`'s buffer is valid and unchanged.
+  // Build a vocabulary as a non-owning, zero-copy view directly into the
+  // buffer of `serializer`, which must support zero-copy deserialization
+  // (see `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The
+  // returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
       requires ad_utility::serialization::ZeroCopyReadSerializer<
           S>) static VocabularyInMemory
@@ -53,17 +53,17 @@ class VocabularyInMemory
   VocabularyInMemory& operator=(VocabularyInMemory&&) noexcept = default;
   VocabularyInMemory(VocabularyInMemory&&) noexcept = default;
 
-  /// Read the vocabulary from a file. The file must have been created by a call
-  /// to `writeToFile` or using a `WordWriter`.
+  // Read the vocabulary from a file. The file must have been created by a call
+  // to `writeToFile` or using a `WordWriter`.
   void open(const std::string& fileName);
 
-  /// Write the vocabulary to a file.
+  // Write the vocabulary to a file.
   void writeToFile(const std::string& fileName) const;
 
-  /// Return the total number of words
+  // Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
 
-  /// Return the `i-th` word. The behavior is undefined if `i >= size()`
+  // Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
   // Conversion function that is used by the Mixin base class.
@@ -76,9 +76,9 @@ class VocabularyInMemory
     return {_words[idx], idx};
   }
 
-  /// A helper type that can be used to directly write a vocabulary to disk
-  /// word-by-word, without having to materialize it in RAM first. See the
-  /// documentation of `CompactVectorOfStrings` for details.
+  // A helper type that can be used to directly write a vocabulary to disk
+  // word-by-word, without having to materialize it in RAM first. See the
+  // documentation of `CompactVectorOfStrings` for details.
   struct WordWriter : public WordWriterBase {
     typename Words::Writer writer_;
     uint64_t index_ = 0;
@@ -109,7 +109,7 @@ class VocabularyInMemory
     return std::make_unique<WordWriter>(filename);
   }
 
-  /// Clear the vocabulary.
+  // Clear the vocabulary.
   void close() { _words.clear(); }
 
   // Const access to the underlying words.
