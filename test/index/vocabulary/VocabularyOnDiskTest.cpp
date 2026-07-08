@@ -106,15 +106,10 @@ class VocabularyOnDiskHandle {
   VocabularyOnDisk* operator->() { return &vocabulary_; }
 };
 
-auto createVocabulary(std::string filename) {
-  return [c = VocabularyCreator{std::move(filename)}](auto&&... args) mutable {
-    return c.createVocabulary(AD_FWD(args)...);
-  };
-}
-
-VocabularyOnDisk createVocabularyFromWords(
+VocabularyOnDiskHandle createVocabularyFromWords(
     const std::vector<std::string>& words) {
-  return createVocabulary(absl::StrCat(gtestCurrentTestName(), ".dat"))(words);
+  return VocabularyOnDiskHandle{absl::StrCat(gtestCurrentTestName(), ".dat"),
+                                words};
 }
 
 auto createVocabulary() {
@@ -124,7 +119,7 @@ auto createVocabulary() {
   };
 }
 
-VocabularyOnDisk createExampleVocabulary() {
+VocabularyOnDiskHandle createExampleVocabulary() {
   return createVocabularyFromWords({"alpha", "delta", "beta", "42"});
 }
 
@@ -217,22 +212,22 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto vocab = createExampleVocabulary();
 
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
-  auto result = vocab.lookupBatch(indices);
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(vocab, result,
+  auto result = vocab->lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
 }
 
 // An empty batch is an invalid request and must throw.
 TEST(VocabularyOnDisk, LookupBatchEmptyThrows) {
   auto vocab = createExampleVocabulary();
-  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
+  EXPECT_ANY_THROW(vocab->lookupBatch(ql::span<const size_t>{}));
 }
 
 // An out-of-range index in a batch must throw.
 TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 2> indices{0, 99};
-  EXPECT_ANY_THROW(vocab.lookupBatch(indices));
+  EXPECT_ANY_THROW(vocab->lookupBatch(indices));
 }
 
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual
@@ -246,9 +241,9 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
   // compare against.
   const auto expectedBatches = batches;
   auto streamed =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
-      vocab, streamed, expectedBatches);
+      *vocab, streamed, expectedBatches);
 }
 
 // An empty input stream (no batches) is valid and must produce no results.
@@ -256,7 +251,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
   auto streamed =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
@@ -266,7 +261,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{0, 99}};
   auto streamed =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
     for ([[maybe_unused]] auto& r : streamed) {
     }
@@ -280,7 +275,7 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
   auto streamed =
-      vocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
     for ([[maybe_unused]] auto& r : streamed) {
     }
