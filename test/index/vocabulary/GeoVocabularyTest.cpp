@@ -150,8 +150,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
     vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
         geoVocab, streamedResults, expectedBatches);
-
-    geoVocab.close();
   }
 };
 
