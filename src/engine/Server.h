@@ -26,7 +26,6 @@
 #include "libqlever/Qlever.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
