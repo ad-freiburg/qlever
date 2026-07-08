@@ -38,9 +38,6 @@
 
 using namespace qlever;
 
-using qlever::EncodedIriManager;
-using qlever::SparqlParser;
-
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;
@@ -49,18 +46,17 @@ using namespace SpatialJoinTestHelpers;
 namespace childrenTesting {
 
 void testAddChild(bool addLeftChildFirst) {
-  auto checkVariable = [](qlever::SpatialJoin* spatialJoin,
-                          bool checkLeftVariable) {
+  auto checkVariable = [](SpatialJoin* spatialJoin, bool checkLeftVariable) {
     if (checkLeftVariable) {
-      std::shared_ptr<qlever::Operation> op =
+      std::shared_ptr<Operation> op =
           spatialJoin->onlyForTestingGetLeftChild()->getRootOperation();
-      qlever::IndexScan* scan = static_cast<qlever::IndexScan*>(op.get());
+      IndexScan* scan = static_cast<IndexScan*>(op.get());
       ASSERT_EQ(scan->subject().getVariable().name(), "?obj1");
       ASSERT_EQ(scan->object().getVariable().name(), "?point1");
     } else {
-      std::shared_ptr<qlever::Operation> op =
+      std::shared_ptr<Operation> op =
           spatialJoin->onlyForTestingGetRightChild()->getRootOperation();
-      qlever::IndexScan* scan = static_cast<qlever::IndexScan*>(op.get());
+      IndexScan* scan = static_cast<IndexScan*>(op.get());
       ASSERT_EQ(scan->subject().getVariable().name(), "?obj2");
       ASSERT_EQ(scan->object().getVariable().name(), "?point2");
     }
@@ -70,30 +66,28 @@ void testAddChild(bool addLeftChildFirst) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  qlever::TripleComponent point1{qlever::Variable{"?point1"}};
-  qlever::TripleComponent point2{qlever::Variable{"?point2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
           std::nullopt, std::nullopt);
 
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-  qlever::Variable firstVariable =
+  Variable firstVariable =
       addLeftChildFirst ? point1.getVariable() : point2.getVariable();
-  qlever::Variable secondVariable =
+  Variable secondVariable =
       addLeftChildFirst ? point2.getVariable() : point1.getVariable();
   std::string firstSubject = addLeftChildFirst ? "?obj1" : "?obj2";
   std::string secondSubject = addLeftChildFirst ? "?obj2" : "?obj1";
@@ -103,21 +97,19 @@ void testAddChild(bool addLeftChildFirst) {
   ASSERT_EQ(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
   ASSERT_EQ(spatialJoin->onlyForTestingGetRightChild(), nullptr);
 
-  ASSERT_ANY_THROW(
-      spatialJoin->addChild(firstChild, qlever::Variable{"?wrongVar"}));
-  ASSERT_ANY_THROW(
-      spatialJoin->addChild(secondChild, qlever::Variable{"?wrongVar"}));
+  ASSERT_ANY_THROW(spatialJoin->addChild(firstChild, Variable{"?wrongVar"}));
+  ASSERT_ANY_THROW(spatialJoin->addChild(secondChild, Variable{"?wrongVar"}));
 
   ASSERT_EQ(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
   ASSERT_EQ(spatialJoin->onlyForTestingGetRightChild(), nullptr);
 
   auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   checkVariable(spatialJoin, addLeftChildFirst);
 
   auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   checkVariable(spatialJoin, (!addLeftChildFirst));
 }
@@ -132,34 +124,32 @@ TEST(SpatialJoin, isConstructed) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  qlever::TripleComponent point1{qlever::Variable{"?point1"}};
-  qlever::TripleComponent point2{qlever::Variable{"?point2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
           std::nullopt, std::nullopt);
 
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   ASSERT_FALSE(spatialJoin->isConstructed());
 
   auto spJoin1 = spatialJoin->addChild(leftChild, point1.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_FALSE(spatialJoin->isConstructed());
 
   auto spJoin2 = spatialJoin->addChild(rightChild, point2.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   ASSERT_TRUE(spatialJoin->isConstructed());
 }
@@ -169,58 +159,56 @@ TEST(SpatialJoin, getChildren) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  qlever::TripleComponent point1{qlever::Variable{"?point1"}};
-  qlever::TripleComponent point2{qlever::Variable{"?point2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
           std::nullopt, std::nullopt);
 
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 0);
 
   auto spJoin1 = spatialJoin->addChild(leftChild, point1.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 1);
 
   auto spJoin2 = spatialJoin->addChild(rightChild, point2.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 2);
 
-  auto assertScanVariables =
-      [](qlever::IndexScan* scan1, qlever::IndexScan* scan2,
-         bool isSubjectNotObject, std::string varName1, std::string varName2) {
-        std::string value1 = scan1->subject().getVariable().name();
-        std::string value2 = scan2->subject().getVariable().name();
-        if (!isSubjectNotObject) {
-          value1 = scan1->object().getVariable().name();
-          value2 = scan2->object().getVariable().name();
-        }
-        ASSERT_TRUE(value1 == varName1 || value1 == varName2);
-        ASSERT_TRUE(value2 == varName1 || value2 == varName2);
-        ASSERT_TRUE(value1 != value2);
-      };
+  auto assertScanVariables = [](IndexScan* scan1, IndexScan* scan2,
+                                bool isSubjectNotObject, std::string varName1,
+                                std::string varName2) {
+    std::string value1 = scan1->subject().getVariable().name();
+    std::string value2 = scan2->subject().getVariable().name();
+    if (!isSubjectNotObject) {
+      value1 = scan1->object().getVariable().name();
+      value2 = scan2->object().getVariable().name();
+    }
+    ASSERT_TRUE(value1 == varName1 || value1 == varName2);
+    ASSERT_TRUE(value2 == varName1 || value2 == varName2);
+    ASSERT_TRUE(value1 != value2);
+  };
 
-  std::shared_ptr<qlever::Operation> op1 =
+  std::shared_ptr<Operation> op1 =
       spatialJoin->getChildren().at(0)->getRootOperation();
-  qlever::IndexScan* scan1 = static_cast<qlever::IndexScan*>(op1.get());
+  IndexScan* scan1 = static_cast<IndexScan*>(op1.get());
 
-  std::shared_ptr<qlever::Operation> op2 =
+  std::shared_ptr<Operation> op2 =
       spatialJoin->getChildren().at(1)->getRootOperation();
-  qlever::IndexScan* scan2 = static_cast<qlever::IndexScan*>(op2.get());
+  IndexScan* scan2 = static_cast<IndexScan*>(op2.get());
 
   assertScanVariables(scan1, scan2, true, "?obj1", "?obj2");
   assertScanVariables(scan1, scan2, false, "?point1", "?point2");
@@ -235,13 +223,12 @@ namespace variableColumnMapAndResultWidth {
 using VarColTestSuiteParam = std::tuple<bool, bool, bool, bool>;
 
 // Internal testing shorthands
-using V = qlever::Variable;
-using VarToColVec = std::vector<std::pair<V, qlever::ColumnIndexAndTypeInfo>>;
+using V = Variable;
+using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 
 // Helper function to create a spatial join from VALUEs
-std::shared_ptr<qlever::SpatialJoin> makeSpatialJoinFromValues(
-    qlever::QueryExecutionContext* qec,
-    PayloadVariables pv = PayloadVariables::all(),
+std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
+    QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
     SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
   EncodedIriManager encodedIriManager;
   const auto sharedHandle =
@@ -256,27 +243,25 @@ std::shared_ptr<qlever::SpatialJoin> makeSpatialJoinFromValues(
       &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
-  qlever::QueryPlanner qp{qec, sharedHandle};
+  QueryPlanner qp{qec, sharedHandle};
 
-  auto leftChild = std::make_shared<qlever::QueryExecutionTree>(
-      qp.createExecutionTree(pqLeft));
-  auto rightChild = std::make_shared<qlever::QueryExecutionTree>(
-      qp.createExecutionTree(pqRight));
+  auto leftChild =
+      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqLeft));
+  auto rightChild =
+      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{0}, qlever::Variable{"?a"},
-                                   qlever::Variable{"?b"}, std::nullopt, pv,
-                                   alg, SpatialJoinType::INTERSECTS},
+          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?a"},
+                                   Variable{"?b"}, std::nullopt, pv, alg,
+                                   SpatialJoinType::INTERSECTS},
           std::nullopt, std::nullopt);
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
-  auto spJoin1 = spatialJoin->addChild(leftChild, qlever::Variable{"?a"});
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
-  auto spJoin2 = spatialJoin->addChild(rightChild, qlever::Variable{"?b"});
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto spJoin1 = spatialJoin->addChild(leftChild, Variable{"?a"});
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
+  auto spJoin2 = spatialJoin->addChild(rightChild, Variable{"?b"});
   return spJoin2;
 }
 
@@ -284,9 +269,9 @@ class SpatialJoinVarColParamTest
     : public ::testing::TestWithParam<VarColTestSuiteParam> {
  public:
   // Helper function to construct a child for testing
-  std::shared_ptr<qlever::QueryExecutionTree> getChild(
-      qlever::QueryExecutionContext* qec, bool getBigChild,
-      std::string numberOfChild) {
+  std::shared_ptr<QueryExecutionTree> getChild(QueryExecutionContext* qec,
+                                               bool getBigChild,
+                                               std::string numberOfChild) {
     std::string obj = absl::StrCat("?obj", numberOfChild);
     std::string name = absl::StrCat("?name", numberOfChild);
     std::string geo = absl::StrCat("?geo", numberOfChild);
@@ -319,8 +304,8 @@ class SpatialJoinVarColParamTest
     return expectedColumns;
   };
 
-  std::shared_ptr<qlever::SpatialJoin> makeSpatialJoin(
-      qlever::QueryExecutionContext* qec, VarColTestSuiteParam parameters,
+  std::shared_ptr<SpatialJoin> makeSpatialJoin(
+      QueryExecutionContext* qec, VarColTestSuiteParam parameters,
       bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
       SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM,
       SpatialJoinType joinType = SpatialJoinType::WITHIN_DIST) {
@@ -329,31 +314,27 @@ class SpatialJoinVarColParamTest
     auto leftChild = getChild(qec, leftSideBigChild, "1");
     auto rightChild = getChild(qec, rightSideBigChild, "2");
 
-    std::optional<qlever::Variable> dist = std::nullopt;
+    std::optional<Variable> dist = std::nullopt;
     if (addDist) {
-      dist = qlever::Variable{"?distOfTheTwoObjectsAddedInternally"};
+      dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
-    std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<qlever::SpatialJoin>(
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+        makeExecutionTree<SpatialJoin>(
             qec,
-            SpatialJoinConfiguration{
-                MaxDistanceConfig{0}, qlever::Variable{"?point1"},
-                qlever::Variable{"?point2"}, dist, pv, alg, joinType},
+            SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
+                                     Variable{"?point2"}, dist, pv, alg,
+                                     joinType},
             std::nullopt, std::nullopt);
-    std::shared_ptr<qlever::Operation> op =
-        spatialJoinOperation->getRootOperation();
-    qlever::SpatialJoin* spatialJoin =
-        static_cast<qlever::SpatialJoin*>(op.get());
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-    qlever::Variable firstVariable = addLeftChildFirst
-                                         ? qlever::Variable{"?point1"}
-                                         : qlever::Variable{"?point2"};
-    qlever::Variable secondVariable = addLeftChildFirst
-                                          ? qlever::Variable{"?point2"}
-                                          : qlever::Variable{"?point1"};
+    Variable firstVariable =
+        addLeftChildFirst ? Variable{"?point1"} : Variable{"?point2"};
+    Variable secondVariable =
+        addLeftChildFirst ? Variable{"?point2"} : Variable{"?point1"};
     auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-    spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+    spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
     auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
     return spJoin2;
   }
@@ -369,7 +350,7 @@ class SpatialJoinVarColParamTest
     auto qec = buildTestQEC();
     auto spJoin2 =
         makeSpatialJoin(qec, parameters, true, PayloadVariables::all(), alg);
-    auto spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+    auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
         (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3) + 1;
@@ -398,35 +379,33 @@ class SpatialJoinVarColParamTest
       ASSERT_EQ(varColMap.size(), expectedColumns.size());
 
       for (size_t i = 0; i < expectedColumns.size(); i++) {
-        ASSERT_TRUE(
-            varColMap.contains(qlever::Variable{expectedColumns.at(i).first}));
+        ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
 
         // test, that the column contains the correct values
-        qlever::ColumnIndex ind =
-            varColMap[qlever::Variable{expectedColumns.at(i).first}]
-                .columnIndex_;
+        ColumnIndex ind =
+            varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
         const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
-        qlever::ValueId tableEntry = r->at(0, ind);
+        ValueId tableEntry = r->at(0, ind);
 
-        if (tableEntry.getDatatype() == qlever::Datatype::VocabIndex) {
-          std::string value = qlever::exportIds::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+        if (tableEntry.getDatatype() == Datatype::VocabIndex) {
+          std::string value =
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
-        } else if (tableEntry.getDatatype() == qlever::Datatype::Int) {
-          std::string value = qlever::exportIds::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+        } else if (tableEntry.getDatatype() == Datatype::Int) {
+          std::string value =
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
-        } else if (tableEntry.getDatatype() == qlever::Datatype::GeoPoint) {
-          auto [value, type] = qlever::exportIds::idToStringAndType(
-                                   qec->getIndex(), tableEntry, {})
-                                   .value();
+        } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
+          auto [value, type] =
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
@@ -445,7 +424,7 @@ class SpatialJoinVarColParamTest
     auto spJoin2 = makeSpatialJoin(
         qec, parameters, false, PayloadVariables::all(),
         SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::CONTAINS);
-    auto spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+    auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
         (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
@@ -472,13 +451,11 @@ class SpatialJoinVarColParamTest
       ASSERT_EQ(varColMap.size(), expectedColumns.size());
 
       for (size_t i = 0; i < expectedColumns.size(); i++) {
-        ASSERT_TRUE(
-            varColMap.contains(qlever::Variable{expectedColumns.at(i).first}));
+        ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
 
         // test, that the column contains the correct values
-        qlever::ColumnIndex ind =
-            varColMap[qlever::Variable{expectedColumns.at(i).first}]
-                .columnIndex_;
+        ColumnIndex ind =
+            varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
         const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
@@ -488,9 +465,9 @@ class SpatialJoinVarColParamTest
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
-              qlever::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+              exportIds::idToStringAndType(qec->getIndex(), valueId, {})
                   .value();
-          if (valueId.getDatatype() == qlever::Datatype::GeoPoint) {
+          if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
           }
           columnEntries.push_back(value);
@@ -517,11 +494,11 @@ class SpatialJoinVarColParamTest
 
     auto computeAndCompareVarToColMaps =
         [&](bool addDist, PayloadVariables pv,
-            qlever::VariableToColumnMap expectedVarToColMap,
+            VariableToColumnMap expectedVarToColMap,
             std::optional<std::string> matchWarning = std::nullopt) {
           auto qec = buildTestQEC();
           auto spJoin2 = makeSpatialJoin(qec, parameters, addDist, pv);
-          auto spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+          auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
           auto vc = spatialJoin->computeVariableToColumnMap();
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
@@ -542,9 +519,9 @@ class SpatialJoinVarColParamTest
 
     auto makeExpected = [&](bool leftSideBigChild, bool rightSideBigChild,
                             bool addDist, bool withObj, bool withName,
-                            bool withGeo) -> qlever::VariableToColumnMap {
+                            bool withGeo) -> VariableToColumnMap {
       size_t currentColumn = 0;
-      qlever::VariableToColumnMap expected;
+      VariableToColumnMap expected;
 
       auto addV = [&](std::vector<V> vec, bool right = false) {
         for (auto v : vec) {
@@ -553,9 +530,9 @@ class SpatialJoinVarColParamTest
             continue;
           }
           V expectedVar{absl::StrCat(v.name(), right ? "2" : "1")};
-          expected[expectedVar] = qlever::ColumnIndexAndTypeInfo{
+          expected[expectedVar] = ColumnIndexAndTypeInfo{
               currentColumn,
-              qlever::ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
+              ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
           currentColumn++;
         }
       };
@@ -565,9 +542,9 @@ class SpatialJoinVarColParamTest
       addV(rightSideBigChild ? bigChild : smallChild, true);
       addV({V{"?point"}}, true);
       if (addDist) {
-        expected[distVar] = qlever::ColumnIndexAndTypeInfo{
+        expected[distVar] = ColumnIndexAndTypeInfo{
             currentColumn,
-            qlever::ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
+            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
       }
       return expected;
     };
@@ -577,15 +554,15 @@ class SpatialJoinVarColParamTest
       for (bool withGeo : bools) {
         for (bool withName : bools) {
           for (bool addDist : bools) {
-            std::vector<qlever::Variable> payloadVars;
+            std::vector<Variable> payloadVars;
             if (withObj) {
-              payloadVars.push_back(qlever::Variable{"?obj2"});
+              payloadVars.push_back(Variable{"?obj2"});
             }
             if (withGeo) {
-              payloadVars.push_back(qlever::Variable{"?geo2"});
+              payloadVars.push_back(Variable{"?geo2"});
             }
             if (withName && rightSideBigChild) {
-              payloadVars.push_back(qlever::Variable{"?name2"});
+              payloadVars.push_back(Variable{"?name2"});
             }
 
             // Test the regular and valid payloadVars
@@ -601,33 +578,33 @@ class SpatialJoinVarColParamTest
 
             // Test multiple occurrences of variables
             if (withObj) {
-              payloadVars.push_back(qlever::Variable{"?obj2"});
+              payloadVars.push_back(Variable{"?obj2"});
               // Variable ?obj2 is now contained twice
               computeAndCompareVarToColMaps(addDist, payloadVars, exp);
               payloadVars.pop_back();
             }
 
             // Test contained right variable in payloadVars
-            payloadVars.push_back(qlever::Variable{"?point2"});
+            payloadVars.push_back(Variable{"?point2"});
             computeAndCompareVarToColMaps(addDist, payloadVars, exp);
             payloadVars.pop_back();
 
             // Test warnings for unbound variables
-            payloadVars.push_back(qlever::Variable{"?point1"});
+            payloadVars.push_back(Variable{"?point1"});
             computeAndCompareVarToColMaps(
                 addDist, payloadVars, exp,
                 "Variable '?point1' selected as payload to "
                 "spatial join but not present in right child");
             payloadVars.pop_back();
 
-            payloadVars.push_back(qlever::Variable{"?obj1"});
+            payloadVars.push_back(Variable{"?obj1"});
             computeAndCompareVarToColMaps(
                 addDist, payloadVars, exp,
                 "Variable '?obj1' selected as payload to "
                 "spatial join but not present in right child");
             payloadVars.pop_back();
 
-            payloadVars.push_back(qlever::Variable{"?isThereSomebodyHere"});
+            payloadVars.push_back(Variable{"?isThereSomebodyHere"});
             computeAndCompareVarToColMaps(
                 addDist, payloadVars, exp,
                 "Variable '?isThereSomebodyHere' selected as payload to "
@@ -675,7 +652,7 @@ TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
 
   auto spJoin2 = makeSpatialJoinFromValues(
       qec, PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN);
-  auto spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto resultTable = spatialJoin->computeResult(false);
   ASSERT_EQ(resultTable.idTableView().numRows(), 1);
@@ -704,12 +681,11 @@ class SpatialJoinKnownEmptyTest
  public:
   void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
                             bool addLeftChildFirst) {
-    auto checkEmptyResult = [](qlever::SpatialJoin* spatialJoin_,
-                               bool shouldBeEmpty) {
+    auto checkEmptyResult = [](SpatialJoin* spatialJoin_, bool shouldBeEmpty) {
       ASSERT_EQ(spatialJoin_->knownEmptyResult(), shouldBeEmpty);
     };
 
-    auto getChild = [](qlever::QueryExecutionContext* qec, bool emptyChild) {
+    auto getChild = [](QueryExecutionContext* qec, bool emptyChild) {
       std::string predicate =
           emptyChild ? "<notExistingPred>" : "<hasGeometry>";
       return buildSmallChild(qec, {"?obj1", predicate, "?geo1"},
@@ -724,25 +700,20 @@ class SpatialJoinKnownEmptyTest
     auto leftChild = getChild(qec, leftSideEmptyChild);
     auto rightChild = getChild(qec, rightSideEmptyChild);
 
-    std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<qlever::SpatialJoin>(
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+        makeExecutionTree<SpatialJoin>(
             qec,
-            SpatialJoinConfiguration{MaxDistanceConfig{0},
-                                     qlever::Variable{"?point1"},
-                                     qlever::Variable{"?point2"}},
+            SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
+                                     Variable{"?point2"}},
             std::nullopt, std::nullopt);
-    std::shared_ptr<qlever::Operation> op =
-        spatialJoinOperation->getRootOperation();
-    qlever::SpatialJoin* spatialJoin =
-        static_cast<qlever::SpatialJoin*>(op.get());
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-    qlever::Variable firstVariable = addLeftChildFirst
-                                         ? qlever::Variable{"?point1"}
-                                         : qlever::Variable{"?point2"};
-    qlever::Variable secondVariable = addLeftChildFirst
-                                          ? qlever::Variable{"?point2"}
-                                          : qlever::Variable{"?point1"};
+    Variable firstVariable =
+        addLeftChildFirst ? Variable{"?point1"} : Variable{"?point2"};
+    Variable secondVariable =
+        addLeftChildFirst ? Variable{"?point2"} : Variable{"?point1"};
     bool firstChildEmpty =
         addLeftChildFirst ? leftSideEmptyChild : rightSideEmptyChild;
     bool secondChildEmpty =
@@ -751,11 +722,11 @@ class SpatialJoinKnownEmptyTest
     checkEmptyResult(spatialJoin, false);
 
     auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-    spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+    spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
     checkEmptyResult(spatialJoin, firstChildEmpty);
 
     auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-    spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+    spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
     checkEmptyResult(spatialJoin, (firstChildEmpty || secondChildEmpty));
   }
 };
@@ -783,31 +754,28 @@ TEST(SpatialJoin, resultSortedOn) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
-  qlever::TripleComponent obj1{qlever::Variable{"?point1"}};
-  qlever::TripleComponent obj2{qlever::Variable{"?point2"}};
+  TripleComponent obj1{Variable{"?point1"}};
+  TripleComponent obj2{Variable{"?point2"}};
   auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
   auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{10000000},
-                                   qlever::Variable{"?point1"},
-                                   qlever::Variable{"?point2"}},
+                                   Variable{"?point1"}, Variable{"?point2"}},
           std::nullopt, std::nullopt);
 
   // add children and test, that multiplicity is a dummy return before all
   // children are added
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
   auto spJoin1 = spatialJoin->addChild(leftChild, obj1.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
   auto spJoin2 = spatialJoin->addChild(rightChild, obj2.getVariable());
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
 }
 
@@ -817,19 +785,17 @@ namespace stringRepresentation {
 
 TEST(SpatialJoin, getDescriptor) {
   auto qec = getQec();
-  qlever::TripleComponent subject{qlever::Variable{"?subject"}};
-  qlever::TripleComponent object{qlever::Variable{"?object"}};
+  TripleComponent subject{Variable{"?subject"}};
+  TripleComponent object{Variable{"?object"}};
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    subject.getVariable(), object.getVariable()},
           std::nullopt, std::nullopt);
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   auto description = spatialJoin->getDescriptor();
   ASSERT_THAT(description, ::testing::HasSubstr(absl::StrCat(
@@ -842,12 +808,12 @@ TEST(SpatialJoin, getDescriptor) {
 TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
   // The `SpatialJoin`'s descriptor should contain a readable representation of
   // the join type
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           getQec(),
           SpatialJoinConfiguration{
               LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
-              qlever::Variable{"?subject"}, qlever::Variable{"?object"}},
+              Variable{"?subject"}, Variable{"?object"}},
           std::nullopt, std::nullopt);
   auto description = spatialJoinOperation->getRootOperation()->getDescriptor();
   ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
@@ -861,31 +827,29 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  qlever::Variable subj{"?point1"};
-  qlever::Variable obj{"?point2"};
+  Variable subj{"?point1"};
+  Variable obj{"?point2"};
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec, SpatialJoinConfiguration{MaxDistanceConfig{1000}, subj, obj},
           std::nullopt, std::nullopt);
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
   auto spJoin1 = spatialJoin->addChild(leftChild, subj);
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
   auto spJoin2 = spatialJoin->addChild(rightChild, obj);
-  spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto cacheKeyString = spatialJoin->getCacheKeyImpl();
   auto leftCacheKeyString =
@@ -911,11 +875,10 @@ TEST(SpatialJoin, clone) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   {
-    qlever::SpatialJoin spatialJoin{
+    SpatialJoin spatialJoin{
         qec,
-        SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                 qlever::Variable{"?point1"},
-                                 qlever::Variable{"?point2"}},
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
         std::nullopt, std::nullopt};
 
     auto clone = spatialJoin.clone();
@@ -929,11 +892,10 @@ TEST(SpatialJoin, clone) {
   }
 
   {
-    qlever::SpatialJoin spatialJoin{
+    SpatialJoin spatialJoin{
         qec,
-        SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                 qlever::Variable{"?point1"},
-                                 qlever::Variable{"?point2"}},
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
         leftChild, std::nullopt};
 
     auto clone = spatialJoin.clone();
@@ -947,11 +909,10 @@ TEST(SpatialJoin, clone) {
   }
 
   {
-    qlever::SpatialJoin spatialJoin{
+    SpatialJoin spatialJoin{
         qec,
-        SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                 qlever::Variable{"?point1"},
-                                 qlever::Variable{"?point2"}},
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
         std::nullopt, rightChild};
 
     auto clone = spatialJoin.clone();
@@ -965,11 +926,10 @@ TEST(SpatialJoin, clone) {
   }
 
   {
-    qlever::SpatialJoin spatialJoin{
+    SpatialJoin spatialJoin{
         qec,
-        SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                 qlever::Variable{"?point1"},
-                                 qlever::Variable{"?point2"}},
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
         leftChild, rightChild};
 
     auto clone = spatialJoin.clone();
@@ -999,12 +959,11 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
  public:
   void testMultiplicitiesOrSizeEstimate(
       bool addLeftChildFirst, MultiplicityOrSizeEst testMultiplicities) {
-    auto multiplicitiesBeforeAllChildrenAdded =
-        [&](qlever::SpatialJoin* spatialJoin) {
-          for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
-            ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
-          }
-        };
+    auto multiplicitiesBeforeAllChildrenAdded = [&](SpatialJoin* spatialJoin) {
+      for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
+        ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
+      }
+    };
 
     const double doubleBound = 0.00001;
     std::string kg = createSmallDataset();
@@ -1018,8 +977,8 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     const unsigned int nrTriplesInput = 17;
     ASSERT_EQ(numTriples, nrTriplesInput);
 
-    qlever::Variable subj{"?point1"};
-    qlever::Variable obj{"?point2"};
+    Variable subj{"?point1"};
+    Variable obj{"?point2"};
 
     // ===================== build the first child
     // ===============================
@@ -1045,22 +1004,20 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
         {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
     // result table of rightChild is identical to leftChild, see above
 
-    std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<qlever::SpatialJoin>(
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
             std::nullopt, std::nullopt);
 
     // add children and test, that multiplicity is a dummy return before all
     // children are added
-    std::shared_ptr<qlever::Operation> op =
-        spatialJoinOperation->getRootOperation();
-    qlever::SpatialJoin* spatialJoin =
-        static_cast<qlever::SpatialJoin*>(op.get());
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-    qlever::Variable firstVariable = addLeftChildFirst ? subj : obj;
-    qlever::Variable secondVariable = addLeftChildFirst ? obj : subj;
+    Variable firstVariable = addLeftChildFirst ? subj : obj;
+    Variable secondVariable = addLeftChildFirst ? obj : subj;
 
     if (testMultiplicities == MultiplicityOrSizeEst::Multiplicity) {
       // expected behavior:
@@ -1070,17 +1027,17 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
 
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-      spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+      spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-      spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+      spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
       auto varColsVec = copySortedByColumnIndex(varColsMap);
       auto leftVarColMap = leftChild->getVariableColumns();
       auto rightVarColMap = rightChild->getVariableColumns();
       for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
         // get variable at column 0 of the result table
-        qlever::Variable var = varColsVec.at(i).first;
+        Variable var = varColsVec.at(i).first;
         auto varChildLeft = leftVarColMap.find(var);
         auto varChildRight = rightVarColMap.find(var);
         auto inputChild = leftChild;
@@ -1095,7 +1052,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
           // a few decimal places), no multiplicities are assumed
           ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
         } else {
-          qlever::ColumnIndex colIndex;
+          ColumnIndex colIndex;
           if (inputChild == leftChild) {
             colIndex = varChildLeft->second.columnIndex_;
           } else {
@@ -1120,10 +1077,10 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       // test getSizeEstimate
       ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-      spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+      spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
       ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-      spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+      spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       ASSERT_NE(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
       ASSERT_NE(spatialJoin->onlyForTestingGetRightChild(), nullptr);
       // the size should be at most 49, because both input tables have 7 rows
@@ -1151,35 +1108,33 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       const unsigned int nrTriplesInput = 17;
       ASSERT_EQ(numTriples, nrTriplesInput);
 
-      qlever::Variable subj{"?point1"};
-      qlever::Variable obj{"?point2"};
+      Variable subj{"?point1"};
+      Variable obj{"?point2"};
 
-      qlever::TripleComponent subj1{qlever::Variable{"?geometry1"}};
-      qlever::TripleComponent obj1{qlever::Variable{"?point1"}};
-      qlever::TripleComponent subj2{qlever::Variable{"?geometry2"}};
-      qlever::TripleComponent obj2{qlever::Variable{"?point2"}};
+      TripleComponent subj1{Variable{"?geometry1"}};
+      TripleComponent obj1{Variable{"?point1"}};
+      TripleComponent subj2{Variable{"?geometry2"}};
+      TripleComponent obj2{Variable{"?point2"}};
       auto leftChild =
           buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
       auto rightChild =
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
-      std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-          qlever::makeExecutionTree<qlever::SpatialJoin>(
+      std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+          makeExecutionTree<SpatialJoin>(
               qec,
               SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
-                                       qlever::Variable{"?distanceForTesting"}},
+                                       Variable{"?distanceForTesting"}},
               std::nullopt, std::nullopt);
 
       // add children and test, that multiplicity is a dummy return before all
       // children are added
-      std::shared_ptr<qlever::Operation> op =
-          spatialJoinOperation->getRootOperation();
-      qlever::SpatialJoin* spatialJoin =
-          static_cast<qlever::SpatialJoin*>(op.get());
+      std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+      SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
       auto firstChild = addLeftChildFirst ? leftChild : rightChild;
       auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-      qlever::Variable firstVariable = addLeftChildFirst ? subj : obj;
-      qlever::Variable secondVariable = addLeftChildFirst ? obj : subj;
+      Variable firstVariable = addLeftChildFirst ? subj : obj;
+      Variable secondVariable = addLeftChildFirst ? obj : subj;
 
       // each of the input child result tables should look like this:
       // ?geometry           ?point
@@ -1193,19 +1148,19 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       // multiplicity of ?geometry: 1,4   multiplicity of ?point: 1   size: 7
 
       if (testMultiplicities == MultiplicityOrSizeEst::Multiplicity) {
-        auto assertMultiplicity = [&](qlever::Variable var, double multiplicity,
-                                      qlever::SpatialJoin* spatialJoin,
-                                      qlever::VariableToColumnMap& varColsMap) {
+        auto assertMultiplicity = [&](Variable var, double multiplicity,
+                                      SpatialJoin* spatialJoin,
+                                      VariableToColumnMap& varColsMap) {
           ASSERT_NEAR(
               spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
               multiplicity, doubleBound);
         };
         multiplicitiesBeforeAllChildrenAdded(spatialJoin);
         auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-        spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+        spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
         multiplicitiesBeforeAllChildrenAdded(spatialJoin);
         auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-        spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+        spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
         auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
 
         assertMultiplicity(subj1.getVariable(), 4.2, spatialJoin, varColsMap);
@@ -1214,15 +1169,15 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
         assertMultiplicity(obj2.getVariable(), 3.0, spatialJoin, varColsMap);
         ASSERT_TRUE(
             spatialJoin->onlyForTestingGetDistanceVariable().has_value());
-        assertMultiplicity(qlever::Variable{"?distanceForTesting"}, 1,
-                           spatialJoin, varColsMap);
+        assertMultiplicity(Variable{"?distanceForTesting"}, 1, spatialJoin,
+                           varColsMap);
       } else {
         auto leftEstimate = leftChild->getSizeEstimate();
         auto rightEstimate = rightChild->getSizeEstimate();
         auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-        spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin1.get());
+        spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
         auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-        spatialJoin = static_cast<qlever::SpatialJoin*>(spJoin2.get());
+        spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
         ASSERT_LE(spatialJoin->getSizeEstimate(), leftEstimate * rightEstimate);
       }
     }

@@ -9,8 +9,6 @@
 
 namespace qlever {
 
-using namespace qlever;
-
 // _____________________________________________________________________________
 void DocsDB::init(const std::string& fileName) {
   _dbFile.open(fileName.c_str(), "r");

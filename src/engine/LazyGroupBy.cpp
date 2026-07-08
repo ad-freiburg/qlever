@@ -5,7 +5,7 @@
 #include "engine/LazyGroupBy.h"
 
 using namespace qlever;
-using qlever::groupBy::detail::VectorOfAggregationData;
+using groupBy::detail::VectorOfAggregationData;
 
 // _____________________________________________________________________________
 LazyGroupBy::LazyGroupBy(

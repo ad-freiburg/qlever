@@ -315,7 +315,7 @@ TEST_F(ValueIdTest, Hashing) {
     ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
   }
   {
-    using namespace qlever::triple_component;
+    using namespace triple_component;
     using namespace ad_utility::testing;
     const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
@@ -415,7 +415,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
 
   // Create a LocalVocabEntry with the same IRI
-  auto iri = qlever::triple_component::Iri::fromIriref(encodableIri);
+  auto iri = triple_component::Iri::fromIriref(encodableIri);
   LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
@@ -430,7 +430,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
       << "Failed to encode IRI: " << encodableIri2;
 
   auto encodedId2 = *encodedIdOpt2;
-  auto iri2 = qlever::triple_component::Iri::fromIriref(encodableIri2);
+  auto iri2 = triple_component::Iri::fromIriref(encodableIri2);
   LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 

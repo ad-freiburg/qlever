@@ -91,7 +91,7 @@ auto generateRandomLocalVocabAndIndicesVec =
         for (size_t j = 0; j < m; j++) {
           str += alphanum.at(gen());
         }
-        using namespace qlever::triple_component;
+        using namespace triple_component;
         indices.push_back(localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::literalWithoutQuotes(str, context)));
       }
@@ -424,7 +424,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     if (sorted) {
       sortedColumns = {0};
     }
-    auto valueTree = qlever::makeExecutionTree<ValuesForTesting>(
+    auto valueTree = makeExecutionTree<ValuesForTesting>(
         qec, std::move(table), variables, false, sortedColumns,
         std::move(localVocab));
 

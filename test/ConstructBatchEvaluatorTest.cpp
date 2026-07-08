@@ -16,7 +16,7 @@ using namespace qlever;
 
 namespace {
 
-using namespace qlever::constructExport;
+using namespace constructExport;
 using ::testing::Each;
 using ::testing::ElementsAre;
 using ::testing::Eq;

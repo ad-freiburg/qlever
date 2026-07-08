@@ -47,7 +47,7 @@
 using namespace qlever;
 
 using namespace std::string_literals;
-using namespace qlever::url_parser::sparqlOperation;
+using namespace url_parser::sparqlOperation;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -55,7 +55,7 @@ using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
-               const qlever::EngineConfig& config, bool noAccessCheck)
+               const EngineConfig& config, bool noAccessCheck)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -262,7 +262,7 @@ auto Server::prepareOperation(
     SharedIndexAndView indexAndViews, std::string_view operationName,
     std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
-    const qlever::url_parser::ParamValueMap& params, TimeLimit timeLimit,
+    const url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -271,9 +271,9 @@ auto Server::prepareOperation(
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   std::optional<std::string> pinResultWithName =
-      qlever::url_parser::checkParameter(params, "pin-result-with-name", {});
+      url_parser::checkParameter(params, "pin-result-with-name", {});
   std::optional<std::string> pinNamedGeoIndex =
-      qlever::url_parser::checkParameter(params, "pin-geo-index-on-var", {});
+      url_parser::checkParameter(params, "pin-geo-index-on-var", {});
   AD_LOG_INFO
       << "Processing the following " << operationName
       << (clientIp.empty() ? std::string{} : absl::StrCat(" from ", clientIp))
@@ -360,8 +360,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter = absl::bind_front(&qlever::url_parser::checkParameter,
-                                         std::cref(parameters));
+  auto checkParameter =
+      absl::bind_front(&url_parser::checkParameter, std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
@@ -501,8 +501,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "write materialized view");
 
     // Extract name parameter for materialized view.
-    auto name = qlever::url_parser::getParameterCheckAtMostOnce(parameters,
-                                                                "view-name");
+    auto name =
+        url_parser::getParameterCheckAtMostOnce(parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value(),
                       "Writing a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
@@ -554,8 +554,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "explicitly load materialized view");
 
     // Extract materialized view name parameter.
-    auto name = qlever::url_parser::getParameterCheckAtMostOnce(parameters,
-                                                                "view-name");
+    auto name =
+        url_parser::getParameterCheckAtMostOnce(parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
     indexAndViews->materializedViewsManager_.loadView(name.value());
@@ -753,13 +753,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
-    const qlever::url_parser::ParamValueMap& params) {
+    const url_parser::ParamValueMap& params) {
   const bool pinSubresults =
-      qlever::url_parser::checkParameter(params, "pin-subresults", "true")
-          .has_value();
+      url_parser::checkParameter(params, "pin-subresults", "true").has_value();
   const bool pinResult =
-      qlever::url_parser::checkParameter(params, "pin-result", "true")
-          .has_value();
+      url_parser::checkParameter(params, "pin-result", "true").has_value();
   return {pinSubresults, pinResult};
 }
 
@@ -813,8 +811,7 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
   json result;
   result["name-index"] = index.getKbName();
   result["git-hash-index"] = index.getGitShortHash();
-  result["git-hash-server"] =
-      *qlever::version::gitShortHashWithoutLinking.wlock();
+  result["git-hash-server"] = *version::gitShortHashWithoutLinking.wlock();
   result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
@@ -921,9 +918,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     std::vector<ad_utility::MediaType> Server::determineMediaTypes(
-        const qlever::url_parser::ParamValueMap& params,
-        const RequestT& request) {
-  using namespace qlever::url_parser;
+        const url_parser::ParamValueMap& params, const RequestT& request) {
+  using namespace url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -1012,7 +1008,7 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
-        const qlever::url_parser::ParamValueMap& params, ParsedQuery&& query,
+        const url_parser::ParamValueMap& params, ParsedQuery&& query,
         const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -1275,10 +1271,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
-        qlever::url_parser::sparqlOperation::Operation operation,
-        VisitorT visitor, const ad_utility::Timer& requestTimer,
-        const RequestT& request, ResponseT& send,
-        const std::optional<PlannedQuery>& plannedQuery) {
+        url_parser::sparqlOperation::Operation operation, VisitorT visitor,
+        const ad_utility::Timer& requestTimer, const RequestT& request,
+        ResponseT& send, const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1430,7 +1425,7 @@ bool Server::checkAccessToken(
 // _____________________________________________________________________________
 void Server::adjustParsedQueryLimitOffset(
     PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-    const qlever::url_parser::ParamValueMap& parameters) {
+    const url_parser::ParamValueMap& parameters) {
   // Read the export limit from the `send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
   //
@@ -1440,7 +1435,7 @@ void Server::adjustParsedQueryLimitOffset(
   auto& limitOffset = plannedQuery.parsedQuery()._limitOffset;
   auto& exportLimit = limitOffset.exportLimit_;
   auto sendParameter =
-      qlever::url_parser::getParameterCheckAtMostOnce(parameters, "send");
+      url_parser::getParameterCheckAtMostOnce(parameters, "send");
   bool considerSendParameter =
       mediaType == MediaType::qleverJson ||
       (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&
@@ -1482,13 +1477,13 @@ void Server::writeMaterializedView(
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   auto indexAndViews = indexAndViewsSnapshot();
   auto& index = indexAndViews->index_;
-  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
+  if (util::doesDirectoryContainFileWithBasename(indexBaseName)) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because there are already files with the same base name "
         "in the same directory")};
   }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, index.getOnDiskBase())) {
+  if (!util::isSubdirectoryOf(indexBaseName, index.getOnDiskBase())) {
     throw std::runtime_error{absl::StrCat(
         "Can't build index with base name \"", indexBaseName,
         "\" because it is not located in the same directory as the "
@@ -1505,9 +1500,8 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
             index.deltaTriplesManager()
                 .getCurrentLocatedTriplesSharedStateWithVocab();
-        qlever::materializeToIndex(index.getImpl(), indexBaseName,
-                                   currentSnapshot, localVocabCopy, ownedBlocks,
-                                   handle, logFileName);
+        materializeToIndex(index.getImpl(), indexBaseName, currentSnapshot,
+                           localVocabCopy, ownedBlocks, handle, logFileName);
       },
       handle);
   co_await std::move(coroutine);

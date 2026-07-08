@@ -14,6 +14,7 @@
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility::use_type_identity;
+using namespace qlever;
 using namespace qlever::url_parser;
 using namespace qlever::url_parser::sparqlOperation;
 using namespace ad_utility::testing;

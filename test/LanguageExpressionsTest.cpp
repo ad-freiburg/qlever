@@ -20,7 +20,7 @@ using ad_utility::source_location;
 using ad_utility::testing::DateId;
 using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
-using qlever::triple_component::LiteralOrIri;
+using triple_component::LiteralOrIri;
 using strOpt = std::optional<std::string>;
 using LanguageTagGetter = sparqlExpression::detail::LanguageTagValueGetter;
 

@@ -30,7 +30,7 @@ using valueIdComparators::Comparison;
 namespace {
 
 auto lit = [](std::string_view s) {
-  return qlever::triple_component::LiteralOrIri(tripleComponentLiteral(s));
+  return triple_component::LiteralOrIri(tripleComponentLiteral(s));
 };
 
 // Convenient access to constants for "infinity" and "not a number". The

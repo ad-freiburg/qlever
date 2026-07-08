@@ -135,7 +135,7 @@ std::optional<std::string> StringValueGetter::operator()(
     }
   }
   // `true` means that we remove the quotes and angle brackets.
-  auto optionalStringAndType = qlever::exportIds::idToStringAndType<true>(
+  auto optionalStringAndType = exportIds::idToStringAndType<true>(
       context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
@@ -145,33 +145,33 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<qlever::triple_component::Literal>
+std::optional<triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return qlever::exportIds::idToLiteral(context->_qec.getIndex(), id,
-                                        context->_localVocab);
+  return exportIds::idToLiteral(context->_qec.getIndex(), id,
+                                context->_localVocab);
 }
 
 // ____________________________________________________________________________
-std::optional<qlever::triple_component::Literal>
+std::optional<triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
                                               const EvaluationContext*) const {
-  return qlever::exportIds::handleIriOrLiteral(s, false);
+  return exportIds::handleIriOrLiteral(s, false);
 }
 
 // ____________________________________________________________________________
-std::optional<qlever::triple_component::Literal>
+std::optional<triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return qlever::exportIds::idToLiteral(context->_qec.getIndex(), id,
-                                        context->_localVocab, true);
+  return exportIds::idToLiteral(context->_qec.getIndex(), id,
+                                context->_localVocab, true);
 }
 
 // ____________________________________________________________________________
-std::optional<qlever::triple_component::Literal>
+std::optional<triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  return qlever::exportIds::handleIriOrLiteral(s, true);
+  return exportIds::handleIriOrLiteral(s, true);
 }
 
 // ____________________________________________________________________________
@@ -234,8 +234,8 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
                                           context->_qec.getIndex().getVocab(),
                                           id.getVocabIndex()));
     case Datatype::LocalVocabIndex: {
-      auto word = qlever::exportIds::idToStringAndType<false>(
-          context->_qec.getIndex(), id, context->_localVocab);
+      auto word = exportIds::idToStringAndType<false>(context->_qec.getIndex(),
+                                                      id, context->_localVocab);
       return Id::makeFromBool(word.has_value() &&
                               ql::starts_with(word.value().first, prefix));
     }
@@ -266,7 +266,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 // _____________________________________________________________________________
 std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  auto optionalStringAndType = qlever::exportIds::idToStringAndType<true, true>(
+  auto optionalStringAndType = exportIds::idToStringAndType<true, true>(
       context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
@@ -345,7 +345,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(qlever::exportIds::getLiteralOrIriFromVocabIndex(
+      return (*this)(exportIds::getLiteralOrIriFromVocabIndex(
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
     case Undefined:
@@ -394,8 +394,8 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
   return cache_.getOrCompute(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
         // Get string content of ValueId
-        auto str = qlever::exportIds::idToLiteralOrIri(
-            context->_qec.getIndex(), value, context->_localVocab, true);
+        auto str = exportIds::idToLiteralOrIri(context->_qec.getIndex(), value,
+                                               context->_localVocab, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
           return UnitOfMeasurementValueGetter{}(str.value(), context);
@@ -426,7 +426,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 }
 
 //______________________________________________________________________________
-std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+std::optional<GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
@@ -434,7 +434,7 @@ std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
       return id.getGeoPoint();
     case VocabIndex:
     case LocalVocabIndex: {
-      auto lit = qlever::exportIds::getLiteralOrIriFromVocabIndex(
+      auto lit = exportIds::getLiteralOrIriFromVocabIndex(
           context->_qec.getIndex(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
@@ -454,7 +454,7 @@ std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+std::optional<GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
@@ -475,8 +475,8 @@ CPP_template(typename T, typename ValueGetter)(
     case EncodedVal:
     case VocabIndex:
       return valueGetter(
-          qlever::exportIds::getLiteralOrIriFromVocabIndex(
-              context->_qec.getIndex(), id, context->_localVocab),
+          exportIds::getLiteralOrIriFromVocabIndex(context->_qec.getIndex(), id,
+                                                   context->_localVocab),
           context);
     case TextRecordIndex:
     case WordVocabIndex:
@@ -539,7 +539,7 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-[[noreturn]] std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+[[noreturn]] std::optional<util::ParsedUri> ParsedUriGetter::operator()(
     ValueId, const EvaluationContext*) const {
   // The base IRI argument of `IriOrUriExpression` is always an `IriExpression`
   // which evaluates to a `LocalVocabEntry`, never a `ValueId`. This overload
@@ -548,20 +548,20 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+std::optional<util::ParsedUri> ParsedUriGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
   AD_CORRECTNESS_CHECK(litOrIri.isIri());
   const auto& iri = litOrIri.getIri();
   if (iri.empty()) {
     return std::nullopt;
   }
-  return qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+  return util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires qlever::RequestedInfoT<RequestedInfo>)
-    std::optional<qlever::GeometryInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+    requires RequestedInfoT<RequestedInfo>)
+    std::optional<GeometryInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::getPrecomputedGeometryInfo(ValueId id,
                                                     const EvaluationContext*
                                                         context) {
@@ -576,7 +576,7 @@ CPP_template_out_def(typename RequestedInfo)(
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires qlever::RequestedInfoT<RequestedInfo>)
+    requires RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
                                     const EvaluationContext * context) const {
@@ -591,13 +591,13 @@ CPP_template_out_def(typename RequestedInfo)(
       } else {
         // No precomputed geometry info available: we have to fetch and parse
         // the string.
-        auto lit = qlever::exportIds::getLiteralOrIriFromVocabIndex(
+        auto lit = exportIds::getLiteralOrIriFromVocabIndex(
             context->_qec.getIndex(), id, context->_localVocab);
         return GeometryInfoValueGetter{}(lit, context);
       }
     }
     case GeoPoint:
-      return qlever::GeometryInfo::fromGeoPoint(id.getGeoPoint())
+      return GeometryInfo::fromGeoPoint(id.getGeoPoint())
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
@@ -614,7 +614,7 @@ CPP_template_out_def(typename RequestedInfo)(
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires qlever::RequestedInfoT<RequestedInfo>)
+    requires RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(const LiteralOrIri & litOrIri,
                                     [[maybe_unused]] const EvaluationContext *
@@ -624,7 +624,7 @@ CPP_template_out_def(typename RequestedInfo)(
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
     auto wktLiteral = litOrIri.getLiteral().toStringRepresentation();
-    return qlever::GeometryInfo::getRequestedInfo<RequestedInfo>(wktLiteral);
+    return GeometryInfo::getRequestedInfo<RequestedInfo>(wktLiteral);
   }
   return std::nullopt;
 };

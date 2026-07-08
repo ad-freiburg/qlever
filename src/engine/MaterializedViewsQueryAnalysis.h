@@ -18,28 +18,28 @@
 #include "rdfTypes/Variable.h"
 #include "util/StringPairHashMap.h"
 
-// Forward declarations to prevent cyclic dependencies.
 namespace qlever {
+
+// Forward declarations to prevent cyclic dependencies.
 class MaterializedView;
 class IndexScan;
-}  // namespace qlever
 
 // _____________________________________________________________________________
 namespace materializedViewsQueryAnalysis {
 
-using ViewPtr = std::shared_ptr<const qlever::MaterializedView>;
-using qlever::graphPatternAnalysis::BasicGraphPatternsInvariantTo;
+using ViewPtr = std::shared_ptr<const MaterializedView>;
+using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
 using VariableToTripleIndices =
-    ad_utility::HashMap<qlever::Variable, std::vector<size_t>>;
+    ad_utility::HashMap<Variable, std::vector<size_t>>;
 
 // Key and value types of the cache for simple chains, that is queries of the
 // form `?s <p1> ?m . ?m <p2> ?o`.
 using ChainedPredicates = ad_utility::detail::StringPair;
 using ChainedPredicatesForLookup = ad_utility::detail::StringViewPair;
 struct ChainInfo {
-  qlever::Variable subject_;
-  qlever::Variable chain_;
-  qlever::Variable object_;
+  Variable subject_;
+  Variable chain_;
+  Variable object_;
   ViewPtr view_;
 };
 using SimpleChainCache =
@@ -50,16 +50,16 @@ using SimpleChainCache =
 // The `StarInfo` holds the subject variable shared between all arms of the star
 // and the `StarArm` for each of them. The `StarArm` stores the predicate IRI
 // and object variable.
-using StarArm = std::pair<std::string, qlever::Variable>;
+using StarArm = std::pair<std::string, Variable>;
 struct StarInfo {
-  qlever::Variable subject_;
+  Variable subject_;
   std::vector<StarArm> arms_;
 };
 
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
-  std::shared_ptr<qlever::IndexScan> indexScan_;
+  std::shared_ptr<IndexScan> indexScan_;
   std::vector<size_t> coveredTriples_;
 
   // ___________________________________________________________________________
@@ -97,32 +97,30 @@ class QueryPatternCache {
   // Given a set of triples, check if a subset of necessary join operations can
   // be replaced by scans on materialized views.
   std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
-      qlever::QueryExecutionContext* qec,
-      const qlever::parsedQuery::BasicGraphPattern& triples) const;
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
 
   // Construct an `IndexScan` for a single chain join given the necessary
   // information from both the materialized view and the user's query.
-  std::shared_ptr<qlever::IndexScan> makeScanForSingleChain(
-      qlever::QueryExecutionContext* qec, ChainInfo cached,
-      qlever::TripleComponent subject, std::optional<qlever::Variable> chain,
-      qlever::Variable object) const;
+  std::shared_ptr<IndexScan> makeScanForSingleChain(
+      QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
+      std::optional<Variable> chain, Variable object) const;
 
   // Construct an `IndexScan` for a star join given the `RequestedColumns`
   // object that maps the columns of the materialized view to the subject and
   // object variable names from the user query. This assumes that the `starView`
   // represents the appropriate star join.
-  std::shared_ptr<qlever::IndexScan> makeScanForStar(
-      qlever::QueryExecutionContext* qec, ViewPtr starView,
-      qlever::parsedQuery::MaterializedViewQuery::RequestedColumns columns)
-      const;
+  std::shared_ptr<IndexScan> makeScanForStar(
+      QueryExecutionContext* qec, ViewPtr starView,
+      parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
   // iff a simple chain `a->b` is present.
   // NOTE: This function only checks one direction, so it should also be called
   // with `a` and `b` switched if it returns `false`.
-  bool analyzeSimpleChain(ViewPtr view, const qlever::SparqlTriple& a,
-                          const qlever::SparqlTriple& b);
+  bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
+                          const SparqlTriple& b);
 
   // Helper for `analyzeView`, that checks for a join star of arbitrary size.
   // A star requires all triples to share the same subject variable with
@@ -136,15 +134,13 @@ class QueryPatternCache {
   // Using `triples`, the function checks if the view represents a join star. If
   // yes, it adds the `view` to the cache for join stars. The function returns
   // `true` iff the view contains a star.
-  bool analyzeJoinStar(ViewPtr view,
-                       const std::vector<qlever::SparqlTriple>& triples);
+  bool analyzeJoinStar(ViewPtr view, const std::vector<SparqlTriple>& triples);
 
   // Given potential left and right sides of simple chains, check for available
   // replacement index scans, construct them and insert them into the `result`
   // vector.
   void makeScansFromChainCandidates(
-      qlever::QueryExecutionContext* qec,
-      const qlever::parsedQuery::BasicGraphPattern& triples,
+      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& chainLeft,
       const VariableToTripleIndices& chainRight) const;
@@ -152,8 +148,7 @@ class QueryPatternCache {
   // Given triples grouped by subject, check for available star join replacement
   // index scans, construct them and insert them into the `result` vector.
   void makeScansFromStarCandidates(
-      qlever::QueryExecutionContext* qec,
-      const qlever::parsedQuery::BasicGraphPattern& triples,
+      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& starCandidates) const;
 };
@@ -161,8 +156,8 @@ class QueryPatternCache {
 // Helper that filters the graph patterns of a parsed query using
 // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
 // helper.
-std::vector<qlever::parsedQuery::GraphPatternOperation>
-graphPatternInvariantFilter(const qlever::ParsedQuery& parsed);
+std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
+    const ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
@@ -170,8 +165,8 @@ using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
 // Extract all `BIND` statements from a `ParsedQuery` and create a hash map
 // mapping `BIND` expression cache keys to target variable column index.
 BindExpressionAndTargetCol extractBindExpressions(
-    const qlever::ParsedQuery& parsed,
-    const qlever::VariableToColumnMap& varToColMap);
+    const ParsedQuery& parsed, const VariableToColumnMap& varToColMap);
 
 }  // namespace materializedViewsQueryAnalysis
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_

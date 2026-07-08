@@ -542,14 +542,13 @@ class CompressedExternalIdTable
     using namespace ad_utility;
     using Block = IdTableStatic<NumStaticCols>;
     // Both branches return the same type via this helper.
-    auto joinBlocks = [](ad_utility::InputRangeTypeErased<Block> stream) {
-      return ql::views::join(ad_utility::OwningViewNoConst{std::move(stream)});
+    auto joinBlocks = [](InputRangeTypeErased<Block> stream) {
+      return ql::views::join(OwningViewNoConst{std::move(stream)});
     };
     if (!this->transformAndPushLastBlock()) {
       // Single block: wrap currentBlock_ as a one-element block stream.
-      return joinBlocks(ad_utility::InputRangeTypeErased<Block>{
-          ad_utility::lazySingleValueRange(
-              [this]() { return std::move(this->currentBlock_); })});
+      return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
+          [this]() { return std::move(this->currentBlock_); })});
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);

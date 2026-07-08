@@ -137,9 +137,9 @@ void generalIdTableCheck(const IdTable& table,
 
   if (allEntriesWereSet) {
     ASSERT_TRUE(ql::ranges::all_of(table, [](const auto& row) {
-      return ql::ranges::all_of(row, [](const qlever::ValueId& entry) {
+      return ql::ranges::all_of(row, [](const ValueId& entry) {
         return ad_utility::testing::VocabId(0) <= entry &&
-               entry <= ad_utility::testing::VocabId(qlever::ValueId::maxIndex);
+               entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
       });
     }));
   }
@@ -180,7 +180,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
                         const size_t& lowerBound, const size_t& upperBound) {
     ASSERT_TRUE(ql::ranges::all_of(
         table.getColumn(columnNumber),
-        [&lowerBound, &upperBound](const qlever::ValueId& entry) {
+        [&lowerBound, &upperBound](const ValueId& entry) {
           return ad_utility::testing::VocabId(lowerBound) <= entry &&
                  entry <= ad_utility::testing::VocabId(upperBound);
         }));
@@ -260,19 +260,18 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
   // Giving an empty function.
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       10, 10, {{1, createCountUpGenerator()}, {1, {}}}));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
-      10, 10, {1}, std::function<qlever::ValueId()>{}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(10, 10, {1}, std::function<ValueId()>{}));
 
   // Creating an empty table of size (0,0).
   {
     auto table = createRandomlyFilledIdTable(
-        0, 0,
-        std::vector<std::pair<size_t, std::function<qlever::ValueId()>>>{});
+        0, 0, std::vector<std::pair<size_t, std::function<ValueId()>>>{});
     EXPECT_EQ(table.numRows(), 0);
     EXPECT_EQ(table.numColumns(), 0);
   }
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
-      0, 0, {}, std::function<qlever::ValueId()>{}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(0, 0, {}, std::function<ValueId()>{}));
 
   // Exhaustive test, if the creation of a randomly filled table works,
   // regardless of the amount of join columns and their position.
@@ -284,8 +283,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
             10, 10,
             ad_utility::transform(
                 joinColumns, [&createCountUpGenerator](const size_t& num) {
-                  return std::make_pair(num, std::function<qlever::ValueId()>{
-                                                 createCountUpGenerator()});
+                  return std::make_pair(
+                      num, std::function<ValueId()>{createCountUpGenerator()});
                 }));
         IdTable resultSingleGenerator = createRandomlyFilledIdTable(
             10, 10, joinColumns, createCountUpGenerator());
@@ -399,7 +398,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   auto createCountUpGenerator = [](const size_t& width) {
     return [width, i = 0]() mutable {
       // Create the row.
-      std::vector<qlever::ValueId> row(width);
+      std::vector<ValueId> row(width);
 
       // Fill the row.
       ql::ranges::fill(row, ad_utility::testing::VocabId(i));
@@ -414,7 +413,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   ASSERT_ANY_THROW(generateIdTable(5, 5, createCountUpGenerator(4)));
   ASSERT_ANY_THROW(generateIdTable(5, 5, [i = 0]() mutable {
     // Create the row.
-    std::vector<qlever::ValueId> row(i < 3 ? 5 : 20);
+    std::vector<ValueId> row(i < 3 ? 5 : 20);
 
     // Fill the row.
     ql::ranges::fill(row, ad_utility::testing::VocabId(4));
@@ -446,34 +445,35 @@ TEST(IdTableHelpersTest, randomSeed) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLUMNS = 200;
 
-  ql::ranges::for_each(createArrayOfRandomSeeds<5>(), [](const ad_utility::
-                                                             RandomSeed seed) {
-    // Simply generate and compare.
-    ASSERT_EQ(
-        createRandomlyFilledIdTable(
-            NUM_ROWS, NUM_COLUMNS,
-            std::vector<std::pair<size_t, std::function<qlever::ValueId()>>>{},
-            seed),
-        createRandomlyFilledIdTable(
-            NUM_ROWS, NUM_COLUMNS,
-            std::vector<std::pair<size_t, std::function<qlever::ValueId()>>>{},
-            seed));
-    ASSERT_EQ(createRandomlyFilledIdTable(
-                  NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
-                  []() { return ad_utility::testing::VocabId(1); }, seed),
-              createRandomlyFilledIdTable(
-                  NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
-                  []() { return ad_utility::testing::VocabId(1); }, seed));
-    ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
-                                          JoinColumnAndBounds{}, seed),
-              createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
-                                          JoinColumnAndBounds{}, seed));
-    ASSERT_EQ(
-        createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
-                                    std::vector<JoinColumnAndBounds>{}, seed),
-        createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
-                                    std::vector<JoinColumnAndBounds>{}, seed));
-    ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed),
-              createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed));
-  });
+  ql::ranges::for_each(
+      createArrayOfRandomSeeds<5>(), [](const ad_utility::RandomSeed seed) {
+        // Simply generate and compare.
+        ASSERT_EQ(
+            createRandomlyFilledIdTable(
+                NUM_ROWS, NUM_COLUMNS,
+                std::vector<std::pair<size_t, std::function<ValueId()>>>{},
+                seed),
+            createRandomlyFilledIdTable(
+                NUM_ROWS, NUM_COLUMNS,
+                std::vector<std::pair<size_t, std::function<ValueId()>>>{},
+                seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
+                      []() { return ad_utility::testing::VocabId(1); }, seed),
+                  createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
+                      []() { return ad_utility::testing::VocabId(1); }, seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
+                                              JoinColumnAndBounds{}, seed),
+                  createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
+                                              JoinColumnAndBounds{}, seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<JoinColumnAndBounds>{},
+                      seed),
+                  createRandomlyFilledIdTable(
+                      NUM_ROWS, NUM_COLUMNS, std::vector<JoinColumnAndBounds>{},
+                      seed));
+        ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed),
+                  createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS, seed));
+      });
 }

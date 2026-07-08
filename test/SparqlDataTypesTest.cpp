@@ -26,20 +26,19 @@ using namespace qlever;
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
-using qlever::GraphTerm;
 
 namespace {
 
-using Iri = qlever::triple_component::Iri;
+using Iri = triple_component::Iri;
 // Validating variant, used to test that invalid IRIs are rejected.
 auto iriV = Iri::fromIrirefValidated;
 
 struct ContextWrapper {
-  qlever::Index _index{ad_utility::makeUnlimitedAllocator<qlever::Id>()};
-  qlever::Result _resultTable{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, qlever::LocalVocab{}};
+  Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
+  Result _resultTable{
+      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
-  qlever::VariableToColumnMap _hashMap{};
+  VariableToColumnMap _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {
@@ -52,8 +51,8 @@ struct ContextWrapper {
   }
 
   void setIdTable(IdTable&& table) {
-    _resultTable = qlever::Result{
-        std::move(table), {}, _resultTable.getSharedLocalVocab()};
+    _resultTable =
+        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
   }
 };
 
@@ -70,7 +69,7 @@ ContextWrapper prepareContext() { return {}; }
 std::optional<std::string> evaluate(
     const GraphTerm& term, const ConstructQueryExportContext& exportCtx,
     PositionInTriple position) {
-  using namespace qlever::constructExport;
+  using namespace constructExport;
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
@@ -262,10 +261,10 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
-  qlever::Variable varWithQuestionMark{"?abc"};
+  Variable varWithQuestionMark{"?abc"};
   EXPECT_EQ(varWithQuestionMark.name(), "?abc");
 
-  qlever::Variable varWithDollarSign{"$abc"};
+  Variable varWithDollarSign{"$abc"};
   EXPECT_EQ(varWithQuestionMark.name(), "?abc");
 }
 
@@ -274,30 +273,28 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
     GTEST_SKIP()
         << "validity of variable names is only checked with expensive checks";
   }
-  EXPECT_THROW(qlever::Variable("no_leading_var_or_dollar", true),
+  EXPECT_THROW(Variable("no_leading_var_or_dollar", true),
                ad_utility::Exception);
-  EXPECT_THROW(qlever::Variable("", true), ad_utility::Exception);
-  EXPECT_THROW(qlever::Variable("? var with space", true),
-               ad_utility::Exception);
-  EXPECT_THROW(qlever::Variable("?", true), ad_utility::Exception);
-  EXPECT_THROW(qlever::Variable("$", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("? var with space", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("?", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("$", true), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[qlever::Variable{"?var"}] =
-      qlever::makeAlwaysDefinedColumn(0);
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
-  qlever::Id value1 = qlever::Id::makeFromInt(69);
-  qlever::Id value2 = qlever::Id::makeFromInt(420);
+  Id value1 = Id::makeFromInt(69);
+  Id value2 = Id::makeFromInt(420);
   table.push_back({value1});
   table.push_back({value2});
 
   wrapper.setIdTable(std::move(table));
 
-  qlever::Variable variable{"?var"};
+  Variable variable{"?var"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(evaluate(variable, context0, SUBJECT), Optional("69"s));
@@ -321,7 +318,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
 TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   auto wrapper = prepareContext();
 
-  qlever::Variable variable{"?var"};
+  Variable variable{"?var"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(evaluate(variable, context0, SUBJECT), std::nullopt);
@@ -338,22 +335,21 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[qlever::Variable{"?var"}] =
-      qlever::makeAlwaysDefinedColumn(0);
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
-  qlever::Id value = qlever::Id::makeFromInt(69);
+  Id value = Id::makeFromInt(69);
   table.push_back({value});
   wrapper.setIdTable(std::move(table));
 
-  qlever::Variable variableKnown{"?var"};
+  Variable variableKnown{"?var"};
   ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
   EXPECT_THAT(evaluate(variableKnown, context, SUBJECT), Optional("69"s));
   EXPECT_THAT(evaluate(GraphTerm{variableKnown}, context, SUBJECT),
               Optional("69"s));
 
-  qlever::Variable variableUnknown{"?unknownVar"};
+  Variable variableUnknown{"?unknownVar"};
 
   EXPECT_EQ(evaluate(variableUnknown, context, SUBJECT), std::nullopt);
   EXPECT_EQ(evaluate(GraphTerm{variableUnknown}, context, SUBJECT),

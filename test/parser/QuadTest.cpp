@@ -13,14 +13,13 @@ using namespace qlever;
 // _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =
-      [](qlever::sparql_types::Triples triples,
-         std::vector<Quads::GraphBlock> graphs,
+      [](sparql_types::Triples triples, std::vector<Quads::GraphBlock> graphs,
          const std::vector<SparqlTripleSimpleWithGraph>& expected,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         // For this test, there are no blank nodes. Below you find a dedicated
         // test with blank nodes.
-        qlever::BlankNodeManager manager;
+        BlankNodeManager manager;
         Quads::BlankNodeAdder bn{{}, {}, &manager};
         const Quads quads{std::move(triples), std::move(graphs)};
         auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
@@ -56,7 +55,7 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
   };
 
   std::array tr{bn("a"), bn("b"), bn("a")};
-  qlever::BlankNodeManager manager;
+  BlankNodeManager manager;
   Quads::BlankNodeAdder adder{{}, {}, &manager};
   const Quads quads{{tr}, {}};
   auto res = quads.toTriplesWithGraph(std::monostate{}, adder);
@@ -79,8 +78,7 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
 
 TEST(QuadTest, getOperations) {
   auto expectGetQuads =
-      [](qlever::sparql_types::Triples triples,
-         std::vector<Quads::GraphBlock> graphs,
+      [](sparql_types::Triples triples, std::vector<Quads::GraphBlock> graphs,
          const testing::Matcher<
              std::vector<parsedQuery::GraphPatternOperation>>& m,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -130,7 +128,7 @@ TEST(QuadTest, forAllVariables) {
         });
         EXPECT_THAT(calledVariables, testing::Eq(expectVariables));
       };
-  auto TCIri = qlever::triple_component::Iri::fromIriref;
+  auto TCIri = triple_component::Iri::fromIriref;
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;

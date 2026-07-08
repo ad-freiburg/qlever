@@ -24,10 +24,10 @@
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // This class handles the efficient writing of the results of a JOIN operation
-// to a column-based `qlever::IdTable`. The underlying assumption is that in
+// to a column-based `IdTable`. The underlying assumption is that in
 // both inputs the join columns are the first columns. On each call to `addRow`,
 // we only store the indices of the matching rows. When a certain buffer size
 // (configurable, default value 100'000) is reached, the results are actually
@@ -39,10 +39,10 @@ class AddCombinedRowToIdTable {
   // The result table will also have no columns corresponding to the join
   // columns, but will only consist of the remaining payload columns.
   bool keepJoinColumns_ = true;
-  std::optional<std::array<qlever::IdTableView<0>, 2>> inputLeftAndRight_;
-  qlever::IdTable resultTable_;
-  qlever::LocalVocab mergedVocab_{};
-  std::array<const qlever::LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
+  std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
+  IdTable resultTable_;
+  LocalVocab mergedVocab_{};
+  std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
  public:
   // This struct stores the information, which row indices from the input are
@@ -80,8 +80,7 @@ class AddCombinedRowToIdTable {
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
-  using BlockwiseCallback =
-      std::function<void(qlever::IdTable&, qlever::LocalVocab&)>;
+  using BlockwiseCallback = std::function<void(IdTable&, LocalVocab&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -91,10 +90,9 @@ class AddCombinedRowToIdTable {
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(
-      size_t numJoinColumns, qlever::IdTableView<0> input1,
-      qlever::IdTableView<0> input2, qlever::IdTable output,
-      CancellationHandle cancellationHandle, bool keepJoinColumns = true,
-      size_t bufferSize = 100'000,
+      size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
+      IdTable output, CancellationHandle cancellationHandle,
+      bool keepJoinColumns = true, size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
@@ -114,7 +112,7 @@ class AddCombinedRowToIdTable {
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
-      size_t numJoinColumns, qlever::IdTable output,
+      size_t numJoinColumns, IdTable output,
       CancellationHandle cancellationHandle, bool keepJoinColumns = true,
       size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
@@ -185,8 +183,8 @@ class AddCombinedRowToIdTable {
   // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
   // passed pointer reference to that vocab.
   template <typename T>
-  void mergeVocab(const T& table, const qlever::LocalVocab*& currentVocab) {
-    qlever::detail::mergeVocabInto(table, currentVocab, mergedVocab_);
+  void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
+    detail::mergeVocabInto(table, currentVocab, mergedVocab_);
   }
 
   // Flush remaining pending entries before changing the input.
@@ -203,7 +201,7 @@ class AddCombinedRowToIdTable {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = qlever::LocalVocab{};
+      mergedVocab_ = LocalVocab{};
     }
   }
 
@@ -211,15 +209,15 @@ class AddCombinedRowToIdTable {
   // indices in the new input. Before resetting, `flush()` is called, so all the
   // rows from the previous inputs get materialized before deleting the old
   // inputs. The arguments to `inputLeft` and `inputRight` can either be
-  // `qlever::IdTable` or `qlever::IdTableView<0>`, or any other type that has a
-  // `asStaticView<0>` method that returns an `qlever::IdTableView<0>`.
+  // `IdTable` or `IdTableView<0>`, or any other type that has a
+  // `asStaticView<0>` method that returns an `IdTableView<0>`.
   template <typename L, typename R>
   void setInput(const L& inputLeft, const R& inputRight) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
-    inputLeftAndRight_ = std::array{qlever::detail::toView(inputLeft),
-                                    qlever::detail::toView(inputRight)};
+    inputLeftAndRight_ =
+        std::array{detail::toView(inputLeft), detail::toView(inputRight)};
     checkNumColumns();
   }
 
@@ -232,13 +230,12 @@ class AddCombinedRowToIdTable {
     // The right input will be empty, but with the correct number of columns.
     using namespace ad_utility::memory_literals;
     inputLeftAndRight_ = std::array{
-        qlever::detail::toView(inputLeft),
-        qlever::IdTableView<0>{
+        detail::toView(inputLeft),
+        IdTableView<0>{
             resultTable_.numColumns() +
                 (static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_) -
-                qlever::detail::toView(inputLeft).numColumns() +
-                numJoinColumns_,
-            ad_utility::makeAllocatorWithLimit<qlever::Id>(0_B)}};
+                detail::toView(inputLeft).numColumns() + numJoinColumns_,
+            ad_utility::makeAllocatorWithLimit<Id>(0_B)}};
   }
 
   // The next free row in the output will be created from
@@ -256,19 +253,19 @@ class AddCombinedRowToIdTable {
 
   // Move the result out after the last write. The function ensures, that the
   // `flush()` is called before doing so.
-  qlever::IdTable&& resultTable() && {
+  IdTable&& resultTable() && {
     flush();
     return std::move(resultTable_);
   }
 
-  qlever::LocalVocab& localVocab() { return mergedVocab_; }
+  LocalVocab& localVocab() { return mergedVocab_; }
 
   // Move both the result table and local vocab out as an IdTableVocabPair.
   // This is a convenience method for the common pattern of moving both out.
   auto toIdTableVocabPair() && {
     flush();
-    return qlever::Result::IdTableVocabPair{std::move(resultTable_),
-                                            std::move(mergedVocab_)};
+    return Result::IdTableVocabPair{std::move(resultTable_),
+                                    std::move(mergedVocab_)};
   }
 
   // Disable copying and moving, it is currently not needed and makes it harder
@@ -291,7 +288,7 @@ class AddCombinedRowToIdTable {
                                            optionalIndexBuffer_.size() ||
                          result.numColumns() == 0);
     // Sometimes the left input and right input are not valid anymore, because
-    // the `qlever::IdTable`s they point to have already been destroyed. This
+    // the `IdTable`s they point to have already been destroyed. This
     // case is okay, as long as there was a manual call to `flush` (after which
     // `nextIndex_ == 0`) before the inputs went out of scope. However, the call
     // to `resultTable()` will still unconditionally flush. The following check
@@ -305,7 +302,7 @@ class AddCombinedRowToIdTable {
     // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
     // If exactly one of them is UNDEF, return the other one, else return any of
     // them (they are equal anyway).
-    auto getJoinValue = [](const qlever::ValueId a, const qlever::ValueId b) {
+    auto getJoinValue = [](const ValueId a, const ValueId b) {
       // NOTE: For localVocabIndices we might have different pointers that
       // compare equal because they point to the same word. Therefore we cannot
       // use a simple bitwise operation to handle the "one of them is UNDEF"
@@ -337,7 +334,7 @@ class AddCombinedRowToIdTable {
       // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        qlever::Id id = colLeft[sourceIndex];
+        Id id = colLeft[sourceIndex];
         resultCol[oldSize + targetIndex] = id;
         numUndef += static_cast<size_t>(id.isUndefined());
       }
@@ -362,15 +359,14 @@ class AddCombinedRowToIdTable {
           static constexpr size_t idx = isColFromLeft ? 0 : 1;
           for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
             auto resultId = col[sourceIndices[idx]];
-            numUndef +=
-                static_cast<size_t>(resultId == qlever::Id::makeUndefined());
+            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
             resultCol[oldSize + targetIndex] = resultId;
           }
 
           // Write the optional rows. For the right input those are always
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-            qlever::Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
+            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
               // Note: `if constexpr` doesn't work here for QCC 8.3 for some
               // reason which has yet to be analyzed.
               if QL_CONSTEXPR (isColFromLeft) {
@@ -378,7 +374,7 @@ class AddCombinedRowToIdTable {
               } else {
                 (void)col;
                 (void)sourceIndex;
-                return qlever::Id::makeUndefined();
+                return Id::makeUndefined();
               }
             }();
             resultCol[oldSize + targetIndex] = id;
@@ -411,19 +407,19 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
     std::invoke(blockwiseCallback_, result, mergedVocab_);
-    // The current `qlever::IdTable`s might still be active, so we have to merge
+    // The current `IdTable`s might still be active, so we have to merge
     // the local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = qlever::LocalVocab{};
+      mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
       // Note: On QCC 8.3, the elegant lazy range pipeline gives us trouble, so
       // we use an `absl::InlinedVector<reference_wrapper>` instead, which can
       // be done here as we know that we have at most two local vocabs.
       auto rangeOfNonNullVocabs = [&]() {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-        return currentVocabs_ | ql::views::filter(toBool) |
-               ql::views::transform(dereference);
+        return currentVocabs_ | ql::views::filter(ad_utility::toBool) |
+               ql::views::transform(ad_utility::dereference);
 #else
         absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
             tmpVocabs;
@@ -438,11 +434,11 @@ class AddCombinedRowToIdTable {
       mergedVocab_.mergeWith(ql::ranges::ref_view{rangeOfNonNullVocabs});
     }
   }
-  const qlever::IdTableView<0>& inputLeft() const {
+  const IdTableView<0>& inputLeft() const {
     return inputLeftAndRight_.value()[0];
   }
 
-  const qlever::IdTableView<0>& inputRight() const {
+  const IdTableView<0>& inputRight() const {
     return inputLeftAndRight_.value()[1];
   }
 
@@ -456,6 +452,6 @@ class AddCombinedRowToIdTable {
             numJoinColumns_ * static_cast<size_t>(!keepJoinColumns_));
   }
 };
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H

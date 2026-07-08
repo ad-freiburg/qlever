@@ -23,13 +23,13 @@ using namespace ad_utility::memory_literals;
 
 namespace {
 // Minimal concrete `AsyncBlockSource` for use in factory-based tests.
-struct DummyAsyncBlockSource : qlever::parser::AsyncBlockSource {
+struct DummyAsyncBlockSource : parser::AsyncBlockSource {
   explicit DummyAsyncBlockSource(boost::asio::any_io_executor exec,
                                  ad_utility::MemorySize blocksize)
       : AsyncBlockSource{exec, blocksize} {}
 
  protected:
-  std::optional<qlever::parser::ByteBlock> getNextBlockImpl() override {
+  std::optional<parser::ByteBlock> getNextBlockImpl() override {
     return std::nullopt;
   }
 };
@@ -47,9 +47,9 @@ TEST(InputFileSpecification, FilenameSource) {
 
 // _____________________________________________________________________________
 TEST(InputFileSpecification, FactorySource) {
-  auto factory = [](boost::asio::any_io_executor exec,
-                    ad_utility::MemorySize blocksize, std::string_view)
-      -> std::unique_ptr<qlever::parser::AsyncBlockSource> {
+  auto factory =
+      [](boost::asio::any_io_executor exec, ad_utility::MemorySize blocksize,
+         std::string_view) -> std::unique_ptr<parser::AsyncBlockSource> {
     return std::make_unique<DummyAsyncBlockSource>(exec, blocksize);
   };
   InputFileSpecification spec{
@@ -70,8 +70,7 @@ TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
   InputFileSpecification spec{tmpFile.string(), Filetype::Turtle, std::nullopt};
   auto src = spec.makeAsyncBlockSource(pool.get_executor(), 1024_B);
   EXPECT_NE(src, nullptr);
-  EXPECT_NE(dynamic_cast<qlever::parser::AsyncFileBlockSource*>(src.get()),
-            nullptr);
+  EXPECT_NE(dynamic_cast<parser::AsyncFileBlockSource*>(src.get()), nullptr);
 
   std::filesystem::remove(tmpFile);
 }
@@ -82,9 +81,9 @@ TEST(InputFileSpecification, MakeAsyncBlockSourceFactoryBased) {
   ad_utility::MemorySize receivedBlocksize{};
   std::string receivedDescription;
 
-  auto factory = [&](boost::asio::any_io_executor exec,
-                     ad_utility::MemorySize blocksize, std::string_view desc)
-      -> std::unique_ptr<qlever::parser::AsyncBlockSource> {
+  auto factory =
+      [&](boost::asio::any_io_executor exec, ad_utility::MemorySize blocksize,
+          std::string_view desc) -> std::unique_ptr<parser::AsyncBlockSource> {
     called = true;
     receivedBlocksize = blocksize;
     receivedDescription = desc;

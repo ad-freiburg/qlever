@@ -14,28 +14,27 @@ using namespace qlever;
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
-  qlever::NamedResultCache cache;
+  NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
       ::testing::HasSubstr("is not contained in the named result cache"));
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
-  using V = qlever::Variable;
-  qlever::VariableToColumnMap varColMap{
-      {V{"?x"}, qlever::makeAlwaysDefinedColumn(0)},
-      {V{"?y"}, qlever::makeAlwaysDefinedColumn(1)}};
+  using V = Variable;
+  VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
+                                {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
-  qlever::LocalVocab localVocab;
+  LocalVocab localVocab;
   auto* qec = ad_utility::testing::getQec();
-  localVocab.getIndexAndAddIfNotContained(qlever::LocalVocabEntry::fromIriref(
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
       "<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
-      [&localVocab]() -> ::testing::Matcher<const qlever::LocalVocab&> {
+      [&localVocab]() -> ::testing::Matcher<const LocalVocab&> {
     using namespace ::testing;
-    auto get = [](const qlever::LocalVocab& vocab) {
+    auto get = [](const LocalVocab& vocab) {
       return vocab.getAllWordsForTesting();
     };
     return ResultOf(
@@ -43,7 +42,7 @@ TEST(NamedResultCache, basicWorkflow) {
   };
 
   auto getCacheValue = [&varColMap, &localVocab](const auto& table) {
-    return qlever::NamedResultCache::Value{
+    return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
@@ -136,19 +135,18 @@ TEST(NamedResultCache, E2E) {
   auto result = qet.getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  qlever::LocalVocab dummyVocab;
-  auto notInVocab = qlever::Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(
-          qlever::LocalVocabEntry::fromIriref("<notInVocab>",
-                                              qec->getLocalVocabContext())));
+  LocalVocab dummyVocab;
+  auto notInVocab = Id::makeFromLocalVocabIndex(
+      dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTableView(), matchesIdTable(expected));
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
-  qlever::VariableToColumnMap expectedVars{
-      {qlever::Variable{"?s"}, qlever::makeAlwaysDefinedColumn(0)}};
+  VariableToColumnMap expectedVars{
+      {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
   EXPECT_THAT(qet.getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }

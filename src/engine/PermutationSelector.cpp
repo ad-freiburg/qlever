@@ -8,14 +8,12 @@
 
 using namespace qlever;
 
-using qlever::SparqlTripleSimple;
-
 namespace {
 
 // Return true if the string representation of the `iri` starts with '@' or
 // `QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET` and is thus considered
 // to be internal.
-bool hasInternalPrefix(const qlever::triple_component::Iri& iri) {
+bool hasInternalPrefix(const triple_component::Iri& iri) {
   const auto& string = iri.toStringRepresentation();
   return ql::starts_with(string, '@') ||
          ql::starts_with(string,

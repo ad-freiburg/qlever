@@ -37,7 +37,7 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = HasPredicateScan::makePatternScan(
       qec, TripleComponent{subtreeVar}, objectVariable);
-  auto joinedSubtree = qlever::makeExecutionTree<Join>(
+  auto joinedSubtree = makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
       joinedSubtree->getVariableColumns().at(objectVariable).columnIndex_;
@@ -418,11 +418,10 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
     QueryExecutionContext* qec, TripleComponent subject, Variable object) {
   SparqlTripleSimple triple{
       std::move(subject),
-      qlever::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+      triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
       TripleComponent{std::move(object)}};
-  return qlever::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       qec,
-      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
-                                      triple),
+      getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(), triple),
       qec->locatedTriplesSharedState(), triple);
 }

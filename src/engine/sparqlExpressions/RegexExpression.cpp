@@ -17,8 +17,6 @@
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "global/ValueIdComparators.h"
 
-using namespace qlever;
-
 using namespace std::literals;
 
 namespace qlever::sparqlExpression::detail {

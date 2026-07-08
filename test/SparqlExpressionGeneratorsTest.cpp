@@ -15,7 +15,7 @@ using namespace sparqlExpression::detail;
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, makeStringResultGetter) {
-  using qlever::triple_component::LiteralOrIri;
+  using triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
@@ -31,7 +31,7 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
-  using qlever::triple_component::LiteralOrIri;
+  using triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());

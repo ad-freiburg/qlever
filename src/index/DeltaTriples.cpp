@@ -26,8 +26,6 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 // ____________________________________________________________________________

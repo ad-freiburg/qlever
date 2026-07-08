@@ -299,7 +299,7 @@ TEST(OperationTest, estimatesForCachedResults) {
   // read from the cache.
   auto makeQet = []() {
     auto idTable = makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}});
-    auto qet = qlever::makeExecutionTree<ValuesForTesting>(
+    auto qet = makeExecutionTree<ValuesForTesting>(
         getQec(), std::move(idTable),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false);
@@ -940,9 +940,9 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   auto* qec = getQec();
 
   // A BIND(RAND()) node is non-deterministic.
-  auto randBindTree = qlever::makeExecutionTree<Bind>(
+  auto randBindTree = makeExecutionTree<Bind>(
       qec,
-      qlever::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, IdTable{1, qec->getAllocator()},
           std::vector<std::optional<Variable>>{Variable{"?x"}}),
       parsedQuery::Bind{
@@ -952,7 +952,7 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
 
   // Wrapping it in a Sort still yields non-deterministic.
-  auto sortedTree = qlever::makeExecutionTree<Sort>(qec, randBindTree,
-                                                    std::vector<ColumnIndex>{});
+  auto sortedTree =
+      makeExecutionTree<Sort>(qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }

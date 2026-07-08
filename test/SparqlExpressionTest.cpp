@@ -839,7 +839,7 @@ TEST(SparqlExpression, stringOperators) {
                 std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
                                                   dateDate, dateLYear, T, F},
                            IdOrLocalVocabEntry{LocalVocabEntry{
-                               qlever::triple_component::Iri{},
+                               triple_component::Iri{},
                                testContext().qec->getLocalVocabContext()}}});
   // test valid
   checkIriOrUri(
@@ -864,7 +864,7 @@ TEST(SparqlExpression, stringOperators) {
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
           IdOrLocalVocabEntry{
-              LocalVocabEntry{qlever::triple_component::Iri{},
+              LocalVocabEntry{triple_component::Iri{},
                               testContext().qec->getLocalVocabContext()}}});
 
   // test with base iri
@@ -1618,7 +1618,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              sfGeoType("Polygon"), U});
 
   // Bounding coordinate expressions
-  using enum qlever::BoundingCoordinate;
+  using enum BoundingCoordinate;
   auto checkMinX =
       testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
   auto checkMinY =
@@ -1657,7 +1657,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   // depend on the method of calculation, which is not what is tested here, we
   // derive the expected values using the helper.
   auto expectedLength = [](std::string_view literal) -> double {
-    auto len = qlever::GeometryInfo::getMetricLength(
+    auto len = GeometryInfo::getMetricLength(
         absl::StrCat("\"", literal,
                      "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
     if (!len.has_value()) {
@@ -1700,7 +1700,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                                       D(expCollection), U});
 
   auto expectedArea = [](std::string_view literal) -> double {
-    auto area = qlever::GeometryInfo::getMetricArea(
+    auto area = GeometryInfo::getMetricArea(
         absl::StrCat("\"", literal,
                      "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
     if (!area.has_value() || std::isnan(area.value().area())) {
@@ -2152,7 +2152,7 @@ TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
     const auto* inner = aggregate->children()[0].get();
     ASSERT_TRUE(inner->isInsideAggregate());
     EXPECT_THAT(inner->evaluate(&ctx.context),
-                ::testing::VariantWith<qlever::Variable>(vocab));
+                ::testing::VariantWith<Variable>(vocab));
   }
 }
 

@@ -44,8 +44,6 @@ using namespace qlever;
 
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
-using qlever::getRuntimeParameter;
-using qlever::RuntimeParameters;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
@@ -61,10 +59,10 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
-    const std::optional<qlever::BoundingBox>& precomputedBoundingBox) {
+    const std::optional<BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
     auto hasNoIntersection =
-        [&prefilterLatLngBox](const qlever::BoundingBox& geomBoundingBox) {
+        [&prefilterLatLngBox](const BoundingBox& geomBoundingBox) {
           return !::util::geo::intersects(
               prefilterLatLngBox.value(),
               ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
@@ -155,8 +153,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 }
 
 // ____________________________________________________________________________
-std::optional<qlever::BoundingBox>
-SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
+std::optional<BoundingBox> SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
     const IdTableView<0>* idTable,
     const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
   if (!boundingBoxes.has_value()) {
@@ -168,8 +165,7 @@ SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
       idUpperRight.getDatatype() != Datatype::GeoPoint) {
     return std::nullopt;
   }
-  return qlever::BoundingBox{idLowerLeft.getGeoPoint(),
-                             idUpperRight.getGeoPoint()};
+  return BoundingBox{idLowerLeft.getGeoPoint(), idUpperRight.getGeoPoint()};
 }
 
 // ____________________________________________________________________________
@@ -198,7 +194,7 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const Index& index) {
   using namespace ::util::geo;
   auto id = restable.at(row, col);
-  auto str = qlever::exportIds::idToStringAndType(index, id, {});
+  auto str = exportIds::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
   }
@@ -250,10 +246,10 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
   // is needed, one could store it in an ID similar to GeoPoint (but with less
   // precision), and then the full geometry would only need to be read, when
   // the exact distance is wanted
-  std::string str(betweenQuotes(qlever::exportIds::idToStringAndType(
-                                    qec_->getIndex(), idtable->at(row, col), {})
-                                    .value()
-                                    .first));
+  std::string str(betweenQuotes(
+      exportIds::idToStringAndType(qec_->getIndex(), idtable->at(row, col), {})
+          .value()
+          .first));
   AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);

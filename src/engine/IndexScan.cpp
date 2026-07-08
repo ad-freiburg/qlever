@@ -243,8 +243,8 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges = qlever::prefilterExpressions::detail::
-        logicalOps::getIntersectionOfBlockRanges(
+    const auto& blockMetadataRanges =
+        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
             it->first->evaluate(getLocalVocabContext(),
                                 getScanSpecAndBlocks().getBlockMetadataSpan(),
                                 colIndex),
@@ -291,7 +291,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   // Make a (cheap) copy of this `IndexScan`. The size estimates (last two
   // args) are computed next, so just set them to dummy values in this call.
-  auto copy = qlever::makeExecutionTree<IndexScan>(
+  auto copy = makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
@@ -932,7 +932,7 @@ IndexScan::makeTreeWithStrippedColumns(
     }
   }
 
-  return qlever::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
@@ -1025,7 +1025,7 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newVariables.value().insert(bind._target);
   }
 
-  return qlever::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,

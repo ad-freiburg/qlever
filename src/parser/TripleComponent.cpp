@@ -15,8 +15,6 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 // ____________________________________________________________________________

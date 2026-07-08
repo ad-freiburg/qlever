@@ -33,7 +33,7 @@ const EncodedIriManager* encodedIriManager() {
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
 using TripleComponentT =
-    std::variant<Id, ColumnIndex, qlever::triple_component::LiteralOrIri>;
+    std::variant<Id, ColumnIndex, triple_component::LiteralOrIri>;
 
 // A matcher that never matches and outputs the given message.
 MATCHER_P(AlwaysFalse, msg, "") {
@@ -52,7 +52,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         const auto sharedHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
-        qlever::BlankNodeManager bnm;
+        BlankNodeManager bnm;
         auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
@@ -189,7 +189,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         "<u> <is-a> <a> <s> ."
         "<u> <label> \"baz\"@en <s> ."
         "<u> <blub> <blah> <s> .";
-    indexConfig.indexType = qlever::Filetype::NQuad;
+    indexConfig.indexType = Filetype::NQuad;
     // That the DEFAULT graph is the union graph again causes some problems.
     expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3, 0, 2));
     expectExecuteUpdate("CLEAR GRAPH <a>", NumTriples(0, 0, 0));

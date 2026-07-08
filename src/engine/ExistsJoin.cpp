@@ -285,8 +285,8 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // downside that it might look confusing
     tree->getRootOperation()->setSelectedVariablesForSubquery(
         pq.getVisibleVariables());
-    subtree = qlever::makeExecutionTree<ExistsJoin>(
-        qec, std::move(subtree), std::move(tree), exists.variable());
+    subtree = makeExecutionTree<ExistsJoin>(qec, std::move(subtree),
+                                            std::move(tree), exists.variable());
   }
   return subtree;
 }
@@ -301,15 +301,14 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 
 // _____________________________________________________________________________
 bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
-  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
-                                                                 joinColumns_);
+  return joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
+                                                         joinColumns_);
 }
 
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
   auto optionalResults =
-      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_,
-                                                                   right_);
+      joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_, right_);
   if (!optionalResults.has_value()) {
     return std::nullopt;
   }
@@ -335,7 +334,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
 
-  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+  auto leftRes = joinHelpers::computeResultSkipChild(
       std::dynamic_pointer_cast<Sort>(left_->getRootOperation()),
       requestLaziness);
   bool isLazy = !leftRes->isFullyMaterialized();
@@ -361,8 +360,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
     bool requestLaziness) {
-  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                        right_)) {
+  if (!joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_, right_)) {
     return std::nullopt;
   }
   if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
@@ -584,5 +582,5 @@ CPP_template_def(typename Range)(
                                  static_cast<bool>(tracker));
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+      joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
 }

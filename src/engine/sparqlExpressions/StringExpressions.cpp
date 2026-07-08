@@ -18,10 +18,6 @@
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
-using qlever::EncodedIriManager;
-using qlever::TokenizerCtre;
-using qlever::TurtleParser;
-
 namespace qlever::sparqlExpression {
 namespace detail::string_expressions {
 

@@ -22,9 +22,9 @@ using ad_utility::source_location;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-constexpr auto T = qlever::Id::makeFromBool(true);
-constexpr auto F = qlever::Id::makeFromBool(false);
-constexpr qlever::Id U = qlever::Id::makeUndefined();
+constexpr auto T = Id::makeFromBool(true);
+constexpr auto F = Id::makeFromBool(false);
+constexpr Id U = Id::makeUndefined();
 
 // _____________________________________________________________________________
 auto literal(const std::string& literal,
@@ -35,8 +35,7 @@ auto literal(const std::string& literal,
 
 // _____________________________________________________________________________
 auto variable(std::string literal) {
-  return std::make_unique<VariableExpression>(
-      qlever::Variable{std::move(literal)});
+  return std::make_unique<VariableExpression>(Variable{std::move(literal)});
 }
 
 // _____________________________________________________________________________
@@ -64,8 +63,7 @@ SparqlExpression::Ptr makeRegexExpression(
     std::string variable, std::string regex,
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
   SparqlExpression::Ptr variableExpression =
-      std::make_unique<VariableExpression>(
-          qlever::Variable{std::move(variable)});
+      std::make_unique<VariableExpression>(Variable{std::move(variable)});
   // The regex and the flags both have to be enquoted. This is normally ensured
   // by the SPARQL parser. For easier readability of the tests we add those
   // quotes here.
@@ -87,7 +85,7 @@ SparqlExpression::Ptr makeRegexExpression(
 // Test that the expression `leftValue Comparator rightValue`, when evaluated on
 // the `TestContext` (see above), yields the `expected` result.
 void testWithExplicitResult(
-    const SparqlExpression& expression, const std::vector<qlever::Id>& expected,
+    const SparqlExpression& expression, const std::vector<Id>& expected,
     const std::optional<size_t>& numInputs = std::nullopt,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
@@ -96,10 +94,9 @@ void testWithExplicitResult(
     ctx.context._endIndex = numInputs.value();
   }
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<qlever::Id>>(
-      resultAsVariant));
-  const auto& result =
-      std::get<VectorWithMemoryLimit<qlever::Id>>(resultAsVariant);
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<Id>>(resultAsVariant));
+  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
@@ -108,21 +105,18 @@ void testWithExplicitResult(
 // during creation of the expression.
 void testValuesInVariables(
     const std::vector<std::array<std::string, 3>>& inputValues,
-    const std::vector<qlever::Id>& expected, bool flagsUsed,
+    const std::vector<Id>& expected, bool flagsUsed,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
   auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   ctx.varToColMap.clear();
-  ctx.varToColMap[qlever::Variable{"?string"}] =
-      qlever::makeAlwaysDefinedColumn(0);
-  ctx.varToColMap[qlever::Variable{"?regex"}] =
-      qlever::makeAlwaysDefinedColumn(1);
-  ctx.varToColMap[qlever::Variable{"?flags"}] =
-      qlever::makeAlwaysDefinedColumn(2);
+  ctx.varToColMap[Variable{"?string"}] = makeAlwaysDefinedColumn(0);
+  ctx.varToColMap[Variable{"?regex"}] = makeAlwaysDefinedColumn(1);
+  ctx.varToColMap[Variable{"?flags"}] = makeAlwaysDefinedColumn(2);
   ctx.table.clear();
   ctx.table.setNumColumns(3);
   auto toLiteralId = [&ctx](const std::string& value) {
-    return qlever::Id::makeFromLocalVocabIndex(
+    return Id::makeFromLocalVocabIndex(
         ctx.localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::literalWithoutQuotes(
                 value, ctx.qec->getLocalVocabContext())));
@@ -137,15 +131,14 @@ void testValuesInVariables(
       makeRegexExpression(variable("?string"), variable("?regex"),
                           flagsUsed ? variable("?flags") : nullptr)
           ->evaluate(&ctx.context);
-  const auto& result =
-      std::get<VectorWithMemoryLimit<qlever::Id>>(resultAsVariant);
+  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
 // _____________________________________________________________________________
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
-                             const std::vector<qlever::Id>& expectedResult,
+                             const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(std::move(l), "testNonPrefixRegex");
@@ -228,8 +221,8 @@ TEST(RegexExpression, inputNotVariable) {
     // "hallo" matches the regex "ha".
     auto expr = makeRegexExpression(std::move(child), literal("\"ha\""),
                                     literal("\"\""));
-    std::vector<qlever::Id> expected;
-    expected.push_back(qlever::Id::makeFromBool(true));
+    std::vector<Id> expected;
+    expected.push_back(Id::makeFromBool(true));
     testWithExplicitResult(*expr, expected, input.size());
   }
 
@@ -248,7 +241,7 @@ TEST(RegexExpression, inputNotVariable) {
 // _____________________________________________________________________________
 auto testNonPrefixRegexWithFlags =
     [](std::string variable, std::string regex, std::string flags,
-       const std::vector<qlever::Id>& expectedResult,
+       const std::vector<Id>& expectedResult,
        source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testNonPrefixRegexWithFlags");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
@@ -368,7 +361,7 @@ TEST(RegexExpression, makePrefixMatchExpression) {
 // _____________________________________________________________________________
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
-       const std::vector<qlever::Id>& expectedResult, bool childAsStr = false,
+       const std::vector<Id>& expectedResult, bool childAsStr = false,
        source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
@@ -404,7 +397,7 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
     EXPECT_TRUE(isPrefixExpression(expr));
     TestContext ctx;
     auto resultAsVariant = expr->evaluate(&ctx.context);
-    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<qlever::Id>(U));
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<Id>(U));
   }
 
   // Input with UNDEF.
@@ -419,7 +412,7 @@ auto testPrefixRegexOrderedColumn =
        ad_utility::SetOfIntervals expected, bool childAsStr = false,
        source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
-      auto variable = qlever::Variable{variableAsString};
+      auto variable = Variable{variableAsString};
       TestContext ctx = TestContext::sortedBy(variable);
       auto expression = makeRegexExpression(variableAsString, regex,
                                             std::nullopt, childAsStr);
@@ -448,19 +441,19 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
 
   // Input with UNDEF.
   {
-    qlever::Variable variable{"?everything"};
+    Variable variable{"?everything"};
     TestContext ctx = TestContext::sortedBy(variable);
     auto expression =
         makeRegexExpression(variable.name(), "^x", std::nullopt, false);
     EXPECT_TRUE(isPrefixExpression(expression));
     auto resultAsVariant = expression->evaluate(&ctx.context);
     EXPECT_THAT(resultAsVariant,
-                ::testing::VariantWith<VectorWithMemoryLimit<qlever::Id>>(
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
                     ::testing::ElementsAre(U, F, F)));
   }
   // Empty input.
   {
-    qlever::Variable variable{"?everything"};
+    Variable variable{"?everything"};
     TestContext ctx = TestContext::sortedBy(variable);
     ctx.context._endIndex = 0;
     auto expression =
@@ -477,7 +470,7 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
 TEST(RegexExpression, prefixRegexOnGroupedVariableIsConstant) {
   // Evaluate on a single-row "group" in which `?vocab` is constant (`"Beta"`).
   auto setUpGroupedContext = [](TestContext& ctx) {
-    ctx.context._groupedVariables = {qlever::Variable{"?vocab"}};
+    ctx.context._groupedVariables = {Variable{"?vocab"}};
     ctx.context._isPartOfGroupBy = true;
     ctx.context._beginIndex = 0;
     ctx.context._endIndex = 1;
@@ -490,7 +483,7 @@ TEST(RegexExpression, prefixRegexOnGroupedVariableIsConstant) {
     TestContext ctx;
     setUpGroupedContext(ctx);
     EXPECT_THAT(expression->evaluate(&ctx.context),
-                ::testing::VariantWith<qlever::Id>(T));
+                ::testing::VariantWith<Id>(T));
   }
   // `"Beta"` does not match the prefix `^al` -> constant `false`.
   {
@@ -499,7 +492,7 @@ TEST(RegexExpression, prefixRegexOnGroupedVariableIsConstant) {
     TestContext ctx;
     setUpGroupedContext(ctx);
     EXPECT_THAT(expression->evaluate(&ctx.context),
-                ::testing::VariantWith<qlever::Id>(F));
+                ::testing::VariantWith<Id>(F));
   }
 }
 
@@ -513,11 +506,11 @@ TEST(RegexExpression, prefixRegexInsideAggregateIsNotFolded) {
   ASSERT_TRUE(prefixRegex->isInsideAggregate());
 
   TestContext ctx;
-  ctx.context._groupedVariables = {qlever::Variable{"?vocab"}};
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
   ctx.context._isPartOfGroupBy = true;
   // The result is computed per row (a vector), not folded to a single constant.
   EXPECT_THAT(prefixRegex->evaluate(&ctx.context),
-              ::testing::VariantWith<VectorWithMemoryLimit<qlever::Id>>(
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
                   ::testing::ElementsAre(F, T, T)));
 }
 
@@ -532,11 +525,11 @@ TEST(RegexExpression, prefixRegexOnGroupedVariableWithUnexpectedChildResult) {
   auto expression = makeRegexExpression("?vocab", "^al");
   ASSERT_TRUE(isPrefixExpression(expression));
   expression->replaceChild(
-      0, std::make_unique<SingleUseExpression>(ExpressionResult{
-             IdOrLocalVocabEntry{qlever::Id::makeFromBool(true)}}));
+      0, std::make_unique<SingleUseExpression>(
+             ExpressionResult{IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
 
   TestContext ctx;
-  ctx.context._groupedVariables = {qlever::Variable{"?vocab"}};
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
   ctx.context._isPartOfGroupBy = true;
   ctx.context._beginIndex = 0;
   ctx.context._endIndex = 1;
@@ -551,9 +544,9 @@ TEST(RegexExpression, getCacheKey) {
   auto exp1 = makeRegexExpression("?first", "alp");
   auto exp2 = makeRegexExpression("?first", "alp");
 
-  qlever::VariableToColumnMap map;
-  map[qlever::Variable{"?first"}] = qlever::makeAlwaysDefinedColumn(0);
-  map[qlever::Variable{"?second"}] = qlever::makeAlwaysDefinedColumn(1);
+  VariableToColumnMap map;
+  map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
+  map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
   EXPECT_TRUE(isPrefixExpression(exp0));
   EXPECT_THAT(
       exp0->getCacheKey(map),
@@ -577,7 +570,7 @@ TEST(RegexExpression, getCacheKey) {
   // Different variable name, but the variable is stored in the same column ->
   // same cache key.
   auto map2 = map;
-  map2[qlever::Variable{"?otherFirst"}] = qlever::makeAlwaysDefinedColumn(0);
+  map2[Variable{"?otherFirst"}] = makeAlwaysDefinedColumn(0);
   auto exp6 = makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1->getCacheKey(map), exp6->getCacheKey(map2));
 
@@ -589,7 +582,7 @@ TEST(RegexExpression, getCacheKey) {
                                   literal("i"));
   EXPECT_NE(exp7->getCacheKey(map), exp8->getCacheKey(map));
 
-  map[qlever::Variable{"?third"}] = qlever::makeAlwaysDefinedColumn(1);
+  map[Variable{"?third"}] = makeAlwaysDefinedColumn(1);
   auto exp9 = makeRegexExpression(variable("?first"), variable("?second"),
                                   variable("?third"));
   EXPECT_NE(exp8->getCacheKey(map), exp9->getCacheKey(map));
@@ -605,27 +598,24 @@ TEST(RegexExpression, getCacheKey) {
 TEST(RegexExpression, getChildren) {
   using namespace ::testing;
   EXPECT_THAT(makeRegexExpression("?a", "someRegex")->containedVariables(),
-              ElementsAre(Pointee(qlever::Variable{"?a"})));
+              ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(makeRegexExpression("?a", "^someRegex")->containedVariables(),
-              ElementsAre(Pointee(qlever::Variable{"?a"})));
+              ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(
       makeRegexExpression("?a", "someRegex", "imsU")->containedVariables(),
-      ElementsAre(Pointee(qlever::Variable{"?a"})));
+      ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(makeTestRegexExpression(variable("?a"), literal("someRegex"),
                                       variable("?c"))
                   ->containedVariables(),
-              ElementsAre(Pointee(qlever::Variable{"?a"}),
-                          Pointee(qlever::Variable{"?c"})));
+              ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?c"})));
   EXPECT_THAT(makeTestRegexExpression(variable("?a"), variable("?b"))
                   ->containedVariables(),
-              ElementsAre(Pointee(qlever::Variable{"?a"}),
-                          Pointee(qlever::Variable{"?b"})));
+              ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"})));
   EXPECT_THAT(
       makeTestRegexExpression(variable("?a"), variable("?b"), variable("?c"))
           ->containedVariables(),
-      ElementsAre(Pointee(qlever::Variable{"?a"}),
-                  Pointee(qlever::Variable{"?b"}),
-                  Pointee(qlever::Variable{"?c"})));
+      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"}),
+                  Pointee(Variable{"?c"})));
 }
 
 // _____________________________________________________________________________
@@ -667,25 +657,25 @@ TEST(RegexExpression, getEstimatesForFilterExpression) {
               hasEstimate(10, 10010));
   EXPECT_THAT(expression->getEstimatesForFilterExpression(100000, std::nullopt),
               hasEstimate(100, 100100));
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(
-                  10000, qlever::Variable{"?b"}),
-              hasEstimate(10, 10010));
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(
-                  100000, qlever::Variable{"?b"}),
-              hasEstimate(100, 100100));
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(
-                  10000, qlever::Variable{"?a"}),
-              hasEstimate(10, 10));
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(
-                  100000, qlever::Variable{"?a"}),
-              hasEstimate(100, 100));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(10000, Variable{"?b"}),
+      hasEstimate(10, 10010));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(100000, Variable{"?b"}),
+      hasEstimate(100, 100100));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
+      hasEstimate(10, 10));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(100000, Variable{"?a"}),
+      hasEstimate(100, 100));
 
   auto longRegexExpression = makeRegexExpression("?a", "^thisisverylong");
   EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
                   1000000000, std::nullopt),
               hasEstimate(10, 1000000010));
   EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
-                  1000000000, qlever::Variable{"?a"}),
+                  1000000000, Variable{"?a"}),
               hasEstimate(10, 10));
 
   auto zeroLengthExpression = makeRegexExpression("?a", "^");
@@ -694,6 +684,6 @@ TEST(RegexExpression, getEstimatesForFilterExpression) {
       zeroLengthExpression->getEstimatesForFilterExpression(100, std::nullopt),
       hasEstimate(100, 200));
   EXPECT_THAT(zeroLengthExpression->getEstimatesForFilterExpression(
-                  1000000000, qlever::Variable{"?a"}),
+                  1000000000, Variable{"?a"}),
               hasEstimate(1000000000, 1000000000));
 }

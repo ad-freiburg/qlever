@@ -72,10 +72,10 @@
 #include "util/Exception.h"
 
 using namespace qlever;
+namespace p = qlever::parsedQuery;
 
 namespace {
 
-using qlever::makeExecutionTree;
 using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>
@@ -319,7 +319,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
-    const qlever::parsedQuery::SelectClause& selectClause,
+    const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -349,7 +349,7 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const qlever::parsedQuery::SelectClause& selectClause,
+    const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
@@ -397,11 +397,11 @@ std::vector<SubtreePlan> QueryPlanner::getHavingRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
-    const parsedQuery::Values& values,
+    const p::Values& values,
     const std::vector<SubtreePlan>& currentPlans) const {
   std::vector<SubtreePlan> result;
 
-  auto valuesPlan = makeSubtreePlan<qlever::Values>(_qec, values._inlineValues);
+  auto valuesPlan = makeSubtreePlan<Values>(_qec, values._inlineValues);
   for (auto& plan : currentPlans) {
     ql::ranges::move(createJoinCandidatesAllowEmpty(
                          plan, valuesPlan, getJoinColumns(plan, valuesPlan)),
@@ -520,7 +520,7 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
-    const qlever::parsedQuery::BasicGraphPattern* pattern) const {
+    const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
@@ -594,7 +594,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
-  qlever::BlankNodeManager bn;
+  BlankNodeManager bn;
   static EncodedIriManager ev;
   auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
                     .parseTypesafe(&SparqlAutomaticParser::filterR)
@@ -867,7 +867,7 @@ auto QueryPlanner::seedWithScansAndText(
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         ql::ends_with(input, '>')) {
-      parsedQuery::SpatialQuery config{node.triple_};
+      p::SpatialQuery config{node.triple_};
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, config.toSpatialJoinConfiguration(), std::nullopt,
           std::nullopt);
@@ -884,7 +884,7 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     if (ql::starts_with(input, MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET)) {
-      parsedQuery::MaterializedViewQuery config{node.triple_};
+      p::MaterializedViewQuery config{node.triple_};
       pushPlan(getMaterializedViewIndexScanPlan(config));
       continue;
     }
@@ -941,8 +941,8 @@ auto QueryPlanner::seedWithScansAndText(
         checkCancellation();
       }
 
-      auto actualPermutation = qlever::getPermutationForTriple(
-          permutation, _qec->getIndex(), triple);
+      auto actualPermutation =
+          getPermutationForTriple(permutation, _qec->getIndex(), triple);
 
       pushPlan(makeSubtreePlan<IndexScan>(_qec, std::move(actualPermutation),
                                           _qec->locatedTriplesSharedState(),
@@ -972,7 +972,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [&left, &right](const qlever::triple_component::Iri& iri) {
+      [&left, &right](const triple_component::Iri& iri) {
         return seedFromVarOrIri(left, iri, right);
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
@@ -1050,7 +1050,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   ParsedQuery::GraphPattern childPlan =
       seedFromPropertyPath(innerLeft, path, innerRight);
   ParsedQuery::GraphPattern p{};
-  qlever::parsedQuery::TransPath transPath;
+  p::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
   transPath._innerLeft = innerLeft;
@@ -1139,19 +1139,18 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
-    const TripleComponent& left, const qlever::sparql_types::VarOrIri& varOrIri,
+    const TripleComponent& left, const sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
-  qlever::parsedQuery::BasicGraphPattern basic;
+  p::BasicGraphPattern basic;
   basic._triples.emplace_back(
       left,
       std::visit(
           ad_utility::OverloadCallOperator{
-              [](const Variable& variable) -> qlever::sparql_types::VarOrPath {
+              [](const Variable& variable) -> sparql_types::VarOrPath {
                 return variable;
               },
-              [](const qlever::triple_component::Iri& iri)
-                  -> qlever::sparql_types::VarOrPath {
+              [](const triple_component::Iri& iri) -> sparql_types::VarOrPath {
                 return PropertyPath::fromIri(iri);
               }},
           varOrIri),
@@ -1166,13 +1165,13 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};
-  p._graphPatterns.emplace_back(qlever::parsedQuery::Union{
-      std::move(patterns[0]), std::move(patterns[1])});
+  p._graphPatterns.emplace_back(
+      parsedQuery::Union{std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     GraphPattern next;
     next._graphPatterns.emplace_back(
-        qlever::parsedQuery::Union{std::move(p), std::move(patterns[i])});
+        parsedQuery::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
   }
   return p;
@@ -1193,7 +1192,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
   SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
-    textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
+    textLimits[cvar] = p::TextLimitMetaObject{{}, {}, 0};
   }
   if (node.triple_.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
@@ -1624,7 +1623,7 @@ size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
     ad_utility::HashSet<Variable> varSet;
     // We use a `VALUES` clause as the dummy because this operation is the
     // easiest to setup for a number of given variables.
-    parsedQuery::SparqlValues values;
+    p::SparqlValues values;
     for (auto* var : vars) {
       values._variables.push_back(*var);
       varSet.insert(*var);
@@ -2616,7 +2615,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
 // _____________________________________________________________________________
 auto QueryPlanner::createMaterializedViewJoinReplacements(
-    const parsedQuery::BasicGraphPattern& triples) const -> ReplacementPlans {
+    const p::BasicGraphPattern& triples) const -> ReplacementPlans {
   ReplacementPlans plans;
 
   // Check if the user allows query rewriting.
@@ -2924,17 +2923,16 @@ void QueryPlanner::checkCancellation(
 }
 
 // _____________________________________________________________________________
-qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
-    const {
-  using Filter = qlever::index::GraphFilter<TripleComponent>;
+index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs() const {
+  using Filter = index::GraphFilter<TripleComponent>;
   auto activeGraphs = activeDatasetClauses_.activeDefaultGraphs();
   if (activeGraphs.has_value()) {
     return Filter::Whitelist(std::move(activeGraphs).value());
   }
   if (defaultGraphBehaviour_ ==
-      parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED) {
-    return Filter::Blacklist(TripleComponent{
-        qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+      p::GroupGraphPattern::GraphVariableBehaviour::NAMED) {
+    return Filter::Blacklist(
+        TripleComponent{triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
   }
   return Filter::All();
 }
@@ -3060,8 +3058,8 @@ template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
   planner_.checkCancellation();
-  if constexpr (std::is_same_v<T, qlever::parsedQuery::Optional> ||
-                std::is_same_v<T, qlever::parsedQuery::GroupGraphPattern>) {
+  if constexpr (std::is_same_v<T, p::Optional> ||
+                std::is_same_v<T, p::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
@@ -3074,15 +3072,15 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
           planner_.defaultGraphBehaviour_ = behaviour;
         }};
     auto& activeDatasets = planner_.activeDatasetClauses_;
-    if constexpr (std::is_same_v<T, qlever::parsedQuery::GroupGraphPattern>) {
+    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (const auto* graphIri =
               std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
         datasetBackup = std::exchange(
             activeDatasets,
             activeDatasets.getDatasetClauseForGraphClause(*graphIri));
       } else if (const auto* graphPair = std::get_if<std::pair<
-                     Variable, qlever::parsedQuery::GroupGraphPattern::
-                                   GraphVariableBehaviour>>(&arg.graphSpec_)) {
+                     Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+                     &arg.graphSpec_)) {
         datasetBackup = std::exchange(
             activeDatasets,
             activeDatasets.getDatasetClauseForVariableGraphClause());
@@ -3098,7 +3096,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     }
 
     auto candidates = planner_.optimize(&arg._child);
-    if constexpr (std::is_same_v<T, qlever::parsedQuery::Optional>) {
+    if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
       }
@@ -3107,16 +3105,16 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if (datasetBackup.has_value()) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Union>) {
+  } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Subquery>) {
+  } else if constexpr (std::is_same_v<T, p::Subquery>) {
     visitSubquery(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::TransPath>) {
+  } else if constexpr (std::is_same_v<T, p::TransPath>) {
     return visitTransitivePath(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Values>) {
+  } else if constexpr (std::is_same_v<T, p::Values>) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Service>) {
+  } else if constexpr (std::is_same_v<T, p::Service>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
@@ -3124,7 +3122,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     throw std::runtime_error(
         "SERVICE is not supported in this restricted version of QLever");
 #endif
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Load>) {
+  } else if constexpr (std::is_same_v<T, p::Load>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
@@ -3132,41 +3130,37 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     throw std::runtime_error(
         "LOAD is not supported in this restricted version of QLever");
 #endif
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Bind>) {
+  } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Minus>) {
+  } else if constexpr (std::is_same_v<T, p::Minus>) {
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
     visitGroupOptionalOrMinus(std::move(candidates));
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::PathQuery>) {
+  } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Describe>) {
+  } else if constexpr (std::is_same_v<T, p::Describe>) {
     visitDescribe(arg);
-  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::SpatialQuery>) {
+  } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
-  } else if constexpr (std::is_same_v<T,
-                                      qlever::parsedQuery::TextSearchQuery>) {
+  } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
-  } else if constexpr (std::is_same_v<
-                           T, qlever::parsedQuery::ExternalValuesQuery>) {
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
     visitExternalValues(arg);
-  } else if constexpr (std::is_same_v<T,
-                                      qlever::parsedQuery::NamedCachedResult>) {
+  } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
-  } else if constexpr (std::is_same_v<
-                           T, qlever::parsedQuery::MaterializedViewQuery>) {
+  } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
     visitMaterializedViewQuery(arg);
   } else {
-    static_assert(std::is_same_v<T, qlever::parsedQuery::BasicGraphPattern>);
+    static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
 };
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
-    const parsedQuery::BasicGraphPattern& v) {
+    const p::BasicGraphPattern& v) {
   // A basic graph patterns consists only of triples. First collect all
   // the bound variables.
   v.collectAllContainedVariables(boundVariables_);
@@ -3194,7 +3188,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
+void QueryPlanner::GraphPatternPlanner::visitBind(const p::Bind& v) {
   if (boundVariables_.contains(v._target)) {
     AD_THROW(
         "The target variable of a BIND must not be used before the "
@@ -3243,8 +3237,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
-    parsedQuery::TransPath& arg) {
+void QueryPlanner::GraphPatternPlanner::visitTransitivePath(p::TransPath& arg) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)arg;
   throw std::runtime_error(
@@ -3276,7 +3269,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
-    parsedQuery::PathQuery& pathQuery) {
+    p::PathQuery& pathQuery) {
   auto config = pathQuery.toPathSearchConfiguration(planner_._qec->getIndex());
 
   // The path search requires a child graph pattern
@@ -3296,21 +3289,21 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
-    const parsedQuery::MaterializedViewQuery& viewQuery) const {
+    const p::MaterializedViewQuery& viewQuery) const {
   return makeSubtreePlan<IndexScan>(
       _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
-    const parsedQuery::MaterializedViewQuery& viewQuery) {
+    const p::MaterializedViewQuery& viewQuery) {
   candidatePlans_.push_back(
       {planner_.getMaterializedViewIndexScanPlan(viewQuery)});
 }
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
-    parsedQuery::SpatialQuery& spatialQuery) {
+    p::SpatialQuery& spatialQuery) {
   auto config = spatialQuery.toSpatialJoinConfiguration();
 
   // If there is no child graph pattern, we need to construct a neutral element
@@ -3355,7 +3348,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(
-    const parsedQuery::TextSearchQuery& textSearchQuery) {
+    const p::TextSearchQuery& textSearchQuery) {
   auto visitor = [this](auto& arg) -> SubtreePlan {
     using T = std::decay_t<decltype(arg)>;
     static_assert(
@@ -3373,7 +3366,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
-    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+    const p::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
       std::make_shared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
@@ -3382,7 +3375,7 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
-    const parsedQuery::NamedCachedResult& arg) {
+    const p::NamedCachedResult& arg) {
   auto candidate =
       SubtreePlan{planner_._qec, planner_._qec->namedResultCache().getOperation(
                                      arg.identifier(), planner_._qec)};
@@ -3390,7 +3383,7 @@ void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
+void QueryPlanner::GraphPatternPlanner::visitUnion(p::Union& arg) {
   // TODO<joka921> here we could keep all the candidates, and create a
   // "sorted union" by merging as additional candidates if the inputs
   // are presorted.
@@ -3404,8 +3397,7 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitSubquery(
-    parsedQuery::Subquery& arg) {
+void QueryPlanner::GraphPatternPlanner::visitSubquery(p::Subquery& arg) {
   absl::Cleanup resetActiveGraphs{
       [this, originalVar = planner_.activeGraphVariable_]() mutable {
         // Reset back to original
@@ -3467,8 +3459,7 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitDescribe(
-    parsedQuery::Describe& describe) {
+void QueryPlanner::GraphPatternPlanner::visitDescribe(p::Describe& describe) {
   auto tree = std::make_shared<QueryExecutionTree>(
       planner_.createExecutionTree(describe.whereClause_.get(), true));
   auto describeOp =

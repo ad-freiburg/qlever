@@ -10,19 +10,30 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
+// Forward declarations of the gtest-generated fixture classes so that the
+// `FRIEND_TEST` declarations below, which must be qualified with `::` because
+// `ParsedRequestBuilder` lives in `namespace qlever`, refer to these classes
+// instead of implicitly declaring (and granting friendship to) unrelated
+// classes of the same name nested inside `namespace qlever`.
+class ParsedRequestBuilderTest_extractTargetGraph_Test;
+class ParsedRequestBuilderTest_determineAccessToken_Test;
+class ParsedRequestBuilderTest_parameterIsContainedExactlyOnce_Test;
+
+namespace qlever {
+
 // Helper for parsing `HttpRequest` into `ParsedRequest`. The parsing has many
 // common patterns but the details are slightly different. This struct
 // stores the partially parsed `ParsedRequest` and methods for common
 // operations used while parsing.
 struct ParsedRequestBuilder {
-  FRIEND_TEST(ParsedRequestBuilderTest, extractTargetGraph);
-  FRIEND_TEST(ParsedRequestBuilderTest, determineAccessToken);
-  FRIEND_TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce);
+  FRIEND_TEST(::ParsedRequestBuilderTest, extractTargetGraph);
+  FRIEND_TEST(::ParsedRequestBuilderTest, determineAccessToken);
+  FRIEND_TEST(::ParsedRequestBuilderTest, parameterIsContainedExactlyOnce);
 
   using RequestType =
       boost::beast::http::request<boost::beast::http::string_body>;
 
-  qlever::url_parser::ParsedRequest parsedRequest_;
+  url_parser::ParsedRequest parsedRequest_;
 
   // Graph Store Protocol direct graph identification needs the host to be able
   // to determine the graph IRI.
@@ -65,7 +76,7 @@ struct ParsedRequestBuilder {
       std::string_view contentType) const;
 
   // Move the `ParsedRequest` out when parsing is finished.
-  qlever::url_parser::ParsedRequest build() &&;
+  url_parser::ParsedRequest build() &&;
 
  private:
   // Adds a dataset clause to the operation if it is of the given type. The
@@ -82,14 +93,15 @@ struct ParsedRequestBuilder {
   // (`Indirect Graph Identification`). See
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
   static GraphOrDefault extractTargetGraph(
-      const qlever::url_parser::ParamValueMap& params);
+      const url_parser::ParamValueMap& params);
 
   // Determine the access token from the parameters and the requests
   // Authorization header.
   static std::optional<std::string> determineAccessToken(
-      const RequestType& request,
-      const qlever::url_parser::ParamValueMap& params);
+      const RequestType& request, const url_parser::ParamValueMap& params);
 };
+
+}  // namespace qlever
 
 #endif
 #endif  // QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H

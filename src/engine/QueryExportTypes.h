@@ -11,15 +11,17 @@
 #include "engine/idTable/IdTable.h"
 #include "index/LocalVocab.h"
 
+namespace qlever {
+
 // Helper type that provides non-owning view access to the underlying `IdTable`
 // and `LocalVocab` associated with the `IdTable`.
 struct TableConstRefWithVocab {
-  qlever::IdTableView<0> idTable_;
-  std::reference_wrapper<const qlever::LocalVocab> localVocab_;
+  IdTableView<0> idTable_;
+  std::reference_wrapper<const LocalVocab> localVocab_;
 
-  const qlever::IdTableView<0>& idTable() const { return idTable_; }
+  const IdTableView<0>& idTable() const { return idTable_; }
 
-  const qlever::LocalVocab& localVocab() const { return localVocab_.get(); }
+  const LocalVocab& localVocab() const { return localVocab_.get(); }
 };
 
 // Helper type that contains an `IdTable` and a view with related indices to
@@ -28,5 +30,7 @@ struct TableWithRange {
   TableConstRefWithVocab tableWithVocab_;
   ql::ranges::iota_view<uint64_t, uint64_t> view_;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_TABLEWITHRANGE_H

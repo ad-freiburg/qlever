@@ -5,8 +5,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
-using namespace qlever;
-
 namespace qlever::sparqlExpression {
 namespace detail {
 // Multiplication.
@@ -283,7 +281,7 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
   using enum BinaryOperator;
-  namespace pd = qlever::prefilterExpressions::detail;
+  namespace pd = prefilterExpressions::detail;
   pd::checkPropertiesForPrefilterConstruction(leftChild);
   pd::checkPropertiesForPrefilterConstruction(rightChild);
   // Merge the PrefilterExpression vectors from the left and right child.

@@ -25,7 +25,7 @@
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
-using namespace qlever::indexRebuilder;
+using namespace indexRebuilder;
 using namespace std::string_literals;
 
 namespace {
@@ -41,9 +41,8 @@ std::vector<char> fileToBuffer(const std::string& filename) {
 }
 
 // Select the correct suffixes.
-std::vector<std::string> getVocabSuffixesForType(
-    qlever::VocabularyType::Enum type) {
-  using enum qlever::VocabularyType::Enum;
+std::vector<std::string> getVocabSuffixesForType(VocabularyType::Enum type) {
+  using enum VocabularyType::Enum;
   switch (type) {
     case InMemoryUncompressed:
       return {""};
@@ -73,7 +72,7 @@ std::vector<std::string> getVocabSuffixesForType(
 
 // Helper function to clean up all vocabulary related files.
 void deleteVocabFiles(const std::string& vocabBasename,
-                      qlever::VocabularyType::Enum type) {
+                      VocabularyType::Enum type) {
   for (const auto& suffix : getVocabSuffixesForType(type)) {
     ad_utility::deleteFile(vocabBasename + suffix);
   }
@@ -82,7 +81,7 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = qlever::VocabularyType::random();
+  auto type = VocabularyType::random();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -108,7 +107,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto type = qlever::VocabularyType::random();
+  auto type = VocabularyType::random();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
@@ -191,7 +190,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, flattenBlankNodeBlocks) {
-  using OBE = qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  using OBE = BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
   std::vector ownedBlocks{OBE{{}, {4, 42}}, OBE{{}, {7, 77}}};
 
   auto flatBlockIndices = flattenBlankNodeBlocks(ownedBlocks);
@@ -222,7 +221,7 @@ TEST(IndexRebuilder, remapVocabId) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapBlankNodeId) {
   std::vector<uint64_t> blankNodeBlocks{4, 42, 77};
-  auto s = qlever::BlankNodeManager::blockSize_;
+  auto s = BlankNodeManager::blockSize_;
 
   EXPECT_EQ(remapBlankNodeId(B(4 * s), blankNodeBlocks, 0), B(0));
   EXPECT_EQ(remapBlankNodeId(B(4 * s + 1), blankNodeBlocks, 0), B(1));
@@ -270,8 +269,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
-                               DEFAULT_GRAPH_IRI)}
+  auto g = TripleComponent{triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
                .toValueId(index)
                .value();
 
@@ -463,10 +461,10 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                     std::move(config));
     index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
                                                  DeltaTriples& deltaTriples) {
-      auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
-                                   DEFAULT_GRAPH_IRI)}
-                   .toValueId(index)
-                   .value();
+      auto g =
+          TripleComponent{triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
+              .toValueId(index)
+              .value();
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
@@ -480,17 +478,17 @@ TEST(IndexRebuilder, materializeToIndex) {
     absl::Cleanup removeIndexFiles{
         [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
 
-    qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                               blankNodes, cancellationHandle, logFile);
+    materializeToIndex(index.getImpl(), newIndexName, state, vocab, blankNodes,
+                       cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
-    EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
-              index.getBlankNodeManager()->minIndex_ +
-                  qlever::BlankNodeManager::blockSize_);
+    EXPECT_EQ(
+        newIndex.getBlankNodeManager()->minIndex_,
+        index.getBlankNodeManager()->minIndex_ + BlankNodeManager::blockSize_);
     EXPECT_EQ(newIndex.numTriples().normal, 4);
     EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
     EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
@@ -525,17 +523,17 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   index.createFromOnDiskIndex(sourceIndexName, false);
 
-  index.deltaTriplesManager().modify<void>(
-      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
-                                     DEFAULT_GRAPH_IRI)}
-                     .toValueId(index)
-                     .value();
-        deltaTriples.insertTriples(
-            cancellationHandle,
-            {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
-                                    Id::makeFromInt(3), g}}});
-      });
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        TripleComponent{triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
+            .toValueId(index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromInt(3), g}}});
+  });
 
   auto [state, vocab, blankNodes] =
       index.deltaTriplesManager()
@@ -545,9 +543,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
 
-  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
-                                             state, vocab, blankNodes,
-                                             cancellationHandle, logFile));
+  EXPECT_NO_THROW(materializeToIndex(index.getImpl(), newIndexName, state,
+                                     vocab, blankNodes, cancellationHandle,
+                                     logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -566,10 +564,9 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  EXPECT_THROW(
-      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
-                                 blankNodes, cancellationHandle, ""),
-      ad_utility::Exception);
+  EXPECT_THROW(materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
+                                  blankNodes, cancellationHandle, ""),
+               ad_utility::Exception);
 }
 
 namespace {

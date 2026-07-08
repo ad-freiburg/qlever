@@ -15,7 +15,7 @@
 
 using namespace qlever;
 
-using namespace qlever::binary_export;
+using namespace binary_export;
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {

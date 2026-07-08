@@ -10,8 +10,7 @@
 
 using namespace qlever;
 
-using namespace qlever::parsedQuery;
-using qlever::Alias;
+using namespace parsedQuery;
 
 // ____________________________________________________________________
 // TODO<joka921, qup42> use a better mechanism to remove duplicates in the

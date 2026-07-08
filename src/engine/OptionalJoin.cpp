@@ -20,8 +20,8 @@
 
 using namespace qlever;
 
-using namespace qlever::joinHelpers;
-using namespace qlever::joinWithIndexScanHelpers;
+using namespace joinHelpers;
+using namespace joinWithIndexScanHelpers;
 
 using std::endl;
 using std::string;
@@ -407,7 +407,7 @@ void OptionalJoin::optionalJoin(
 
   auto lessThanBoth = ql::ranges::lexicographical_compare;
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+  auto rowAdder = qlever::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
       cancellationHandle_, keepJoinColumns_);
   auto rowAdderOnIterators = [&]() {
@@ -624,8 +624,8 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
 // _____________________________________________________________________________
 bool OptionalJoin::isIndexNestedLoopJoinSuitable() const {
   auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_joinColumns, _left,
-                                                            _right);
+    return joinHelpers::joinColumnsAreAlwaysDefined(_joinColumns, _left,
+                                                    _right);
   };
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
@@ -688,7 +688,6 @@ OptionalJoin::makeTreeWithStrippedColumns(
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
     return ad_utility::contains(variables, var);
   });
-  return qlever::makeExecutionTree<OptionalJoin>(
-      getExecutionContext(), std::move(left), std::move(right),
-      keepJoinColumns);
+  return makeExecutionTree<OptionalJoin>(getExecutionContext(), std::move(left),
+                                         std::move(right), keepJoinColumns);
 }

@@ -11,7 +11,7 @@
 
 using namespace qlever;
 
-using namespace qlever::updateClause;
+using namespace updateClause;
 using V = Variable;
 
 // _____________________________________________________________________________

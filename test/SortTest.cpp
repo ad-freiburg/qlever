@@ -35,7 +35,7 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
   return Sort{qec, subtree, sortColumns};
 }
@@ -266,7 +266,7 @@ TEST(Sort, externalSortLazyInput) {
 
   // Create a `ValuesForTesting` that produces lazy output (multiple tables).
   auto subtree =
-      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(tables), vars);
+      makeExecutionTree<ValuesForTesting>(qec, std::move(tables), vars);
 
   // Set threshold to 100 KB so that the 192 KB input triggers external sort.
   // The threshold is exceeded after block 3 (144 KB > 100 KB), so block 4 is
@@ -316,7 +316,7 @@ TEST(Sort, externalSortMaterializedInput) {
   // result even when lazy is requested.
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
       LocalVocab{}, std::nullopt, true);
 
@@ -409,7 +409,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
   // result.
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
       LocalVocab{}, std::nullopt, true);
 
@@ -434,8 +434,8 @@ TEST(Sort, limitOffsetIsPropagated) {
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(inputTable), vars);
+  auto subtree =
+      makeExecutionTree<ValuesForTesting>(qec, std::move(inputTable), vars);
 
   Sort sort{qec, subtree, {0}};
   sort.applyLimitOffset({2, 1});
@@ -452,8 +452,8 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(inputTable), vars);
+  auto subtree =
+      makeExecutionTree<ValuesForTesting>(qec, std::move(inputTable), vars);
 
   auto tree = QueryExecutionTree::createSortedTree(subtree, {0}, true);
   auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());

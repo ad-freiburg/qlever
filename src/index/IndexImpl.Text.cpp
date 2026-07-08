@@ -19,8 +19,6 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 // _____________________________________________________________________________

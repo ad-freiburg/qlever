@@ -20,8 +20,6 @@
 #include "index/EncodedIriManager.h"
 #include "util/Exception.h"
 
-using namespace qlever;
-
 namespace qlever::exportIds {
 
 using LiteralOrIri = triple_component::LiteralOrIri;

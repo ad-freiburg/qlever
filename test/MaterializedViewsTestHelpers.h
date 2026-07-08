@@ -235,7 +235,7 @@ inline void expectNotSuitableForRewrite(
     const auto& viewName, const auto& query,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  qlever::materializedViewsQueryAnalysis::QueryPatternCache qpc;
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
   auto view = manager.getView(viewName);
   EXPECT_FALSE(qpc.analyzeView(view));

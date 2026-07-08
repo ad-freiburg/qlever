@@ -17,8 +17,6 @@
 #include "util/TypeTraits.h"
 #include "util/VariantRangeFilter.h"
 
-using namespace qlever;
-
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________

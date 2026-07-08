@@ -395,8 +395,8 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
-  return qlever::makeExecutionTree<Union>(_executionContext, _subtrees.at(0),
-                                          _subtrees.at(1), sortColumns);
+  return makeExecutionTree<Union>(_executionContext, _subtrees.at(0),
+                                  _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________
@@ -465,6 +465,6 @@ Union::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   auto right =
       QueryExecutionTree::makeTreeWithStrippedColumns(rightChild(), variables);
 
-  return qlever::makeExecutionTree<Union>(getExecutionContext(),
-                                          std::move(left), std::move(right));
+  return makeExecutionTree<Union>(getExecutionContext(), std::move(left),
+                                  std::move(right));
 }

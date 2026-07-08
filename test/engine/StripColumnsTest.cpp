@@ -29,7 +29,7 @@ using namespace ::testing;
 template <typename IdTableOrIdTables>
 StripColumns makeStrip(QueryExecutionContext* qec, IdTableOrIdTables idTable,
                        const std::set<Variable>& varsToKeep) {
-  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTable),
       Vars{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
   return {qec, std::move(valuesTree), varsToKeep};
@@ -79,7 +79,7 @@ TEST(StripColumns, computeResult) {
     std::vector<IdTable> children;
     children.push_back(makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}));
     children.push_back(makeIdTableFromVector({{8, 9, 10}}));
-    auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
+    auto valuesTree = makeExecutionTree<ValuesForTesting>(
         qec, std::move(children),
         Vars{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}}, false,
         std::vector<ColumnIndex>{}, std::move(voc));
@@ -128,7 +128,7 @@ TEST(StripColumns, resultSortedOnAndVarToColMap) {
   // ?c and is sorted by "?c ?a ?b". The strip operation only keeps the
   // `varsToKeep`.
   auto makeOp = [&](const std::set<Variable>& varsToKeep) {
-    auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
+    auto valuesTree = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{0, Id::makeUndefined(), 3}}),
         Vars{a, b, c}, false, std::vector<ColumnIndex>{2, 0, 1});
     return StripColumns{qec, std::move(valuesTree), varsToKeep};

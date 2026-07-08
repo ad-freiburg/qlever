@@ -97,7 +97,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // x actually is a `row_reference_restricted`. This is unexpected because
     // `auto` typically yields a value type. Reading from the proxy is fine, as
     // read access never does any harm.
-    qlever::Id id = rowProxy[0];
+    Id id = rowProxy[0];
     ASSERT_EQ(V(13), id);
     // The following syntax would change the table unexpectedly and therefore
     // doesn't compile
@@ -116,7 +116,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // `rowProxy` actually is a `row_reference_restricted`. This is unexpected
     // because `auto` typically yields a value type. Reading from the proxy is
     // fine, as read access never does any harm.
-    qlever::Id id = rowProxy[0];
+    Id id = rowProxy[0];
     ASSERT_EQ(V(13), id);
     // The following syntax would change the table unexpectedly and therefore
     // doesn't compile
@@ -233,8 +233,8 @@ TEST(IdTable, rowIterators) {
 // `IdTable` (e.g. an allocator or a `BufferedVector`).
 template <size_t NumIdTables, typename T>
 void runTestForDifferentTypes(T testCase, std::string testCaseName) {
-  using Buffer = ad_utility::BufferedVector<qlever::Id>;
-  using BufferedTable = columnBasedIdTable::IdTable<qlever::Id, 0, Buffer>;
+  using Buffer = ad_utility::BufferedVector<Id>;
+  using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
   // for the respective `IdTable` types.
@@ -289,11 +289,11 @@ TEST(IdTable, push_back_and_assign) {
     IdTable t2{NUM_COLS, makeAllocator()};
     // Test the push_back function for spans
     for (size_t i = 0; i < NUM_ROWS; i++) {
-      std::vector<qlever::ValueId> row;
-      row.push_back(qlever::Id::makeFromInt(i * NUM_COLS + 1));
-      row.push_back(qlever::Id::makeFromInt(i * NUM_COLS + 2));
-      row.push_back(qlever::Id::makeFromInt(i * NUM_COLS + 3));
-      row.push_back(qlever::Id::makeFromInt(i * NUM_COLS + 4));
+      std::vector<ValueId> row;
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 1));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 2));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 3));
+      row.push_back(Id::makeFromInt(i * NUM_COLS + 4));
       t2.push_back(row);
     }
 
@@ -306,7 +306,7 @@ TEST(IdTable, push_back_and_assign) {
     // Check the entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
-      ASSERT_EQ(qlever::Id::makeFromInt(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(Id::makeFromInt(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
     }
 
     // Assign new values to the entries
@@ -425,7 +425,7 @@ TEST(IdTable, insertAtEndWithPermutationAndLimit) {
     t1.push_back({make(9), make(2), make(6)});
 
     Table t2 = clone(init, std::move(additionalArgs.at(2))...);
-    std::vector<qlever::ColumnIndex> permutation{2, 1, 0, 3};
+    std::vector<ColumnIndex> permutation{2, 1, 0, 3};
     // Test inserting at the end
     t2.insertAtEnd(t1, 1, 3, permutation, make(1337));
     for (size_t i = 0; i < init.size(); i++) {
@@ -834,13 +834,13 @@ TEST(IdTableTest, statusAfterMove) {
     ASSERT_EQ(0, t1.numRows());
     ASSERT_NO_THROW(t1.push_back(std::array{V(4), V(16), V(23)}));
     ASSERT_EQ(1, t1.numRows());
-    ASSERT_EQ((static_cast<std::array<qlever::Id, 3>>(t1[0])),
+    ASSERT_EQ((static_cast<std::array<Id, 3>>(t1[0])),
               (std::array{V(4), V(16), V(23)}));
   }
   {
-    using Buffer = ad_utility::BufferedVector<qlever::Id>;
+    using Buffer = ad_utility::BufferedVector<Id>;
     Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
-    using BufferedTable = columnBasedIdTable::IdTable<qlever::Id, 1, Buffer>;
+    using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
     BufferedTable table{1, std::array{std::move(buffer)}};
     table.push_back(std::array{V(19)});
     auto t2 = std::move(table);
@@ -1030,30 +1030,29 @@ TEST(IdTable, setColumnSubset) {
   t.push_back({1, 11, 21});
   t.push_back({2, 12, 22});
   {
-    auto view = t.asColumnSubsetView(
-        std::array{qlever::ColumnIndex(2), qlever::ColumnIndex(0)});
+    auto view =
+        t.asColumnSubsetView(std::array{ColumnIndex(2), ColumnIndex(0)});
     ASSERT_EQ(2, view.numColumns());
     ASSERT_EQ(3, view.numRows());
     ASSERT_THAT(view.getColumn(0), ::testing::ElementsAre(20, 21, 22));
     ASSERT_THAT(view.getColumn(1), ::testing::ElementsAre(0, 1, 2));
     // Column index too large
-    ASSERT_ANY_THROW(t.asColumnSubsetView(std::array{qlever::ColumnIndex{3}}));
+    ASSERT_ANY_THROW(t.asColumnSubsetView(std::array{ColumnIndex{3}}));
   }
-  t.setColumnSubset(std::array{qlever::ColumnIndex(2), qlever::ColumnIndex(0)});
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0)});
   ASSERT_EQ(2, t.numColumns());
   ASSERT_EQ(3, t.numRows());
   ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
   ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
 
   // Empty column subset
-  t.setColumnSubset(std::array<qlever::ColumnIndex, 0>{});
+  t.setColumnSubset(std::array<ColumnIndex, 0>{});
   ASSERT_EQ(0, t.numColumns());
 
   // Duplicate columns are not allowed.
-  ASSERT_ANY_THROW(
-      t.setColumnSubset(std::vector<qlever::ColumnIndex>{0, 0, 1}));
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
   // A column index is out of range.
-  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<qlever::ColumnIndex>{1, 2}));
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
 
 TEST(IdTableStatic, setColumnSubset) {
@@ -1062,8 +1061,7 @@ TEST(IdTableStatic, setColumnSubset) {
   t.push_back({0, 10, 20});
   t.push_back({1, 11, 21});
   t.push_back({2, 12, 22});
-  t.setColumnSubset(std::array{qlever::ColumnIndex(2), qlever::ColumnIndex(0),
-                               qlever::ColumnIndex(1)});
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0), ColumnIndex(1)});
   ASSERT_EQ(3, t.numColumns());
   ASSERT_EQ(3, t.numRows());
   ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
@@ -1071,14 +1069,12 @@ TEST(IdTableStatic, setColumnSubset) {
   ASSERT_THAT(t.getColumn(2), ::testing::ElementsAre(10, 11, 12));
 
   // Duplicate columns are not allowed.
-  ASSERT_ANY_THROW(
-      t.setColumnSubset(std::vector<qlever::ColumnIndex>{0, 0, 1}));
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
   // A column index is out of range.
-  ASSERT_ANY_THROW(
-      t.setColumnSubset(std::vector<qlever::ColumnIndex>{1, 2, 3}));
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2, 3}));
 
   // For static tables, we need a permutation, a real subset is not allowed.
-  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<qlever::ColumnIndex>{1, 2}));
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
 TEST(IdTable, deleteColumn) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
@@ -1165,7 +1161,7 @@ TEST(IdTable, shrinkToFit) {
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
   auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
-  IdTable table{2, ad_utility::AllocatorWithLimit<qlever::Id>{memory}};
+  IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
   using namespace ad_utility::memory_literals;
   ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);
   table.reserve(20);
@@ -1210,7 +1206,7 @@ TEST(IdTable, constructorsAreSfinaeFriendly) {
 TEST(IdTable, addEmptyColumn) {
   using ::testing::ElementsAre;
   using ::testing::Eq;
-  IdTable table{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
 
@@ -1225,7 +1221,7 @@ TEST(IdTable, addEmptyColumn) {
 
 // _____________________________________________________________________________
 TEST(IdTable, moveOrClone) {
-  IdTable table{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
 
@@ -1239,7 +1235,7 @@ TEST(IdTable, moveOrClone) {
 
 // ______________________________________________________________________________
 TEST(IdTable, moveOrCloneOnView) {
-  IdTable table{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
 
@@ -1265,7 +1261,7 @@ using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 
 TYPED_TEST(IdTableSubViewTest, subView) {
-  auto alloc = ad_utility::makeUnlimitedAllocator<qlever::Id>();
+  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable table{2, alloc};
   for (int i = 0; i < 5; ++i) {
     table.push_back({V(i * 10), V(i * 10 + 1)});

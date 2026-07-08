@@ -113,39 +113,39 @@ TEST(MultiColumnJoin, clone) {
 
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
-  using qlever::triple_component::Iri;
+  using triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
-  auto values1 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto values2 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto values2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
   // Not in graph, potentially undef
-  auto values3 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto values3 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto values4 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto values4 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
   // In graph, no undef
-  auto index1 = qlever::makeExecutionTree<IndexScan>(
+  auto index1 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?c"}});
-  auto index2 = qlever::makeExecutionTree<IndexScan>(
+  auto index2 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?b"}});
   // In graph, potential undef
-  auto index3 = qlever::makeExecutionTree<NeutralOptional>(
-      qec, qlever::makeExecutionTree<IndexScan>(
+  auto index3 = makeExecutionTree<NeutralOptional>(
+      qec, makeExecutionTree<IndexScan>(
                qec, Permutation::PSO,
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?c"}}));
-  auto index4 = qlever::makeExecutionTree<NeutralOptional>(
-      qec, qlever::makeExecutionTree<IndexScan>(
+  auto index4 = makeExecutionTree<NeutralOptional>(
+      qec, makeExecutionTree<IndexScan>(
                qec, Permutation::PSO,
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?b"}}));

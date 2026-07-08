@@ -75,7 +75,7 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
                                 &transformTc](TurtleTriple&& triple) {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
                          triple.graphIri_.getId() ==
-                             qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+                             specialIds().at(DEFAULT_GRAPH_IRI));
 
     return SparqlTripleSimpleWithGraph(
         transformTc(std::move(triple.subject_)),
@@ -88,7 +88,7 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 
 // ____________________________________________________________________________
 ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
-    const qlever::triple_component::Iri& graphIri) {
+    const triple_component::Iri& graphIri) {
   namespace http = boost::beast::http;
   return ResponseMiddleware(
       [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
@@ -100,9 +100,9 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
 }
 
 // ____________________________________________________________________________
-qlever::triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
+triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
   ad_utility::UuidGenerator uuidGen;
-  return qlever::triple_component::Iri::fromIriref(
+  return triple_component::Iri::fromIriref(
       absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX, uuidGen(), ">"));
 }
 
@@ -112,7 +112,7 @@ ParsedQuery GraphStoreProtocol::transformGet(
   // Construct the parsed query from its short equivalent SPARQL Update
   // string. This is easier and also provides e.g. the `_originalString` field.
   auto getQuery = [&graph]() -> std::string {
-    if (const auto* iri = std::get_if<qlever::triple_component::Iri>(&graph)) {
+    if (const auto* iri = std::get_if<triple_component::Iri>(&graph)) {
       return absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
                           iri->toStringRepresentation(), " { ?s ?p ?o } }");
     } else {
@@ -144,7 +144,7 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
   // Construct the parsed update from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
   auto getUpdate = [&graph]() -> std::string {
-    if (const auto* iri = std::get_if<qlever::triple_component::Iri>(&graph)) {
+    if (const auto* iri = std::get_if<triple_component::Iri>(&graph)) {
       return absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
     } else {
       return "DROP DEFAULT";

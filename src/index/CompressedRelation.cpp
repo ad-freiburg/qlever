@@ -23,8 +23,6 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 using namespace std::chrono_literals;

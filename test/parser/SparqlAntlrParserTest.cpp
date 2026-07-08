@@ -32,7 +32,7 @@ auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(qlever::triple_component::Iri::fromIriref(iri));
+  return PropertyPath::fromIri(triple_component::Iri::fromIriref(iri));
 }
 
 const EncodedIriManager* encodedIriManager() {
@@ -71,7 +71,7 @@ TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
   {
-    static qlever::BlankNodeManager blankNodeManager;
+    static BlankNodeManager blankNodeManager;
     ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
@@ -816,7 +816,7 @@ TEST(SparqlParser, SelectClause) {
   auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
   auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
-  using Alias = std::pair<string, qlever::Variable>;
+  using Alias = std::pair<string, Variable>;
   expectCompleteParse(parseSelectClause("SELECT *"),
                       m::AsteriskSelect(false, false));
   expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
@@ -1616,8 +1616,8 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
-  auto GraphBlock = [](const qlever::sparql_types::VarOrIri& graph,
-                       const qlever::sparql_types::Triples& triples)
+  auto GraphBlock = [](const sparql_types::VarOrIri& graph,
+                       const sparql_types::Triples& triples)
       -> testing::Matcher<const Quads::GraphBlock&> {
     return testing::FieldsAre(testing::Eq(graph),
                               testing::ElementsAreArray(triples));
@@ -1737,7 +1737,7 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   auto parseWithEncoding = [&](const std::string& input) {
-    static qlever::BlankNodeManager blankNodeManager;
+    static BlankNodeManager blankNodeManager;
     return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };

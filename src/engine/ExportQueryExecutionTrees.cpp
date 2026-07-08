@@ -40,8 +40,8 @@ using ad_utility::InputRangeTypeErased;
 
 namespace {
 
-using LiteralOrIri = qlever::triple_component::LiteralOrIri;
-using Literal = qlever::triple_component::Literal;
+using LiteralOrIri = triple_component::LiteralOrIri;
+using Literal = triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -266,7 +266,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
-    const qlever::sparql_types::Triples& constructTriples,
+    const sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // For each result from the WHERE clause, we produce up to
@@ -277,17 +277,16 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  return qlever::constructExport::ConstructTripleGenerator::
-      generateStringTriples(constructTriples, qet.getVariableColumns(),
-                            qet.getQec()->getIndex(), cancellationHandle,
-                            std::move(rowIndices), limitAndOffset._offset);
+  return constructExport::ConstructTripleGenerator::generateStringTriples(
+      constructTriples, qet.getVariableColumns(), qet.getQec()->getIndex(),
+      cancellationHandle, std::move(rowIndices), limitAndOffset._offset);
 }
 
 // _____________________________________________________________________________
 InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
-    const qlever::sparql_types::Triples& constructTriples,
+    const sparql_types::Triples& constructTriples,
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
@@ -320,7 +319,7 @@ nlohmann::json idTableToQLeverJSONRow(
       continue;
     }
     const auto& currentId = data(rowIndex, opt->columnIndex_);
-    const auto& optionalStringAndXsdType = qlever::exportIds::idToStringAndType(
+    const auto& optionalStringAndXsdType = exportIds::idToStringAndType(
         qet.getQec()->getIndex(), currentId, localVocab);
     if (!optionalStringAndXsdType.has_value()) {
       row.emplace_back(nullptr);
@@ -518,7 +517,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              qlever::exportIds::idToStringAndType<format == MediaType::csv>(
+              exportIds::idToStringAndType<format == MediaType::csv>(
                   qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
@@ -545,7 +544,7 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =
-      qlever::exportIds::idToStringAndType(index, id, localVocab);
+      exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalValue.has_value()) {
     return ""s;
   }
@@ -695,7 +694,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
     auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
-      auto optionalStringAndType = qlever::exportIds::idToStringAndType(
+      auto optionalStringAndType = exportIds::idToStringAndType(
           qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
           pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
@@ -760,7 +759,7 @@ template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
-    const qlever::sparql_types::Triples& constructTriples,
+    const sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
@@ -789,11 +788,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
-  auto triples = qlever::constructExport::ConstructTripleGenerator::
-      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
-                               qet.getQec()->getIndex(), cancellationHandle,
-                               std::move(rowIndices), limitAndOffset._offset,
-                               format);
+  auto triples =
+      constructExport::ConstructTripleGenerator::generateFormattedTriples(
+          constructTriples, qet.getVariableColumns(), qet.getQec()->getIndex(),
+          cancellationHandle, std::move(rowIndices), limitAndOffset._offset,
+          format);
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);

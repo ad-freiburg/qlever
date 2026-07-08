@@ -567,7 +567,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
       makeTestIndex("getResultSizeOfScanWithDeltaTriples",
                     "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
   auto getId = makeGetId(*index);
-  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto g = specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
   using V = Variable;
@@ -788,8 +788,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
-  auto qet =
-      qlever::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  auto qet = makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::move(prefilterPairs));
@@ -980,9 +979,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
-    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        qlever::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getLocalVocabContext()});
+    vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{triple_component::Literal::literalWithoutQuotes("Test"),
+                        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1368,8 +1367,7 @@ TEST(IndexScan, clone) {
     using namespace filterHelper;
     SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
                               Tc{Variable{"?price"}}};
-    auto qet =
-        qlever::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+    auto qet = makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
     ASSERT_TRUE(qet->getRootOperation()->canResultBeCached());
     auto clone = qet->clone();
     ASSERT_TRUE(clone);
@@ -1792,7 +1790,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // permutation where subject is bound to ?x (first column)
 
   auto makeBaseScan = [&qec]() {
-    return qlever::makeExecutionTree<IndexScan>(
+    return makeExecutionTree<IndexScan>(
         qec, Permutation::SPO,
         SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
   };
@@ -1901,9 +1899,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
-    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        qlever::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getLocalVocabContext()});
+    vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{triple_component::Literal::literalWithoutQuotes("Test"),
+                        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),

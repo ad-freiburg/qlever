@@ -102,8 +102,8 @@ auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree) {
   distinctColumns.reserve(executionTree->getResultWidth());
   ql::ranges::copy(ad_utility::integerRange(executionTree->getResultWidth()),
                    std::back_inserter(distinctColumns));
-  return qlever::makeExecutionTree<Distinct>(qec, std::move(executionTree),
-                                             std::move(distinctColumns));
+  return makeExecutionTree<Distinct>(qec, std::move(executionTree),
+                                     std::move(distinctColumns));
 }
 }  // namespace
 
@@ -131,12 +131,12 @@ TransitivePathBase::makeIndexScanPair(
       };
 
   return {
-      stripColumns(qlever::makeExecutionTree<IndexScan>(
+      stripColumns(makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
           SparqlTripleSimple{TripleComponent{variable}, std::move(a),
                              TripleComponent{std::move(b)}, additionalColumns},
           activeGraphs)),
-      stripColumns(qlever::makeExecutionTree<IndexScan>(
+      stripColumns(makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
           SparqlTripleSimple{TripleComponent{std::move(c)}, std::move(d),
                              TripleComponent{variable}, additionalColumns},
@@ -155,16 +155,16 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
 
   auto joinWithValues = [qec, &tripleComponent, &x](
                             std::shared_ptr<QueryExecutionTree> executionTree) {
-    auto valuesClause = qlever::makeExecutionTree<Values>(
+    auto valuesClause = makeExecutionTree<Values>(
         qec, parsedQuery::SparqlValues{{x}, {{tripleComponent}}});
-    return qlever::makeExecutionTree<Join>(qec, std::move(executionTree),
-                                           std::move(valuesClause), 0, 0);
+    return makeExecutionTree<Join>(qec, std::move(executionTree),
+                                   std::move(valuesClause), 0, 0);
   };
   auto [leftScan, rightScan] =
       makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
   return makeDistinct(
-      qlever::makeExecutionTree<Union>(qec, joinWithValues(std::move(leftScan)),
-                                       joinWithValues(std::move(rightScan))));
+      makeExecutionTree<Union>(qec, joinWithValues(std::move(leftScan)),
+                               joinWithValues(std::move(rightScan))));
 }
 
 // _____________________________________________________________________________
@@ -175,8 +175,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
   auto [leftScan, rightScan] = makeIndexScanPair(
       qec, std::move(activeGraphs),
       std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
-  return makeDistinct(qlever::makeExecutionTree<Union>(qec, std::move(leftScan),
-                                                       std::move(rightScan)));
+  return makeDistinct(
+      makeExecutionTree<Union>(qec, std::move(leftScan), std::move(rightScan)));
 }
 
 // _____________________________________________________________________________
@@ -497,9 +497,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
              .has_value()) {
       auto completeScan = makeEmptyPathSide(
           getExecutionContext(), activeGraphs_, graphVariable_, originalVar);
-      leftOrRightOp = qlever::makeExecutionTree<Join>(
-          getExecutionContext(), std::move(leftOrRightOp), completeScan,
-          inputCol, 0);
+      leftOrRightOp = makeExecutionTree<Join>(getExecutionContext(),
+                                              std::move(leftOrRightOp),
+                                              completeScan, inputCol, 0);
       inputCol = leftOrRightOp->getVariableColumn(originalVar);
     }
 
@@ -518,11 +518,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
         getExecutionContext(), activeGraphs_,
         graphIsJoin ? internalGraphHelper_ : graphVariable_, originalVar);
     if (graphVariable_.has_value() && !graphIsJoin) {
-      leftOrRightOp = qlever::makeExecutionTree<MultiColumnJoin>(
+      leftOrRightOp = makeExecutionTree<MultiColumnJoin>(
           getExecutionContext(), std::move(leftOrRightOp),
           std::move(completeScan));
     } else {
-      leftOrRightOp = qlever::makeExecutionTree<Join>(
+      leftOrRightOp = makeExecutionTree<Join>(
           getExecutionContext(), std::move(leftOrRightOp),
           std::move(completeScan), inputCol, 0);
     }
@@ -535,9 +535,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     // `TransitivePathImpl::transitiveHull` already does the comparison.
     auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
                                           internalGraphHelper_, originalVar);
-    leftOrRightOp = qlever::makeExecutionTree<Join>(
-        getExecutionContext(), std::move(leftOrRightOp),
-        std::move(completeScan), inputCol, 0);
+    leftOrRightOp =
+        makeExecutionTree<Join>(getExecutionContext(), std::move(leftOrRightOp),
+                                std::move(completeScan), inputCol, 0);
     inputCol = leftOrRightOp->getVariableColumn(originalVar);
   }
   return leftOrRightOp;

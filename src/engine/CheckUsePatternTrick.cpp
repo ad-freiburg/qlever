@@ -9,6 +9,8 @@
 #include "parser/GraphPatternOperation.h"
 
 namespace qlever::checkUsePatternTrick {
+namespace p = parsedQuery;
+
 // __________________________________________________________________________
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
@@ -19,7 +21,7 @@ bool isVariableContainedInGraphPattern(
           })) {
     return true;
   }
-  auto check = [&](const parsedQuery::GraphPatternOperation& op) {
+  auto check = [&](const p::GraphPatternOperation& op) {
     return isVariableContainedInGraphPatternOperation(variable, op,
                                                       tripleToIgnore);
   };
@@ -28,28 +30,27 @@ bool isVariableContainedInGraphPattern(
 
 // __________________________________________________________________________
 bool isVariableContainedInGraphPatternOperation(
-    const Variable& variable,
-    const parsedQuery::GraphPatternOperation& operation,
+    const Variable& variable, const p::GraphPatternOperation& operation,
     const SparqlTriple* tripleToIgnore) {
-  auto check = [&](const parsedQuery::GraphPattern& pattern) {
+  auto check = [&](const p::GraphPattern& pattern) {
     return isVariableContainedInGraphPattern(variable, pattern, tripleToIgnore);
   };
   return operation.visit([&](auto&& arg) -> bool {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, parsedQuery::Optional> ||
-                  std::is_same_v<T, parsedQuery::GroupGraphPattern> ||
-                  std::is_same_v<T, parsedQuery::Minus>) {
+    if constexpr (std::is_same_v<T, p::Optional> ||
+                  std::is_same_v<T, p::GroupGraphPattern> ||
+                  std::is_same_v<T, p::Minus>) {
       return check(arg._child);
-    } else if constexpr (std::is_same_v<T, parsedQuery::Union>) {
+    } else if constexpr (std::is_same_v<T, p::Union>) {
       return check(arg._child1) || check(arg._child2);
-    } else if constexpr (std::is_same_v<T, parsedQuery::Subquery>) {
+    } else if constexpr (std::is_same_v<T, p::Subquery>) {
       // Subqueries always are SELECT clauses.
       const auto& selectClause = arg.get().selectClause();
       return ad_utility::contains(selectClause.getSelectedVariables(),
                                   variable);
-    } else if constexpr (std::is_same_v<T, parsedQuery::Bind>) {
+    } else if constexpr (std::is_same_v<T, p::Bind>) {
       return ad_utility::contains(arg.containedVariables(), variable);
-    } else if constexpr (std::is_same_v<T, parsedQuery::BasicGraphPattern>) {
+    } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
       return ad_utility::contains_if(
           arg._triples, [&](const SparqlTriple& triple) {
             if (&triple == tripleToIgnore) {
@@ -58,25 +59,22 @@ bool isVariableContainedInGraphPatternOperation(
             return (triple.s_ == variable || triple.predicateIs(variable) ||
                     triple.o_ == variable);
           });
-    } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
+    } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables, variable);
-    } else if constexpr (std::is_same_v<T, parsedQuery::Service>) {
+    } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
-    } else if constexpr (ad_utility::SameAsAny<
-                             T, parsedQuery::PathQuery,
-                             parsedQuery::SpatialQuery,
-                             parsedQuery::TextSearchQuery,
-                             parsedQuery::NamedCachedResult,
-                             parsedQuery::MaterializedViewQuery,
-                             parsedQuery::ExternalValuesQuery>) {
+    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
+                                               p::TextSearchQuery,
+                                               p::NamedCachedResult,
+                                               p::MaterializedViewQuery,
+                                               p::ExternalValuesQuery>) {
       // For `MagicServiceQuery`s disable the pattern trick. This might slow
       // things down more than necessary but is never wrong. In the future this
       // could potentially be enabled for certain magic service queries.
       return true;
     } else {
       static_assert(
-          ad_utility::SameAsAny<T, parsedQuery::TransPath,
-                                parsedQuery::Describe, parsedQuery::Load>);
+          ad_utility::SameAsAny<T, p::TransPath, p::Describe, p::Load>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
@@ -141,8 +139,7 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
 // `?s ql:has-pattern ?p`. See the documentation of
 // `rewriteTriplesForPatternTrick` above.
 static std::optional<PatternTrickTuple> findPatternTrickTuple(
-    parsedQuery::BasicGraphPattern* graphPattern,
-    const ParsedQuery* parsedQuery,
+    p::BasicGraphPattern* graphPattern, const ParsedQuery* parsedQuery,
     const std::optional<
         sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
         countedVariable) {
@@ -190,7 +187,7 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
   // TODO<joka921> This loop can be made much easier using ranges and view once
   // they are supported by clang.
   for (auto& pattern : parsedQuery->children()) {
-    auto* curPattern = std::get_if<parsedQuery::BasicGraphPattern>(&pattern);
+    auto* curPattern = std::get_if<p::BasicGraphPattern>(&pattern);
     if (!curPattern) {
       continue;
     }

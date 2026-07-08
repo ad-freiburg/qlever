@@ -184,7 +184,7 @@ compressedRelationTestWriteCompressedRelations(
 
   auto res = CompressedRelationWriter::createPermutation(
       std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
-      qlever::KeyOrder{0, 1, 2, 3}, {});
+      KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
   ad_utility::serialization::ByteBufferWriteSerializer w;
@@ -1027,7 +1027,7 @@ using FLT =
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
   ad_utility::testing::TestIndexConfig testIndexConfig;
-  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  testIndexConfig.indexType = Filetype::NQuad;
   testIndexConfig.turtleInput =
       "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
       "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."
@@ -1043,7 +1043,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
-    return TripleComponent{qlever::triple_component::Iri::fromIriref(iri)}
+    return TripleComponent{triple_component::Iri::fromIriref(iri)}
         .toValueId(index)
         .value();
   };
@@ -1104,7 +1104,7 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   ad_utility::testing::TestIndexConfig testIndexConfig;
   testIndexConfig.usePatterns = true;
-  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  testIndexConfig.indexType = Filetype::NQuad;
   testIndexConfig.turtleInput =
       "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
       "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."

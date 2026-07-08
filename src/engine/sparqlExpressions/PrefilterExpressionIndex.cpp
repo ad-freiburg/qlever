@@ -18,8 +18,6 @@
 #include "util/ConstexprMap.h"
 #include "util/OverloadCallOperator.h"
 
-using namespace qlever;
-
 namespace qlever::prefilterExpressions {
 
 using LVE = LocalVocabEntry;

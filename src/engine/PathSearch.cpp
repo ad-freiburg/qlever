@@ -19,7 +19,7 @@
 #include "util/AllocatorWithLimit.h"
 
 using namespace qlever;
-using namespace qlever::pathSearch;
+using namespace pathSearch;
 
 using namespace pathSearch;
 

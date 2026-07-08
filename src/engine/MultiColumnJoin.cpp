@@ -12,7 +12,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever;
-using namespace qlever::joinHelpers;
+using namespace joinHelpers;
 
 using std::endl;
 using std::string;
@@ -229,7 +229,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto rightPermuted =
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+  auto rowAdder = qlever::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
       cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
@@ -305,7 +305,7 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   // can have a more efficient implementation.
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
-    using namespace qlever::joinHelpers;
+    using namespace joinHelpers;
     return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);

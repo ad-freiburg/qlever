@@ -95,7 +95,7 @@ class SpatialJoinParamTest
     };
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec, SpatialJoinConfiguration{task, left, right}, std::nullopt,
             std::nullopt);
 
@@ -275,9 +275,8 @@ class SpatialJoinParamTest
     std::string geometry =
         getUseAreasOrPoints() ? "<geometryArea1>" : "<geometry1>";
     TripleComponent point1{Variable{"?point1"}};
-    TripleComponent subject{
-        qlever::triple_component::Iri::fromIriref(geometry)};
-    auto smallChild = qlever::makeExecutionTree<IndexScan>(
+    TripleComponent subject{triple_component::Iri::fromIriref(geometry)};
+    auto smallChild = makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),
                            point1});
@@ -1582,7 +1581,7 @@ TEST(SpatialJoin, areaFormat) {
       buildIndexScan(qec, {"?geo2", std::string{"<asWKT>"}, "?obj2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig(100000000),
                                    Variable{"?obj1"}, Variable{"?obj2"}},
@@ -1607,7 +1606,7 @@ TEST(SpatialJoin, trueAreaDistance) {
       auto subject = absl::StrCat("<geometry", nr, ">");
       auto objStr = absl::StrCat("?obj", nr);
       TripleComponent object{Variable{objStr}};
-      return qlever::makeExecutionTree<IndexScan>(
+      return makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
           SparqlTripleSimple{TripleComponent::Iri::fromIriref(subject),
                              TripleComponent::Iri::fromIriref("<asWKT>"),
@@ -1619,7 +1618,7 @@ TEST(SpatialJoin, trueAreaDistance) {
     auto var2 = absl::StrCat("?obj", nr2);
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig(100000000),
                                      Variable{var1}, Variable{var2}},
@@ -1670,7 +1669,7 @@ TEST(SpatialJoin, mixedDataSet) {
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        qlever::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig(maxDist),
                                      Variable{"?geo1"}, Variable{"?geo2"}},
@@ -1725,8 +1724,7 @@ void testNumberOfThreads(size_t runtimeParamNumThreads,
       Variable{"?geo2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
-                                             rightChild);
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
@@ -1755,7 +1753,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
-  std::optional<qlever::VocabularyType> vocabType = std::nullopt;
+  std::optional<VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
@@ -1771,8 +1769,8 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
       LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
       Variable{"?area2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  auto spatialJoinOperation = qlever::makeExecutionTree<SpatialJoin>(
-      qec, config, leftChild, rightChild);
+  auto spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
@@ -1790,7 +1788,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   auto base = std::filesystem::current_path() / "_spatialjoinAbsTestIndex";
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
-  std::optional<qlever::VocabularyType> vocabType = std::nullopt;
+  std::optional<VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
@@ -1805,8 +1803,8 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
       LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
       Variable{"?area2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  auto spatialJoinOperation = qlever::makeExecutionTree<SpatialJoin>(
-      qec, config, leftChild, rightChild);
+  auto spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
@@ -1837,8 +1835,7 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
       "<s3> <asWKT> \"POINT(1 2)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
 
-  auto vocabType =
-      qlever::VocabularyType::fromString("on-disk-compressed-geo-split");
+  auto vocabType = VocabularyType::fromString("on-disk-compressed-geo-split");
   auto qec = ad_utility::testing::getQec(kb, vocabType);
   auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
   auto result = scan->getResult();

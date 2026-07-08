@@ -42,8 +42,7 @@ TEST(Describe, recursiveBlankNodes) {
       "_:g4 <p>  _:g5 .");
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
-  Describe describe{qec,
-                    qlever::makeExecutionTree<NeutralElementOperation>(qec),
+  Describe describe{qec, makeExecutionTree<NeutralElementOperation>(qec),
                     parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
   const auto& table = res.idTableView();
@@ -86,8 +85,7 @@ TEST(Describe, describeWithVariable) {
                             TripleComponent::Iri::fromIriref("<p>"),
                             TripleComponent::Iri::fromIriref("<o>")};
   Describe describe{
-      qec,
-      qlever::makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, triple),
+      qec, makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, triple),
       parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
   const auto& table = res.idTableView();
@@ -118,7 +116,7 @@ TEST(Describe, describeWithVariableButNoWhereClause) {
   auto qec = getQec("<s> <p> <o>");
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(Variable{"?x"});
-  auto noWhere = qlever::makeExecutionTree<NeutralElementOperation>(qec);
+  auto noWhere = makeExecutionTree<NeutralElementOperation>(qec);
   Describe describe{qec, noWhere, parsedDescribe};
   auto result = describe.computeResultOnlyForTesting();
   EXPECT_EQ(result.idTableView().size(), 0);
@@ -141,8 +139,7 @@ TEST(Describe, simpleMembers) {
       "_:g4 <p>  _:g5 .");
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
-  Describe describe{qec,
-                    qlever::makeExecutionTree<NeutralElementOperation>(qec),
+  Describe describe{qec, makeExecutionTree<NeutralElementOperation>(qec),
                     parsedDescribe};
 
   EXPECT_EQ(describe.getDescriptor(), "DESCRIBE");
@@ -164,8 +161,7 @@ TEST(Describe, simpleMembers) {
   parsedDescribe2.datasetClauses_ =
       parsedQuery::DatasetClauses::fromClauses(std::vector{DatasetClause{
           TripleComponent::Iri::fromIriref("<default-graph-1>"), false}});
-  Describe describe2{qec,
-                     qlever::makeExecutionTree<NeutralElementOperation>(qec),
+  Describe describe2{qec, makeExecutionTree<NeutralElementOperation>(qec),
                      parsedDescribe2};
   EXPECT_THAT(describe2.getCacheKey(),
               AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
@@ -188,8 +184,7 @@ TEST(Describe, clone) {
   auto qec = getQec();
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
-  Describe describe{qec,
-                    qlever::makeExecutionTree<NeutralElementOperation>(qec),
+  Describe describe{qec, makeExecutionTree<NeutralElementOperation>(qec),
                     parsedDescribe};
 
   auto clone = describe.clone();

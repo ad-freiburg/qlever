@@ -16,11 +16,14 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Serializer/TripleSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void qlever::NamedResultCache::
-    writeToSerializer(Serializer& serializer) const {
+        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
+                                                                  serializer)
+    const {
   auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
   for (const auto& key : lock->getAllNonpinnedKeys()) {
@@ -41,9 +44,9 @@ CPP_template_def(typename Serializer)(
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void qlever::NamedResultCache::
+        Serializer>) void NamedResultCache::
     readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const qlever::LocalVocabContext& context) {
+                       const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -67,6 +70,8 @@ CPP_template_def(typename Serializer)(
     store(key, std::move(value));
   }
 }
+
+}  // namespace qlever
 
 namespace ad_utility::serialization {
 

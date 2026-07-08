@@ -64,10 +64,10 @@ namespace {
 constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 }  // namespace
 
-using namespace qlever::sparql_types;
+using namespace sparql_types;
 using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
-using namespace qlever::updateClause;
+using namespace updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = parsedQuery::SelectClause;
@@ -82,9 +82,8 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 namespace {
-const qlever::triple_component::Iri a =
-    qlever::triple_component::Iri::fromIriref(
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+const triple_component::Iri a = triple_component::Iri::fromIriref(
+    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }  // namespace
 
 // _____________________________________________________________________________
@@ -221,7 +220,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
-  using enum qlever::BoundingCoordinate;
+  using enum BoundingCoordinate;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
@@ -417,7 +416,7 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 
 // ____________________________________________________________________________________
 parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
-    const qlever::sparql_types::Triples& triples) const {
+    const sparql_types::Triples& triples) const {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
   auto toTripleComponent = [this](const auto& item) {
@@ -739,9 +738,9 @@ namespace {
 TripleComponent::Iri transformGraph(const GraphOrDefault& graph) {
   return std::visit(
       ad_utility::OverloadCallOperator{
-          [](const qlever::triple_component::Iri& iri) { return iri; },
+          [](const triple_component::Iri& iri) { return iri; },
           [](const DEFAULT&) {
-            return qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
+            return triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
           }},
       graph);
 }
@@ -795,7 +794,7 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
           },
           [](const DEFAULT&) -> P {
             auto defaultGraph =
-                qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
+                triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
             auto copy = defaultGraph;
             return {makeAllTripleGraphPattern(std::move(defaultGraph)),
                     std::move(copy)};
@@ -1453,8 +1452,8 @@ std::string Visitor::visit(Parser::IrirefContext* ctx) const {
   if (!baseIri_.has_value()) {
     return ctx->getText();
   }
-  return qlever::triple_component::Iri::fromIrirefConsiderBase(ctx->getText(),
-                                                               baseIri_.value())
+  return triple_component::Iri::fromIrirefConsiderBase(ctx->getText(),
+                                                       baseIri_.value())
       .toStringRepresentation();
 }
 
@@ -1538,7 +1537,7 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
   }
   auto iri =
       TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
-  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+  baseIri_ = util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________
@@ -2076,8 +2075,8 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithPathContext* ctx) {
 
 // ____________________________________________________________________________________
 VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
-  return visitAlternative<qlever::sparql_types::VarOrPath>(ctx->verbPath(),
-                                                           ctx->verbSimple());
+  return visitAlternative<sparql_types::VarOrPath>(ctx->verbPath(),
+                                                   ctx->verbSimple());
 }
 
 // ___________________________________________________________________________
@@ -2322,11 +2321,10 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
 // _____________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
-  return toRdfCollection(visitVector(ctx->graphNodePath()),
-                         [](std::string_view iri) {
-                           return PropertyPath::fromIri(
-                               qlever::triple_component::Iri::fromIriref(iri));
-                         });
+  return toRdfCollection(
+      visitVector(ctx->graphNodePath()), [](std::string_view iri) {
+        return PropertyPath::fromIri(triple_component::Iri::fromIriref(iri));
+      });
 }
 
 // ____________________________________________________________________________________

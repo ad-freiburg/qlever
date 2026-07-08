@@ -26,14 +26,12 @@
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
 
-// Forward declarations
 namespace qlever {
+
+// Forward declarations
 class QueryExecutionContext;
 class QueryExecutionTree;
 class IndexScan;
-}  // namespace qlever
-
-namespace qlever {
 
 // For the future, materialized views save their version. If we change something
 // about the way materialized views are stored, we can break the existing ones

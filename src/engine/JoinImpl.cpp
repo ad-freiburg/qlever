@@ -37,8 +37,8 @@
 
 using namespace qlever;
 
-using namespace qlever::joinHelpers;
-using namespace qlever::joinWithIndexScanHelpers;
+using namespace joinHelpers;
+using namespace joinWithIndexScanHelpers;
 using std::endl;
 using std::string;
 
@@ -327,7 +327,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+  auto rowAdder = qlever::AddCombinedRowToIdTable(
       1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
       keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
@@ -734,15 +734,14 @@ ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
+qlever::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
     std::function<void(IdTable&, LocalVocab&)> callback) const {
-  return ad_utility::AddCombinedRowToIdTable{
-      1,
-      IdTable{getResultWidth(), allocator()},
-      cancellationHandle_,
-      keepJoinColumn_,
-      CHUNK_SIZE,
-      std::move(callback)};
+  return qlever::AddCombinedRowToIdTable{1,
+                                         IdTable{getResultWidth(), allocator()},
+                                         cancellationHandle_,
+                                         keepJoinColumn_,
+                                         CHUNK_SIZE,
+                                         std::move(callback)};
 }
 
 // _____________________________________________________________________________
@@ -782,9 +781,9 @@ JoinImpl::makeTreeWithStrippedColumns(
   auto right = QueryExecutionTree::makeTreeWithStrippedColumns(right_, *vars);
   auto leftCol = left->getVariableColumn(joinVar_);
   auto rightCol = right->getVariableColumn(joinVar_);
-  return qlever::makeExecutionTree<Join>(
-      getExecutionContext(), std::move(left), std::move(right), leftCol,
-      rightCol, ad_utility::contains(variables, joinVar_));
+  return makeExecutionTree<Join>(getExecutionContext(), std::move(left),
+                                 std::move(right), leftCol, rightCol,
+                                 ad_utility::contains(variables, joinVar_));
 }
 
 // _____________________________________________________________________________
@@ -797,8 +796,7 @@ JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         auto& right = newChildren.at(1);
         auto leftCol = left->getVariableColumn(joinVar_);
         auto rightCol = right->getVariableColumn(joinVar_);
-        return qlever::makeExecutionTree<Join>(
-            getExecutionContext(), std::move(left), std::move(right), leftCol,
-            rightCol);
+        return makeExecutionTree<Join>(getExecutionContext(), std::move(left),
+                                       std::move(right), leftCol, rightCol);
       });
 }

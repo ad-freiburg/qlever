@@ -102,8 +102,8 @@ StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   std::set<Variable> keepVars{view.begin(), view.end()};
   keepVars.insert(bind._target);
 
-  return qlever::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(*newChild), keepVars);
+  return makeExecutionTree<StripColumns>(getExecutionContext(),
+                                         std::move(*newChild), keepVars);
 }
 
 // _____________________________________________________________________________

@@ -197,9 +197,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return std::move(sortedQet).value();
   }
 
-  return qlever::makeExecutionTree<Sort>(rootOperation->getExecutionContext(),
-                                         std::move(qet), sortColumns,
-                                         explicitSort);
+  return makeExecutionTree<Sort>(rootOperation->getExecutionContext(),
+                                 std::move(qet), sortColumns, explicitSort);
 }
 
 // _____________________________________________________________________________
@@ -220,8 +219,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
-    return qlever::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
+    return makeExecutionTree<StripColumns>(rootOperation->getExecutionContext(),
+                                           std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();

@@ -38,8 +38,6 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 using std::array;
@@ -140,7 +138,7 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
   IdTable outputTable{NumColumnsIndexBuilding + 2,
                       ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable{
+  auto rowAdder = qlever::AddCombinedRowToIdTable{
       1,
       std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),

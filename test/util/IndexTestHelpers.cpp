@@ -17,7 +17,6 @@
 
 using namespace qlever;
 
-using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
@@ -223,8 +222,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
-    qlever::InputFileSpecification spec{inputFilename, c.indexType,
-                                        std::nullopt};
+    InputFileSpecification spec{inputFilename, c.indexType, std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()

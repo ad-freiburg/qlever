@@ -25,7 +25,7 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(i));
   }
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
   return TextLimit{
       qec,           n,           std::move(subtree), textRecordColumn,
@@ -40,14 +40,14 @@ CartesianProductJoin makeJoin(IdTable input1, IdTable input2) {
   for (size_t i = 0; i < input1.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(j++));
   }
-  valueOperations.push_back(qlever::makeExecutionTree<ValuesForTesting>(
+  valueOperations.push_back(makeExecutionTree<ValuesForTesting>(
       qec, std::move(input1), std::move(vars)));
 
   vars.clear();
   for (size_t i = 0; i < input2.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(j++));
   }
-  valueOperations.push_back(qlever::makeExecutionTree<ValuesForTesting>(
+  valueOperations.push_back(makeExecutionTree<ValuesForTesting>(
       qec, std::move(input2), std::move(vars)));
 
   return CartesianProductJoin{qec, std::move(valueOperations)};

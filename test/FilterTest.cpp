@@ -40,7 +40,7 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 }
 
 // Shorthand helper function
-qlever::triple_component::Iri iri(std::string_view string) {
+triple_component::Iri iri(std::string_view string) {
   return TripleComponent::Iri::fromIriref(string);
 }
 
@@ -53,7 +53,7 @@ void checkSetPrefilterExpressionVariablePair(
   [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
       &RuntimeParameters::enablePrefilterOnIndexScans_>(
       enablePrefilterForFilter);
-  auto subtree = qlever::makeExecutionTree<IndexScan>(qec, permutation, triple);
+  auto subtree = makeExecutionTree<IndexScan>(qec, permutation, triple);
   Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
   const auto& optUpdatedSubtree = filter.getSubtree();
   if (prefilterIsApplicable && enablePrefilterForFilter) {
@@ -275,7 +275,7 @@ TEST(Filter, isDeterministic) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
 
   auto makeTree = [qec]() {
-    return qlever::makeExecutionTree<ValuesForTesting>(
+    return makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{Variable{"?x"}});
   };

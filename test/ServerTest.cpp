@@ -28,8 +28,8 @@ using namespace qlever;
 using nlohmann::json;
 
 namespace {
-using namespace qlever::url_parser;
-using namespace qlever::url_parser::sparqlOperation;
+using namespace url_parser;
+using namespace url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 constexpr auto encodedIriManager = []() -> const EncodedIriManager* {

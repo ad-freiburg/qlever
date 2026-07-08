@@ -157,7 +157,7 @@ void assertPatternContents(const std::string& filename,
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
   auto pat = idOfHasPattern;
-  // auto pred = qlever::specialIds().at(HAS_PREDICATE_PREDICATE);
+  // auto pred = specialIds().at(HAS_PREDICATE_PREDICATE);
   TripleVec expectedTriples;
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});

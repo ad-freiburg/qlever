@@ -30,18 +30,18 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
  protected:
   // Blank node manager and allocator that can be used when we don't really
   // care about blank nodes and allocation details.
-  qlever::QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-  ad_utility::AllocatorWithLimit<qlever::Id> alloc_{
-      ad_utility::makeUnlimitedAllocator<qlever::Id>()};
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  ad_utility::AllocatorWithLimit<Id> alloc_{
+      ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Serialize and immediately deserialize and return the `value`.
-  qlever::NamedResultCache::Value serializeAndDeserializeValue(
-      const qlever::NamedResultCache::Value& value,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator) const {
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value,
+      ad_utility::AllocatorWithLimit<Id> allocator) const {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    qlever::NamedResultCache::Value result;
+    NamedResultCache::Value result;
     result.allocatorForSerialization_ = std::move(allocator);
     result.contextForSerialization_ = &qec_->getIndex().getImpl();
     readSerializer >> result;
@@ -49,8 +49,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   }
 
   // Overload that uses the default member variables.
-  qlever::NamedResultCache::Value serializeAndDeserializeValue(
-      const qlever::NamedResultCache::Value& value) {
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value) {
     return serializeAndDeserializeValue(value, alloc_);
   }
 };
@@ -58,10 +58,10 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
-  qlever::LocalVocab localVocab;
-  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
-      qlever::LocalVocabEntry::fromIriref("<http://example.org/test>",
-                                          qec_->getLocalVocabContext()));
+  LocalVocab localVocab;
+  [[maybe_unused]] auto local =
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+          "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -69,18 +69,18 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // following table by `local` and adapt the remainder of the test accordingly.
   auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
 
-  qlever::VariableToColumnMap varColMap;
-  varColMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
-  varColMap[qlever::Variable{"?y"}] = qlever::makePossiblyUndefinedColumn(1);
+  VariableToColumnMap varColMap;
+  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  std::vector<qlever::ColumnIndex> sortedOn = {0, 1};
+  std::vector<ColumnIndex> sortedOn = {0, 1};
 
   std::string cacheKey = "test-cache-key";
 
   // Save original words for comparison
   auto origWords = localVocab.getAllWordsForTesting();
 
-  qlever::NamedResultCache::Value value{
+  NamedResultCache::Value value{
       std::make_shared<const IdTable>(table.clone()),
       varColMap,
       sortedOn,
@@ -113,30 +113,30 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
 // Test serialization of the entire NamedResultCache.
 TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   // Create a cache and add some entries
-  qlever::NamedResultCache cache;
+  NamedResultCache cache;
 
   auto table1 = makeIdTableFromVector({{1, 2}, {3, 4}});
   auto table2 = makeIdTableFromVector({{5, 6, 7}, {8, 9, 10}});
 
-  qlever::VariableToColumnMap varColMap1;
-  varColMap1[qlever::Variable{"?a"}] = qlever::makeAlwaysDefinedColumn(0);
-  varColMap1[qlever::Variable{"?b"}] = qlever::makeAlwaysDefinedColumn(1);
+  VariableToColumnMap varColMap1;
+  varColMap1[Variable{"?a"}] = makeAlwaysDefinedColumn(0);
+  varColMap1[Variable{"?b"}] = makeAlwaysDefinedColumn(1);
 
-  qlever::VariableToColumnMap varColMap2;
-  varColMap2[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
-  varColMap2[qlever::Variable{"?y"}] = qlever::makeAlwaysDefinedColumn(1);
-  varColMap2[qlever::Variable{"?z"}] = qlever::makeAlwaysDefinedColumn(2);
+  VariableToColumnMap varColMap2;
+  varColMap2[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+  varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
   const auto& localVocabContext = qec_->getLocalVocabContext();
-  qlever::LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(qlever::LocalVocabEntry::fromIriref(
-      "<http://example.org/1>", localVocabContext));
+  LocalVocab vocab1;
+  vocab1.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
 
-  qlever::LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(qlever::LocalVocabEntry::fromIriref(
-      "<http://example.org/2>", localVocabContext));
+  LocalVocab vocab2;
+  vocab2.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
 
-  cache.store("query-1", qlever::NamedResultCache::Value{
+  cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
                              varColMap1,
                              {0},
@@ -144,7 +144,7 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
                              "key1",
                              std::nullopt});
 
-  cache.store("query-2", qlever::NamedResultCache::Value{
+  cache.store("query-2", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table2.clone()),
                              varColMap2,
                              {1, 0},
@@ -158,10 +158,9 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
-    qlever::NamedResultCache cache2;
+    NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
-    cache2.readFromSerializer(reader,
-                              ad_utility::makeUnlimitedAllocator<qlever::Id>(),
+    cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
                               qec_->getLocalVocabContext());
     return cache2;
   }();
@@ -187,17 +186,16 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 // Test empty cache serialization.
 TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   // Create an empty cache
-  qlever::NamedResultCache cache;
+  NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
 
   auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
-    qlever::NamedResultCache cache2;
+    NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
-    cache2.readFromSerializer(reader,
-                              ad_utility::makeUnlimitedAllocator<qlever::Id>(),
+    cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
                               qec_->getLocalVocabContext());
     return cache2;
   }();

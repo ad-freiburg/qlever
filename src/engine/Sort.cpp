@@ -28,7 +28,7 @@ using namespace qlever;
 // This could be made more efficient by using `ad_utility::callFixedSize` on
 // the number of sort columns and permuting the columns such that the sort
 // columns come first.
-using Sorter = qlever::CompressedExternalIdTableSorter<SortByColumns, 0>;
+using Sorter = CompressedExternalIdTableSorter<SortByColumns, 0>;
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -184,8 +184,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   // `std::atomic`), but the `unique_ptr` can be moved into the lambda below.
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
-      qlever::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_});
+      DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE, SortByColumns{sortColumnIndices_});
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
@@ -255,8 +254,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
-  return qlever::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                         sortColumns, explicitSort_);
+  return makeExecutionTree<Sort>(_executionContext, subtree_, sortColumns,
+                                 explicitSort_);
 }
 
 // _____________________________________________________________________________
@@ -291,7 +290,6 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return qlever::makeExecutionTree<Sort>(getExecutionContext(),
-                                         std::move(subtree), sortColumnIndices,
-                                         explicitSort_);
+  return makeExecutionTree<Sort>(getExecutionContext(), std::move(subtree),
+                                 sortColumnIndices, explicitSort_);
 }

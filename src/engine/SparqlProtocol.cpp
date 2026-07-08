@@ -10,12 +10,11 @@
 
 using namespace qlever;
 
-using namespace qlever::url_parser::sparqlOperation;
+using namespace url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest SparqlProtocol::parseGET(
-    const RequestType& request) {
+url_parser::ParsedRequest SparqlProtocol::parseGET(const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
   const bool isQuery = parsedRequestBuilder.parametersContain("query");
@@ -38,7 +37,7 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parseGET(
 }
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
+url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   // All parameters must be included in the request body for URL-encoded
@@ -65,7 +64,7 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
                              request.body());
   }
   parsedRequestBuilder.parsedRequest_.parameters_ =
-      qlever::url_parser::paramsToMap(query->params());
+      url_parser::paramsToMap(query->params());
   parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(
       contentTypeUrlEncoded);
   if (parsedRequestBuilder.parametersContain("query") &&
@@ -86,9 +85,9 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
 
 // ____________________________________________________________________________
 template <typename Operation>
-qlever::url_parser::ParsedRequest SparqlProtocol::parseSPARQLPOST(
+url_parser::ParsedRequest SparqlProtocol::parseSPARQLPOST(
     const RequestType& request, std::string_view contentType) {
-  using namespace qlever::url_parser::sparqlOperation;
+  using namespace url_parser::sparqlOperation;
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(contentType);
   parsedRequestBuilder.parsedRequest_.operation_ =
@@ -99,7 +98,7 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parseSPARQLPOST(
 }
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest SparqlProtocol::parsePOST(
+url_parser::ParsedRequest SparqlProtocol::parsePOST(
     const RequestType& request) {
   // For a POST request, the content type must be either
   // "application/x-www-form-urlencoded" (1), "application/sparql-query"
@@ -159,8 +158,8 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parsePOST(
 }
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest
-SparqlProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
+url_parser::ParsedRequest SparqlProtocol::parseGraphStoreProtocolIndirect(
+    const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
   if (!parsedRequestBuilder.isGraphStoreOperationIndirect()) {
@@ -172,7 +171,7 @@ SparqlProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
 }
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest SparqlProtocol::parseGraphStoreProtocolDirect(
+url_parser::ParsedRequest SparqlProtocol::parseGraphStoreProtocolDirect(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
@@ -181,7 +180,7 @@ qlever::url_parser::ParsedRequest SparqlProtocol::parseGraphStoreProtocolDirect(
 }
 
 // ____________________________________________________________________________
-qlever::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
+url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
     RequestType& request) {
   // TODO<qup42>: make request const again once the conformance tests are fixed.
   // Fixup for request target missing the leading slash.

@@ -13,15 +13,17 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 CPP_template_def(typename MakeCloneWithNewChildren)(
     requires ad_utility::InvocableWithExactReturnType<
-        MakeCloneWithNewChildren, std::shared_ptr<qlever::QueryExecutionTree>,
-        std::vector<std::shared_ptr<qlever::QueryExecutionTree>>>)
-    std::optional<std::shared_ptr<qlever::QueryExecutionTree>> qlever::
-        Operation::pushDownBindToAnyChild(
+        MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+        std::vector<std::shared_ptr<QueryExecutionTree>>>)
+    std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
+        pushDownBindToAnyChild(
             const parsedQuery::Bind& bind,
-            std::vector<std::shared_ptr<qlever::QueryExecutionTree>> children,
+            std::vector<std::shared_ptr<QueryExecutionTree>> children,
             MakeCloneWithNewChildren makeCloneWithNewChildren) const {
   if (children.empty()) {
     return std::nullopt;
@@ -56,5 +58,7 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
   }
   return makeCloneWithNewChildren(std::move(children));
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_OPERATIONBINDPUSHDOWNIMPL_H_

@@ -555,7 +555,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using enum Datatype;
   const auto& optionalStringAndXsdType =
-      qlever::exportIds::idToStringAndType(index, id, localVocab);
+      exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
     return "UNDEF";
