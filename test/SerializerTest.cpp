@@ -325,7 +325,7 @@ auto testWithCallableSerializer = [](auto testFunction) {
   WriteViaCallableSerializer writer{write};
   auto makeReaderFromWriter = [&buffer]() {
     auto read = [pos = size_t{0}, &buffer](char* target,
-                                             size_t numBytes) mutable {
+                                           size_t numBytes) mutable {
       std::copy(buffer.begin() + pos, buffer.begin() + pos + numBytes, target);
       pos += numBytes;
     };
