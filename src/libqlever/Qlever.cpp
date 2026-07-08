@@ -6,12 +6,19 @@
 
 #include "libqlever/Qlever.h"
 
+#include <boost/optional.hpp>
+#include <functional>
+#include <memory>
+#include <stdexcept>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -19,8 +26,13 @@ namespace qlever {
 Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
-      index_{std::make_shared<Index>(allocator_)},
+              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
+          [this](ad_utility::MemorySize numMemoryToAllocate) {
+            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                            numMemoryToAllocate);
+          }}},
+      indexAndViews_{std::make_shared<IndexAndViews>(
+          Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -34,21 +46,37 @@ Qlever::Qlever(const EngineConfig& config)
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // Grab the freshly constructed `Index` and `MaterializedViewsManager` once.
+  // No other thread can observe them yet, so reading the snapshot here is safe.
+  // `snapshot` keeps the `shared_ptr`s alive for the references below.
+  auto snapshot = indexAndViewsSnapshot();
+  auto& [index, materializedViewsManager] = *snapshot;
+
   // Load the index from disk.
-  index_->usePatterns() = enablePatternTrick_;
-  index_->loadAllPermutations() = !config.onlyPsoAndPos_;
-  index_->doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index_->createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+  index.usePatterns() = enablePatternTrick_;
+  index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+  index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
-    index_->addTextFromOnDiskIndex();
+    index.addTextFromOnDiskIndex();
   }
 
-  materializedViewsManager_->setOnDiskBase(config.baseName_);
+  materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index_->numTriples().normalAndInternal_() *
+      allocator_, index.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+
+  // Preload materialized views as requested by the user.
+  for (const auto& viewName : config.preloadMaterializedViews_) {
+    try {
+      materializedViewsManager.loadView(viewName);
+    } catch (const std::exception& ex) {
+      AD_LOG_ERROR << "Preloading materialized view '" << viewName
+                   << "' failed: " << ex.what() << "." << std::endl;
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -129,27 +157,27 @@ std::string Qlever::query(std::string queryString,
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(const QueryPlan& queryPlan,
+std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
-  const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
-  // TODO<joka921> For cancellation we have to call
-  // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  const auto& sharedCancellationHandle = plannedQuery.queryExecutionTree()
+                                             .getRootOperation()
+                                             ->getCancellationHandle();
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, *qet, mediaType, timer, std::move(handle));
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      timer, sharedCancellationHandle);
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
 #else
   ad_utility::streams::StringBatcher yielder{
       [&result](std::string_view batch) { result.append(batch); }};
-  ExportQueryExecutionTrees::computeResult(parsedQuery, *qet, mediaType, timer,
-                                           std::move(handle),
-                                           std::ref(yielder));
+  ExportQueryExecutionTrees::computeResult(
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      timer, sharedCancellationHandle, std::ref(yielder));
 
 #endif
   return result;
@@ -158,10 +186,9 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
-  auto queryPlan = parseAndPlanQuery(std::move(query));
-  auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() = std::move(options);
-  [[maybe_unused]] auto result = this->query(queryPlan);
+  auto plannedQuery = parseAndPlanQuery(std::move(query));
+  plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
+  [[maybe_unused]] auto result = this->query(plannedQuery);
 }
 
 // _____________________________________________________________________________
@@ -180,22 +207,53 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
-Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
-  auto qecPtr = std::make_shared<QueryExecutionContext>(
-      index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, materializedViewsManager_, [](std::string) {}, false,
-      false, disableCaching_);
-  // TODO<joka921> support Dataset clauses.
-  auto parsedQuery = SparqlParser::parseQuery(
-      &index_->getImpl().encodedIriManager(), std::move(query), {});
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{qecPtr.get(), handle};
+PlannedQuery Qlever::planQuery(
+    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  handle->throwIfCancelled();
+  QueryPlanner qp{&qec, handle};
+
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
+  PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
-  auto qetPtr = std::make_shared<QueryExecutionTree>(std::move(qet));
-  return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
+  auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
+  // Propagate the `cancellationHandle` and the `timeLimit` through the
+  // `queryExecutionTree`.
+  rootOperation.recursivelySetCancellationHandle(std::move(handle));
+  if (timeLimit.has_value()) {
+    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
+  }
+
+  if (requestTimer.has_value()) {
+    auto& qet = plannedQuery.queryExecutionTree();
+    auto timeForQueryPlanning = requestTimer->msecs();
+    auto& runtimeInfoWholeQuery =
+        qet.getRootOperation()->getRuntimeInfoWholeQuery();
+    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  }
+  return plannedQuery;
+}
+
+// ___________________________________________________________________________
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    ad_utility::SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+
+  auto parsedQuery = SparqlParser::parseQuery(
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
+      datasetClauses);
+
+  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
+                   std::move(handle));
 }
 
 // ___________________________________________________________________________
@@ -220,18 +278,30 @@ void IndexBuilderConfig::validate() const {
 
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  materializedViewsManager_->writeViewToDisk(
+  materializedViewsManager()->writeViewToDisk(
       std::move(name), parseAndPlanQuery(std::move(query)));
 }
 
 // ___________________________________________________________________________
 bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
-  return materializedViewsManager_->isViewLoaded(name);
+  return materializedViewsManager()->isViewLoaded(name);
 }
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  materializedViewsManager_->loadView(name);
+  materializedViewsManager()->loadView(name);
 }
 
+// ___________________________________________________________________________
+std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
+    std::shared_ptr<IndexAndViews> indexAndViews,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult,
+    QueryExecutionContext::DisableCaching disableCaching) const {
+  auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
+  return std::make_shared<QueryExecutionContext>(
+      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching);
+}
 }  // namespace qlever

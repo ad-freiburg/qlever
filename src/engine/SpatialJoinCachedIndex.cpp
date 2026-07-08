@@ -25,7 +25,7 @@ class SpatialJoinCachedIndexImpl {
   // Construct the index, and return the mapping from shape indices to rows.
   // If `simplificationErrorInMeters` has a value, polyline geometries are
   // simplified before indexing; `std::nullopt` skips simplification.
-  ShapeIndexToRow populate(ColumnIndex col, const IdTable& restable,
+  ShapeIndexToRow populate(ColumnIndex col, const IdTableView<0>& restable,
                            const Index& index,
                            std::optional<double> simplificationErrorInMeters) {
     ShapeIndexToRow shapeIndexToRow;
@@ -52,7 +52,7 @@ class SpatialJoinCachedIndexImpl {
 
 // ____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(
-    Variable geometryColumn, ColumnIndex col, const IdTable& restable,
+    Variable geometryColumn, ColumnIndex col, const IdTableView<0>& restable,
     const Index& index, std::optional<double> simplificationErrorInMeters)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {

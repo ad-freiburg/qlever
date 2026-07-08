@@ -73,7 +73,8 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
 }
 
 //______________________________________________________________________________
-DayTimeDuration DayTimeDuration::operator-(const DayTimeDuration& rhs) const {
+std::optional<DayTimeDuration> DayTimeDuration::operator-(
+    const DayTimeDuration& rhs) const {
   auto totalMilliseconds1 = getTotalMilliseconds();
   auto totalMilliseconds2 = rhs.getTotalMilliseconds();
   auto difference = totalMilliseconds1 - totalMilliseconds2;
@@ -82,14 +83,19 @@ DayTimeDuration DayTimeDuration::operator-(const DayTimeDuration& rhs) const {
                                            ? DayTimeDuration::Type::Negative
                                            : DayTimeDuration::Type::Positive;
   difference = difference < 0 ? -difference : difference;
-  // Only passing seconds to `DayTimeDuration`. The object itself will convert
-  // the input to days, hours, minutes and seconds.
-  return DayTimeDuration{durationType, 0, 0, 0,
-                         static_cast<double>(difference) / 1000.0};
+  // A `DayTimeDuration` can be constructed with the total amount of seconds.
+  // Therefore convert from milliseconds to seconds. The constructor itself will
+  // break down the total seconds into days, hours, minutes and seconds
+  // internally.
+  // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
+  // days) return UNDEF.
+  return DayTimeDuration::makeWithBoundsCheck(
+      durationType, 0, 0, 0, static_cast<double>(difference) / 1000.0);
 }
 
 //______________________________________________________________________________
-DayTimeDuration DayTimeDuration::operator+(const DayTimeDuration& rhs) const {
+std::optional<DayTimeDuration> DayTimeDuration::operator+(
+    const DayTimeDuration& rhs) const {
   auto totalMilliseconds1 = getTotalMilliseconds();
   auto totalMilliseconds2 = rhs.getTotalMilliseconds();
   auto sum = totalMilliseconds1 + totalMilliseconds2;
@@ -101,8 +107,10 @@ DayTimeDuration DayTimeDuration::operator+(const DayTimeDuration& rhs) const {
   // Therefore convert from milliseconds to seconds. The constructor itself will
   // break down the total seconds into days, hours, minutes and seconds
   // internally.
-  return DayTimeDuration{durationType, 0, 0, 0,
-                         static_cast<double>(sum) / 1000.0};
+  // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
+  // days) return UNDEF.
+  return DayTimeDuration::makeWithBoundsCheck(
+      durationType, 0, 0, 0, static_cast<double>(sum) / 1000.0);
 }
 
 //______________________________________________________________________________

@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
 // Forward declarations
@@ -47,7 +48,7 @@ class SpatialJoinCachedIndex {
   // with the given maximum error in meters before indexing; `std::nullopt`
   // means no simplification.
   SpatialJoinCachedIndex(
-      Variable geometryColumn, ColumnIndex col, const IdTable& restable,
+      Variable geometryColumn, ColumnIndex col, const IdTableView<0>& restable,
       const Index& index,
       std::optional<double> simplificationErrorInMeters = std::nullopt);
 

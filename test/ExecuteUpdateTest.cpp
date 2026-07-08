@@ -556,8 +556,8 @@ TEST(ExecuteUpdate, resolveVariable) {
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
                              {V(6), Id::makeUndefined(), V(8)}});
-  auto resolveVariable =
-      std::bind_front(&ExecuteUpdate::resolveVariable, std::cref(idTable));
+  auto resolveVariable = std::bind_front(&ExecuteUpdate::resolveVariable,
+                                         idTable.asStaticView<0>());
   EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
   EXPECT_THAT(resolveVariable(0, 1UL), Eq(V(1)));
   EXPECT_THAT(resolveVariable(1, 1UL), Eq(V(4)));
@@ -577,8 +577,8 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
          const IdTable& idTable, uint64_t rowIdx,
          const Matcher<const std::vector<IdTriple<>>&>& expectedQuads) {
         std::vector<IdTriple<>> result;
-        ExecuteUpdate::computeAndAddQuadsForResultRow(templates, result,
-                                                      idTable, rowIdx);
+        ExecuteUpdate::computeAndAddQuadsForResultRow(
+            templates, result, idTable.asStaticView<0>(), rowIdx);
         EXPECT_THAT(result, expectedQuads);
       };
   // Compute the quads for an empty template set yields no quads.

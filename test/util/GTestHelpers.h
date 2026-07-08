@@ -11,7 +11,9 @@
 #include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
+#include <memory>
 #include <optional>
+#include <sstream>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -80,8 +82,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
-// `EXPECT` that the `argument` is equal to `std::nullopt`.
-#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+// `EXPECT` that the `argument`'s `has_value` method returns `false`. Checking
+// equality to `std::nullopt` does not work with `boost::optional`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_FALSE(argument.has_value())
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
@@ -117,10 +120,44 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 inline auto setLoglevelForTesting(LogLevel level) {
   auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
       level.value(), std::memory_order_relaxed);
-  return absl::MakeCleanup([previous] {
+  return absl::Cleanup([previous] {
     ::ad_utility::detail::runtimeLogLevel.store(previous,
                                                 std::memory_order_relaxed);
   });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to `stream` and return an `absl::Cleanup`
+// that restores the *previously active* stream when it goes out of scope. Use
+// this in tests that temporarily capture or suppress log output, so the global
+// stream is never left dangling or reset to the wrong value.
+inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream);
+  return absl::Cleanup(
+      [previous] { ad_utility::setGlobalLoggingStream(previous); });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to a fresh `std::ostringstream` and return
+// a pair of an `absl::Cleanup` (which restores the previously active stream
+// when it goes out of scope) and a reference to that stream. Typical usage is
+// `auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();`.
+// NOTE: The returned reference is only valid as long as the `cleanup` is alive,
+// as the underlying stream is owned by the `cleanup`.
+inline auto setGlobalLoggingStreamToStringStream() {
+  auto stream = std::make_shared<std::ostringstream>();
+  auto& streamRef = *stream;
+  // `setGlobalLoggingStreamForTesting` cannot be used here because we have to
+  // move the shared pointer to the string stream into the cleanup to keep it
+  // alive.
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream.get());
+  auto cleanup = absl::Cleanup([previous, stream = std::move(stream)] {
+    ad_utility::setGlobalLoggingStream(previous);
+  });
+  return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
+                                                           streamRef};
 }
 
 // _____________________________________________________________________________
