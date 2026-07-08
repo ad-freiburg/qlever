@@ -61,7 +61,7 @@ class AsyncBlockSource {
       : executor_{exec}, blocksize_{blocksize} {}
   virtual ~AsyncBlockSource() = default;
 
-  // Asynchronously deliver the next block of bytes. Accepts any Asio
+  // Asynchronously deliver the next block of bytes. Accept any Asio
   // completion token (e.g. `boost::asio::use_future`). The completion
   // signature is `void(std::exception_ptr, std::optional<Block>)`: a null
   // `exception_ptr` signals success, a non-null one signals an exception that
@@ -82,9 +82,6 @@ class AsyncBlockSource {
                                     std::optional<Block> block) mutable {
             net::dispatch(
                 ex, [h = std::move(h), ep, block = std::move(block)]() mutable {
-                  // `std::move(h)` treats the handler as a one-shot,
-                  // move-only callable, which is the required Asio
-                  // convention for completion handlers.
                   std::move(h)(ep, std::move(block));
                 });
           });
@@ -191,8 +188,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
   // marks the end of a statement. `exec` is only used as the default executor
-  // for dispatching completions (see `AsyncBlockSource`'s constructor); this
-  // class never blocks on `inner`, so it does not need its own strand.
+  // for dispatching completions (see `AsyncBlockSource`'s constructor).
   AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,

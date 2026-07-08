@@ -24,6 +24,23 @@ namespace qlever::parser {
 
 namespace net = boost::asio;
 
+namespace {
+// Build the exception that signals that no statement boundary (as described
+// by `description`) could be found in an input batch of `inputSize` bytes
+// that was not the last one.
+std::exception_ptr getNoStatementBoundaryError(std::string_view description,
+                                               size_t inputSize) {
+  return std::make_exception_ptr(std::runtime_error{absl::StrCat(
+      "No statement boundary (", description,
+      ") was found in the current input batch (which was not the last one) "
+      "of size ",
+      ad_utility::insertThousandSeparator(std::to_string(inputSize), ','),
+      "; possible fixes are: "
+      "use `--parser-buffer-size` to increase the buffer size or use "
+      "`--parallel-parsing false` to disable parallel parsing")});
+}
+}  // namespace
+
 // ____________________________________________________________________________
 BlockingAsyncBlockSource::BlockingAsyncBlockSource(
     const net::any_io_executor& exec, ad_utility::MemorySize blocksize)
@@ -108,25 +125,16 @@ void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
         if (ep) {
           return handler(ep, std::nullopt);
         }
-        if (peek.has_value()) {
-          // Inner source has more data: this is a real "statement too large"
-          // error.
-          return handler(
-              std::make_exception_ptr(std::runtime_error{absl::StrCat(
-                  "No statement boundary (", description_,
-                  ") was found in the current input batch (which was not "
-                  "the last one) of size ",
-                  ad_utility::insertThousandSeparator(
-                      std::to_string(rawInput.size()), ','),
-                  "; possible fixes are: "
-                  "use `--parser-buffer-size` to increase the buffer size "
-                  "or use `--parallel-parsing false` to disable parallel "
-                  "parsing")}),
-              std::nullopt);
+        if (!peek.has_value()) {
+          // The current block is the last one: return remainder_ + rawInput.
+          exhausted_ = true;
+          return assembleAndDeliver(handler, rawInput, rawInput.size());
         }
-        // The current block is the last one: return remainder_ + rawInput.
-        exhausted_ = true;
-        assembleAndDeliver(handler, rawInput, rawInput.size());
+        // Inner source has more data: this is a real "statement too large"
+        // error.
+        return handler(
+            getNoStatementBoundaryError(description_, rawInput.size()),
+            std::nullopt);
       });
 }
 
