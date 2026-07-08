@@ -9,7 +9,7 @@
 #include <algorithm>
 
 #include "backports/iterator.h"
-#include "global/Pattern.h"
+#include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {

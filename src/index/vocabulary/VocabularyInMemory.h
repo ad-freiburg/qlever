@@ -8,10 +8,10 @@
 #include <string>
 #include <string_view>
 
-#include "global/Pattern.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/Serializer/Serializer.h"
 
