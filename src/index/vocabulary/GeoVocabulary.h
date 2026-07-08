@@ -71,6 +71,16 @@ class GeoVocabulary {
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
   // ___________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return literals_.lookupBatch(indices);
+  }
+
+  // ___________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return literals_.lookupBatchesStreamed(std::move(input));
+  }
+
+  // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 
   // ___________________________________________________________________________

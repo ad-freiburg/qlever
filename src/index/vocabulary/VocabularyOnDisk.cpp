@@ -4,8 +4,18 @@
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
-#include <array>
+#include <absl/cleanup/cleanup.h>
+#include <util/Views.h>
 
+#include <algorithm>
+#include <array>
+#include <deque>
+#include <fstream>
+#include <numeric>
+
+#include "global/Constants.h"
+#include "util/ExceptionHandling.h"
+#include "util/Iterators.h"
 #include "util/MmapVector.h"
 #include "util/StringUtils.h"
 
@@ -32,6 +42,82 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   file_.read(result.data(), offsetAndSize.size_,
              static_cast<off_t>(offsetAndSize.offset_));
   return result;
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  const size_t numIndices = indices.size();
+
+  auto manager = ioManagers_->pop().value();
+
+  // Return the `manager` to the pool on every exit path (including exceptions,
+  // e.g. an out-of-range index below), so we never leak an `IoManager` (and its
+  // io_uring buffers) out of the pool.
+  absl::Cleanup returnManager{[this, &manager]() {
+    ad_utility::terminateIfThrows(
+        [this, &manager]() { ioManagers_->push(std::move(manager)); },
+        "returning the `IoManager` to the pool in "
+        "`VocabularyOnDisk::lookupBatch`");
+  }};
+
+  // Phase 1: For each requested index `i`, read its offset together with the
+  // next offset (which bounds the string) as one 16-byte pair from `.offsets`.
+  struct OffsetPair {
+    uint64_t offset_;
+    uint64_t nextOffset_;
+  };
+  std::vector<OffsetPair> offsetPairs(numIndices);
+  {
+    std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
+    std::vector<uint64_t> fileOffsets(numIndices);
+    std::vector<char*> targets(numIndices);
+    for (size_t i = 0; i < numIndices; ++i) {
+      AD_CONTRACT_CHECK(indices[i] < size());
+      fileOffsets[i] = indices[i] * sizeof(uint64_t);
+      targets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
+    }
+    manager->wait(
+        manager->addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+  }
+
+  // Phase 2: Read the string data. String `i` starts at `offset_` with length
+  // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
+  std::vector<size_t> sizes(numIndices);
+  std::vector<uint64_t> fileOffsets(numIndices);
+  for (auto&& [size, fileOffset, offsetPair] :
+       ::ranges::views::zip(sizes, fileOffsets, offsetPairs)) {
+    size = offsetPair.nextOffset_ - offsetPair.offset_;
+    fileOffset = offsetPair.offset_;
+  }
+
+  auto data = std::make_shared<VocabBatchLookupData>();
+  data->buffer().resize(
+      ::ranges::accumulate(sizes.begin(), sizes.end(), size_t{0}));
+  data->views().resize(numIndices);
+
+  std::vector<char*> targets(numIndices);
+  size_t bufferOffset = 0;
+  for (auto&& [target, view, size] :
+       ::ranges::views::zip(targets, data->views(), sizes)) {
+    target = data->buffer().data() + bufferOffset;
+    view = std::string_view(target, size);
+    bufferOffset += size;
+  }
+
+  manager->wait(manager->addBatch(file_.fd(), sizes, fileOffsets, targets));
+
+  return VocabBatchLookupData::asResult(std::move(data));
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
+    VocabLookupInput rangeOfIndexBatches) const {
+  return VocabLookupOutput{
+      ad_utility::OwningView{std::move(rangeOfIndexBatches)} |
+      ql::views::transform(
+          [this](const auto& indices) { return lookupBatch(indices); })};
 }
 
 // _____________________________________________________________________________
@@ -77,10 +163,19 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename, "r");
   offsetsFile_.open(filename + offsetSuffix_, "r");
+
   // Read the offset count from the `MmapVectorMetaData` trailer, which is
   // the canonical layout used by both old and new vocabulary files.
   uint64_t numOffsets =
       ad_utility::MmapVectorMetaData::readFromFile(offsetsFile_).size_;
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
+
+  // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
+  ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
+      std::unique_ptr<ad_utility::BatchIoManager>>>(
+      NUM_VOCAB_BATCH_IO_MANAGERS);
+  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
+    ioManagers_->push(std::make_unique<ad_utility::BatchIoManager>());
+  }
 }
