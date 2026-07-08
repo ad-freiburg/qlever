@@ -47,7 +47,7 @@ class BlankNodeManager {
   const uint64_t minIndex_;
 
   // Number of indices that make up a single block.
-  static constexpr unsigned int blockSize_ = 1000;
+  static constexpr uint32_t blockSize_ = 1000;
 
   // Number of blocks available.
   const uint64_t totalAvailableBlocks_ =
