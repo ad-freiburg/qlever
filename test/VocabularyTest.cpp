@@ -276,6 +276,6 @@ TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
   auto streamed =
-      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
