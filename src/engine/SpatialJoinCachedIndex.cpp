@@ -32,16 +32,16 @@ class SpatialJoinCachedIndexImpl {
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
-      if (p.has_value()) {
-        if (simplificationErrorInMeters.has_value()) {
-          p.value() = geometryConverters::simplifyPolyline(
-              std::move(p.value()), simplificationErrorInMeters.value());
-        }
-        auto shapeIndex =
-            s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
-                std::make_unique<S2Polyline>(std::move(p.value()))));
-        shapeIndexToRow[shapeIndex] = row;
+      if (!p.has_value()) {
+        continue;
       }
+      if (simplificationErrorInMeters.has_value()) {
+        p.value() = geometryConverters::simplifyPolyline(
+            std::move(p.value()), simplificationErrorInMeters.value());
+      }
+      auto shapeIndex = s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
+          std::make_unique<S2Polyline>(std::move(p.value()))));
+      shapeIndexToRow[shapeIndex] = row;
     }
     // By default, the S2 indices are constructed lazily on the first query,
     // which then is slow. The following call avoids this.

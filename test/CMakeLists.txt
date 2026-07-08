@@ -314,6 +314,8 @@ addLinkAndDiscoverTest(GeoPointTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
+addLinkAndDiscoverTest(GeoConvertersTest util)
+
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateYearDurationTest util parser)

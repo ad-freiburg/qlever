@@ -225,7 +225,7 @@ class Server {
   // expected to be the variable name of a column (without leading `?`) on which
   // a geometry index should be built. If `geoIndexSimplificationInMeters` is
   // also set, geometries are simplified with the given maximum error in meters
-  // before indexing. Throws if named pinning is required, but the access token
+  // before indexing. Throw if named pinning is required, but the access token
   // is not okay.
   static void configurePinnedResultWithName(
       const std::optional<std::string>& pinResultWithName,

@@ -99,39 +99,29 @@ inline std::unique_ptr<S2Polygon> makeS2Polygon(
 // Simplify an `S2Polyline` using the Douglas-Peucker algorithm via
 // `S2Polyline::SubsampleVertices`. The first and last vertices are always kept.
 // The `metersError` parameter is the maximum allowed deviation from the
-// original polyline in meters. A non-positive value returns a copy.
+// original polyline in meters and must be positive.
 inline S2Polyline simplifyPolyline(const S2Polyline& polyline,
                                    double metersError) {
+  AD_CONTRACT_CHECK(metersError > 0.0);
+  auto tolerance = S2Earth::MetersToAngle(metersError);
+  std::vector<int> indices;
+  polyline.SubsampleVertices(tolerance, &indices);
   std::vector<S2Point> selected;
-  if (metersError > 0.0) {
-    auto tolerance = S2Earth::MetersToAngle(metersError);
-    std::vector<int> indices;
-    polyline.SubsampleVertices(tolerance, &indices);
-    selected.reserve(indices.size());
-    for (int idx : indices) {
-      selected.push_back(polyline.vertex(idx));
-    }
-  } else {
-    selected.reserve(polyline.num_vertices());
-    for (int i = 0; i < polyline.num_vertices(); ++i) {
-      selected.push_back(polyline.vertex(i));
-    }
+  selected.reserve(indices.size());
+  for (int idx : indices) {
+    selected.push_back(polyline.vertex(idx));
   }
   return S2Polyline{absl::MakeSpan(selected)};
 }
 
 // Simplify each loop of an `S2Polygon` by applying the Douglas-Peucker
 // algorithm (via `S2Polyline::SubsampleVertices`) to each loop's vertices.
-// The `metersError` parameter is the maximum allowed deviation in meters.
-// A non-positive value returns a copy of the original polygon.
+// The `metersError` parameter is the maximum allowed deviation in meters and
+// must be positive.
 // Falls back to the original loop vertices if simplification would reduce a
 // loop below three vertices.
 inline S2Polygon simplifyPolygon(const S2Polygon& polygon, double metersError) {
-  if (metersError <= 0.0) {
-    S2Polygon copy;
-    copy.Copy(polygon);
-    return copy;
-  }
+  AD_CONTRACT_CHECK(metersError > 0.0);
   auto tolerance = S2Earth::MetersToAngle(metersError);
   std::vector<std::unique_ptr<S2Loop>> simplifiedLoops;
   simplifiedLoops.reserve(polygon.num_loops());

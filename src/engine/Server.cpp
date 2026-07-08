@@ -281,13 +281,20 @@ auto Server::prepareOperation(
     if (!pinGeoIndexSimplificationStr.has_value()) {
       return std::nullopt;
     }
+    double metersError;
     try {
-      return std::stod(pinGeoIndexSimplificationStr.value());
+      metersError = std::stod(pinGeoIndexSimplificationStr.value());
     } catch (...) {
       throw std::runtime_error(
           "Invalid value for `pin-geo-index-simplification`: must be a "
           "floating-point number of meters.");
     }
+    if (metersError <= 0.0) {
+      throw std::runtime_error(
+          "Invalid value for `pin-geo-index-simplification`: must be a "
+          "positive floating-point number of meters.");
+    }
+    return metersError;
   };
   std::optional<double> geoIndexSimplificationInMeters =
       parseGeoIndexSimplification();
