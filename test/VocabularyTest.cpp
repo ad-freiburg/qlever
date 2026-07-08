@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -9,6 +10,7 @@
 
 #include "index/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/GTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
 
@@ -167,7 +169,8 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
-  auto filename = "vocabZeroCopyRoundTripPolymorphic.dat";
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
   vocabulary.createFromSet(words, filename);
 
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
@@ -183,7 +186,6 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
     EXPECT_EQ(vocabulary[VocabIndex::make(i)],
               readVocabulary[VocabIndex::make(i)]);
   }
-  ad_utility::deleteFile(filename);
 }
 
 // _____________________________________________________________________________
@@ -201,7 +203,8 @@ TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
 TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
   TextVocabulary vocabulary;
   ad_utility::HashSet<string> words{"wordA", "wordB", "wordC"};
-  auto filename = "vocabZeroCopyRoundTripDirectVocabularyInMemory.dat";
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
   vocabulary.createFromSet(words, filename);
 
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
@@ -217,5 +220,4 @@ TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
     EXPECT_EQ(vocabulary[WordVocabIndex::make(i)],
               readVocabulary[WordVocabIndex::make(i)]);
   }
-  ad_utility::deleteFile(filename);
 }

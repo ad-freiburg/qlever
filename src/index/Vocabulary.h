@@ -256,6 +256,15 @@ class Vocabulary {
           Serializer>) void loadFromZeroCopyDeserializer(Serializer&
                                                              serializer) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      // `vocabulary_.getUnderlyingVocabulary()` returns the
+      // `PolymorphicVocabulary`, whose own `getUnderlyingVocabulary()` in
+      // turn returns a reference to the `std::variant` of the concrete
+      // vocabulary implementations that it can hold (see
+      // `PolymorphicVocabulary::getUnderlyingVocabulary`). Assigning a
+      // `VocabularyInMemory` to that variant switches the active
+      // implementation, which requires that `VocabularyInMemory` is one of
+      // the variant's alternatives (currently always true, see
+      // `PolymorphicVocabulary`'s `Variant` type alias).
       vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary() =
           VocabularyInMemory::fromZeroCopyDeserializer(serializer);
     } else {

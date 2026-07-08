@@ -4,6 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -518,7 +519,9 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   vocab.resetToType(ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::InMemoryUncompressed});
   ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
-  vocab.createFromSet(words, "indexTestZeroCopyVocabularyBlob.dat");
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocab.createFromSet(words, filename);
 
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
   index.writeVocabularyToZeroCopyBlob(writeSerializer);
@@ -533,7 +536,6 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   for (size_t i = 0; i < vocab.size(); ++i) {
     EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
   }
-  ad_utility::deleteFile("indexTestZeroCopyVocabularyBlob.dat");
 }
 
 TEST(IndexTest, NumDistinctEntities) {

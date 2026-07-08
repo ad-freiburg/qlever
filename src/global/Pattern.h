@@ -61,6 +61,21 @@ class CompactVectorOfStrings {
                                          std::string, std::vector<data_type>>;
 
   using Writer = detail::CompactStringVectorWriter<data_type>;
+
+ private:
+  // The two kinds of storage for the data and the offsets, respectively: an
+  // owned vector (after `build()`, or after reading from a regular,
+  // non-zero-copy serializer), or a non-owning view into externally-owned
+  // memory (after `fromZeroCopyDeserializer`).
+  using DataStorage = std::vector<data_type>;
+  using OffsetStorage = std::vector<offset_type>;
+  using DataView = ql::span<const data_type>;
+  using OffsetView = ql::span<const offset_type>;
+
+  std::variant<DataStorage, DataView> data_;
+  std::variant<OffsetStorage, OffsetView> offsets_;
+
+ public:
   CompactVectorOfStrings() = default;
 
   // Build a `CompactVectorOfStrings` as a non-owning, zero-copy view directly
@@ -72,13 +87,10 @@ class CompactVectorOfStrings {
       requires ad_utility::serialization::ZeroCopyReadSerializer<
           S>) static CompactVectorOfStrings
       fromZeroCopyDeserializer(S& serializer) {
+    using namespace ad_utility::serialization;
     CompactVectorOfStrings result;
-    result.data_ =
-        ad_utility::serialization::zeroCopyDeserializeToSpan<data_type>(
-            serializer);
-    result.offsets_ =
-        ad_utility::serialization::zeroCopyDeserializeToSpan<offset_type>(
-            serializer);
+    result.data_ = zeroCopyDeserializeToSpan<data_type>(serializer);
+    result.offsets_ = zeroCopyDeserializeToSpan<offset_type>(serializer);
     return result;
   }
 
@@ -151,8 +163,7 @@ class CompactVectorOfStrings {
                                                           data_type>)
       CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
-    auto offsets = offsetsSpan();
-    clone.offsets_ = std::vector<offset_type>(offsets.begin(), offsets.end());
+    clone.offsets_ = ::ranges::to_vector(offsetsSpan());
     clone.data_ = ::ranges::to_vector(
         dataSpan() | ql::views::transform(std::move(mappingFunction)));
     return clone;
@@ -172,49 +183,37 @@ class CompactVectorOfStrings {
   // `fromZeroCopyDeserializer` to obtain a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      auto data = arg.dataSpan();
-      auto offsets = arg.offsetsSpan();
-      serializer | data;
-      serializer | offsets;
+      serializer << arg.dataSpan();
+      serializer << arg.offsetsSpan();
     } else {
-      std::vector<data_type> data;
-      std::vector<offset_type> offsets;
+      auto& data = arg.data_.template emplace<DataStorage>();
+      auto& offsets = arg.offsets_.template emplace<OffsetStorage>();
       serializer | data;
       serializer | offsets;
-      arg.data_ = std::move(data);
-      arg.offsets_ = std::move(offsets);
     }
   }
 
  private:
-  // The storage either owns its elements (after `build()` or after reading
-  // from a regular, non-zero-copy serializer), or is a non-owning view into
-  // externally-owned memory (after `fromZeroCopyDeserializer`).
-  std::variant<std::vector<data_type>, ql::span<const data_type>> data_;
-  std::variant<std::vector<offset_type>, ql::span<const offset_type>> offsets_;
-
-  ql::span<const data_type> dataSpan() const {
+  // Return a read-only view of the data, regardless of whether the storage
+  // currently owns its elements or is a non-owning view.
+  DataView dataSpan() const {
     return std::visit(
-        [](const auto& x) -> ql::span<const data_type> {
-          return {x.data(), x.size()};
-        },
-        data_);
+        [](const auto& x) -> DataView { return {x.data(), x.size()}; }, data_);
   }
 
-  ql::span<const offset_type> offsetsSpan() const {
+  // Return a read-only view of the offsets, regardless of whether the
+  // storage currently owns its elements or is a non-owning view.
+  OffsetView offsetsSpan() const {
     return std::visit(
-        [](const auto& x) -> ql::span<const offset_type> {
-          return {x.data(), x.size()};
-        },
+        [](const auto& x) -> OffsetView { return {x.data(), x.size()}; },
         offsets_);
   }
 
   // Access the owned vector alternatives. Throws (via `std::get`) if this
   // object is currently a non-owning view, which is a programming error (a
-  // zero-copy view is read-only, so `build()`/`cloneAndRemap()` must not be
-  // called on it).
-  std::vector<data_type>& ownedData() { return std::get<0>(data_); }
-  std::vector<offset_type>& ownedOffsets() { return std::get<0>(offsets_); }
+  // zero-copy view is read-only, so `build()` must not be called on it).
+  DataStorage& ownedData() { return std::get<DataStorage>(data_); }
+  OffsetStorage& ownedOffsets() { return std::get<OffsetStorage>(offsets_); }
 };
 
 namespace detail {
