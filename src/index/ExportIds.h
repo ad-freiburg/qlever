@@ -220,24 +220,14 @@ void resolveNonVocabIndexIds(
     ql::span<const size_t> positions,
     ql::span<std::optional<std::pair<std::string, const char*>>> results,
     const EscapeFunction& escapeFunction) {
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(positions, [&ids](size_t i) {
+    return ids[i].getDatatype() != Datatype::VocabIndex;
+  }));
   ql::ranges::for_each(positions, [&](size_t i) {
     results[i] =
         idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
             index, ids[i], localVocab, escapeFunction);
   });
-}
-
-// Batch-look-up the vocabulary strings for a range of `VocabIndex` ids. Returns
-// one `string_view` per id, in the same order as `vocabIds`, inside a handle
-// that keeps the backing memory alive (dereference it to get the `span`).
-// Precondition: `vocabIds` is non-empty and every id has datatype `VocabIndex`.
-template <typename IdRange>
-VocabBatchLookupResult lookupVocabIndexStrings(const Index& index,
-                                               IdRange vocabIds) {
-  auto rawIndices = ::ranges::to<std::vector<size_t>>(
-      vocabIds | ql::views::transform(
-                     [](const Id& id) { return id.getVocabIndex().get(); }));
-  return index.getImpl().getVocab().lookupBatch(rawIndices);
 }
 
 // Resolve the `VocabIndex` IDs at `positions` in a single batched vocabulary
@@ -253,11 +243,18 @@ void resolveVocabIndexIds(
     return;
   }
 
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(positions, [&ids](size_t i) {
+    return ids[i].getDatatype() == Datatype::VocabIndex;
+  }));
+
   auto vocabIds =
       positions |
       ql::views::transform([&ids](size_t i) -> const Id& { return ids[i]; });
 
-  auto vocabStrings = lookupVocabIndexStrings(index, vocabIds);
+  auto rawIndices = positions | ql::views::transform([&ids](size_t i) {
+                      ids[i].getVocabIndex().get();
+                    });
+  auto vocabStrings = index.getImpl().getVocab().lookupBatch(rawIndices);
 
   // `vocabStrings` is in the same order as `positions`, so zip scatters each
   // looked-up string back to the position it came from.
