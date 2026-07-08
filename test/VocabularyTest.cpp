@@ -18,6 +18,73 @@ using json = nlohmann::json;
 using std::string;
 using ::testing::ElementsAre;
 
+namespace {
+using ad_utility::VocabularyType;
+
+// TODO: write descriptive comment here.
+class RdfsVocabularyCreator {
+  std::string filename_;
+  void deleteFiles() const {
+    for (std::string_view suffix : {".words", ".words.offsets", ".codebooks"}) {
+      ad_utility::deleteFile(absl::StrCat(filename_, suffix), false);
+    }
+  }
+
+ public:
+  explicit RdfsVocabularyCreator(std::string filename)
+      : filename_{std::move(filename)} {
+    deleteFiles();  // clear any leftovers from a previous run.
+  }
+
+  RdfsVocabularyCreator(const RdfsVocabularyCreator&) = delete;
+  RdfsVocabularyCreator& operator=(const RdfsVocabularyCreator&) = delete;
+  ~RdfsVocabularyCreator() { deleteFiles(); }
+
+  RdfsVocabulary createVocabulary(const ad_utility::HashSet<std::string>& words,
+                                  VocabularyType type) {
+    RdfsVocabulary v;
+    v.resetToType(type);
+    v.createFromSet(words, filename_);
+    return v;
+  }
+};
+
+// Owns an `RdfsVocabulary` together with the creator that manages its files,
+// so the files live exactly as long as the vocabulary and are removed on
+// destruction.
+class RdfsVocabularyHandle {
+ public:
+  RdfsVocabularyHandle(std::string filename,
+                       const ad_utility::HashSet<std::string>& words,
+                       VocabularyType type =
+                           VocabularyType{
+                               VocabularyType::Enum::OnDiskCompressed})
+      : creator_{std::move(filename)},
+        vocabulary_{creator_.createVocabulary(words, type)} {}
+
+  // Non-copyable/movable: exactly one owner of the backing files.
+  RdfsVocabularyHandle(const RdfsVocabularyHandle&) = delete;
+  RdfsVocabularyHandle& operator=(const RdfsVocabularyHandle&) = delete;
+  RdfsVocabularyHandle(RdfsVocabularyHandle&&) = delete;
+  RdfsVocabularyHandle& operator=(const RdfsVocabularyHandle&&) = delete;
+
+  RdfsVocabulary& operator*() { return vocabulary_; }
+  RdfsVocabulary* operator->() { return &vocabulary_; }
+
+ private:
+  // `vocabulary_` listed after `creator_`, so `vocabulary_` is destroyed first,
+  // releasing the files before `creator_` removes them.
+  RdfsVocabularyCreator creator_;
+  RdfsVocabulary vocabulary_;
+};
+
+RdfsVocabularyHandle createExampleVocabulary(
+    const ad_utility::HashSet<std::string>& words = {"a", "ab", "ba", "car"}) {
+  return RdfsVocabularyHandle{absl::StrCat(gtestCurrentTestName(), ".dat"),
+                              words};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(VocabularyTest, getIdForWordTest) {
   std::vector<TextVocabulary> vec(2);
@@ -164,90 +231,51 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 
 // _____________________________________________________________________________
 TEST(VocabularyTest, LookupBatch) {
-  using ad_utility::VocabularyType;
-  RdfsVocabulary v;
-  // TODO<ms2144>: In some of the other test cases for the vocabulary test
-  //  helpers we created helpers in order to encapsulate this.
-  //  Should we create a helper for this in the VocabularyTestHelpers.h
-  //  or create a helper for this in this file right here?
-  v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
-  ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
-  auto filename = "vocTestLookupBatch.dat";
-  v.createFromSet(s, filename);
-
-  // Sorted order: a=0, ab=1, ba=2, car=3. Look up in shuffled order.
+  auto v = createExampleVocabulary();
   std::vector<size_t> indices{2, 0, 3, 1};
-  auto result = v.lookupBatch(indices);
+  auto result = v->lookupBatch(indices);
   EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
-
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(v, result,
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
                                                                 indices);
-
   // An empty batch is an invalid request and must throw.
-  EXPECT_ANY_THROW(v.lookupBatch(ql::span<const size_t>{}));
+  EXPECT_ANY_THROW(v->lookupBatch(ql::span<const size_t>{}));
 
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
-  auto dupResult = v.lookupBatch(dup);
+  auto dupResult = v->lookupBatch(dup);
   EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
-
-  ad_utility::deleteFile(filename);
 }
 
-// _____________________________________________________________________________
+// Each streamed result must equal the eager `lookupBatch` for that batch's
+// indices, and the batches must be yielded in input order.
 TEST(VocabularyTest, LookupBatchesStreamed) {
-  using ad_utility::VocabularyType;
-  // TODO<ms2144>: extract into helper? DUPLICATION
-  RdfsVocabulary v;
-  v.resetToType(VocabularyType{VocabularyType::Enum::OnDiskCompressed});
-  ad_utility::HashSet<string> s{"a", "ab", "ba", "car"};
-  auto filename = "vocTestLookupBatchesStreamed.dat";
-  v.createFromSet(s, filename);
-
-  absl::Cleanup deleteFileCleanup{
-      [&filename]() { ad_utility::deleteFile(filename); }};
-
-  // Two batches: mixed and single.
+  auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
-  auto streamed = v.lookupBatchesStreamed(VocabLookupInput{batches});
+  // `VocabLookupInput` takes ownership, so keep a copy to compare against.
+  const auto expectedBatches = batches;
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+  vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+      *v, streamed, expectedBatches);
+}
 
-  auto results = ::ranges::to_vector(std::move(streamed));
-  ASSERT_EQ(results.size(), 2);
-
-  // TODO<ms2144> I think this can be refactored with the new helpers.
-  //  Each streamed result must match the eager `lookupBatch`.
-  auto expectedMatchesEager = [&v](const VocabBatchLookupResult& actual,
-                                   ql::span<const size_t> batchIndices) {
-    auto expected = v.lookupBatch(batchIndices);
-    ASSERT_EQ(actual->size(), expected->size());
-    for (size_t i = 0; i < expected->size(); ++i) {
-      EXPECT_EQ((*actual)[i], (*expected)[i]);
-    }
-  };
-  // TODO<ms2144> I think this can be refactored with the new helpers.
-  expectedMatchesEager(results[0], batches[0]);
-  expectedMatchesEager(results[1], batches[1]);
-
-  // TODO<ms2144> I think this can be refactored with the new helpers.
-  //  Exact contents
-  EXPECT_THAT((*results[0]), ::testing::ElementsAre("ba", "a"));
-  EXPECT_THAT((*results[1]), ::testing::ElementsAre("car"));
-
-  // TODO<ms2144> I think this can be refactored with the new helpers.
-  //  An empty batch within the stream is invalid and must throw when pulled.
-  std::vector<std::vector<size_t>> batchesWithEmpty{{2, 0}, {}, {3}};
-  auto streamedWithEmpty =
-      v.lookupBatchesStreamed(VocabLookupInput{batchesWithEmpty});
+// An empty batch within the stream is invalid and must throw when pulled.
+TEST(VocabularyTest, LookupBatchesStreamedEmptyBatchThrows) {
+  auto v = createExampleVocabulary();
+  std::vector<std::vector<size_t>> batches{{2, 0}, {}, {3}};
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
-    for ([[maybe_unused]] auto& r : streamedWithEmpty) {
+    for ([[maybe_unused]] auto& r : streamed) {
     }
   });
+}
 
-  // TODO<ms2144> TODO: check whether we test for every vocabulary type that
-  //  an empty input stream for the streamed lookup case yields no results.
-  //  I am not sure whether we are doing that currently.
-  //  Empty input stream -> no results.
+// An empty input stream (no batches) yields no results.
+TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
+  auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
-  auto empty = v.lookupBatchesStreamed(VocabLookupInput{noBatches});
-  EXPECT_EQ(ql::ranges::distance(empty), 0);
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+  EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
