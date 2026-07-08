@@ -6,6 +6,7 @@
 
 #include "libqlever/Qlever.h"
 
+#include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -206,30 +207,18 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // ___________________________________________________________________________
-PlannedQuery Qlever::parseAndPlanQuery(
-    std::string query, const std::vector<DatasetClause>& datasetClauses,
-    ad_utility::SharedCancellationHandle handle,
-    std::optional<TimeLimit> timeLimit,
-    std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) const {
-  ad_utility::Timer planningTimer{ad_utility::Timer::InitialStatus::Started};
-
-  auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
-      pinResult, disableCaching_);
-
-  auto parsedQuery = SparqlParser::parseQuery(
-      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
-      datasetClauses);
-
-  QueryPlanner qp{qecPtr.get(), handle};
+PlannedQuery Qlever::planQuery(
+    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  handle->throwIfCancelled();
+  QueryPlanner qp{&qec, handle};
 
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
-  PlannedQuery plannedQuery{std::move(parsedQuery), std::move(qet), *qecPtr};
+  PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
-  handle->throwIfCancelled();
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
   // Propagate the `cancellationHandle` and the `timeLimit` through the
   // `queryExecutionTree`.
@@ -238,7 +227,33 @@ PlannedQuery Qlever::parseAndPlanQuery(
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
 
+  if (requestTimer.has_value()) {
+    auto& qet = plannedQuery.queryExecutionTree();
+    auto timeForQueryPlanning = requestTimer->msecs();
+    auto& runtimeInfoWholeQuery =
+        qet.getRootOperation()->getRuntimeInfoWholeQuery();
+    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  }
   return plannedQuery;
+}
+
+// ___________________________________________________________________________
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    ad_utility::SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+
+  auto parsedQuery = SparqlParser::parseQuery(
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
+      datasetClauses);
+
+  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
+                   std::move(handle));
 }
 
 // ___________________________________________________________________________

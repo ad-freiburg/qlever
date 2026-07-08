@@ -10,7 +10,7 @@
 #ifndef QLEVER_SRC_PARSER_ASYNCBLOCKSOURCE_H
 #define QLEVER_SRC_PARSER_ASYNCBLOCKSOURCE_H
 
-#include <re2/re2.h>
+#include <absl/functional/any_invocable.h>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_executor.hpp>
@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "util/File.h"
 #include "util/Forward.h"
@@ -109,10 +110,10 @@ class AsyncBlockSource {
   // Return `nullopt` to signal EOF, throw exceptions on errors.
   virtual std::optional<ByteBlock> getNextBlockImpl() = 0;
 
-  // Helper for `AsyncEndRegexBlockSource`: call `getNextBlockImpl()` on a
-  // different `AsyncBlockSource` instance. C++ protected-access rules prevent
-  // calling a protected method on a sibling object, so this static trampoline
-  // is provided in the base.
+  // Helper for `AsyncStatementBoundaryBlockSource`: call `getNextBlockImpl()`
+  // on a different `AsyncBlockSource` instance. C++ protected-access rules
+  // prevent calling a protected method on a sibling object, so this static
+  // trampoline is provided in the base.
   static std::optional<ByteBlock> nextBlockFrom(AsyncBlockSource& src) {
     return src.getNextBlockImpl();
   }
@@ -137,31 +138,36 @@ class AsyncFileBlockSource : public AsyncBlockSource {
 };
 
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
-// block produced by the inner source, search for the last match of `endRegex`
-// and return the part of the block up to and including the first capture group
-// in that regex match, prepending any tail carried over from the previous
-// block. If no statement boundary can be found in a complete block, an
-// exception is thrown with a message that indicates possible mitigations for
-// this error.
-class AsyncEndRegexBlockSource : public AsyncBlockSource {
+// block produced by the inner source, `findEndPosition` determines the number
+// of bytes until the end of the last statement in the block (it is expected to
+// scan the block from the back); the block is returned up to that position,
+// with the tail carried over from the previous block prepended. If no statement
+// boundary can be found in a complete block, an exception is thrown with a
+// message that indicates possible mitigations for this error.
+class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
+ public:
+  // A function that, given a block, returns the number of bytes until the end
+  // of the last statement in the block (i.e. the position at which the block
+  // should be split), or `std::nullopt` if there is no such position. It is
+  // expected to scan the block from the back.
+  using EndPositionFinder =
+      absl::AnyInvocable<std::optional<size_t>(std::string_view)>;
+
  private:
   std::unique_ptr<AsyncBlockSource> inner_;
   Block remainder_;
-  re2::RE2 endRegex_;
-  std::string endRegexAsString_;
+  EndPositionFinder findEndPosition_;
+  std::string description_;
   bool exhausted_ = false;
 
  public:
-  // Wrap `inner` and cut its blocks at matches of `endRegex`.
-  AsyncEndRegexBlockSource(const boost::asio::any_io_executor& exec,
-                           std::unique_ptr<AsyncBlockSource> inner,
-                           std::string endRegex);
-
-  // Search for `regex` near the end of `vec` in exponentially-growing chunks
-  // from the back. Return the number of bytes in `vec` up to the end of the
-  // match, or `nullopt` if no match was found.
-  static std::optional<size_t> findRegexNearEnd(const Block& vec,
-                                                const re2::RE2& regex);
+  // Wrap `inner` and cut its blocks at the positions determined by
+  // `findEndPosition`. `description` is used in error messages to describe what
+  // marks the end of a statement.
+  AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
+                                    std::unique_ptr<AsyncBlockSource> inner,
+                                    EndPositionFinder findEndPosition,
+                                    std::string description);
 
  protected:
   std::optional<ByteBlock> getNextBlockImpl() override;
