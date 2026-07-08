@@ -693,7 +693,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   std::vector<std::string> prefixes;
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
-  ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+  qlever::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [&cmp = vocab_.getCaseComparator()](
                         std::string_view a, bool aIsExternal,
                         std::string_view b, bool bIsExternal) {
@@ -702,7 +702,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
-    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
+    auto mergedVocabMeta = qlever::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
@@ -856,8 +856,7 @@ auto IndexImpl::convertPartialToGlobalIds(
     }
     std::string filename =
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
-    auto map =
-        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
+    auto map = qlever::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(filename);
     return std::pair{idx, std::move(map)};
@@ -1601,7 +1600,7 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
     const {
-  using namespace ad_utility::vocabulary_merger;
+  using namespace qlever::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
                << std::endl;
   AD_LOG_DEBUG

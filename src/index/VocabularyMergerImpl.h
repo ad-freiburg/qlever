@@ -24,7 +24,7 @@
 #include "util/Serializer/SerializeString.h"
 #include "util/Timer.h"
 
-namespace ad_utility::vocabulary_merger {
+namespace qlever::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
@@ -163,8 +163,9 @@ CPP_template_def(typename C, typename L)(
 }
 
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
-  HashMap<uint64_t, uint64_t> res;
+inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
+    ItemVec& els) {
+  ad_utility::HashMap<uint64_t, uint64_t> res;
   res.reserve(els.size());
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
@@ -186,7 +187,7 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToExtVec(
     const std::vector<std::array<qlever::Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<uint64_t, uint64_t>& map,
+    const ad_utility::HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
@@ -220,8 +221,8 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   // `FileWriteSerializer::serializeBytes`) buffering data on its own, it is
   // faster to buffer with our own buffer, presumably because `fwrite` is
   // thread-safe and therefore has to acquire a mutex for every call.
-  serialization::BufferedWriteSerializer serializer{
-      serialization::FileWriteSerializer{fileName}, 16_MB};
+  ad_utility::serialization::BufferedWriteSerializer serializer{
+      ad_utility::serialization::FileWriteSerializer{fileName}, 16_MB};
 
   uint64_t size = els.size();
   serializer << size;
@@ -300,6 +301,6 @@ inline ad_utility::HashMap<qlever::Id, qlever::Id> IdMapFromPartialIdMapFile(
   auto vec = getIdMapFromFile(filename);
   return ad_utility::HashMap<qlever::Id, qlever::Id>{vec.begin(), vec.end()};
 }
-}  // namespace ad_utility::vocabulary_merger
+}  // namespace qlever::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H

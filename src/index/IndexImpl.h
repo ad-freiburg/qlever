@@ -71,7 +71,7 @@ struct BuildPartialVocabulariesResult {
 
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
 struct IndexBuilderDataAsExternalVector {
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+  qlever::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
 };
 
@@ -87,7 +87,7 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
 // Vocabulary metadata and ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter {
   using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+  qlever::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   SorterPtr sorter_;
 };
 

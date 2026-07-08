@@ -26,7 +26,7 @@
 
 using namespace qlever;
 
-using namespace ad_utility::vocabulary_merger;
+using namespace qlever::vocabulary_merger;
 namespace {
 // equality operator used in this test
 bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {

@@ -56,7 +56,7 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
 using TripleVec =
     ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
-namespace ad_utility::vocabulary_merger {
+namespace qlever::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
@@ -292,7 +292,7 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  */
 void writeMappedIdsToExtVec(
     const std::vector<std::array<qlever::Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<qlever::Id, qlever::Id>& map,
+    const ad_utility::HashMap<qlever::Id, qlever::Id>& map,
     std::unique_ptr<TripleVec>* writePtr);
 
 /**
@@ -326,7 +326,7 @@ ItemVec vocabMapsToVector(const ItemMapArray& map);
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
-}  // namespace ad_utility::vocabulary_merger
+}  // namespace qlever::vocabulary_merger
 
 #include "index/VocabularyMergerImpl.h"
 
