@@ -13,8 +13,8 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever::url_parser;
+using namespace qlever::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 namespace {
@@ -23,12 +23,12 @@ auto ParsedRequestIs =
        const ParamValueMap& parameters,
        const Operation& operation) -> testing::Matcher<const ParsedRequest> {
   return testing::AllOf(
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, accessToken_,
+      AD_FIELD(qlever::url_parser::ParsedRequest, path_, testing::Eq(path)),
+      AD_FIELD(qlever::url_parser::ParsedRequest, accessToken_,
                testing::Eq(accessToken)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, parameters_,
+      AD_FIELD(qlever::url_parser::ParsedRequest, parameters_,
                testing::ContainerEq(parameters)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
+      AD_FIELD(qlever::url_parser::ParsedRequest, operation_,
                testing::Eq(operation)));
 };
 

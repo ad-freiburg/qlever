@@ -47,7 +47,7 @@
 using namespace qlever;
 
 using namespace std::string_literals;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever::url_parser::sparqlOperation;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -262,7 +262,7 @@ auto Server::prepareOperation(
     SharedIndexAndView indexAndViews, std::string_view operationName,
     std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
-    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
+    const qlever::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -271,11 +271,9 @@ auto Server::prepareOperation(
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   std::optional<std::string> pinResultWithName =
-      ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
-                                             {});
+      qlever::url_parser::checkParameter(params, "pin-result-with-name", {});
   std::optional<std::string> pinNamedGeoIndex =
-      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
-                                             {});
+      qlever::url_parser::checkParameter(params, "pin-geo-index-on-var", {});
   AD_LOG_INFO
       << "Processing the following " << operationName
       << (clientIp.empty() ? std::string{} : absl::StrCat(" from ", clientIp))
@@ -362,8 +360,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = absl::bind_front(&qlever::url_parser::checkParameter,
+                                         std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
@@ -503,8 +501,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "write materialized view");
 
     // Extract name parameter for materialized view.
-    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parameters, "view-name");
+    auto name = qlever::url_parser::getParameterCheckAtMostOnce(parameters,
+                                                                "view-name");
     AD_CONTRACT_CHECK(name.has_value(),
                       "Writing a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
@@ -556,8 +554,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "explicitly load materialized view");
 
     // Extract materialized view name parameter.
-    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parameters, "view-name");
+    auto name = qlever::url_parser::getParameterCheckAtMostOnce(parameters,
+                                                                "view-name");
     AD_CONTRACT_CHECK(name.has_value());
 
     indexAndViews->materializedViewsManager_.loadView(name.value());
@@ -755,12 +753,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params) {
+    const qlever::url_parser::ParamValueMap& params) {
   const bool pinSubresults =
-      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
+      qlever::url_parser::checkParameter(params, "pin-subresults", "true")
           .has_value();
   const bool pinResult =
-      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
+      qlever::url_parser::checkParameter(params, "pin-result", "true")
           .has_value();
   return {pinSubresults, pinResult};
 }
@@ -923,9 +921,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     std::vector<ad_utility::MediaType> Server::determineMediaTypes(
-        const ad_utility::url_parser::ParamValueMap& params,
+        const qlever::url_parser::ParamValueMap& params,
         const RequestT& request) {
-  using namespace ad_utility::url_parser;
+  using namespace qlever::url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -1014,8 +1012,8 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
-        const ad_utility::url_parser::ParamValueMap& params,
-        ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+        const qlever::url_parser::ParamValueMap& params, ParsedQuery&& query,
+        const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
@@ -1277,7 +1275,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
-        ad_utility::url_parser::sparqlOperation::Operation operation,
+        qlever::url_parser::sparqlOperation::Operation operation,
         VisitorT visitor, const ad_utility::Timer& requestTimer,
         const RequestT& request, ResponseT& send,
         const std::optional<PlannedQuery>& plannedQuery) {
@@ -1432,7 +1430,7 @@ bool Server::checkAccessToken(
 // _____________________________________________________________________________
 void Server::adjustParsedQueryLimitOffset(
     PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-    const ad_utility::url_parser::ParamValueMap& parameters) {
+    const qlever::url_parser::ParamValueMap& parameters) {
   // Read the export limit from the `send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
   //
@@ -1442,7 +1440,7 @@ void Server::adjustParsedQueryLimitOffset(
   auto& limitOffset = plannedQuery.parsedQuery()._limitOffset;
   auto& exportLimit = limitOffset.exportLimit_;
   auto sendParameter =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, "send");
+      qlever::url_parser::getParameterCheckAtMostOnce(parameters, "send");
   bool considerSendParameter =
       mediaType == MediaType::qleverJson ||
       (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&

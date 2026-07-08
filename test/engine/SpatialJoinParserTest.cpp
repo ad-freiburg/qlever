@@ -24,7 +24,7 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using namespace ad_utility::detail::parallel_wkt_parser;
+using namespace qlever::detail::parallel_wkt_parser;
 
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, AddValueIdToQueue) {

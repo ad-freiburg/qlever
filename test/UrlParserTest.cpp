@@ -12,6 +12,7 @@
 
 using namespace ad_utility;
 using namespace ad_utility::testing;
+using namespace qlever;
 
 TEST(UrlParserTest, getParameterCheckAtMostOnce) {
   const url_parser::ParamValueMap map = {{"once", {"a"}},
@@ -71,7 +72,7 @@ TEST(UrlParserTest, paramsToMap) {
 }
 
 TEST(UrlParserTest, parseRequestTarget) {
-  using namespace ad_utility::url_parser;
+  using namespace qlever::url_parser;
 
   auto IsParsedUrl = [](const std::string& path,
                         const url_parser::ParamValueMap& parameters)
@@ -101,7 +102,7 @@ TEST(UrlParserTest, parseRequestTarget) {
 }
 
 TEST(UrlParserTest, parseDatasetClausesFrom) {
-  using namespace ad_utility::url_parser;
+  using namespace qlever::url_parser;
 
   // Construct the vector from an initializer list without specifying the type.
   auto IsDatasets = [](const std::vector<DatasetClause>& datasetClauses)

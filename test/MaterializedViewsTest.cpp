@@ -790,7 +790,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Initialize but do not start a `Server` instance on our test index.
     Server server{4321, 1, "accessToken", config};
 
-    ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
+    qlever::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();

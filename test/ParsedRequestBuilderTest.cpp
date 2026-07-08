@@ -14,8 +14,8 @@
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility::use_type_identity;
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever::url_parser;
+using namespace qlever::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 // _____________________________________________________________________________________________
@@ -73,7 +73,7 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractDatasetClause) {
   auto expect = [](const auto& request, auto ti,
-                   const std::vector<DatasetClause>& expected,
+                   const std::vector<qlever::DatasetClause>& expected,
                    const ad_utility::source_location l =
                        AD_CURRENT_SOURCE_LOC()) {
     using T = typename decltype(ti)::type;

@@ -15,7 +15,7 @@
 
 namespace m = matchers;
 using namespace ad_utility::testing;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever::url_parser::sparqlOperation;
 
 using Var = qlever::Variable;
 using TC = TripleComponent;

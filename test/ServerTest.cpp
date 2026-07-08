@@ -28,8 +28,8 @@ using namespace qlever;
 using nlohmann::json;
 
 namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever::url_parser;
+using namespace qlever::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
@@ -313,8 +313,8 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
           ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
           std::string operation =
               "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
-                                                                      {"12"}}},
+          const qlever::url_parser::ParamValueMap& parameters = {{"send",
+                                                                  {"12"}}},
           ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));

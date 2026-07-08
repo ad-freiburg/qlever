@@ -264,11 +264,10 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
       vector<ParsedQuery> transformGraphStoreProtocol(
-          ad_utility::url_parser::sparqlOperation::GraphStoreOperation
-              operation,
+          qlever::url_parser::sparqlOperation::GraphStoreOperation operation,
           const RequestT& rawRequest, const Index& index) {
-    ad_utility::url_parser::ParsedUrl parsedUrl =
-        ad_utility::url_parser::parseRequestTarget(rawRequest.target());
+    qlever::url_parser::ParsedUrl parsedUrl =
+        qlever::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
     std::string_view method = rawRequest.method_string();
     if (method == "GET") {

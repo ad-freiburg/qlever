@@ -19,12 +19,12 @@
 /**
  * /brief Some helpers to parse request URLs in QLever.
  */
-namespace ad_utility::url_parser {
-using qlever::DatasetClause;
+namespace qlever::url_parser {
 
 // A map that stores the values for parameters. Parameters can be specified
 // multiple times with different values.
-using ParamValueMap = HashMap<std::string, std::vector<std::string>>;
+using ParamValueMap =
+    ad_utility::HashMap<std::string, std::vector<std::string>>;
 
 // Extracts a parameter that must be present exactly once. If the parameter is
 // not present std::nullopt is returned. If the parameter is present multiple
@@ -108,6 +108,6 @@ std::vector<DatasetClause> parseDatasetClausesFrom(const ParamValueMap& params,
                                                    const std::string& key,
                                                    bool isNamed);
 
-}  // namespace ad_utility::url_parser
+}  // namespace qlever::url_parser
 
 #endif  // QLEVER_URLPARSER_H

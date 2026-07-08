@@ -122,13 +122,13 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   // If the input is smaller than one batch for every thread, reduce the number
   // of threads accordingly to avoid spawning threads that will never be used.
   static constexpr auto batchSize =
-      ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
+      qlever::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
   static_assert(batchSize > 0);
   size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
   numThreads = std::min(numThreads, requiredBatches);
 
   // Initialize the parser.
-  ad_utility::detail::parallel_wkt_parser::WKTParser parser(
+  qlever::detail::parallel_wkt_parser::WKTParser parser(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 

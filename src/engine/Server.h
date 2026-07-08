@@ -43,9 +43,8 @@ namespace qlever {
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
-    ad_utility::SameAsAny<Operation,
-                          ad_utility::url_parser::sparqlOperation::Query,
-                          ad_utility::url_parser::sparqlOperation::Update>;
+    ad_utility::SameAsAny<Operation, qlever::url_parser::sparqlOperation::Query,
+                          qlever::url_parser::sparqlOperation::Update>;
 
 //! The HTTP Server used.
 class Server {
@@ -154,7 +153,7 @@ class Server {
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processOperation(
-          ad_utility::url_parser::sparqlOperation::Operation operation,
+          qlever::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
           const std::optional<PlannedQuery>& plannedQuery);
@@ -171,8 +170,8 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
-          const ad_utility::url_parser::ParamValueMap& params,
-          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+          const qlever::url_parser::ParamValueMap& params, ParsedQuery&& query,
+          const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
@@ -201,25 +200,25 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
       vector<ad_utility::MediaType> determineMediaTypes(
-          const ad_utility::url_parser::ParamValueMap& params,
+          const qlever::url_parser::ParamValueMap& params,
           const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
   // Determine whether the subtrees and the result should be pinned.
   static std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params);
+      const qlever::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
   auto prepareOperation(SharedIndexAndView indexAndViews,
                         std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
-                        const ad_utility::url_parser::ParamValueMap& params,
+                        const qlever::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-      const ad_utility::url_parser::ParamValueMap& parameters);
+      const qlever::url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
@@ -339,7 +338,7 @@ class Server {
   // token has already been checked.
   void writeMaterializedView(
       const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const qlever::url_parser::sparqlOperation::Query& query,
       const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
