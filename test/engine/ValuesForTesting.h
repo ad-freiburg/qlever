@@ -12,6 +12,11 @@
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
+using qlever::ColumnIndex;
+using qlever::Id;
+using qlever::IdTable;
+using qlever::LocalVocab;
+
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
 // operation.

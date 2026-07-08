@@ -17,6 +17,4 @@ SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeUniqueBlankNodeExpression();
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BLANKNODEEXPRESSION_H_

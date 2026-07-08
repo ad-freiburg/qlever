@@ -29,7 +29,7 @@
 
 namespace {
 
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 using ad_utility::testing::iri;
 using qlever::ParsedQuery;
 
@@ -192,8 +192,8 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionMemberFunctions, isDeterministic) {
-  using namespace sparqlExpression;
-  using namespace sparqlExpression::detail;
+  using namespace qlever::sparqlExpression;
+  using namespace qlever::sparqlExpression::detail;
 
   auto makeVar = []() -> SparqlExpression::Ptr {
     return std::make_unique<VariableExpression>(qlever::Variable{"?x"});

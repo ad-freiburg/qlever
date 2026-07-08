@@ -20,8 +20,6 @@
 #include "rdfTypes/RdfEscaping.h"
 #include "util/OverloadCallOperator.h"
 
-namespace RdfEscaping = qlever::RdfEscaping;
-
 static constexpr char quote{'"'};
 static constexpr char at{'@'};
 static constexpr char hat{'^'};

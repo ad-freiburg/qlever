@@ -15,8 +15,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueIdComparators.h"
 
-namespace valueIdComparators = qlever::valueIdComparators;
-
 namespace qlever::sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
@@ -247,5 +245,4 @@ using detail::MinExpression;
 using detail::SumExpression;
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H

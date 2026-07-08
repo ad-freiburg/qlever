@@ -12,8 +12,6 @@
 
 namespace qlever {
 
-using qlever::TextRecordIndex;
-
 class DocsDB {
  public:
   void init(const std::string& fileName);

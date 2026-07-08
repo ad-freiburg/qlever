@@ -1698,11 +1698,11 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     qlever::TripleComponent subject{qlever::Variable{"?subject"}};
     qlever::TripleComponent object{qlever::Variable{"?object"}};
     if (shouldThrow) {
-      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{qlever::SparqlTriple{
+      ASSERT_ANY_THROW((qlever::parsedQuery::SpatialQuery{qlever::SparqlTriple{
                             subject, iri(distanceIRI), object}})
                            .toSpatialJoinConfiguration());
     } else {
-      auto config = parsedQuery::SpatialQuery{
+      auto config = qlever::parsedQuery::SpatialQuery{
           qlever::SparqlTriple{
               subject, iri(distanceIRI),
               object}}.toSpatialJoinConfiguration();

@@ -7,6 +7,8 @@
 #include "gtest/gtest.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 TEST(ValuesForTesting, valuesForTesting) {
   auto table = makeIdTableFromVector({{3, 4}, {12, 2}, {1, 63}});

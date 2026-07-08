@@ -26,7 +26,7 @@ using qlever::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;
 
 using GeoDistanceFilter =
-    std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>;
+    std::optional<std::pair<qlever::sparqlExpression::GeoFunctionCall, double>>;
 using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
 
 // Test helper for `GeoFunctionCall`

@@ -50,6 +50,4 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H

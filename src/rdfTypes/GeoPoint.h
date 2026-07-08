@@ -87,8 +87,7 @@ class GeoPoint {
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
   // otherwise return nothing.
   static std::optional<GeoPoint> parseFromLiteral(
-      const qlever::triple_component::Literal& value,
-      bool checkDatatype = true);
+      const triple_component::Literal& value, bool checkDatatype = true);
 
   std::string toStringRepresentation() const;
 

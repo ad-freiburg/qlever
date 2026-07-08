@@ -18,6 +18,9 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+using qlever::ColumnIndex;
+using qlever::IdTable;
+
 /*
  * @brief Join two IdTables using the given join function and return
  * the result.

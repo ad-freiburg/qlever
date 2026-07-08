@@ -45,7 +45,7 @@ class SpatialJoinCachedIndex {
   // experimental S2 point polyline algorithm.
   SpatialJoinCachedIndex(qlever::Variable geometryColumn,
                          qlever::ColumnIndex col,
-                         const IdTableView<0>& restable,
+                         const qlever::IdTableView<0>& restable,
                          const qlever::Index& index);
 
   // Getters

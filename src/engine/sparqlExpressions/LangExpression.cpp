@@ -13,7 +13,7 @@
 namespace qlever::sparqlExpression {
 namespace detail::langImpl {
 
-using Lit = qlever::triple_component::Literal;
+using Lit = triple_component::Literal;
 using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________

@@ -27,9 +27,8 @@
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
-namespace columnBasedIdTable {
-using qlever::ColumnIndex;
-using qlever::Id;
+namespace qlever::columnBasedIdTable {
+
 // The `IdTable` class is QLever's central data structure. It is used to store
 // all intermediate and final query results in the ID space.
 //
@@ -894,12 +893,14 @@ class IdTable {
   }
 };
 
-}  // namespace columnBasedIdTable
+}  // namespace qlever::columnBasedIdTable
+
+namespace qlever {
 
 namespace detail {
-using DefaultAllocator = ad_utility::default_init_allocator<
-    qlever::Id, ad_utility::AllocatorWithLimit<qlever::Id>>;
-using IdVector = std::vector<qlever::Id, DefaultAllocator>;
+using DefaultAllocator =
+    ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
+using IdVector = std::vector<Id, DefaultAllocator>;
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
@@ -910,9 +911,9 @@ using IdVector = std::vector<qlever::Id, DefaultAllocator>;
 //        is widely used inside the QLever codebase.
 template <int COLS>
 class IdTableStatic
-    : public columnBasedIdTable::IdTable<qlever::Id, COLS, detail::IdVector> {
+    : public columnBasedIdTable::IdTable<Id, COLS, detail::IdVector> {
  public:
-  using Base = columnBasedIdTable::IdTable<qlever::Id, COLS, detail::IdVector>;
+  using Base = columnBasedIdTable::IdTable<Id, COLS, detail::IdVector>;
   // Inherit the constructors.
   using Base::Base;
 
@@ -929,8 +930,7 @@ class IdTableStatic
                                   const IdTableStatic& idTable) {
     os << "{ ";
     ql::ranges::copy(
-        idTable,
-        std::ostream_iterator<columnBasedIdTable::Row<qlever::Id>>(os, " "));
+        idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
     os << "}";
     return os;
   }
@@ -952,7 +952,7 @@ class IdTable : public IdTableStatic<0> {
 /// A constant view into an IdTable that does not own its data
 template <int COLS>
 using IdTableView =
-    columnBasedIdTable::IdTable<qlever::Id, COLS, detail::IdVector,
+    columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
 
 // Concept that matches any type that is or inherits from any instantiation of
@@ -992,5 +992,7 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

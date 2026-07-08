@@ -31,7 +31,7 @@ namespace qlever::sparqlExpression::detail {
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
 inline ql::span<const ValueId> getIdsFromVariable(
-    const qlever::Variable& variable, const EvaluationContext* context,
+    const Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
@@ -52,7 +52,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
 inline ql::span<const ValueId> getIdsFromVariable(
-    const qlever::Variable& variable, const EvaluationContext* context) {
+    const Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
@@ -192,7 +192,7 @@ CPP_template(typename Input, typename Transformation = ql::identity)(
         Input>) auto makeGenerator(Input&& input, size_t numItems,
                                    const EvaluationContext* context,
                                    Transformation transformation = {}) {
-  if constexpr (ad_utility::isSimilar<qlever::Variable, Input>) {
+  if constexpr (ad_utility::isSimilar<Variable, Input>) {
     return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
                            transformation);
   } else {

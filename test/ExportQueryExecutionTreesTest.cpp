@@ -21,6 +21,8 @@
 #include "util/ParseableDuration.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using namespace qlever;
+
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using qlever::DatasetClause;
@@ -1925,10 +1927,10 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
   auto* qec = ad_utility::testing::getQec();
 
-  auto qet1 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto qet1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}),
       std::vector<std::optional<Variable>>{std::nullopt}, false);
-  auto qet2 = qlever::makeExecutionTree<ValuesForTesting>(
+  auto qet2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}),
       std::vector<std::optional<Variable>>{std::nullopt}, true);
 

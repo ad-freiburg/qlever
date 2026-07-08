@@ -532,7 +532,7 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     [[maybe_unused]] const LocalVocabContext& context,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     bool getTotalComplement) const {
-  using namespace qlever::valueIdComparators;
+  using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
   LocalVocab localVocab{};

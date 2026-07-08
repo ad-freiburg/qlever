@@ -12,7 +12,6 @@
 #include "index/IdTableUtils.h"
 
 namespace qlever::sparqlExpression {
-using qlever::IdTableUtils;
 
 // _____________________________________________________________________________
 CountStarExpression::CountStarExpression(bool distinct) : distinct_{distinct} {

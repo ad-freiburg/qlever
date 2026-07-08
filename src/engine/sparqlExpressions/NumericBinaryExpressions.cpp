@@ -162,7 +162,7 @@ namespace constructPrefilterExpr {
 namespace {
 
 // `BinaryOperator` defines the operations `AND` and `OR`.
-using BinaryOperator = qlever::prefilterExpressions::LogicalOperator;
+using BinaryOperator = prefilterExpressions::LogicalOperator;
 
 // MERGE <BinaryOperator::AND, AndExpression>
 // _____________________________________________________________________________
@@ -324,19 +324,19 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
 // TEMPLATED STANDARD MERGE
 //______________________________________________________________________________
 constexpr auto makeAndMergeWithAndConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<
-        BinaryOperator::AND, qlever::prefilterExpressions::AndExpression>;
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
+                                           prefilterExpressions::AndExpression>;
 constexpr auto makeOrMergeWithOrConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<
-        BinaryOperator::OR, qlever::prefilterExpressions::OrExpression>;
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
+                                           prefilterExpressions::OrExpression>;
 // TEMPLATED (PARTIAL) DE-MORGAN MERGE
 //______________________________________________________________________________
 constexpr auto makeAndMergeWithOrConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<
-        BinaryOperator::AND, qlever::prefilterExpressions::OrExpression>;
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
+                                           prefilterExpressions::OrExpression>;
 constexpr auto makeOrMergeWithAndConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<
-        BinaryOperator::OR, qlever::prefilterExpressions::AndExpression>;
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
+                                           prefilterExpressions::AndExpression>;
 
 // GET TEMPLATED MERGE FUNCTION (CONJUNCTION AND / OR)
 //______________________________________________________________________________
@@ -387,14 +387,14 @@ constexpr auto makeOrMergeWithAndConjunction =
 template <typename BinaryPrefilterExpr>
 constexpr auto getMergeFunction(bool isNegated) {
   if constexpr (std::is_same_v<BinaryPrefilterExpr,
-                               qlever::prefilterExpressions::AndExpression>) {
+                               prefilterExpressions::AndExpression>) {
     return !isNegated ? makeAndMergeWithAndConjunction
                       // negated, partially apply De-Morgan:
                       // change AND to OR
                       : makeOrMergeWithAndConjunction;
   } else {
     static_assert(std::is_same_v<BinaryPrefilterExpr,
-                                 qlever::prefilterExpressions::OrExpression>);
+                                 prefilterExpressions::OrExpression>);
     return !isNegated ? makeOrMergeWithOrConjunction
                       // negated, partially apply De-Morgan:
                       // change OR to AND
@@ -426,7 +426,7 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
   std::optional<SparqlExpression::LangFilterData> getLanguageFilterExpression()
       const override {
     if constexpr (!std::is_same_v<BinaryPrefilterExpr,
-                                  qlever::prefilterExpressions::OrExpression>) {
+                                  prefilterExpressions::OrExpression>) {
       return std::nullopt;
     }
     // Concatenate filters for the case of
@@ -449,14 +449,13 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
       return child->isResultAlwaysDefined(map);
     };
     if constexpr (std::is_same_v<BinaryPrefilterExpr,
-                                 qlever::prefilterExpressions::OrExpression>) {
+                                 prefilterExpressions::OrExpression>) {
       // For an OR expression, it is sufficient that one child is always
       // defined.
       return ql::ranges::any_of(this->children(), isAlwaysDefined);
     } else {
-      static_assert(
-          std::is_same_v<BinaryPrefilterExpr,
-                         qlever::prefilterExpressions::AndExpression>);
+      static_assert(std::is_same_v<BinaryPrefilterExpr,
+                                   prefilterExpressions::AndExpression>);
       // For an AND expression, both children must be always defined.
       return ql::ranges::all_of(this->children(), isAlwaysDefined);
     }
@@ -467,12 +466,12 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 
 //______________________________________________________________________________
 using AndExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
-    qlever::prefilterExpressions::AndExpression,
+    prefilterExpressions::AndExpression,
     Operation<2, FV<AndLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Intersection>>>;
 
 using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
-    qlever::prefilterExpressions::OrExpression,
+    prefilterExpressions::OrExpression,
     Operation<2, FV<OrLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Union>>>;
 

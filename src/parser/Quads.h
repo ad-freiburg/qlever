@@ -25,11 +25,10 @@ namespace qlever {
 struct Quads {
   // A single block of triples wrapped in a `GRAPH ... { ... }`. Corresponds to
   // the `quadsNotTriples` grammar rule.
-  using GraphBlock =
-      std::tuple<qlever::sparql_types::VarOrIri, qlever::sparql_types::Triples>;
+  using GraphBlock = std::tuple<sparql_types::VarOrIri, sparql_types::Triples>;
 
   // Free triples are outside a `GRAPH ...` clause.
-  qlever::sparql_types::Triples freeTriples_{};
+  sparql_types::Triples freeTriples_{};
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 
@@ -49,7 +48,7 @@ struct Quads {
     // Store the mapping from labelds to IDs.
     ad_utility::HashMap<std::string, Id> map_;
     // The (global) blank node manager used to obtain new unique blank node IDs.
-    qlever::BlankNodeManager* bnodeManager_;
+    BlankNodeManager* bnodeManager_;
 
     // Get an `Id` for the `label`. If the same `label` was previously passed to
     // the same `BlankNodeAdder`, this will result in the same `Id`.

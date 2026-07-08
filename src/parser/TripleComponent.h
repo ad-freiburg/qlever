@@ -47,8 +47,8 @@ class IndexImpl;
 // of any other type).
 class TripleComponent {
  public:
-  using Literal = qlever::triple_component::Literal;
-  using Iri = qlever::triple_component::Iri;
+  using Literal = triple_component::Literal;
+  using Iri = triple_component::Iri;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.

@@ -20,11 +20,11 @@ constexpr inline size_t WKT_PARSER_BATCH_SIZE = 10'000;
 
 // Special parse job using `ValueId` instead of string.
 struct SpatialJoinParseJob {
-  qlever::ValueId valueId;
+  ValueId valueId;
   size_t line;
   bool side;
   std::string wkt;
-  std::optional<qlever::BoundingBox> boundingBox;
+  std::optional<BoundingBox> boundingBox;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
@@ -43,7 +43,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-            const qlever::Index& index);
+            const Index& index);
 
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
@@ -51,8 +51,8 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // left or right `side` of the spatial join). If available as part of the
   // `IdTable`, this function accepts a precomputed bounding box for
   // prefiltering.
-  void addValueIdToQueue(qlever::ValueId valueId, size_t rowIndex, bool side,
-                         std::optional<qlever::BoundingBox> boundingBox);
+  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                         std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that
@@ -78,7 +78,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
 
   // A reference to QLever's index is needed to access precomputed geometry
   // bounding boxes and to resolve `ValueId`s into WKT literals.
-  const qlever::Index& _index;
+  const Index& _index;
 };
 
 }  // namespace qlever::detail::parallel_wkt_parser

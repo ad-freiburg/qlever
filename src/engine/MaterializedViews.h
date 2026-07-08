@@ -33,8 +33,6 @@ class QueryExecutionTree;
 class IndexScan;
 }  // namespace qlever
 
-namespace parsedQuery = qlever::parsedQuery;
-
 namespace qlever {
 
 // For the future, materialized views save their version. If we change something
@@ -78,9 +76,9 @@ class MaterializedViewWriter {
   using Comparator = SortTriple<0, 1, 2>;
   // Sorter for SPO permutation with a dynamic number of columns (template
   // argument `NumStaticCols == 0`)
-  using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
+  using Sorter = CompressedExternalIdTableSorter<Comparator, 0>;
 
-  using PlannedQuery = qlever::PlannedQuery;
+  using PlannedQuery = PlannedQuery;
 
   // Initialize a writer given the base filename of the view and a planned
   // query. The view will be written to files prefixed with the index basename
@@ -336,7 +334,7 @@ class MaterializedViewsManager {
   // permutation if the query result is not correctly sorted already. The
   // `plannedQuery` is executed with the normal query memory limit.
   void writeViewToDisk(
-      std::string name, const qlever::PlannedQuery& plannedQuery,
+      std::string name, const PlannedQuery& plannedQuery,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>()) const;

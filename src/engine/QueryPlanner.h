@@ -360,8 +360,7 @@ class QueryPlanner {
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromVarOrIri(
-      const TripleComponent& left,
-      const qlever::sparql_types::VarOrIri& varOrIri,
+      const TripleComponent& left, const sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
 
   Variable generateUniqueVarName();
@@ -778,7 +777,7 @@ class QueryPlanner {
   // the default graphs (implicit, or specified via `FROM`) are active, and
   // inside a `GRAPH` clause, the named graphs are active (specified via an
   // explicit IRI in the `GRAPH` clause, or via `FROM NAMED`).
-  qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
+  index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
 }  // namespace qlever

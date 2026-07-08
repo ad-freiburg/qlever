@@ -53,8 +53,7 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
   return idMap;
 }
 
-using TripleVec =
-    ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+using TripleVec = qlever::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
 namespace qlever::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
@@ -90,24 +89,22 @@ struct VocabularyMetaData {
         return false;
       }
       if (!beginWasSeen_) {
-        begin_ =
-            qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(wordIndex));
+        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
         beginWasSeen_ = true;
       }
-      end_ = qlever::Id::makeFromVocabIndex(
-          qlever::VocabIndex::make(wordIndex + 1));
+      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
       return true;
     }
 
-    qlever::Id begin() const { return begin_; }
-    qlever::Id end() const { return end_; }
+    Id begin() const { return begin_; }
+    Id end() const { return end_; }
 
     // Return true if the `id` belongs to this range.
-    bool contains(qlever::Id id) const { return begin_ <= id && id < end_; }
+    bool contains(Id id) const { return begin_ <= id && id < end_; }
 
    private:
-    qlever::Id begin_ = qlever::Id::makeUndefined();
-    qlever::Id end_ = qlever::Id::makeUndefined();
+    Id begin_ = Id::makeUndefined();
+    Id end_ = Id::makeUndefined();
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
@@ -125,7 +122,7 @@ struct VocabularyMetaData {
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
       if (globalSpecialIds_->contains(word)) {
         specialIdMapping_[std::string{word}] =
-            qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(wordIndex));
+            Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
       }
     }
   }
@@ -139,7 +136,7 @@ struct VocabularyMetaData {
     return res;
   }
 
-  // The mapping from the `qlever::specialIds` to their actual IDs.
+  // The mapping from the `specialIds` to their actual IDs.
   // This is created on the fly by the calls to `addWord`.
   const auto& specialIdMapping() const { return specialIdMapping_; }
   // The prefix range for the `@en@<predicate` style predicates.
@@ -153,7 +150,7 @@ struct VocabularyMetaData {
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the
   // input.
-  bool isQleverInternalId(qlever::Id id) const {
+  bool isQleverInternalId(Id id) const {
     return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
   }
 
@@ -168,9 +165,8 @@ struct VocabularyMetaData {
   IdRangeForPrefix internalEntities_{
       std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
 
-  ad_utility::HashMap<std::string, qlever::Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, qlever::Id>* globalSpecialIds_ =
-      &qlever::specialIds();
+  ad_utility::HashMap<std::string, Id> specialIdMapping_;
+  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ = &specialIds();
 };
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
@@ -270,7 +266,7 @@ class VocabularyMerger {
 };
 
 // ____________________________________________________________________________
-ad_utility::HashMap<qlever::Id, qlever::Id> IdMapFromPartialIdMapFile(
+ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const std::string& filename);
 
 /**
@@ -291,8 +287,8 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  * <map> and write the resulting Id triple to <*writePtr>
  */
 void writeMappedIdsToExtVec(
-    const std::vector<std::array<qlever::Id, NumColumnsIndexBuilding>>& input,
-    const ad_utility::HashMap<qlever::Id, qlever::Id>& map,
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const ad_utility::HashMap<Id, Id>& map,
     std::unique_ptr<TripleVec>* writePtr);
 
 /**

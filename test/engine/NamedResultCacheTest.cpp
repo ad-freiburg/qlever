@@ -10,6 +10,8 @@
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
 
+using namespace qlever;
+
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
   qlever::NamedResultCache cache;

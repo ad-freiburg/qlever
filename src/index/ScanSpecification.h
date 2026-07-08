@@ -27,7 +27,7 @@ class Index;
 class ScanSpecification {
  public:
   using T = std::optional<Id>;
-  using GraphFilter = qlever::index::GraphFilter<Id>;
+  using GraphFilter = index::GraphFilter<Id>;
 
  private:
   T col0Id_;
@@ -87,7 +87,7 @@ class ScanSpecification {
 class ScanSpecificationAsTripleComponent {
  public:
   using T = std::optional<TripleComponent>;
-  using GraphFilter = qlever::index::GraphFilter<TripleComponent>;
+  using GraphFilter = index::GraphFilter<TripleComponent>;
 
  private:
   T col0_;

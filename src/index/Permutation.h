@@ -27,7 +27,9 @@
 #include "util/Log.h"
 
 // Forward declaration of `IdTable`.
+namespace qlever {
 class IdTable;
+}
 
 namespace qlever {
 
@@ -43,7 +45,7 @@ class DeltaTriples;
 // avoid code duplication.
 class Permutation {
  public:
-  using KeyOrder = qlever::KeyOrder;
+  using KeyOrder = KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use

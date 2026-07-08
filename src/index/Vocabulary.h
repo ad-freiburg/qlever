@@ -135,7 +135,7 @@ class Vocabulary {
   // if and only if a `GeoVocabulary` is used and the given index points to a
   // valid geometry in this `GeoVocabulary`. In all other cases, `std::nullopt`
   // is returned.
-  std::optional<qlever::GeometryInfo> getGeoInfo(IndexType idx) const;
+  std::optional<GeometryInfo> getGeoInfo(IndexType idx) const;
 
   // This function determines if precomputed `GeometryInfo` is available for
   // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
@@ -237,7 +237,7 @@ class Vocabulary {
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
   // vocabulary and set the type of the vocabulary according to the `type`
   // argument (see the `PolymorphicVocabulary` class for details).
-  void resetToType(qlever::VocabularyType type) {
+  void resetToType(VocabularyType type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
     }

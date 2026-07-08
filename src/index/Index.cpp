@@ -44,7 +44,7 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 }
 
 // ____________________________________________________________________________
-qlever::BlankNodeManager* Index::getBlankNodeManager() const {
+BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
 }
 

@@ -19,9 +19,6 @@
 
 namespace qlever {
 
-using qlever::CompactVectorOfStrings;
-using qlever::Pattern;
-
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
 // contiguous (but ascending). All accesses are implemented using binary search.

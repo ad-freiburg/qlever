@@ -10,8 +10,6 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 
-namespace valueIdComparators = qlever::valueIdComparators;
-
 namespace qlever::sparqlExpression {
 
 // Make a `ValueId` from an int/ a double. Shorter name, as it will be used

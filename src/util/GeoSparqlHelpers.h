@@ -151,7 +151,7 @@ class WktCentroid {
 // Get the bounding box of a geometry.
 class WktEnvelope {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  qlever::sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<qlever::BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
       return qlever::ValueId::makeUndefined();
@@ -201,7 +201,7 @@ class WktBoundingCoordinate {
 // Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  qlever::sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<qlever::GeometryType>& geometryType) const {
     if (!geometryType.has_value()) {
       return qlever::ValueId::makeUndefined();
@@ -226,7 +226,7 @@ class WktGeometryType {
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
  public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  qlever::sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<qlever::GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
     using qlever::triple_component::Iri;
@@ -252,7 +252,7 @@ class WktGeometryN {
 class WktSimplify {
  public:
   template <typename NumericVariant>
-  sparqlExpression::IdOrLiteralOrIri operator()(
+  qlever::sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<qlever::GeoPointOrWkt>& geom,
       const NumericVariant& tolerance) const {
     using qlever::triple_component::Iri;

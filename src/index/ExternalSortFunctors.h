@@ -115,7 +115,7 @@ struct SortByColumns {
 // by index building, you must add a matching explicit instantiation in
 // `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
 // fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
-namespace ad_utility {
+namespace qlever {
 
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
                                                       3>;
@@ -131,6 +131,6 @@ extern template class CompressedExternalIdTableSorter<
     SortByPSO, NumColumnsIndexBuilding + 2>;
 extern template class CompressedExternalIdTableSorter<SortText, 5>;
 
-}  // namespace ad_utility
+}  // namespace qlever
 #endif  // QLEVER_CHEAPER_COMPILATION
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H

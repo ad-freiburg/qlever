@@ -34,7 +34,7 @@
 // human-readable output if a test fails.
 namespace qlever {
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
-  using Iri = qlever::triple_component::Iri;
+  using Iri = triple_component::Iri;
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
@@ -175,7 +175,6 @@ namespace matchers {
 
 using testing::Matcher;
 // short namespace alias
-namespace p = qlever::parsedQuery;
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -335,17 +334,17 @@ inline auto Literal = [](const std::string& value) {
 
 inline auto ConstructClause =
     [](const std::vector<std::array<qlever::GraphTerm, 3>>& elems)
-    -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
-  return testing::Optional(
-      AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems)));
+    -> Matcher<const std::optional<qlever::parsedQuery::ConstructClause>&> {
+  return testing::Optional(AD_FIELD(qlever::parsedQuery::ConstructClause,
+                                    triples_, testing::Eq(elems)));
 };
 
 // _____________________________________________________________________________
 namespace detail {
 inline auto Expression = [](const std::string& descriptor)
-    -> Matcher<const sparqlExpression::SparqlExpressionPimpl&> {
-  return AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getDescriptor,
-                     testing::Eq(descriptor));
+    -> Matcher<const qlever::sparqlExpression::SparqlExpressionPimpl&> {
+  return AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl,
+                     getDescriptor, testing::Eq(descriptor));
 };
 }  // namespace detail
 
@@ -354,30 +353,32 @@ inline auto Expression = [](const std::string& descriptor)
 // `ExpressionT` must be a subclass of `SparqlExpression`.
 template <typename ExpressionT>
 inline auto ExpressionWithType =
-    []() -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+    []() -> Matcher<const qlever::sparqlExpression::SparqlExpression::Ptr&> {
   return testing::Pointer(
       testing::WhenDynamicCastTo<const ExpressionT*>(testing::NotNull()));
 };
 
 namespace detail {
 template <typename T>
-auto GraphPatternOperation =
-    [](auto subMatcher) -> Matcher<const p::GraphPatternOperation&> {
+auto GraphPatternOperation = [](auto subMatcher)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return testing::VariantWith<T>(subMatcher);
 };
 }  // namespace detail
 
-inline auto BindExpression =
-    [](const std::string& expression) -> Matcher<const p::Bind&> {
-  return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
+inline auto BindExpression = [](const std::string& expression)
+    -> Matcher<const qlever::parsedQuery::Bind&> {
+  return AD_FIELD(qlever::parsedQuery::Bind, _expression,
+                  detail::Expression(expression));
 };
 
 inline auto Bind = [](const qlever::Variable& variable,
                       const std::string& expression)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Bind>(
-      testing::AllOf(BindExpression(expression),
-                     AD_FIELD(p::Bind, _target, testing::Eq(variable))));
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Bind>(
+      testing::AllOf(
+          BindExpression(expression),
+          AD_FIELD(qlever::parsedQuery::Bind, _target, testing::Eq(variable))));
 };
 
 inline auto LimitOffset =
@@ -452,7 +453,7 @@ inline auto VariableGroupKey =
 
 inline auto ExpressionGroupKey =
     [](const std::string& expr) -> Matcher<const qlever::GroupKey&> {
-  return testing::VariantWith<sparqlExpression::SparqlExpressionPimpl>(
+  return testing::VariantWith<qlever::sparqlExpression::SparqlExpressionPimpl>(
       detail::Expression(expr));
 };
 
@@ -510,12 +511,12 @@ inline auto WarningsOfParsedQuery = [](const std::vector<std::string>& warnings)
 inline auto Values =
     [](const std::vector<qlever::Variable>& vars,
        const std::vector<std::vector<qlever::TripleComponent>>& values)
-    -> Matcher<const p::Values&> {
+    -> Matcher<const qlever::parsedQuery::Values&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  using SparqlValues = p::SparqlValues;
+  using SparqlValues = qlever::parsedQuery::SparqlValues;
   return testing::AllOf(AD_FIELD(
-      p::Values, _inlineValues,
+      qlever::parsedQuery::Values, _inlineValues,
       testing::AllOf(AD_FIELD(SparqlValues, _variables, testing::Eq(vars)),
                      AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
 };
@@ -523,53 +524,58 @@ inline auto Values =
 inline auto InlineData =
     [](const std::vector<qlever::Variable>& vars,
        const std::vector<std::vector<qlever::TripleComponent>>& values)
-    -> Matcher<const p::GraphPatternOperation&> {
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  return detail::GraphPatternOperation<p::Values>(Values(vars, values));
+  return detail::GraphPatternOperation<qlever::parsedQuery::Values>(
+      Values(vars, values));
 };
 
-inline auto Service =
-    [](const qlever::TripleComponent::Iri& iri,
-       const std::vector<qlever::Variable>& variables,
-       const std::string& graphPattern, const std::string& prologue = "",
-       bool silent = false) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Service = [](const qlever::TripleComponent::Iri& iri,
+                         const std::vector<qlever::Variable>& variables,
+                         const std::string& graphPattern,
+                         const std::string& prologue = "", bool silent = false)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   auto serviceMatcher = testing::AllOf(
-      AD_FIELD(p::Service, serviceIri_, testing::Eq(iri)),
-      AD_FIELD(p::Service, visibleVariables_,
+      AD_FIELD(qlever::parsedQuery::Service, serviceIri_, testing::Eq(iri)),
+      AD_FIELD(qlever::parsedQuery::Service, visibleVariables_,
                testing::UnorderedElementsAreArray(variables)),
-      AD_FIELD(p::Service, graphPatternAsString_, testing::Eq(graphPattern)),
-      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)),
-      AD_FIELD(p::Service, silent_, testing::Eq(silent)));
-  return detail::GraphPatternOperation<p::Service>(serviceMatcher);
+      AD_FIELD(qlever::parsedQuery::Service, graphPatternAsString_,
+               testing::Eq(graphPattern)),
+      AD_FIELD(qlever::parsedQuery::Service, prologue_, testing::Eq(prologue)),
+      AD_FIELD(qlever::parsedQuery::Service, silent_, testing::Eq(silent)));
+  return detail::GraphPatternOperation<qlever::parsedQuery::Service>(
+      serviceMatcher);
 };
 
 namespace detail {
 inline auto SelectBase =
     [](bool distinct,
        bool reduced) -> Matcher<const qlever::ParsedQuery::SelectClause&> {
-  return testing::AllOf(
-      AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
-      AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced)),
-      AD_PROPERTY(p::SelectClause, getAliases, testing::IsEmpty()));
+  return testing::AllOf(AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
+                                 testing::Eq(distinct)),
+                        AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
+                                 testing::Eq(reduced)),
+                        AD_PROPERTY(qlever::parsedQuery::SelectClause,
+                                    getAliases, testing::IsEmpty()));
 };
 }  // namespace detail
 
-inline auto AsteriskSelect = [](bool distinct = false,
-                                bool reduced =
-                                    false) -> Matcher<const p::SelectClause&> {
-  return testing::AllOf(
-      detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(p::SelectClause, isAsterisk, testing::IsTrue()));
+inline auto AsteriskSelect = [](bool distinct = false, bool reduced = false)
+    -> Matcher<const qlever::parsedQuery::SelectClause&> {
+  return testing::AllOf(detail::SelectBase(distinct, reduced),
+                        AD_PROPERTY(qlever::parsedQuery::SelectClause,
+                                    isAsterisk, testing::IsTrue()));
 };
 
 inline auto VariablesSelect =
     [](const std::vector<std::string>& variables, bool distinct = false,
-       bool reduced = false) -> Matcher<const p::SelectClause&> {
+       bool reduced =
+           false) -> Matcher<const qlever::parsedQuery::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(p::SelectClause, getSelectedVariablesAsStrings,
-                  testing::Eq(variables)));
+      AD_PROPERTY(qlever::parsedQuery::SelectClause,
+                  getSelectedVariablesAsStrings, testing::Eq(variables)));
 };
 
 namespace detail {
@@ -633,11 +639,12 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
     i++;
   }
   return testing::ExplainMatchResult(
-      testing::AllOf(
-          AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
-          AD_PROPERTY(p::SelectClause, getAliases,
-                      testing::SizeIs(testing::Eq(alias_counter))),
-          AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced))),
+      testing::AllOf(AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
+                              testing::Eq(distinct)),
+                     AD_PROPERTY(qlever::parsedQuery::SelectClause, getAliases,
+                                 testing::SizeIs(testing::Eq(alias_counter))),
+                     AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
+                              testing::Eq(reduced))),
       arg, result_listener);
 }
 }  // namespace detail
@@ -648,16 +655,17 @@ inline auto Select =
            selection,
        bool distinct = false, bool reduced = false,
        std::vector<std::pair<std::string, qlever::Variable>> hiddenAliases = {})
-    -> Matcher<const p::SelectClause&> {
-  return testing::SafeMatcherCast<const p::SelectClause&>(detail::Select(
-      distinct, reduced, std::move(selection), std::move(hiddenAliases)));
+    -> Matcher<const qlever::parsedQuery::SelectClause&> {
+  return testing::SafeMatcherCast<const qlever::parsedQuery::SelectClause&>(
+      detail::Select(distinct, reduced, std::move(selection),
+                     std::move(hiddenAliases)));
 };
 
 // Return a `Matcher` that tests whether the descriptor of the expression of a
 // `SparqlFilter` matches the given `expectedDescriptor`.
 inline auto stringMatchesFilter =
     [](const std::string& expectedDescriptor) -> Matcher<const SparqlFilter&> {
-  auto inner = AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+  auto inner = AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl,
                            getDescriptor, testing::Eq(expectedDescriptor));
   return AD_FIELD(SparqlFilter, expression_, inner);
 };
@@ -693,9 +701,9 @@ inline auto SolutionModifier =
 };
 
 inline auto Triples = [](const std::vector<qlever::SparqlTriple>& triples)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::BasicGraphPattern>(
-      AD_FIELD(p::BasicGraphPattern, _triples,
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::BasicGraphPattern>(
+      AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
                testing::UnorderedElementsAreArray(triples)));
 };
 
@@ -704,62 +712,68 @@ inline auto Triples = [](const std::vector<qlever::SparqlTriple>& triples)
 // test failure.
 inline auto OrderedTriples =
     [](const std::vector<qlever::SparqlTriple>& triples)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::BasicGraphPattern>(AD_FIELD(
-      p::BasicGraphPattern, _triples, testing::ElementsAreArray(triples)));
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::BasicGraphPattern>(
+      AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
+               testing::ElementsAreArray(triples)));
 };
 
 namespace detail {
-inline auto Optional =
-    [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Optional>(
-      AD_FIELD(p::Optional, _child, subMatcher));
+inline auto Optional = [](auto&& subMatcher)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Optional>(
+      AD_FIELD(qlever::parsedQuery::Optional, _child, subMatcher));
 };
 }  // namespace detail
 
 inline auto Group =
     [](auto&& subMatcher,
-       p::GroupGraphPattern::GraphSpec graphSpec =
-           std::monostate{}) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::GroupGraphPattern>(::testing::AllOf(
-      AD_FIELD(p::GroupGraphPattern, _child, subMatcher),
-      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec))));
+       qlever::parsedQuery::GroupGraphPattern::GraphSpec graphSpec =
+           std::monostate{})
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::GroupGraphPattern>(
+      ::testing::AllOf(
+          AD_FIELD(qlever::parsedQuery::GroupGraphPattern, _child, subMatcher),
+          AD_FIELD(qlever::parsedQuery::GroupGraphPattern, graphSpec_,
+                   ::testing::Eq(graphSpec))));
 };
 
-inline auto Union =
-    [](auto&& subMatcher1,
-       auto&& subMatcher2) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Union>(
-      testing::AllOf(AD_FIELD(p::Union, _child1, subMatcher1),
-                     AD_FIELD(p::Union, _child2, subMatcher2)));
+inline auto Union = [](auto&& subMatcher1, auto&& subMatcher2)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Union>(
+      testing::AllOf(
+          AD_FIELD(qlever::parsedQuery::Union, _child1, subMatcher1),
+          AD_FIELD(qlever::parsedQuery::Union, _child2, subMatcher2)));
 };
 
-inline auto Minus =
-    [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Minus>(
-      AD_FIELD(p::Minus, _child, subMatcher));
+inline auto Minus = [](auto&& subMatcher)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Minus>(
+      AD_FIELD(qlever::parsedQuery::Minus, _child, subMatcher));
 };
 
-inline auto Load = [](const qlever::TripleComponent::Iri& iri,
-                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Load>(
-      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
-                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
+inline auto Load = [](const qlever::TripleComponent::Iri& iri, bool silent)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Load>(
+      testing::AllOf(
+          AD_FIELD(qlever::parsedQuery::Load, iri_, testing::Eq(iri)),
+          AD_FIELD(qlever::parsedQuery::Load, silent_, testing::Eq(silent))));
 };
 
-inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
+inline auto RootGraphPattern =
+    [](const Matcher<const qlever::parsedQuery::GraphPattern&>& m)
     -> Matcher<const qlever::ParsedQuery&> {
   return AD_FIELD(qlever::ParsedQuery, _rootGraphPattern, m);
 };
 
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
-  Matcher<const p::GraphPatternOperation&> operator()(
+  Matcher<const qlever::parsedQuery::GraphPatternOperation&> operator()(
       std::vector<std::string>&& filters, const auto&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
   }
 
-  Matcher<const p::GraphPatternOperation&> operator()(
+  Matcher<const qlever::parsedQuery::GraphPatternOperation&> operator()(
       const auto&... childMatchers) {
     return SubMatcherLambda({}, childMatchers...);
   }
@@ -800,7 +814,7 @@ inline auto GraphPattern =
 namespace detail {
 inline auto OptionalGraphPattern = [](std::vector<std::string>&& filters,
                                       const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::Optional(
       detail::GraphPattern(true, filters, childMatchers...));
 };
@@ -810,19 +824,21 @@ inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
 inline auto GroupGraphPattern = [](const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, {}, childMatchers...));
 };
 
 inline auto GroupGraphPatternWithGraph = ad_utility::OverloadCallOperator{
-    [](p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
-        -> Matcher<const p::GraphPatternOperation&> {
+    [](qlever::parsedQuery::GroupGraphPattern::GraphSpec graph,
+       const auto&... childMatchers)
+        -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
       return Group(detail::GraphPattern(false, {}, childMatchers...), graph);
     },
     [](qlever::Variable graphVariable,
-       p::GroupGraphPattern::GraphVariableBehaviour graphVariableBehaviour,
+       qlever::parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+           graphVariableBehaviour,
        const auto&... childMatchers)
-        -> Matcher<const p::GraphPatternOperation&> {
+        -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
       return Group(detail::GraphPattern(false, {}, childMatchers...),
                    std::pair{std::move(graphVariable), graphVariableBehaviour});
     }};
@@ -830,7 +846,7 @@ inline auto GroupGraphPatternWithGraph = ad_utility::OverloadCallOperator{
 namespace detail {
 inline auto MinusGraphPattern = [](std::vector<std::string>&& filters,
                                    const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));
 };
 }  // namespace detail
@@ -838,21 +854,23 @@ inline auto MinusGraphPattern = [](std::vector<std::string>&& filters,
 inline auto MinusGraphPattern =
     MatcherWithDefaultFilters<detail::MinusGraphPattern>{};
 
-inline auto SubSelect =
-    [](auto&& selectMatcher,
-       auto&& whereMatcher) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::Subquery>(AD_PROPERTY(
-      p::Subquery, get,
-      testing::AllOf(
-          AD_PROPERTY(qlever::ParsedQuery, hasSelectClause, testing::IsTrue()),
-          AD_PROPERTY(qlever::ParsedQuery, selectClause, selectMatcher),
-          AD_FIELD(qlever::ParsedQuery, _rootGraphPattern, whereMatcher))));
+inline auto SubSelect = [](auto&& selectMatcher, auto&& whereMatcher)
+    -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<qlever::parsedQuery::Subquery>(
+      AD_PROPERTY(
+          qlever::parsedQuery::Subquery, get,
+          testing::AllOf(
+              AD_PROPERTY(qlever::ParsedQuery, hasSelectClause,
+                          testing::IsTrue()),
+              AD_PROPERTY(qlever::ParsedQuery, selectClause, selectMatcher),
+              AD_FIELD(qlever::ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    parsedQuery::DatasetClauses::Graphs activeDefaultGraphs = std::nullopt,
-    parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
+    qlever::parsedQuery::DatasetClauses::Graphs activeDefaultGraphs =
+        std::nullopt,
+    qlever::parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
     -> Matcher<const qlever::ParsedQuery::DatasetClauses&> {
   using DS = qlever::ParsedQuery::DatasetClauses;
   using namespace ::testing;
@@ -861,10 +879,11 @@ inline auto datasetClausesMatcher(
 }
 
 inline auto SelectQuery =
-    [](const Matcher<const p::SelectClause&>& selectMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
-       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
-       parsedQuery::DatasetClauses::Graphs namedGraphs =
+    [](const Matcher<const qlever::parsedQuery::SelectClause&>& selectMatcher,
+       const Matcher<const qlever::parsedQuery::GraphPattern&>&
+           graphPatternMatcher,
+       qlever::parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       qlever::parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const qlever::ParsedQuery&> {
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
@@ -904,9 +923,10 @@ inline auto GroupKeys = GroupByVariables;
 
 // Matcher for an ASK query.
 inline auto AskQuery =
-    [](const Matcher<const p::GraphPattern&>& graphPatternMatcher,
-       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
-       parsedQuery::DatasetClauses::Graphs namedGraphs =
+    [](const Matcher<const qlever::parsedQuery::GraphPattern&>&
+           graphPatternMatcher,
+       qlever::parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       qlever::parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const qlever::ParsedQuery&> {
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
@@ -920,15 +940,15 @@ inline auto AskQuery =
 // _____________________________________________________________________________
 inline auto ConstructQuery(
     const std::vector<std::array<qlever::GraphTerm, 3>>& elems,
-    const Matcher<const p::GraphPattern&>& m,
-    parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
-    parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
+    const Matcher<const qlever::parsedQuery::GraphPattern&>& m,
+    qlever::parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+    qlever::parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
     -> Matcher<const qlever::ParsedQuery&> {
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
   return testing::AllOf(
       AD_PROPERTY(qlever::ParsedQuery, hasConstructClause, testing::IsTrue()),
       AD_PROPERTY(qlever::ParsedQuery, constructClause,
-                  AD_FIELD(parsedQuery::ConstructClause, triples_,
+                  AD_FIELD(qlever::parsedQuery::ConstructClause, triples_,
                            testing::ElementsAreArray(elems))),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(m));
@@ -936,28 +956,32 @@ inline auto ConstructQuery(
 
 // A matcher for a `DescribeQuery`
 inline auto DescribeQuery(
-    const Matcher<const p::GraphPattern&>& describeMatcher,
-    const parsedQuery::DatasetClauses::Graphs& defaultGraphs = std::nullopt,
-    const parsedQuery::DatasetClauses::Graphs& namedGraphs = std::nullopt) {
+    const Matcher<const qlever::parsedQuery::GraphPattern&>& describeMatcher,
+    const qlever::parsedQuery::DatasetClauses::Graphs& defaultGraphs =
+        std::nullopt,
+    const qlever::parsedQuery::DatasetClauses::Graphs& namedGraphs =
+        std::nullopt) {
   using Var = qlever::Variable;
   return ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}},
                         describeMatcher, defaultGraphs, namedGraphs);
 }
 
 // Match a `Describe` clause.
-inline auto Describe = [](const std::vector<p::Describe::VarOrIri>& resources,
-                          const p::DatasetClauses& datasetClauses,
-                          const Matcher<const qlever::ParsedQuery&>& subquery)
-    -> Matcher<const p::GraphPattern&> {
+inline auto Describe =
+    [](const std::vector<qlever::parsedQuery::Describe::VarOrIri>& resources,
+       const qlever::parsedQuery::DatasetClauses& datasetClauses,
+       const Matcher<const qlever::ParsedQuery&>& subquery)
+    -> Matcher<const qlever::parsedQuery::GraphPattern&> {
   using namespace ::testing;
-  auto getSubquery =
-      [](const p::Subquery& subquery) -> const qlever::ParsedQuery& {
-    return subquery.get();
-  };
-  return GraphPattern(detail::GraphPatternOperation<p::Describe>(AllOf(
-      AD_FIELD(p::Describe, resources_, Eq(resources)),
-      AD_FIELD(p::Describe, datasetClauses_, Eq(datasetClauses)),
-      AD_FIELD(p::Describe, whereClause_, ResultOf(getSubquery, subquery)))));
+  auto getSubquery = [](const qlever::parsedQuery::Subquery& subquery)
+      -> const qlever::ParsedQuery& { return subquery.get(); };
+  return GraphPattern(
+      detail::GraphPatternOperation<qlever::parsedQuery::Describe>(AllOf(
+          AD_FIELD(qlever::parsedQuery::Describe, resources_, Eq(resources)),
+          AD_FIELD(qlever::parsedQuery::Describe, datasetClauses_,
+                   Eq(datasetClauses)),
+          AD_FIELD(qlever::parsedQuery::Describe, whereClause_,
+                   ResultOf(getSubquery, subquery)))));
 };
 
 // _____________________________________________________________________________
@@ -969,11 +993,11 @@ inline auto VisibleVariables = [](const std::vector<qlever::Variable>& elems)
 
 using namespace qlever::updateClause;
 
-// Match a `updateClause::GraphUpdate` clause.
+// Match a `qlever::updateClause::GraphUpdate` clause.
 inline auto MatchGraphUpdate(
-    const Matcher<const updateClause::GraphUpdate::Triples&>& toDelete,
-    const Matcher<const updateClause::GraphUpdate::Triples&>& toInsert)
-    -> Matcher<const updateClause::GraphUpdate&> {
+    const Matcher<const qlever::updateClause::GraphUpdate::Triples&>& toDelete,
+    const Matcher<const qlever::updateClause::GraphUpdate::Triples&>& toInsert)
+    -> Matcher<const qlever::updateClause::GraphUpdate&> {
   using namespace testing;
   return AllOf(AD_FIELD(GraphUpdate, toInsert_, toInsert),
                AD_FIELD(GraphUpdate, toDelete_, toDelete));
@@ -984,7 +1008,7 @@ inline auto MatchGraphUpdate(
 inline auto GraphUpdate(
     const std::vector<qlever::SparqlTripleSimpleWithGraph>& toDelete,
     const std::vector<qlever::SparqlTripleSimpleWithGraph>& toInsert)
-    -> Matcher<const updateClause::GraphUpdate&> {
+    -> Matcher<const qlever::updateClause::GraphUpdate&> {
   auto getVec = [](const GraphUpdate::Triples& tr) -> decltype(auto) {
     return tr.triples_;
   };
@@ -1004,15 +1028,16 @@ inline auto EmptyDatasets = [] {
 using Graphs = ad_utility::HashSet<qlever::TripleComponent>;
 
 inline auto UpdateClause =
-    [](const Matcher<const updateClause::GraphUpdate&>& opMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+    [](const Matcher<const qlever::updateClause::GraphUpdate&>& opMatcher,
+       const Matcher<const qlever::parsedQuery::GraphPattern&>&
+           graphPatternMatcher,
        const Matcher<const qlever::ParsedQuery::DatasetClauses&>&
            datasetMatcher =
                EmptyDatasets()) -> Matcher<const qlever::ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(qlever::ParsedQuery, hasUpdateClause, testing::IsTrue()),
       AD_PROPERTY(qlever::ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, op_, opMatcher)),
+                  AD_FIELD(qlever::parsedQuery::UpdateClause, op_, opMatcher)),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(graphPatternMatcher));
 };
@@ -1036,7 +1061,7 @@ inline auto Quads = [](const qlever::sparql_types::Triples& freeTriples,
 
 // Some helper matchers for testing SparqlExpressions
 namespace builtInCall {
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
@@ -1083,7 +1108,7 @@ CPP_template(typename Expression, typename... Children)(requires(
 auto matchNaryWithChildrenMatchers(auto makeFunction,
                                    auto&&... childrenMatchers)
     -> Matcher<const SparqlExpression::Ptr&> {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   auto typeIdLambda = [](const auto& ptr) {
     return std::type_index{typeid(*ptr)};
   };
@@ -1113,8 +1138,8 @@ inline auto idExpressionMatcher = [](qlever::Id id) {
 auto matchNary(auto makeFunction,
                QL_CONCEPT_OR_NOTHING(
                    ad_utility::SimilarTo<qlever::Variable>) auto&&... variables)
-    -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  using namespace sparqlExpression;
+    -> Matcher<const qlever::sparqlExpression::SparqlExpression::Ptr&> {
+  using namespace qlever::sparqlExpression;
   return matchNaryWithChildrenMatchers(makeFunction,
                                        variableExpressionMatcher(variables)...);
 }
@@ -1126,7 +1151,7 @@ auto matchUnary(F makeFunction) -> Matcher<const SparqlExpression::Ptr&> {
 template <typename T>
 auto matchLiteralExpression(const T& value)
     -> Matcher<const SparqlExpression::Ptr&> {
-  using Expr = sparqlExpression::detail::LiteralExpression<T>;
+  using Expr = qlever::sparqlExpression::detail::LiteralExpression<T>;
   return testing::Pointee(testing::WhenDynamicCastTo<const Expr&>(
       AD_PROPERTY(Expr, value, testing::Eq(value))));
 }
@@ -1135,14 +1160,15 @@ auto matchLiteralExpression(const T& value)
 // Match an EXISTS function
 inline auto Exists(Matcher<const qlever::ParsedQuery&> pattern) {
   return testing::Pointee(
-      testing::WhenDynamicCastTo<const sparqlExpression::ExistsExpression&>(
-          AD_PROPERTY(sparqlExpression::ExistsExpression, argument, pattern)));
+      testing::WhenDynamicCastTo<
+          const qlever::sparqlExpression::ExistsExpression&>(AD_PROPERTY(
+          qlever::sparqlExpression::ExistsExpression, argument, pattern)));
 }
 
 // Match a NOT EXISTS function
 inline auto NotExists(Matcher<const qlever::ParsedQuery&> pattern) {
   return builtInCall::matchNaryWithChildrenMatchers(
-      &sparqlExpression::makeUnaryNegateExpression, Exists(pattern));
+      &qlever::sparqlExpression::makeUnaryNegateExpression, Exists(pattern));
 }
 
 // Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
@@ -1150,13 +1176,14 @@ inline auto NotExists(Matcher<const qlever::ParsedQuery&> pattern) {
 // `ExistsExpression`.
 inline auto ContainsExistsFilter =
     [](const Matcher<const qlever::ParsedQuery&>& matcher)
-    -> Matcher<const parsedQuery::GraphPattern&> {
-  return AD_FIELD(parsedQuery::GraphPattern, _filters,
-                  ::testing::ElementsAre(AD_FIELD(
-                      SparqlFilter, expression_,
-                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
-                                  getExistsExpressions,
-                                  ::testing::ElementsAre(Exists(matcher))))));
+    -> Matcher<const qlever::parsedQuery::GraphPattern&> {
+  return AD_FIELD(
+      qlever::parsedQuery::GraphPattern, _filters,
+      ::testing::ElementsAre(
+          AD_FIELD(SparqlFilter, expression_,
+                   AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl,
+                               getExistsExpressions,
+                               ::testing::ElementsAre(Exists(matcher))))));
 };
 
 // Check that the given filters are set on the graph pattern.
@@ -1168,20 +1195,21 @@ inline auto Filters = [](const auto&... filterMatchers)
 
 // Matcher for `FILTER EXISTS` filters.
 inline auto ExistsFilter =
-    [](const Matcher<const parsedQuery::GraphPattern&>& m,
-       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
-       parsedQuery::DatasetClauses::Graphs namedGraphs =
+    [](const Matcher<const qlever::parsedQuery::GraphPattern&>& m,
+       qlever::parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       qlever::parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const SparqlFilter&> {
-  return AD_FIELD(SparqlFilter, expression_,
-                  AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getPimpl,
-                              Exists(SelectQuery(VariablesSelect({}), m,
-                                                 defaultGraphs, namedGraphs))));
+  return AD_FIELD(
+      SparqlFilter, expression_,
+      AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl, getPimpl,
+                  Exists(SelectQuery(VariablesSelect({}), m, defaultGraphs,
+                                     namedGraphs))));
 };
 
 // A helper matcher for a graph pattern that targets all triples in `graph`.
 inline auto SelectAllPattern =
-    [](parsedQuery::GroupGraphPattern::GraphSpec graph)
-    -> Matcher<const parsedQuery::GraphPattern&> {
+    [](qlever::parsedQuery::GroupGraphPattern::GraphSpec graph)
+    -> Matcher<const qlever::parsedQuery::GraphPattern&> {
   return GraphPattern(false, std::vector<std::string>{},
                       Group(GraphPattern(Triples({{{qlever::Variable("?s"),
                                                     qlever::Variable("?p"),
@@ -1200,7 +1228,7 @@ inline auto Clear = ad_utility::OverloadCallOperator{
                           SelectAllPattern(graph));
     },
     [](const qlever::Variable& graph,
-       parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+       qlever::parsedQuery::GroupGraphPattern::GraphVariableBehaviour
            graphVariableBehaviour) {
       return UpdateClause(
           GraphUpdate({{{qlever::Variable("?s")},

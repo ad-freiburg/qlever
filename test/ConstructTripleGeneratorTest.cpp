@@ -16,6 +16,8 @@
 #include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace qlever::constructExport;

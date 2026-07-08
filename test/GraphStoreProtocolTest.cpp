@@ -499,8 +499,7 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       std::holds_alternative<parsedQuery::ConstructClause>(getQuery._clause));
 
   // Test transformGet with specific graph IRI
-  auto graphIri =
-      qlever::triple_component::Iri::fromIriref("<http://example.org/123>");
+  auto graphIri = triple_component::Iri::fromIriref("<http://example.org/123>");
   auto graphQuery =
       GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
   EXPECT_THAT(

@@ -152,10 +152,10 @@ class Iri : public BasicIri<true> {
   // specification of RFC 3986. For absolute IRIs with a scheme (like
   // `<http://...>`), this is the same as `fromIriref`.
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const qlever::util::ParsedUri& baseUri);
+                                    const util::ParsedUri& baseUri);
 
   // Create an `Iri` object given from the given `ParsedUri` object.
-  static Iri fromUri(const qlever::util::ParsedUri& uri);
+  static Iri fromUri(const util::ParsedUri& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).

@@ -8,8 +8,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
-using namespace sparqlExpression;
-using namespace sparqlExpression::detail;
+using namespace qlever::sparqlExpression;
+using namespace qlever::sparqlExpression::detail;
 
 // ____________________________________________________________________________
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {

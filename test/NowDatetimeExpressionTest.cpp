@@ -7,7 +7,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 TEST(NowDatetimeExpression, nowExpressionEvaluate) {
   std::string strDate = "2011-01-10T14:45:13.815-05:00";

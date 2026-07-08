@@ -15,7 +15,7 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 using namespace qlever;
 using Vars = std::vector<std::optional<Variable>>;
 

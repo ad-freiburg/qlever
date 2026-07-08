@@ -98,7 +98,7 @@ class QueryPatternCache {
   // be replaced by scans on materialized views.
   std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
       qlever::QueryExecutionContext* qec,
-      const parsedQuery::BasicGraphPattern& triples) const;
+      const qlever::parsedQuery::BasicGraphPattern& triples) const;
 
   // Construct an `IndexScan` for a single chain join given the necessary
   // information from both the materialized view and the user's query.
@@ -113,7 +113,8 @@ class QueryPatternCache {
   // represents the appropriate star join.
   std::shared_ptr<qlever::IndexScan> makeScanForStar(
       qlever::QueryExecutionContext* qec, ViewPtr starView,
-      parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
+      qlever::parsedQuery::MaterializedViewQuery::RequestedColumns columns)
+      const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
@@ -143,7 +144,7 @@ class QueryPatternCache {
   // vector.
   void makeScansFromChainCandidates(
       qlever::QueryExecutionContext* qec,
-      const parsedQuery::BasicGraphPattern& triples,
+      const qlever::parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& chainLeft,
       const VariableToTripleIndices& chainRight) const;
@@ -152,7 +153,7 @@ class QueryPatternCache {
   // index scans, construct them and insert them into the `result` vector.
   void makeScansFromStarCandidates(
       qlever::QueryExecutionContext* qec,
-      const parsedQuery::BasicGraphPattern& triples,
+      const qlever::parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& starCandidates) const;
 };
@@ -160,8 +161,8 @@ class QueryPatternCache {
 // Helper that filters the graph patterns of a parsed query using
 // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
 // helper.
-std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
-    const qlever::ParsedQuery& parsed);
+std::vector<qlever::parsedQuery::GraphPatternOperation>
+graphPatternInvariantFilter(const qlever::ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;

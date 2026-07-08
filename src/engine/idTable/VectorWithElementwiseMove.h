@@ -9,7 +9,7 @@
 
 #include "util/ExceptionHandling.h"
 
-namespace columnBasedIdTable::detail {
+namespace qlever::columnBasedIdTable::detail {
 // A class that inherits from a `Vector`. This class changes the move
 // operators of the underlying `Vector` as follows: Instead of moving the vector
 // as a whole, only the individual elements are moved. This is used for the
@@ -58,6 +58,6 @@ struct VectorWithElementwiseMove : public Vector {
         "IdTable");
   }
 };
-}  // namespace columnBasedIdTable::detail
+}  // namespace qlever::columnBasedIdTable::detail
 
 #endif  // QLEVER_VECTORWITHELEMENTWISEMOVE_H

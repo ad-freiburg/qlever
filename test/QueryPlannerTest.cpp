@@ -1330,9 +1330,10 @@ TEST(QueryPlanner, PathSearchMissingStart) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
-                                        HasSubstr("Missing parameter <start>"),
-                                        parsedQuery::PathSearchException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("Missing parameter <start>"),
+      qlever::parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________
@@ -1380,9 +1381,10 @@ TEST(QueryPlanner, PathSearchMissingEnd) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
-                                        HasSubstr("Missing parameter <end>"),
-                                        parsedQuery::PathSearchException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("Missing parameter <end>"),
+      qlever::parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________
@@ -1510,7 +1512,7 @@ TEST(QueryPlanner, PathSearchTwoVariablesForSource) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Only one variable is allowed per search side"),
-      parsedQuery::PathSearchException);
+      qlever::parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________

@@ -38,7 +38,7 @@ TEST(SelectClause, VariablesAndAliases) {
   SelectClause clause;
   std::vector<SelectClause::VarOrAlias> v{
       qlever::Variable{"?x"},
-      Alias{{std::make_unique<sparqlExpression::IdExpression>(
+      Alias{{std::make_unique<qlever::sparqlExpression::IdExpression>(
                  qlever::Id::makeFromBool(false)),
              "false"},
             qlever::Variable{"?y"}},

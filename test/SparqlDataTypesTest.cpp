@@ -21,6 +21,8 @@
 #include "parser/data/Types.h"
 #include "rdfTypes/Iri.h"
 
+using namespace qlever;
+
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;

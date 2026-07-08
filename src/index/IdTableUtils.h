@@ -14,8 +14,6 @@
 
 namespace qlever {
 
-using qlever::ColumnIndex;
-
 class IdTableUtils {
  public:
   template <size_t WIDTH>

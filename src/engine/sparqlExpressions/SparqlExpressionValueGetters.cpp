@@ -631,13 +631,13 @@ CPP_template_out_def(typename RequestedInfo)(
 
 // Explicit instantiations
 namespace qlever::sparqlExpression::detail {
-template struct GeometryInfoValueGetter<qlever::GeometryInfo>;
-template struct GeometryInfoValueGetter<qlever::GeometryType>;
-template struct GeometryInfoValueGetter<qlever::Centroid>;
-template struct GeometryInfoValueGetter<qlever::BoundingBox>;
-template struct GeometryInfoValueGetter<qlever::NumGeometries>;
-template struct GeometryInfoValueGetter<qlever::MetricLength>;
-template struct GeometryInfoValueGetter<qlever::MetricArea>;
+template struct GeometryInfoValueGetter<GeometryInfo>;
+template struct GeometryInfoValueGetter<GeometryType>;
+template struct GeometryInfoValueGetter<Centroid>;
+template struct GeometryInfoValueGetter<BoundingBox>;
+template struct GeometryInfoValueGetter<NumGeometries>;
+template struct GeometryInfoValueGetter<MetricLength>;
+template struct GeometryInfoValueGetter<MetricArea>;
 }  // namespace qlever::sparqlExpression::detail
 
 //______________________________________________________________________________
@@ -699,20 +699,13 @@ template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
 template struct TypeErasedValueGetter<ParsedUriGetter>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::GeometryInfo>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::GeometryType>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::Centroid>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::BoundingBox>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::NumGeometries>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::MetricLength>>;
-template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<qlever::MetricArea>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<GeometryInfo>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<GeometryType>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<Centroid>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<BoundingBox>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<NumGeometries>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<MetricLength>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<MetricArea>>;
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;

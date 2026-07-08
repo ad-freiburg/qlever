@@ -25,7 +25,7 @@ namespace detail {
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
 CPP_class_template(typename NaryOperation,
-                   qlever::prefilterExpressions::IsDatatype Datatype)(
+                   prefilterExpressions::IsDatatype Datatype)(
     requires(isOperation<NaryOperation>)) class IsDatatypeExpressionImpl
     : public NaryExpression<NaryOperation> {
  public:
@@ -33,7 +33,7 @@ CPP_class_template(typename NaryOperation,
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
-    using namespace qlever::prefilterExpressions;
+    using namespace prefilterExpressions;
     std::vector<PrefilterExprVariablePair> prefilterVec;
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 1);
@@ -52,22 +52,21 @@ CPP_class_template(typename NaryOperation,
 // Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
 // `isNumeric`, and the custom function `isWktPoint`. Note that the value
 // getters already return the correct `Id`, hence `ql::identity`.
-template <typename Getter, qlever::prefilterExpressions::IsDatatype Datatype>
+template <typename Getter, prefilterExpressions::IsDatatype Datatype>
 using IsDtypeExpression =
     IsDatatypeExpressionImpl<Operation<1, FV<ql::identity, Getter>>, Datatype>;
 
 using isLiteralExpression =
     IsDtypeExpression<IsLiteralValueGetter,
-                      qlever::prefilterExpressions::IsDatatype::LITERAL>;
+                      prefilterExpressions::IsDatatype::LITERAL>;
 using isNumericExpression =
     IsDtypeExpression<IsNumericValueGetter,
-                      qlever::prefilterExpressions::IsDatatype::NUMERIC>;
+                      prefilterExpressions::IsDatatype::NUMERIC>;
 using isBlankExpression =
     IsDtypeExpression<IsValueIdValueGetter<Datatype::BlankNodeIndex>,
-                      qlever::prefilterExpressions::IsDatatype::BLANK>;
+                      prefilterExpressions::IsDatatype::BLANK>;
 using isIriExpression =
-    IsDtypeExpression<IsIriValueGetter,
-                      qlever::prefilterExpressions::IsDatatype::IRI>;
+    IsDtypeExpression<IsIriValueGetter, prefilterExpressions::IsDatatype::IRI>;
 
 // We currently don't support pre-filtering for `isGeoPointExpression`.
 using isGeoPointExpression =

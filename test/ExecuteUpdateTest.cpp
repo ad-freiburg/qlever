@@ -16,6 +16,8 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 using namespace deltaTriplesTestHelpers;
 
@@ -239,7 +241,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const std::vector<DatasetClause> datasets = {};
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
-    qlever::BlankNodeManager bnm;
+    BlankNodeManager bnm;
     auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
@@ -384,7 +386,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     // An Index with Quads/triples that are not in the default graph.
     ad_utility::testing::TestIndexConfig config{
         "<a> <a> <a> <a> . <b> <b> <b> <b> . <c> <c> <c> <c> . <d> <d> <d> ."};
-    config.indexType = qlever::Filetype::NQuad;
+    config.indexType = Filetype::NQuad;
     qec = ad_utility::testing::getQec(std::move(config));
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
     auto QuadFrom = [&IdTriple](const qlever::Id& id) {
@@ -427,13 +429,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   using namespace ::testing;
   const auto Id = ad_utility::testing::makeGetId(index);
   using Graph = SparqlTripleSimpleWithGraph::Graph;
-  using LocalVocab = qlever::triple_component::LiteralOrIri;
+  using LocalVocab = triple_component::LiteralOrIri;
   auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
   auto Iri = [](const std::string& iri) {
-    return qlever::triple_component::Iri::fromIriref(iri);
+    return triple_component::Iri::fromIriref(iri);
   };
   auto Literal = [](const std::string& literal) {
-    return qlever::triple_component::Literal::fromStringRepresentation(literal);
+    return triple_component::Literal::fromStringRepresentation(literal);
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
@@ -449,7 +451,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               return VariantWith<ColumnIndex>(Eq(index));
             },
             [&localVocab,
-             &index](const qlever::triple_component::LiteralOrIri& literalOrIri)
+             &index](const triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
                   LocalVocabEntry{literalOrIri, index});
@@ -458,7 +460,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     absl::StrCat(literalOrIri.toStringRepresentation(),
                                  " not in local vocab"));
               }
-              const auto id = Id::makeFromLocalVocabIndex(lviOpt.value());
+              const auto id =
+                  qlever::Id::makeFromLocalVocabIndex(lviOpt.value());
               return VariantWith<qlever::Id>(
                   AD_PROPERTY(Id, getBits, Eq(id.getBits())));
             }},

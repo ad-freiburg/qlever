@@ -1227,7 +1227,7 @@ TEST(SparqlParser, ConstructQuery) {
 // _____________________________________________________________________________
 namespace qlever {
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  static qlever::BlankNodeManager blankNodeManager;
+  static BlankNodeManager blankNodeManager;
   SparqlQleverVisitor visitor{
       &blankNodeManager, encodedIriManager(), {}, std::nullopt};
 

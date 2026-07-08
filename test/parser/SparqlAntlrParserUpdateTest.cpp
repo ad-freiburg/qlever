@@ -206,7 +206,7 @@ TEST(SparqlParser, Clear) {
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
   auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
-  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  using GVB = qlever::parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
   expectClear("CLEAR ALL", m::Clear(qlever::Variable("?g"), GVB::ALL));
   expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
   expectClear("CLEAR NAMED", m::Clear(qlever::Variable("?g"), GVB::NAMED));
@@ -221,7 +221,7 @@ TEST(SparqlParser, Drop) {
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
   auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
-  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  using GVB = qlever::parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
   expectDrop("DROP ALL", m::Clear(qlever::Variable("?g"), GVB::ALL));
   expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
   expectDrop("DROP NAMED", m::Clear(qlever::Variable("?g"), GVB::NAMED));
@@ -353,7 +353,7 @@ TEST(SparqlParser, BlankNodesInUpdate) {
   // the `UpdateTriples` (This is tested in isolation in
   // `UpdateTriplesTest.cpp`).
   static constexpr auto getVec =
-      [](const updateClause::UpdateTriples& tr) -> decltype(auto) {
+      [](const qlever::updateClause::UpdateTriples& tr) -> decltype(auto) {
     // Note: we have to use a lambda and can't use a function-to-member pointer
     // because of problems in GTest internals.
     return tr.triples_;
@@ -362,12 +362,13 @@ TEST(SparqlParser, BlankNodesInUpdate) {
   using namespace testing;
   // Match update triples with a single triple where the subject and object are
   // the same blank node.
-  auto matchBpB = []() -> Matcher<const updateClause::UpdateTriples&> {
+  auto matchBpB = []() -> Matcher<const qlever::updateClause::UpdateTriples&> {
     return ResultOf(getVec,
                     ElementsAre(AllOf(SoEqual(), SpNotEqual(), bnodeTriple())));
   };
   // Match empty update triples.
-  const auto empty = []() -> Matcher<const updateClause::UpdateTriples&> {
+  const auto empty =
+      []() -> Matcher<const qlever::updateClause::UpdateTriples&> {
     return ResultOf(getVec, IsEmpty());
   }();
 

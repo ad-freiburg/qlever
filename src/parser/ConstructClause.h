@@ -14,10 +14,10 @@
 
 namespace qlever::parsedQuery {
 struct ConstructClause : ClauseBase {
-  qlever::sparql_types::Triples triples_;
+  sparql_types::Triples triples_;
 
   ConstructClause() = default;
-  explicit ConstructClause(qlever::sparql_types::Triples triples)
+  explicit ConstructClause(sparql_types::Triples triples)
       : triples_(std::move(triples)) {}
 
   // Lazily yields all variables that appear in this `ConstructClause`.

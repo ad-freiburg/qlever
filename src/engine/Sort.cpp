@@ -28,7 +28,7 @@ using namespace qlever;
 // This could be made more efficient by using `ad_utility::callFixedSize` on
 // the number of sort columns and permuting the columns such that the sort
 // columns come first.
-using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
+using Sorter = qlever::CompressedExternalIdTableSorter<SortByColumns, 0>;
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -184,7 +184,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   // `std::atomic`), but the `unique_ptr` can be moved into the lambda below.
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
-      ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+      qlever::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       SortByColumns{sortColumnIndices_});
 
   // Push the already collected blocks and the remaining blocks from the

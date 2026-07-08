@@ -29,7 +29,7 @@ namespace qlever {
 // from disk with the same implementation that it was written to.
 class PolymorphicVocabulary {
  public:
-  using VocabularyType = qlever::VocabularyType;
+  using VocabularyType = VocabularyType;
 
  private:
   // Type aliases for all the currently supported vocabularies. To add another
@@ -128,9 +128,9 @@ class PolymorphicVocabulary {
 
   // Retrieve `GeometryInfo` from an underlying vocabulary, if it is a
   // `GeoVocabulary`.
-  std::optional<qlever::GeometryInfo> getGeoInfo(uint64_t index) const {
+  std::optional<GeometryInfo> getGeoInfo(uint64_t index) const {
     return std::visit(
-        [&](const auto& vocab) -> std::optional<qlever::GeometryInfo> {
+        [&](const auto& vocab) -> std::optional<GeometryInfo> {
           using T = std::decay_t<decltype(vocab)>;
           // For more details, please see the definition of these concepts
           // in `VocabularyConstraints.h`.

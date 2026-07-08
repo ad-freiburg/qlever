@@ -19,6 +19,8 @@
 #include "util/BufferedVector.h"
 #include "util/TypeIdentity.h"
 
+using namespace qlever;
+
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {

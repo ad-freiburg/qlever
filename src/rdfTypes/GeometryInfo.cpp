@@ -15,15 +15,11 @@
 #include "util/Log.h"
 
 namespace qlever {
-using qlever::ValueId;
 
 // ____________________________________________________________________________
-qlever::GeometryInfo::GeometryInfo(uint8_t wktType,
-                                   const BoundingBox& boundingBox,
-                                   Centroid centroid,
-                                   NumGeometries numGeometries,
-                                   MetricLength metricLength,
-                                   MetricArea metricArea)
+GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
+                           Centroid centroid, NumGeometries numGeometries,
+                           MetricLength metricLength, MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
@@ -54,8 +50,7 @@ qlever::GeometryInfo::GeometryInfo(uint8_t wktType,
 };
 
 // ____________________________________________________________________________
-std::optional<qlever::GeometryInfo> qlever::GeometryInfo::fromWktLiteral(
-    std::string_view wkt) {
+std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace ad_utility::detail;
   auto [type, parsed] = parseWkt(wkt);
@@ -78,7 +73,7 @@ std::optional<qlever::GeometryInfo> qlever::GeometryInfo::fromWktLiteral(
   double area = std::numeric_limits<double>::quiet_NaN();
   try {
     area = computeMetricArea(parsed.value());
-  } catch (const qlever::InvalidPolygonError&) {
+  } catch (const InvalidPolygonError&) {
     AD_LOG_DEBUG << "Could not compute area of WKT literal `" << wkt << "`."
                  << std::endl;
   }
@@ -88,16 +83,15 @@ std::optional<qlever::GeometryInfo> qlever::GeometryInfo::fromWktLiteral(
 }
 
 // ____________________________________________________________________________
-qlever::GeometryType::GeometryType(uint8_t type) : type_{type} {};
+GeometryType::GeometryType(uint8_t type) : type_{type} {};
 
 // ____________________________________________________________________________
-qlever::MetricLength::MetricLength(double length) : length_{length} {
+MetricLength::MetricLength(double length) : length_{length} {
   AD_CORRECTNESS_CHECK(length_ >= 0, "Metric length must be positive");
 };
 
 // ____________________________________________________________________________
-std::optional<qlever::GeometryType> qlever::GeometryInfo::getWktType(
-    std::string_view wkt) {
+std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
   auto wktType = static_cast<uint8_t>(
       ad_utility::detail::getWKTType(ad_utility::detail::removeDatatype(wkt)));
   if (wktType == 0) {
@@ -108,8 +102,7 @@ std::optional<qlever::GeometryType> qlever::GeometryInfo::getWktType(
 };
 
 // ____________________________________________________________________________
-qlever::GeometryInfo qlever::GeometryInfo::fromGeoPoint(
-    const qlever::GeoPoint& point) {
+GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
   return {
       ::util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
       MetricLength{0.0},           MetricArea{0.0},
@@ -117,26 +110,25 @@ qlever::GeometryInfo qlever::GeometryInfo::fromGeoPoint(
 }
 
 // ____________________________________________________________________________
-qlever::GeometryType qlever::GeometryInfo::getWktType() const {
+GeometryType GeometryInfo::getWktType() const {
   return GeometryType{
       static_cast<uint8_t>((geometryTypeAndCentroid_ & bitMaskGeometryType) >>
                            ValueId::numDataBits)};
 }
 
 // ____________________________________________________________________________
-std::optional<std::string_view> qlever::GeometryType::asIri() const {
+std::optional<std::string_view> GeometryType::asIri() const {
   return ad_utility::detail::wktTypeToIri(type_);
 }
 
 // ____________________________________________________________________________
-qlever::Centroid qlever::GeometryInfo::getCentroid() const {
-  return Centroid{qlever::GeoPoint::fromBitRepresentation(
-      geometryTypeAndCentroid_ & bitMaskCentroid)};
+Centroid GeometryInfo::getCentroid() const {
+  return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
+                                                  bitMaskCentroid)};
 }
 
 // ____________________________________________________________________________
-std::optional<Centroid> qlever::GeometryInfo::getCentroid(
-    std::string_view wkt) {
+std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   auto [type, parsed] = ad_utility::detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
@@ -145,15 +137,13 @@ std::optional<Centroid> qlever::GeometryInfo::getCentroid(
 }
 
 // ____________________________________________________________________________
-qlever::BoundingBox qlever::GeometryInfo::getBoundingBox() const {
-  return {
-      qlever::GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
-      qlever::GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
+BoundingBox GeometryInfo::getBoundingBox() const {
+  return {GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
+          GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
 }
 
 // ____________________________________________________________________________
-std::optional<BoundingBox> qlever::GeometryInfo::getBoundingBox(
-    std::string_view wkt) {
+std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
   auto [type, parsed] = ad_utility::detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
@@ -162,8 +152,7 @@ std::optional<BoundingBox> qlever::GeometryInfo::getBoundingBox(
 }
 
 // ____________________________________________________________________________
-qlever::BoundingBox::BoundingBox(qlever::GeoPoint lowerLeft,
-                                 qlever::GeoPoint upperRight)
+BoundingBox::BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
     : lowerLeft_{lowerLeft}, upperRight_{upperRight} {
   AD_CORRECTNESS_CHECK(
       lowerLeft.getLat() <= upperRight.getLat() &&

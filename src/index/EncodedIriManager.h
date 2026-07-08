@@ -17,9 +17,6 @@
 
 namespace qlever {
 
-using qlever::Datatype;
-using qlever::Id;
-
 namespace detail {
 // Match `repr` against the pattern `([0-9]+)>` and return the digit
 // substring as a `string_view` into `repr` on success, or `std::nullopt` if

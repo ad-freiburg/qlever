@@ -16,13 +16,13 @@
 namespace qlever {
 
 // _____________________________________________________________________________
-qlever::BlankNodeManager::BlankNodeManager(uint64_t minIndex)
+BlankNodeManager::BlankNodeManager(uint64_t minIndex)
     : minIndex_(minIndex),
       state_{ad_utility::SlowRandomIntGenerator<uint64_t>(
           0, totalAvailableBlocks_ - 1)} {}
 
 // _____________________________________________________________________________
-qlever::BlankNodeManager::Block qlever::BlankNodeManager::allocateBlock() {
+BlankNodeManager::Block BlankNodeManager::allocateBlock() {
   // The Random-Generation Algorithm's performance is reduced once the number of
   // used blocks exceeds a limit.
   auto stateLock = state_.wlock();
@@ -44,7 +44,7 @@ qlever::BlankNodeManager::Block qlever::BlankNodeManager::allocateBlock() {
 }
 
 // ______________________________________________________________________________
-[[nodiscard]] auto qlever::BlankNodeManager::allocateExplicitBlock(
+[[nodiscard]] auto BlankNodeManager::allocateExplicitBlock(
     uint64_t blockIdx, boost::optional<WriteLock&> lockOpt) -> Block {
   auto localLock =
       lockOpt.has_value() ? std::nullopt : std::optional{state_.wlock()};
@@ -62,16 +62,16 @@ qlever::BlankNodeManager::Block qlever::BlankNodeManager::allocateBlock() {
 }
 
 // _____________________________________________________________________________
-qlever::BlankNodeManager::Block::Block(uint64_t blockIndex, uint64_t startIndex)
+BlankNodeManager::Block::Block(uint64_t blockIndex, uint64_t startIndex)
     : blockIdx_(blockIndex), startIdx_(startIndex), nextIdx_(startIndex) {}
 
 // _____________________________________________________________________________
-qlever::BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
+BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
     BlankNodeManager* blankNodeManager)
     : blankNodeManager_(blankNodeManager) {}
 
 // _____________________________________________________________________________
-uint64_t qlever::BlankNodeManager::LocalBlankNodeManager::getId() {
+uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
   auto& blocks = blocks_->blocks_;
   if (blocks.empty() || blocks.back().nextIdx_ == idxAfterCurrentBlock_) {
     blocks.emplace_back(blankNodeManager_->allocateBlock());
@@ -81,7 +81,7 @@ uint64_t qlever::BlankNodeManager::LocalBlankNodeManager::getId() {
 }
 
 // _____________________________________________________________________________
-bool qlever::BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
+bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
     uint64_t index) const {
   auto containsIndex = [index](const Block& block) {
     return index >= block.startIdx_ && index < block.nextIdx_;
@@ -96,8 +96,8 @@ bool qlever::BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
 }
 
 // _____________________________________________________________________________
-auto qlever::BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices()
-    const -> std::vector<OwnedBlocksEntry> {
+auto BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices() const
+    -> std::vector<OwnedBlocksEntry> {
   std::vector<OwnedBlocksEntry> indices;
   // Lambda that turns a single `Blocks` object into an `OwnedBlocksEntry`.
   auto resultFromSingleSet = [](const auto& set) {
@@ -118,9 +118,8 @@ auto qlever::BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices()
 }
 
 // _____________________________________________________________________________
-void qlever::BlankNodeManager::LocalBlankNodeManager::
-    allocateBlocksFromExplicitIndices(
-        const std::vector<OwnedBlocksEntry>& indices) {
+void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
+    const std::vector<OwnedBlocksEntry>& indices) {
   AD_CONTRACT_CHECK(blocks_->blocks_.empty() && otherBlocks_.empty(),
                     "Explicit reserving of blank node blocks is only allowed "
                     "for empty `LocalBlankNodeManager`s");
@@ -137,7 +136,7 @@ void qlever::BlankNodeManager::LocalBlankNodeManager::
 }
 
 // _____________________________________________________________________________
-auto qlever::BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
+auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
   // Guard against the (very very unlikely) case of UUID collision.
   auto lockOpt = std::optional{state_.wlock()};
   auto& lock = lockOpt.value();
@@ -157,7 +156,7 @@ auto qlever::BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
 }
 
 // _____________________________________________________________________________
-void qlever::BlankNodeManager::freeBlockSet(const Blocks& blocks) {
+void BlankNodeManager::freeBlockSet(const Blocks& blocks) {
   // We keep the lock the whole time because we have to perform a consistent,
   // transactional operation on the `state_`, which itself is not threadsafe.
   state_.withWriteLock([&blocks](auto& state) {
@@ -188,8 +187,8 @@ void qlever::BlankNodeManager::freeBlockSet(const Blocks& blocks) {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<qlever::BlankNodeManager::Blocks>
-qlever::BlankNodeManager::registerAndAllocateBlockSet(
+std::shared_ptr<BlankNodeManager::Blocks>
+BlankNodeManager::registerAndAllocateBlockSet(
     const LocalBlankNodeManager::OwnedBlocksEntry& entry) {
   // We keep the lock the whole time to avoid race conditions between
   // registering the UUID and allocating the blocks.

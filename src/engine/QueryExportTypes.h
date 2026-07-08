@@ -14,10 +14,10 @@
 // Helper type that provides non-owning view access to the underlying `IdTable`
 // and `LocalVocab` associated with the `IdTable`.
 struct TableConstRefWithVocab {
-  IdTableView<0> idTable_;
+  qlever::IdTableView<0> idTable_;
   std::reference_wrapper<const qlever::LocalVocab> localVocab_;
 
-  const IdTableView<0>& idTable() const { return idTable_; }
+  const qlever::IdTableView<0>& idTable() const { return idTable_; }
 
   const qlever::LocalVocab& localVocab() const { return localVocab_.get(); }
 };

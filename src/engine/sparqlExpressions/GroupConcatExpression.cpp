@@ -7,7 +7,7 @@
 #include <absl/strings/str_cat.h>
 
 // __________________________________________________________________________
-sparqlExpression::GroupConcatExpression::GroupConcatExpression(
+qlever::sparqlExpression::GroupConcatExpression::GroupConcatExpression(
     bool distinct, Ptr&& child, std::string separator)
     : child_{std::move(child)},
       separator_{std::move(separator)},
@@ -16,8 +16,8 @@ sparqlExpression::GroupConcatExpression::GroupConcatExpression(
 }
 
 // __________________________________________________________________________
-sparqlExpression::ExpressionResult
-sparqlExpression::GroupConcatExpression::evaluate(
+qlever::sparqlExpression::ExpressionResult
+qlever::sparqlExpression::GroupConcatExpression::evaluate(
     EvaluationContext* context) const {
   auto impl = [this, context](auto&& el)
       -> CPP_ret(ExpressionResult)(
@@ -67,7 +67,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
 }
 
 // __________________________________________________________________________
-std::string sparqlExpression::GroupConcatExpression::getCacheKey(
+std::string qlever::sparqlExpression::GroupConcatExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("[ GROUP_CONCAT", distinct_ ? " DISTINCT " : "",
                       separator_, "]", child_->getCacheKey(varColMap));

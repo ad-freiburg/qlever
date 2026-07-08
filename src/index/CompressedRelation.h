@@ -27,15 +27,13 @@
 #include "util/TaskQueue.h"
 
 // Forward declaration.
+namespace qlever {
 class IdTable;
+}
 
 using namespace std::string_view_literals;
 
 namespace qlever {
-
-using qlever::ColumnIndex;
-using qlever::Id;
-using qlever::ValueId;
 
 class LocatedTriplesPerBlock;
 
@@ -380,7 +378,7 @@ class CompressedRelationWriter {
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
 
  private:
   // Internal helper for `PermutationWriter<true>` (that is, in pair mode).
@@ -418,7 +416,7 @@ class CompressedRelationWriter {
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:

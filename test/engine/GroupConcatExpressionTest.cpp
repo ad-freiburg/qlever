@@ -11,8 +11,8 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
 namespace {
+using namespace qlever;
 using namespace sparqlExpression;
-namespace tc = qlever::triple_component;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
@@ -48,7 +48,7 @@ void expectIdsAreConcatenatedTo(
 // _____________________________________________________________________________
 void expectLiteralsAreConcatenatedTo(
     qlever::QueryExecutionContext* qec, bool distinct,
-    const std::vector<tc::Literal>& literals,
+    const std::vector<qlever::triple_component::Literal>& literals,
     const qlever::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   qlever::LocalVocab localVocab;
@@ -66,7 +66,8 @@ void expectLiteralsAreConcatenatedTo(
 }
 
 auto lit = [](std::string s) {
-  return tc::Literal::fromStringRepresentation(std::move(s));
+  return qlever::triple_component::Literal::fromStringRepresentation(
+      std::move(s));
 };
 }  // namespace
 

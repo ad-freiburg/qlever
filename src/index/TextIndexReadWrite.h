@@ -125,7 +125,7 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
  *                          scores to the right type.
  *
  */
-IdTable readContextListHelper(
+qlever::IdTable readContextListHelper(
     const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
     const qlever::ContextListMetaData& contextList, bool isWordCl,
     const ad_utility::File& textIndexFile,
@@ -190,14 +190,15 @@ std::vector<T> readZstdComprList(size_t nofElements, off_t from,
 
 // Reads the given textblock and returns all words with their contextId, wordId
 // and score. Internally uses readContextListHelper.
-IdTable readWordCl(const qlever::TextBlockMetaData& tbmd,
-                   const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
-                   const ad_utility::File& textIndexFile,
-                   qlever::TextScoringMetric textScoringMetric);
+qlever::IdTable readWordCl(
+    const qlever::TextBlockMetaData& tbmd,
+    const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
+    const ad_utility::File& textIndexFile,
+    qlever::TextScoringMetric textScoringMetric);
 
 // Reads the given textblock and returns all entities with their contextId,
 // entityId and score. Internally uses readContextListHelper.
-IdTable readWordEntityCl(
+qlever::IdTable readWordEntityCl(
     const qlever::TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
     const ad_utility::File& textIndexFile,

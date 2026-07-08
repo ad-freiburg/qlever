@@ -27,7 +27,7 @@ namespace qlever {
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
-  using GeometryInfo = qlever::GeometryInfo;
+  using GeometryInfo = GeometryInfo;
 
   UnderlyingVocabulary literals_;
 
@@ -50,7 +50,7 @@ class GeoVocabulary {
   static constexpr GeometryInfoBuffer invalidGeoInfoBuffer = {};
 
   // Offset for the header of the geometry information file
-  static constexpr size_t geoInfoHeader = sizeof(qlever::GEOMETRY_INFO_VERSION);
+  static constexpr size_t geoInfoHeader = sizeof(GEOMETRY_INFO_VERSION);
 
  public:
   GeoVocabulary() = default;

@@ -19,9 +19,9 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
 
-namespace qlever {
+using namespace qlever;
 
-using qlever::TextBlockIndex;
+namespace qlever {
 
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {

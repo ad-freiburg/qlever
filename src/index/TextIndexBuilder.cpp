@@ -14,6 +14,8 @@
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
+using namespace qlever;
+
 namespace qlever {
 
 // _____________________________________________________________________________

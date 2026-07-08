@@ -21,8 +21,6 @@
 #include "index/Vocabulary.h"
 #include "util/Iterators.h"
 
-namespace valueIdComparators = qlever::valueIdComparators;
-
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
 // available metadata (see CompressedBlockMetadata in CompressedRelation.h)

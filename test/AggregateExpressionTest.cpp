@@ -21,7 +21,9 @@
 #include "global/ValueId.h"
 #include "gtest/gtest.h"
 
-using namespace sparqlExpression;
+using namespace qlever;
+
+using namespace qlever::sparqlExpression;
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 
@@ -47,20 +49,22 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto t = TestContext{};
-  VectorWithMemoryLimit<sparqlExpression::detail::PromoteToLocalVocabEntry<T>>
+  VectorWithMemoryLimit<
+      qlever::sparqlExpression::detail::PromoteToLocalVocabEntry<T>>
       input(makeAllocator());
   input.reserve(inputAsVector.size());
   for (auto& value : inputAsVector) {
-    input.push_back(sparqlExpression::detail::promoteToLocalVocabEntry(
+    input.push_back(qlever::sparqlExpression::detail::promoteToLocalVocabEntry(
         std::move(value), t.context._qec.getLocalVocabContext()));
   }
   auto d = std::make_unique<SingleUseExpression>(input.clone());
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};
   auto resAsVariant = m.evaluate(&t.context);
-  auto res = std::get<sparqlExpression::detail::PromoteToLocalVocabEntry<U>>(
-      resAsVariant);
-  EXPECT_EQ(res, sparqlExpression::detail::promoteToLocalVocabEntry(
+  auto res =
+      std::get<qlever::sparqlExpression::detail::PromoteToLocalVocabEntry<U>>(
+          resAsVariant);
+  EXPECT_EQ(res, qlever::sparqlExpression::detail::promoteToLocalVocabEntry(
                      expectedResult, t.context._qec.getLocalVocabContext()));
 };
 
@@ -237,7 +241,7 @@ TEST(AggregateExpression, CountStar) {
   };
 
   auto totalSize = t.table.size();
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   auto m = makeCountStarExpression(false);
   EXPECT_THAT(m, matcher(totalSize));
 
@@ -303,7 +307,7 @@ TEST(AggregateExpression, CountStar) {
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using enum SparqlExpression::AggregateStatus;
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
@@ -319,7 +323,7 @@ TEST(AggregateExpression, CountStarSimpleMembers) {
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, SampleExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   auto makeSample = [](ExpressionResult result) {
     return std::make_unique<SampleExpression>(
         false, std::make_unique<SingleUseExpression>(std::move(result)));
@@ -354,7 +358,7 @@ TEST(AggregateExpression, SampleExpression) {
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, SampleExpressionSimpleMembers) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   auto makeSample = [](qlever::Id result, bool distinct = false) {
     return std::make_unique<SampleExpression>(
         distinct, std::make_unique<IdExpression>(std::move(result)));

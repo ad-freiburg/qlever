@@ -34,7 +34,7 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // ___________________________________________________________________________
 TEST(SparqlParser, primaryExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   auto expectPrimaryExpression =
       ExpectCompleteParse<&Parser::primaryExpression>{};
@@ -48,7 +48,7 @@ TEST(SparqlParser, primaryExpression) {
 
 // ___________________________________________________________________________
 TEST(SparqlParser, builtInCall) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
@@ -202,7 +202,7 @@ TEST(SparqlParser, builtInCall) {
 }
 
 TEST(SparqlParser, unaryExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   auto expectUnary = ExpectCompleteParse<&Parser::unaryExpression>{};
 
@@ -211,7 +211,7 @@ TEST(SparqlParser, unaryExpression) {
 }
 
 TEST(SparqlParser, multiplicativeExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   qlever::Variable x{"?x"};
   qlever::Variable y{"?y"};
@@ -236,7 +236,7 @@ TEST(SparqlParser, relationalExpression) {
   qlever::Variable x{"?x"};
   qlever::Variable y{"?y"};
   qlever::Variable z{"?z"};
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
   expectRelational("?x IN (?y, ?z)",
@@ -253,7 +253,8 @@ TEST(SparqlParser, relationalExpression) {
 ::testing::Matcher<const qlever::SparqlQleverVisitor::OperatorAndExpression&>
 matchOperatorAndExpression(
     qlever::SparqlQleverVisitor::Operator op,
-    const ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&>&
+    const ::testing::Matcher<
+        const qlever::sparqlExpression::SparqlExpression::Ptr&>&
         expressionMatcher) {
   using OpAndExp = qlever::SparqlQleverVisitor::OperatorAndExpression;
   return ::testing::AllOf(AD_FIELD(OpAndExp, operator_, ::testing::Eq(op)),
@@ -261,7 +262,7 @@ matchOperatorAndExpression(
 }
 
 TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   qlever::Variable x{"?x"};
   qlever::Variable y{"?y"};
@@ -320,7 +321,7 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
 }
 
 TEST(SparqlParser, FunctionCall) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
@@ -558,7 +559,7 @@ TEST(SparqlParser, FunctionCall) {
 
 // ______________________________________________________________________________
 TEST(SparqlParser, substringExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   using V = qlever::Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
@@ -583,7 +584,7 @@ TEST(SparqlParser, substringExpression) {
 
 // _________________________________________________________
 TEST(SparqlParser, binaryStringExpressions) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   using V = qlever::Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
@@ -601,7 +602,7 @@ TEST(SparqlParser, binaryStringExpressions) {
 }
 
 namespace aggregateTestHelpers {
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // points to an `AggregateExpr`, that the distinctness and the child variable of
@@ -650,7 +651,7 @@ template <typename AggregateExpr>
 
 // ___________________________________________________________
 TEST(SparqlParser, aggregateExpressions) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   using namespace m::builtInCall;
   using namespace aggregateTestHelpers;
   using V = qlever::Variable;

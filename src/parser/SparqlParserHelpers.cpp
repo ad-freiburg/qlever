@@ -22,7 +22,7 @@ constexpr ctll::fixed_string unicodeEscapeRegex =
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    qlever::BlankNodeManager* blankNodeManager,
+    BlankNodeManager* blankNodeManager,
     const EncodedIriManager* encodedIriManager, std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
@@ -35,7 +35,7 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    qlever::BlankNodeManager* blankNodeManager,
+    BlankNodeManager* blankNodeManager,
     const EncodedIriManager* encodedIriManager, std::string input,
     SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,

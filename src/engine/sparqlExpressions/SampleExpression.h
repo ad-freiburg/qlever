@@ -46,6 +46,4 @@ class SampleExpression : public SparqlExpression {
 };
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H

@@ -129,7 +129,7 @@ TEST(VariableCounterTest, VariableCounts) {
   // Load.
   {
     VariableCounter count;
-    count(parsedQuery::Load{
+    count(qlever::parsedQuery::Load{
         qlever::TripleComponent::Iri::fromIriref("<https://example.org>"),
         false});
     EXPECT_THAT(count, counts({}));
@@ -145,7 +145,7 @@ TEST(VariableCounterTest, VariableCounts) {
   // `TransPath`.
   {
     VariableCounter count;
-    parsedQuery::TransPath tp{
+    qlever::parsedQuery::TransPath tp{
         {V{"?left"}}, {V{"?right"}}, {V{"?ileft"}}, {V{"?iright"}}, 0, 5, {}};
     count(tp);
     EXPECT_THAT(count, counts({{V{"?left"}, 1},

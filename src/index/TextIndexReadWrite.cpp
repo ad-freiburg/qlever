@@ -6,6 +6,8 @@
 
 #include "index/TextScoringEnum.h"
 
+using namespace qlever;
+
 using qlever::Id;
 using qlever::Posting;
 using qlever::Score;

@@ -24,15 +24,11 @@
 #include "util/json.h"
 
 // Forward declaration.
+namespace qlever {
 class IdTable;
+}
 
 namespace qlever {
-
-using qlever::Id;
-using qlever::Score;
-using qlever::TextRecordIndex;
-using qlever::VocabIndex;
-using qlever::WordIndex;
 
 // Forward declarations.
 class TextBlockMetaData;
@@ -83,8 +79,8 @@ class Index {
     std::vector<Score> scores_;
   };
 
-  using Filetype = qlever::Filetype;
-  using InputFileSpecification = qlever::InputFileSpecification;
+  using Filetype = Filetype;
+  using InputFileSpecification = InputFileSpecification;
 
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
@@ -123,7 +119,7 @@ class Index {
   using TextVocab = TextVocabulary;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
-  qlever::BlankNodeManager* getBlankNodeManager() const;
+  BlankNodeManager* getBlankNodeManager() const;
 
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();

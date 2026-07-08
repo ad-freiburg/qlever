@@ -38,6 +38,8 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 namespace qlever {
 
 using std::array;
@@ -84,8 +86,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-    const {
+    ad_utility::InputRangeTypeErased<InputFileSpecification> files) const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
       "The buffer size of the RDF parser must be greater than zero");
@@ -387,7 +388,7 @@ void IndexImpl::createFromFiles(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    ad_utility::InputRangeTypeErased<InputFileSpecification> files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -693,7 +694,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   std::vector<std::string> prefixes;
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
-  qlever::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+  vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [&cmp = vocab_.getCaseComparator()](
                         std::string_view a, bool aIsExternal,
                         std::string_view b, bool bIsExternal) {
@@ -702,7 +703,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
-    auto mergedVocabMeta = qlever::vocabulary_merger::mergeVocabulary(
+    auto mergedVocabMeta = vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
@@ -739,8 +740,7 @@ auto IndexImpl::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   auto resultPtr =
-      [&]() -> std::unique_ptr<
-                ad_utility::CompressedExternalIdTableSorterTypeErased> {
+      [&]() -> std::unique_ptr<CompressedExternalIdTableSorterTypeErased> {
     if (loadAllPermutations()) {
       return makeSorterPtr<FirstPermutation>("first");
     } else {
@@ -856,7 +856,7 @@ auto IndexImpl::convertPartialToGlobalIds(
     }
     std::string filename =
         absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
-    auto map = qlever::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
+    auto map = vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(filename);
     return std::pair{idx, std::move(map)};
@@ -1240,9 +1240,8 @@ void IndexImpl::setSettingsFile(const std::string& filename) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git-hash"] =
-      *qlever::version::gitShortHashWithoutLinking.wlock();
-  configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["git-hash"] = *version::gitShortHashWithoutLinking.wlock();
+  configuration["index-format-version"] = indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1263,9 +1262,9 @@ void IndexImpl::readConfiguration() {
 
   if (configurationJson_.find("index-format-version") !=
       configurationJson_.end()) {
-    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
+    auto indexFormatVersion = static_cast<IndexFormatVersion>(
         configurationJson_["index-format-version"]);
-    const auto& currentVersion = qlever::indexFormatVersion;
+    const auto& currentVersion = indexFormatVersion;
     if (indexFormatVersion != currentVersion) {
       if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
         AD_LOG_ERROR
@@ -1365,16 +1364,14 @@ void IndexImpl::readConfiguration() {
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 
-  qlever::VocabularyType vocabType(
-      qlever::VocabularyType::Enum::OnDiskCompressed);
+  VocabularyType vocabType(VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
   loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);
-  blankNodeManager_ =
-      std::make_unique<qlever::BlankNodeManager>(numBlankNodesTotal);
+  blankNodeManager_ = std::make_unique<BlankNodeManager>(numBlankNodesTotal);
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
@@ -1600,7 +1597,7 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
     const {
-  using namespace qlever::vocabulary_merger;
+  using namespace vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
                << std::endl;
   AD_LOG_DEBUG
@@ -1962,7 +1959,7 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 }
 
 // _____________________________________________________________________________
-qlever::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
+BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
 }

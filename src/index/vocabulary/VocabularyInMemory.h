@@ -17,9 +17,6 @@
 
 namespace qlever {
 
-using qlever::CompactVectorOfStrings;
-using qlever::Pattern;
-
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.

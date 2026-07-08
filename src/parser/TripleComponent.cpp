@@ -101,7 +101,7 @@ std::string TripleComponent::toRdfLiteral() const {
     return getIri().toStringRepresentation();
   } else {
     EncodedIriManager ev;
-    auto [value, type] = qlever::exportIds::idToStringAndTypeForEncodedValue(
+    auto [value, type] = exportIds::idToStringAndTypeForEncodedValue(
                              toValueIdIfNotString(&ev).value())
                              .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");
@@ -149,7 +149,7 @@ Id TripleComponent::toValueId(const IndexImpl& index,
   // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
   // which we look up in (and potentially add to) our local vocabulary.
   AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using LiteralOrIri = triple_component::LiteralOrIri;
   auto moveWord = [&]() {
     if (isLiteral()) {
       return LiteralOrIri{std::move(getLiteral())};

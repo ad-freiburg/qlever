@@ -33,7 +33,7 @@ struct InputFileSpecification {
   // `MemorySize` is the preferred blocksize, and the `string_view` is a
   // descriptor of the resource used for logging and debugging.
   using AsyncBlockSourceFactory =
-      std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
+      std::function<std::unique_ptr<parser::AsyncBlockSource>(
           const boost::asio::any_io_executor&, ad_utility::MemorySize,
           std::string_view)>;
 
@@ -77,11 +77,11 @@ struct InputFileSpecification {
   // Create and return an `AsyncBlockSource` for this spec. For filename-based
   // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
   // returned. For factory-based specs, the factory is called.
-  std::unique_ptr<qlever::parser::AsyncBlockSource> makeAsyncBlockSource(
+  std::unique_ptr<parser::AsyncBlockSource> makeAsyncBlockSource(
       const boost::asio::any_io_executor& exec,
       ad_utility::MemorySize blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<qlever::parser::AsyncFileBlockSource>(
+      return std::make_unique<parser::AsyncFileBlockSource>(
           exec, blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =

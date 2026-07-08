@@ -59,6 +59,7 @@
 #include "util/TypeTraits.h"
 
 using namespace std::string_literals;
+using namespace qlever;
 
 namespace ad_benchmark {
 
@@ -113,15 +114,15 @@ struct SetOfIdTableColumnElements {
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
   */
-  std::vector<std::reference_wrapper<const qlever::ValueId>> uniqueElements_{};
-  ad_utility::HashMap<qlever::ValueId, size_t> numOccurrences_{};
+  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const ql::span<const qlever::ValueId>& idTableColumnRef) {
-    ql::ranges::for_each(idTableColumnRef, [this](const qlever::ValueId& id) {
+      const ql::span<const ValueId>& idTableColumnRef) {
+    ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
         (numOccurrencesIterator->second)++;
@@ -194,8 +195,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0UL};
 
   // Create the overlap.
-  ad_utility::HashMap<qlever::ValueId,
-                      std::reference_wrapper<const qlever::ValueId>>
+  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
@@ -208,7 +208,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
         */
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
-          const qlever::ValueId& newValue = newValueIterator->second;
+          const ValueId& newValue = newValueIterator->second;
           // Values, that are only found in the smaller table, are added to the
           // hash map with value 0.
           const size_t numOccurrences{
@@ -300,15 +300,14 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
                 smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
-  ad_utility::HashMap<qlever::ValueId,
-                      std::reference_wrapper<const qlever::ValueId>>
+  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
        &newOverlapMatches, &smallerTableElementToNewElement,
        &biggerTableJoinColumnSet,
-       &smallerTableJoinColumnSet](const qlever::ValueId& smallerTableId) {
+       &smallerTableJoinColumnSet](const ValueId& smallerTableId) {
         const auto& biggerTableId{biggerTableJoinColumnSet.uniqueElements_.at(
             randomBiggerTableElement())};
 

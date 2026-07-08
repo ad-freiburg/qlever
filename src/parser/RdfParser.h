@@ -66,7 +66,7 @@ struct TurtleTriple {
   // The predicate can an IRI which can also be directly folded into the ID.
   TripleComponent predicate_;
   TripleComponent object_;
-  TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent graphIri_ = specialIds().at(DEFAULT_GRAPH_IRI);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
                                               predicate_, object_, graphIri_)
@@ -190,12 +190,12 @@ class TurtleParser : public RdfParserBase {
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
   void setPrefixOrThrow(const std::string& key,
-                        const qlever::triple_component::Iri& prefix);
+                        const triple_component::Iri& prefix);
 
   // Set the base IRI for the given key. If `prefixAndBaseDisabled_`
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
-  void setBaseIriOrThrow(const qlever::triple_component::Iri& iri);
+  void setBaseIriOrThrow(const triple_component::Iri& iri);
 
  protected:
   // Data members.
@@ -216,14 +216,14 @@ class TurtleParser : public RdfParserBase {
   TripleComponent lastParseResult_;
 
   ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
-  std::optional<qlever::util::ParsedUri> baseIri_;
+  std::optional<util::ParsedUri> baseIri_;
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
   std::string activePrefix_;
   TripleComponent activeSubject_;
   TripleComponent activePredicate_;
-  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphIri_ = specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -412,7 +412,7 @@ class TurtleParser : public RdfParserBase {
 
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
-  TripleComponent defaultGraphId_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphId_ = specialIds().at(DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
@@ -508,7 +508,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
  private:
   // The complete input to this parser.
-  qlever::parser::ByteBlock tmpToParse_;
+  parser::ByteBlock tmpToParse_;
   // Used to add a certain offset to the parsing position when using this
   // in a parallel setting.
   size_t positionOffset_ = 0;
@@ -529,7 +529,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   const auto& getBaseIri() const { return baseIri_; }
 
   // __________________________________________________________
-  void setInputStream(qlever::parser::ByteBlock&& toParse) {
+  void setInputStream(parser::ByteBlock&& toParse) {
     tmpToParse_ = std::move(toParse);
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
@@ -583,18 +583,17 @@ class RdfStreamParser : public Parser {
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer.
-  explicit RdfStreamParser(const qlever::InputFileSpecification& spec,
-                           ad_utility::MemorySize blocksize,
-                           const EncodedIriManager* ev,
-                           TripleComponent defaultGraphIri =
-                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+  explicit RdfStreamParser(
+      const InputFileSpecification& spec, ad_utility::MemorySize blocksize,
+      const EncodedIriManager* ev,
+      TripleComponent defaultGraphIri = specialIds().at(DEFAULT_GRAPH_IRI))
       : Parser{ev, std::move(defaultGraphIri)} {
     initialize(spec, blocksize);
   }
 
   bool getLineImpl(TurtleTriple* triple) override;
 
-  void initialize(const qlever::InputFileSpecification& spec,
+  void initialize(const InputFileSpecification& spec,
                   ad_utility::MemorySize blocksize);
 
   size_t getParsePosition() const override {
@@ -619,13 +618,13 @@ class RdfStreamParser : public Parser {
   // Stores the current batch of bytes we have to parse. Might end in the
   // middle of a statement or even a multibyte UTF-8 character, that's why we
   // need the `backupState()` and `resetStateAndRead()` methods.
-  qlever::parser::ByteBlock byteVec_;
+  parser::ByteBlock byteVec_;
 
   // That many bytes were already parsed before dealing with the current batch
   // in member `byteVec_`.
   size_t numBytesBeforeCurrentBatch_ = 0;
 
-  std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
+  std::optional<parser::AsyncFileBlockDriver> driver_;
 };
 
 /**
@@ -643,11 +642,11 @@ class RdfParallelParser : public Parser {
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer.
-  RdfParallelParser(const qlever::InputFileSpecification& spec,
+  RdfParallelParser(const InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
                     const EncodedIriManager* ev,
                     const TripleComponent& defaultGraphIri =
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                        specialIds().at(DEFAULT_GRAPH_IRI),
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
       : Parser{ev, defaultGraphIri},
@@ -668,7 +667,7 @@ class RdfParallelParser : public Parser {
     parallelParser_.resetTimers();
   }
 
-  void initialize(const qlever::InputFileSpecification& spec,
+  void initialize(const InputFileSpecification& spec,
                   ad_utility::MemorySize blocksize);
 
   size_t getParsePosition() const override {
@@ -706,7 +705,7 @@ class RdfParallelParser : public Parser {
   using Parser::triples_;
 
   // Initialized in the call to `initialize`.
-  std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
+  std::optional<parser::AsyncFileBlockDriver> driver_;
 
   // Collect error messages in case of multiple failures. The `size_t` is the
   // start position of the corresponding batch, used to order the errors in case
@@ -719,7 +718,7 @@ class RdfParallelParser : public Parser {
   std::atomic<size_t> batchIdx_ = 0;
   std::atomic<size_t> numBatchesTotal_ = 0;
 
-  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphIri_ = specialIds().at(DEFAULT_GRAPH_IRI);
 
   std::chrono::milliseconds sleepTimeForTesting_{0};
 
@@ -745,7 +744,7 @@ class RdfMultifileParser : public RdfParserBase {
   // Construct the parser from a type-erased input range of file specifications
   // and eagerly start parsing them on background threads.
   RdfMultifileParser(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      ad_utility::InputRangeTypeErased<InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
@@ -790,7 +789,7 @@ class RdfMultifileParser : public RdfParserBase {
 
   // Parse a single file and push all resulting triple batches (and any
   // exception) into `finishedBatchQueue_`.
-  void parseFileAndPushBatches(const qlever::InputFileSpecification& file,
+  void parseFileAndPushBatches(const InputFileSpecification& file,
                                ad_utility::MemorySize bufferSize);
 };
 

@@ -51,7 +51,7 @@ class BlankNodeManager {
 
   // Number of blocks available.
   const uint64_t totalAvailableBlocks_ =
-      (qlever::ValueId::maxIndex - minIndex_ + 1) / blockSize_;
+      (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
 
  private:
   // Forward declaration because of cyclic dependency.

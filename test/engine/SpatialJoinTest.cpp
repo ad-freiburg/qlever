@@ -36,6 +36,8 @@
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 using qlever::EncodedIriManager;
 using qlever::SparqlParser;
 

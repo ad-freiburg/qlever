@@ -22,8 +22,6 @@
 #include "util/VisitMixin.h"
 
 namespace qlever::sparqlExpression {
-using qlever::LocalVocabContext;
-using qlever::LocalVocabEntry;
 
 // A std::vector<T, AllocatorWithLimit> with deleted copy constructor
 // and copy assignment. Used in the SparqlExpression module, where we want
@@ -102,8 +100,7 @@ static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 // helpers can return without needing vocab position bounds; it gets promoted
 // to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
-using IdOrLiteralOrIri =
-    std::variant<ValueId, qlever::triple_component::LiteralOrIri>;
+using IdOrLiteralOrIri = std::variant<ValueId, triple_component::LiteralOrIri>;
 // Printing for GTest.
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
@@ -119,7 +116,7 @@ using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
 // Each type in this tuple also is a possible expression result type.
-using OtherTypes = std::tuple<ad_utility::SetOfIntervals, qlever::Variable>;
+using OtherTypes = std::tuple<ad_utility::SetOfIntervals, Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
@@ -473,7 +470,5 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
 
 }  // namespace detail
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H

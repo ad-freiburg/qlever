@@ -47,7 +47,7 @@ auto parseOperation(BnodeMgr bnodeMgr,
 ParsedQuery SparqlParser::parseQuery(
     const EncodedIriManager* encodedIriManager, std::string query,
     const std::vector<DatasetClause>& datasets) {
-  qlever::BlankNodeManager bnodeMgr;
+  BlankNodeManager bnodeMgr;
   auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
                             std::move(query), datasets);
   // Queries never contain blank nodes in the body since they are always turned

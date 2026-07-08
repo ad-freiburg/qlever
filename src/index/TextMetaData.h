@@ -15,9 +15,6 @@
 
 namespace qlever {
 
-using qlever::Id;
-using qlever::WordIndex;
-
 class ContextListMetaData {
  public:
   ContextListMetaData()

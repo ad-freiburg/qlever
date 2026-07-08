@@ -16,6 +16,8 @@
 #include "index/LocalVocabEntry.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+using namespace qlever;
+
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
 using ::testing::Pointee;

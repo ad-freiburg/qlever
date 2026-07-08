@@ -835,7 +835,7 @@ namespace qlever {
 TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   auto* qec = getQec();
 
-  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 

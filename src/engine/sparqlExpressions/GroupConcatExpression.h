@@ -42,6 +42,4 @@ class GroupConcatExpression : public SparqlExpression {
 };
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_GROUPCONCATEXPRESSION_H

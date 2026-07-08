@@ -22,13 +22,13 @@
 namespace qlever {
 
 using GraphTermBase =
-    std::variant<Literal, BlankNode, qlever::triple_component::Iri, Variable>;
+    std::variant<Literal, BlankNode, triple_component::Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
  public:
   using GraphTermBase::GraphTermBase;
-  using Iri = qlever::triple_component::Iri;
+  using Iri = triple_component::Iri;
 
   // ___________________________________________________________________________
   std::string toSparql() const {

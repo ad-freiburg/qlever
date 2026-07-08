@@ -20,7 +20,7 @@ enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 struct ConstructQueryExportContext {
   // idx of row of result table for WHERE-clause
   const size_t resultTableRowIndex_;
-  IdTableView<0> idTable_;
+  qlever::IdTableView<0> idTable_;
   const qlever::LocalVocab& localVocab_;
   const qlever::VariableToColumnMap& _variableColumns;
   const qlever::Index& _qecIndex;

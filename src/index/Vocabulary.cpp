@@ -230,7 +230,7 @@ auto Vocabulary<S, C, I>::lower_bound(
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-std::optional<qlever::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+std::optional<GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
   // For more information on the concepts used here, please see
   // their definitions in `VocabularyConstraints.h`.

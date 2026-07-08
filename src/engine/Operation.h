@@ -650,5 +650,4 @@ class Operation {
 
 }  // namespace qlever
 
-namespace parsedQuery = qlever::parsedQuery;
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

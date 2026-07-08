@@ -14,17 +14,15 @@
 namespace qlever::sparqlExpression {
 namespace detail::uuidExpression {
 
-using qlever::LocalVocabEntry;
-using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using LiteralOrIri = triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
-  return LiteralOrIri{
-      qlever::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(str))};
+  return LiteralOrIri{triple_component::Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(str))};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {
-  return LiteralOrIri{qlever::triple_component::Iri::fromStringRepresentation(
+  return LiteralOrIri{triple_component::Iri::fromStringRepresentation(
       absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
 };
 
@@ -95,7 +93,5 @@ using UuidExpression = detail::uuidExpression::UuidExpression;
 using StrUuidExpression = detail::uuidExpression::StrUuidExpression;
 
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H

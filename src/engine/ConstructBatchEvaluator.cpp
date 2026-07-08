@@ -95,8 +95,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // (heap-use-after-free in `LocalVocabEntry::compareThreeWay`). Resolving
   // them per block is fine performance-wise: `LocalVocabEntry`s live in RAM,
   // so there is no disk I/O to amortize across batches.
-  auto missResolved =
-      qlever::exportIds::idsToStringAndType(index, missIds, localVocab);
+  auto missResolved = exportIds::idsToStringAndType(index, missIds, localVocab);
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     auto evaluate = [&resolved](const Id&) {

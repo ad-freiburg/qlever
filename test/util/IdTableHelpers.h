@@ -26,6 +26,13 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+using qlever::Id;
+using qlever::IdTable;
+using qlever::IdTableStatic;
+using qlever::IdTableView;
+using qlever::LocalVocab;
+using qlever::ValueId;
+
 /*
  * Does what it says on the tin: Save an IdTable with the corresponding
  * join column.

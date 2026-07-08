@@ -60,7 +60,7 @@ inline bool hasOnlyOneGraph(
 // contains only a few distinct graphs such that we can store this information
 // in the block metadata.
 inline std::pair<bool, std::optional<std::vector<qlever::Id>>> getGraphInfo(
-    const IdTable& block) {
+    const qlever::IdTable& block) {
   AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.

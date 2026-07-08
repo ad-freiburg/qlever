@@ -73,7 +73,6 @@
 
 using namespace qlever;
 
-namespace p = qlever::parsedQuery;
 namespace {
 
 using qlever::makeExecutionTree;
@@ -320,7 +319,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
-    const p::SelectClause& selectClause,
+    const qlever::parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -350,7 +349,7 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const p::SelectClause& selectClause,
+    const qlever::parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
@@ -521,7 +520,7 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
-    const p::BasicGraphPattern* pattern) const {
+    const qlever::parsedQuery::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
@@ -1051,7 +1050,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   ParsedQuery::GraphPattern childPlan =
       seedFromPropertyPath(innerLeft, path, innerRight);
   ParsedQuery::GraphPattern p{};
-  p::TransPath transPath;
+  qlever::parsedQuery::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
   transPath._innerLeft = innerLeft;
@@ -1143,7 +1142,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
     const TripleComponent& left, const qlever::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
-  p::BasicGraphPattern basic;
+  qlever::parsedQuery::BasicGraphPattern basic;
   basic._triples.emplace_back(
       left,
       std::visit(
@@ -1167,13 +1166,13 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};
-  p._graphPatterns.emplace_back(
-      p::Union{std::move(patterns[0]), std::move(patterns[1])});
+  p._graphPatterns.emplace_back(qlever::parsedQuery::Union{
+      std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     GraphPattern next;
     next._graphPatterns.emplace_back(
-        p::Union{std::move(p), std::move(patterns[i])});
+        qlever::parsedQuery::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
   }
   return p;
@@ -3061,8 +3060,8 @@ template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
   planner_.checkCancellation();
-  if constexpr (std::is_same_v<T, p::Optional> ||
-                std::is_same_v<T, p::GroupGraphPattern>) {
+  if constexpr (std::is_same_v<T, qlever::parsedQuery::Optional> ||
+                std::is_same_v<T, qlever::parsedQuery::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
@@ -3075,15 +3074,15 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
           planner_.defaultGraphBehaviour_ = behaviour;
         }};
     auto& activeDatasets = planner_.activeDatasetClauses_;
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+    if constexpr (std::is_same_v<T, qlever::parsedQuery::GroupGraphPattern>) {
       if (const auto* graphIri =
               std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
         datasetBackup = std::exchange(
             activeDatasets,
             activeDatasets.getDatasetClauseForGraphClause(*graphIri));
       } else if (const auto* graphPair = std::get_if<std::pair<
-                     Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-                     &arg.graphSpec_)) {
+                     Variable, qlever::parsedQuery::GroupGraphPattern::
+                                   GraphVariableBehaviour>>(&arg.graphSpec_)) {
         datasetBackup = std::exchange(
             activeDatasets,
             activeDatasets.getDatasetClauseForVariableGraphClause());
@@ -3099,7 +3098,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     }
 
     auto candidates = planner_.optimize(&arg._child);
-    if constexpr (std::is_same_v<T, p::Optional>) {
+    if constexpr (std::is_same_v<T, qlever::parsedQuery::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
       }
@@ -3108,16 +3107,16 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if (datasetBackup.has_value()) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
-  } else if constexpr (std::is_same_v<T, p::Union>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Union>) {
     visitUnion(arg);
-  } else if constexpr (std::is_same_v<T, p::Subquery>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Subquery>) {
     visitSubquery(arg);
-  } else if constexpr (std::is_same_v<T, p::TransPath>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::TransPath>) {
     return visitTransitivePath(arg);
-  } else if constexpr (std::is_same_v<T, p::Values>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Values>) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
-  } else if constexpr (std::is_same_v<T, p::Service>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Service>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
@@ -3125,7 +3124,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     throw std::runtime_error(
         "SERVICE is not supported in this restricted version of QLever");
 #endif
-  } else if constexpr (std::is_same_v<T, p::Load>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Load>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
@@ -3133,30 +3132,34 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     throw std::runtime_error(
         "LOAD is not supported in this restricted version of QLever");
 #endif
-  } else if constexpr (std::is_same_v<T, p::Bind>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Bind>) {
     visitBind(arg);
-  } else if constexpr (std::is_same_v<T, p::Minus>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Minus>) {
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
     visitGroupOptionalOrMinus(std::move(candidates));
-  } else if constexpr (std::is_same_v<T, p::PathQuery>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::PathQuery>) {
     visitPathSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::Describe>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::Describe>) {
     visitDescribe(arg);
-  } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
+  } else if constexpr (std::is_same_v<T, qlever::parsedQuery::SpatialQuery>) {
     visitSpatialSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
+  } else if constexpr (std::is_same_v<T,
+                                      qlever::parsedQuery::TextSearchQuery>) {
     visitTextSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+  } else if constexpr (std::is_same_v<
+                           T, qlever::parsedQuery::ExternalValuesQuery>) {
     visitExternalValues(arg);
-  } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
+  } else if constexpr (std::is_same_v<T,
+                                      qlever::parsedQuery::NamedCachedResult>) {
     visitNamedCachedResult(arg);
-  } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
+  } else if constexpr (std::is_same_v<
+                           T, qlever::parsedQuery::MaterializedViewQuery>) {
     visitMaterializedViewQuery(arg);
   } else {
-    static_assert(std::is_same_v<T, p::BasicGraphPattern>);
+    static_assert(std::is_same_v<T, qlever::parsedQuery::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
 };

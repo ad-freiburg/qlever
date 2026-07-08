@@ -26,7 +26,7 @@ TEST(GraphPatternOperationTest, BasicPatternContainedVars) {
   auto triple1 = SparqlTriple::fromSimple(example1);
   auto triple2 = SparqlTriple::fromSimple(example2);
 
-  parsedQuery::BasicGraphPattern bgp{{triple1, triple2}};
+  qlever::parsedQuery::BasicGraphPattern bgp{{triple1, triple2}};
 
   ad_utility::HashSet<V> vars;
   bgp.collectAllContainedVariables(vars);

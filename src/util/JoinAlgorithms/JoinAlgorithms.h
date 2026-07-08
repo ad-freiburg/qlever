@@ -75,7 +75,7 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
  * and MINUS and to allow for optimizations when some of the columns don't
  * contain UNDEF values.
  * @param left The left input to the join algorithm. Typically a range of rows
- * of IDs (e.g.`IdTable` or `IdTableView`).
+ * of IDs (e.g.`qlever::IdTable` or `IdTableView`).
  * @param right The right input to the join algorithm.
  * @param lessThan This function is called with one element from `left` and
  * `right` each and must return `true` if the first argument comes before the
@@ -555,7 +555,7 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
   // TODO<joka921> This is a little inefficient, should be a getColumn on a
   // column based interface, but that requires refactoring of all the
   // types passed in here (in particular, we are using
-  // `ql::ranges::subrange<IdTable>` etc.
+  // `ql::ranges::subrange<qlever::IdTable>` etc.
   auto getLastJoinColum = [numJoinCols](const auto& row) {
     AD_EXPENSIVE_CHECK(numJoinCols > 0 && numJoinCols <= row.size());
     return row[numJoinCols - 1];
@@ -663,7 +663,7 @@ using Range = std::pair<size_t, size_t>;
 // contiguous subrange of the range. Note that this approach is more robust
 // than storing iterators or subranges directly instead of indices, because many
 // containers have their iterators invalidated when they are being moved (e.g.
-// `std::string` or `IdTable`).
+// `std::string` or `qlever::IdTable`).
 template <typename Block>
 class BlockAndSubrange {
  private:
@@ -1713,7 +1713,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
   // column, it suffices to perform a single column join on the last column.
   // Note: We currently copy all the contents of `blocksLeft` and `blocksRight`,
   // because the interfaces we are using currently requires the interface of a
-  // single IdTable-like thing.
+  // single qlever::IdTable-like thing.
   // TODO<joka921> mitigate this requirement, or at least assess how expensive
   // it is.
   template <bool reversed>
@@ -1738,7 +1738,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // TODO<joka921> This can be much more efficient, in particular it could use
     // zero copying.
-    // Concatenate all rows from blocksLeft into a single IdTable.
+    // Concatenate all rows from blocksLeft into a single qlever::IdTable.
 
     auto materializeBlocksAsTable = [&allocator](const auto& blocks) {
       // Note: It is crucial that we go through the `asStaticView` interface of
@@ -1746,7 +1746,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
       // columns, not only the join columns, because the resultAdder needs them.
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
-      IdTable table(numCols, allocator);
+      qlever::IdTable table(numCols, allocator);
       qlever::LocalVocab vocab;
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
@@ -1757,7 +1757,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
         vocab.mergeWith(block.fullBlock().getLocalVocab());
       }
       // Note: We use `IdTableAndFirstCols` here because it allows us to combine
-      // an `IdTable`  with a `LocalVocab` in a way that the
+      // an `qlever::IdTable`  with a `LocalVocab` in a way that the
       // `AddCombinedRowAdder` understands. The `1` template argument is
       // actually a dummy, as we will never access the data via the
       // `getFirstCols` interface.
@@ -1887,8 +1887,8 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
  * `O(size of result)`. The result is only correct if none of the inputs
  * contains UNDEF values.
  * @param leftBlocks The left input range to the join algorithm. We use this for
- * blocks of rows of IDs (e.g.`std::vector<IdTable>` or
- * `ad_utility::generator<IdTable>`). Each block will be moved from.
+ * blocks of rows of IDs (e.g.`std::vector<qlever::IdTable>` or
+ * `ad_utility::generator<qlever::IdTable>`). Each block will be moved from.
  * @param rightBlocks The right input range to the join algorithm. Each block
  * will be moved from.
  * @param lessThan This function is called with one element from one of the

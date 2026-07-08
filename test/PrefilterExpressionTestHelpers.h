@@ -119,7 +119,7 @@ inline auto LVE = [](std::string litOrIri,
 constexpr inline auto pr =
     [](std::unique_ptr<qlever::prefilterExpressions::PrefilterExpression> expr,
        const qlever::Variable& var)
-    -> sparqlExpression::PrefilterExprVariablePair {
+    -> qlever::sparqlExpression::PrefilterExprVariablePair {
   return {std::move(expr), var};
 };
 
@@ -129,13 +129,13 @@ constexpr inline auto pr =
 struct MakePrefilterVec {
   template <QL_CONCEPT_OR_TYPENAME(
       ql::concepts::convertible_to<
-          sparqlExpression::PrefilterExprVariablePair>)... Args>
+          qlever::sparqlExpression::PrefilterExprVariablePair>)... Args>
   constexpr auto operator()(Args&&... prefilterArgs) const {
-    std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
-        {};
+    std::vector<qlever::sparqlExpression::PrefilterExprVariablePair>
+        prefilterVarPairs = {};
     if constexpr (sizeof...(prefilterArgs) > 0) {
       (prefilterVarPairs.emplace_back(
-           std::forward<sparqlExpression::PrefilterExprVariablePair>(
+           std::forward<qlever::sparqlExpression::PrefilterExprVariablePair>(
                prefilterArgs)),
        ...);
     }
@@ -149,7 +149,7 @@ constexpr inline MakePrefilterVec makePrefilterVec;
 }  // namespace makeFilterExpression
 
 namespace makeSparqlExpression {
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 namespace {
 using Literal = qlever::triple_component::Literal;
@@ -213,7 +213,7 @@ std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
 //______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
     VariantArgs varExpr, VariantArgs litExpr) {
-  return sparqlExpression::makeRegexExpression(
+  return qlever::sparqlExpression::makeRegexExpression(
       std::visit(getExpr, std::move(varExpr)),
       std::visit(getExpr, std::move(litExpr)), nullptr);
 }
@@ -253,29 +253,29 @@ CPP_template(typename... Args)(
   (childrenSparql.push_back(
        std::visit(getExpr, VariantArgs{std::forward<Args>(argList)})),
    ...);
-  return std::make_unique<sparqlExpression::InExpression>(
+  return std::make_unique<qlever::sparqlExpression::InExpression>(
       std::visit(getExpr, std::move(first)), std::move(childrenSparql));
 }
 
 //______________________________________________________________________________
 // LESS THAN (`<`, `SparqlExpression`)
 constexpr inline auto ltSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::LessThanExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::LessThanExpression>;
 // LESS EQUAL (`<=`, `SparqlExpression`)
-constexpr inline auto leSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::LessEqualExpression>;
+constexpr inline auto leSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::LessEqualExpression>;
 // EQUAL (`==`, `SparqlExpression`)
 constexpr inline auto eqSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::EqualExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::EqualExpression>;
 // NOT EQUAL (`!=`, `SparqlExpression`)
 constexpr inline auto neqSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::NotEqualExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::NotEqualExpression>;
 // GREATER EQUAL (`>=`, `SparqlExpression`)
-constexpr inline auto geSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterEqualExpression>;
+constexpr inline auto geSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::GreaterEqualExpression>;
 // GREATER THAN (`>`, `SparqlExpression`)
-constexpr inline auto gtSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterThanExpression>;
+constexpr inline auto gtSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::GreaterThanExpression>;
 // AND (`&&`, `SparqlExpression`)
 constexpr inline auto andSprqlExpr = &makeAndExpression;
 // OR (`||`, `SparqlExpression`)

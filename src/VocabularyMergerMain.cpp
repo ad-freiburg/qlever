@@ -9,7 +9,6 @@
 #include "index/VocabularyMerger.h"
 #include "rdfTypes/RdfEscaping.h"
 
-namespace RdfEscaping = qlever::RdfEscaping;
 using qlever::TripleComponentComparator;
 using qlever::VocabularyOnDisk;
 
@@ -28,7 +27,7 @@ int main(int argc, char** argv) {
   auto wordCallback = [&file, &count](
                           const auto& word,
                           [[maybe_unused]] bool isExternalDummy = true) {
-    file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+    file << qlever::RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     return count++;
   };
 

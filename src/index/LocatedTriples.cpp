@@ -26,7 +26,7 @@ namespace qlever {
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     ql::span<const IdTriple<0>> triples,
     ql::span<const CompressedBlockMetadata> blockMetadata,
-    const qlever::KeyOrder& keyOrder, bool insertOrDelete,
+    const KeyOrder& keyOrder, bool insertOrDelete,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   std::vector<LocatedTriple> out;
   out.reserve(triples.size());
@@ -262,7 +262,7 @@ namespace {
 // applied).
 VacuumStatistics processBlockForVacuum(
     const IdTable& idTable, const LocatedTriples& locatedTriples,
-    const qlever::KeyOrder::Array& inverseKeys,
+    const KeyOrder::Array& inverseKeys,
     std::vector<IdTriple<0>>& allDeletionsToRemove,
     std::vector<IdTriple<0>>& allInsertionsToRemove) {
   auto toSpo = [&inverseKeys](auto& ids) {
@@ -340,7 +340,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 
   // The identified triples are output in `SPO` so we need to invert the
   // permutation.
-  qlever::KeyOrder::Array inverseKeys{};
+  KeyOrder::Array inverseKeys{};
   for (uint8_t i = 0; i < 4; ++i) {
     inverseKeys[perm.keyOrder().keys()[i]] = i;
   }

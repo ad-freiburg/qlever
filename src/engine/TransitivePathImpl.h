@@ -226,7 +226,7 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
-    using namespace qlever::graphSearch;
+    using namespace graphSearch;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.

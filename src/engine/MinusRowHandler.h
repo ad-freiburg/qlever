@@ -29,15 +29,15 @@ class MinusRowHandler {
   // Output `IdTable`.
   IdTable resultTable_;
   // Output `LocalVocab`.
-  qlever::LocalVocab mergedVocab_{};
+  LocalVocab mergedVocab_{};
   // Pointer to the current `LocalVocab` of the left input.
-  const qlever::LocalVocab* currentVocab_ = nullptr;
+  const LocalVocab* currentVocab_ = nullptr;
   // Non-matching indices of the left input, the ones to copy to the result.
   std::vector<size_t> indexBuffer_{};
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
-  using BlockwiseCallback = std::function<void(IdTable&, qlever::LocalVocab&)>;
+  using BlockwiseCallback = std::function<void(IdTable&, LocalVocab&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_;
 
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -88,7 +88,7 @@ class MinusRowHandler {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = qlever::LocalVocab{};
+      mergedVocab_ = LocalVocab{};
     }
   }
 
@@ -109,8 +109,8 @@ class MinusRowHandler {
   template <typename L>
   void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
-    ad_utility::detail::mergeVocabInto(inputLeft, currentVocab_, mergedVocab_);
-    inputLeft_ = ad_utility::detail::toView(inputLeft);
+    detail::mergeVocabInto(inputLeft, currentVocab_, mergedVocab_);
+    inputLeft_ = detail::toView(inputLeft);
     AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
   }
 
@@ -128,7 +128,7 @@ class MinusRowHandler {
   }
 
   // Get the output `LocalVocab`.
-  qlever::LocalVocab& localVocab() { return mergedVocab_; }
+  LocalVocab& localVocab() { return mergedVocab_; }
 
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
@@ -158,7 +158,7 @@ class MinusRowHandler {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = qlever::LocalVocab{};
+      mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
       if (currentVocab_) {
         mergedVocab_.mergeWith(*currentVocab_);

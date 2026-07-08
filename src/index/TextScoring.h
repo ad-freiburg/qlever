@@ -10,17 +10,11 @@
 
 namespace qlever {
 
-using qlever::DocLengthMap;
-using qlever::DocumentIndex;
-using qlever::InvertedIndex;
-using qlever::TextRecordIndex;
-using qlever::WordIndex;
-
 // This class is used to calculate tf-idf and bm25 scores and use them in the
 // building of the text index.
 class ScoreData {
  public:
-  using TextScoringMetric = qlever::TextScoringMetric;
+  using TextScoringMetric = TextScoringMetric;
   ScoreData() = default;
 
   explicit ScoreData(LocaleManager localeManager)

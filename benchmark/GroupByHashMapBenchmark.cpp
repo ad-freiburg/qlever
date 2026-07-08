@@ -25,12 +25,6 @@
 
 using namespace qlever;
 
-using qlever::LocalVocab;
-using qlever::LocalVocabContext;
-using qlever::LocalVocabIndex;
-using qlever::RuntimeParameters;
-using qlever::setRuntimeParameter;
-
 namespace ad_benchmark {
 using namespace sparqlExpression;
 using namespace ad_utility::use_type_identity;

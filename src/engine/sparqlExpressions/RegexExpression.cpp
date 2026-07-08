@@ -23,7 +23,7 @@ using namespace std::literals;
 
 namespace qlever::sparqlExpression::detail {
 
-void ensureIsSimpleLiteral(const qlever::triple_component::Literal& literal) {
+void ensureIsSimpleLiteral(const triple_component::Literal& literal) {
   if (literal.hasDatatype() || literal.hasLanguageTag()) {
     throw std::runtime_error{
         "The REGEX function only accepts simple literals (literals without a "
@@ -338,7 +338,7 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   }
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
-      std::make_unique<qlever::prefilterExpressions::PrefixRegexExpression>(
+      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
           TripleComponent::Literal::literalWithNormalizedContent(
               asNormalizedStringViewUnsafe(prefixRegex_))),
       variable_);

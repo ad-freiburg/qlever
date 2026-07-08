@@ -8,6 +8,8 @@
 
 #include "global/SpecialIds.h"
 
+using namespace qlever;
+
 namespace qlever {
 
 using PatternId = Pattern::PatternId;

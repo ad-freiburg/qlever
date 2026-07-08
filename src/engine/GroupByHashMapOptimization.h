@@ -12,8 +12,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
-namespace valueIdComparators = qlever::valueIdComparators;
-
 // _____________________________________________________________________________
 // For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.
@@ -23,7 +21,7 @@ static constexpr auto valueAdder = []() {
       -> CPP_ret(void)(requires std::is_arithmetic_v<decltype(value)>) {
     sum += static_cast<double>(value);
   };
-  auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
+  auto nonNumericValueAdder = [](qlever::sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };
   return ad_utility::OverloadCallOperator{numericValueAdder,
@@ -32,14 +30,15 @@ static constexpr auto valueAdder = []() {
 
 // Data to perform the AVG aggregation using the HashMap optimization.
 struct AvgAggregationData {
-  using ValueGetter = sparqlExpression::detail::NumericValueGetter;
+  using ValueGetter = qlever::sparqlExpression::detail::NumericValueGetter;
   bool error_ = false;
   double sum_ = 0;
   int64_t count_ = 0;
 
   // _____________________________________________________________________________
   template <typename T>
-  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
+  void addValue(T&& value,
+                const qlever::sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
     count_++;
@@ -55,12 +54,13 @@ struct AvgAggregationData {
 
 // Data to perform the COUNT aggregation using the HashMap optimization.
 struct CountAggregationData {
-  using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
+  using ValueGetter = qlever::sparqlExpression::detail::IsValidValueGetter;
   int64_t count_ = 0;
 
   // _____________________________________________________________________________
   template <typename T>
-  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
+  void addValue(T&& value,
+                const qlever::sparqlExpression::EvaluationContext* ctx) {
     if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
   }
 
@@ -73,22 +73,23 @@ struct CountAggregationData {
 };
 
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
-template <valueIdComparators::Comparison Comp>
+template <qlever::valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
-  sparqlExpression::IdOrLocalVocabEntry currentValue_;
+  qlever::sparqlExpression::IdOrLocalVocabEntry currentValue_;
   bool firstValueSet_ = false;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrLocalVocabEntry& value,
-                const sparqlExpression::EvaluationContext* ctx) {
+  void addValue(const qlever::sparqlExpression::IdOrLocalVocabEntry& value,
+                const qlever::sparqlExpression::EvaluationContext* ctx) {
     if (!firstValueSet_) {
       currentValue_ = value;
       firstValueSet_ = true;
       return;
     }
 
-    currentValue_ = sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>{}(
-        value, currentValue_, ctx);
+    currentValue_ =
+        qlever::sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>{}(
+            value, currentValue_, ctx);
   }
 
   // _____________________________________________________________________________
@@ -100,13 +101,13 @@ struct ExtremumAggregationData {
 };
 
 using MinAggregationData =
-    ExtremumAggregationData<valueIdComparators::Comparison::LT>;
+    ExtremumAggregationData<qlever::valueIdComparators::Comparison::LT>;
 using MaxAggregationData =
-    ExtremumAggregationData<valueIdComparators::Comparison::GT>;
+    ExtremumAggregationData<qlever::valueIdComparators::Comparison::GT>;
 
 // Data to perform the SUM aggregation using the HashMap optimization.
 struct SumAggregationData {
-  using ValueGetter = sparqlExpression::detail::NumericValueGetter;
+  using ValueGetter = qlever::sparqlExpression::detail::NumericValueGetter;
   bool error_ = false;
   bool intSumValid_ = true;
   double sum_ = 0;
@@ -114,7 +115,8 @@ struct SumAggregationData {
 
   // _____________________________________________________________________________
   template <typename T>
-  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
+  void addValue(T&& value,
+                const qlever::sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
 
     auto doubleValueAdder = [this](double value) {
@@ -125,9 +127,8 @@ struct SumAggregationData {
       sum_ += static_cast<double>(value);
       intSum_ += value;
     };
-    auto nonNumericValueAdder = [this](sparqlExpression::detail::NotNumeric) {
-      error_ = true;
-    };
+    auto nonNumericValueAdder =
+        [this](qlever::sparqlExpression::detail::NotNumeric) { error_ = true; };
     auto sumValueAdder = ad_utility::OverloadCallOperator{
         doubleValueAdder, intValueAdder, nonNumericValueAdder};
 
@@ -145,7 +146,7 @@ struct SumAggregationData {
 // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
 struct GroupConcatAggregationData {
   using ValueGetter =
-      sparqlExpression::detail::LiteralValueGetterWithoutStrFunction;
+      qlever::sparqlExpression::detail::LiteralValueGetterWithoutStrFunction;
   bool undefined_ = false;
   bool first_ = true;
   std::string currentValue_;
@@ -153,7 +154,8 @@ struct GroupConcatAggregationData {
 
   // _____________________________________________________________________________
   template <typename T>
-  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
+  void addValue(T&& value,
+                const qlever::sparqlExpression::EvaluationContext* ctx) {
     // No need to compute anything in this case.
     if (undefined_) {
       return;
@@ -177,11 +179,13 @@ struct GroupConcatAggregationData {
 
 // Data to perform SAMPLE aggregation using the HashMap optimization.
 struct SampleAggregationData {
-  std::optional<sparqlExpression::IdOrLocalVocabEntry> value_ = std::nullopt;
+  std::optional<qlever::sparqlExpression::IdOrLocalVocabEntry> value_ =
+      std::nullopt;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrLocalVocabEntry& value,
-                [[maybe_unused]] const sparqlExpression::EvaluationContext*) {
+  void addValue(
+      const qlever::sparqlExpression::IdOrLocalVocabEntry& value,
+      [[maybe_unused]] const qlever::sparqlExpression::EvaluationContext*) {
     if (!value_.has_value()) {
       value_.emplace(value);
     }

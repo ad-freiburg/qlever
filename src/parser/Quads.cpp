@@ -23,7 +23,7 @@ Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
 
 // Transform the triples and sets the graph on all triples.
 static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-    qlever::sparql_types::Triples triples,
+    sparql_types::Triples triples,
     const SparqlTripleSimpleWithGraph::Graph& graph,
     Quads::BlankNodeAdder& blankNodeAdder) {
   auto toTc = [&blankNodeAdder](const GraphTerm& t) -> TripleComponent {
@@ -43,7 +43,7 @@ static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
 
 // Re-wraps the value into a variant `T` which has additional values.
 template <typename T>
-static T expandVariant(const qlever::sparql_types::VarOrIri& graph) {
+static T expandVariant(const sparql_types::VarOrIri& graph) {
   return std::visit([](const auto& graph) -> T { return graph; }, graph);
 };
 
@@ -55,7 +55,7 @@ updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
       [](size_t acc, const GraphBlock& block) {
-        return acc + std::get<qlever::sparql_types::Triples>(block).size();
+        return acc + std::get<sparql_types::Triples>(block).size();
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
@@ -80,7 +80,7 @@ Quads::toGraphPatternOperations() const {
         triple[2].toTripleComponent()));
   };
 
-  using namespace qlever::parsedQuery;
+  using namespace parsedQuery;
   std::vector<GraphPatternOperation> operations;
   operations.emplace_back(
       BasicGraphPattern{ad_utility::transform(freeTriples_, toSparqlTriple)});

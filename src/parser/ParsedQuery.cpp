@@ -347,7 +347,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
       operations.push_back({std::vector{SparqlTriple{
           variable,
           PropertyPath::fromIri(
-              qlever::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
+              triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
           ad_utility::convertLangtagToEntityUri(langTag)}}});
     }
 

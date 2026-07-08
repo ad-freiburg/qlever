@@ -19,8 +19,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
   for (const auto& [oldId, newId] : stringMapping_) {
-    auto literalOrIri =
-        qlever::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
+    auto literalOrIri = exportIds::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     sortedStrings[newId] =
         std::move(literalOrIri.value()).toStringRepresentation();

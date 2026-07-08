@@ -14,7 +14,7 @@
 // because it only reads the value computed by the special `ExistsJoin`
 // operation, where the actual work is done (see the comments there).
 namespace qlever::sparqlExpression {
-using qlever::ParsedQuery;
+
 class ExistsExpression : public SparqlExpression {
  private:
   // The argument of the `EXISTS`, which is a group graph pattern. This is set
@@ -105,7 +105,5 @@ class ExistsExpression : public SparqlExpression {
   ql::span<Ptr> childrenImpl() override { return {}; }
 };
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H

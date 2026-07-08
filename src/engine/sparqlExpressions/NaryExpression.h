@@ -84,7 +84,7 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 
-template <qlever::BoundingCoordinate RequestedCoordinate>
+template <BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child);
 
@@ -219,7 +219,5 @@ constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

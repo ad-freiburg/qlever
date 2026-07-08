@@ -70,7 +70,7 @@ std::string_view MagicServiceQuery::extractParameterName(
   }
 
   // Get IRI without brackets
-  auto iriObj = qlever::triple_component::Iri::fromIriref(magicIRI);
+  auto iriObj = triple_component::Iri::fromIriref(magicIRI);
   auto iri = iriObj.getContent();
 
   // Remove prefix if applicable: this allows users to define the parameter

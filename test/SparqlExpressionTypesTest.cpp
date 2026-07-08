@@ -9,6 +9,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 
 TEST(SparqlExpressionTypes, expressionResult) {

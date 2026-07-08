@@ -22,6 +22,8 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+using namespace qlever;
+
 namespace qlever {
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -83,7 +85,7 @@ auto numTriplesBlockwise =
   return testing::AllOfArray(blockMatchers);
 };
 
-const qlever::KeyOrder keyOrder{0, 1, 2, 3};
+const KeyOrder keyOrder{0, 1, 2, 3};
 }  // namespace
 
 // Fixture with helper functions.
@@ -1007,7 +1009,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
-  auto Iri = qlever::triple_component::Iri::fromIriref;
+  auto Iri = triple_component::Iri::fromIriref;
   auto getId = [&lv, &index](TC&& tc) {
     return std::move(tc).toValueId(index, lv);
   };

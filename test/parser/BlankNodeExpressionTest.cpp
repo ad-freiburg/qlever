@@ -10,6 +10,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 using namespace qlever::triple_component;
 

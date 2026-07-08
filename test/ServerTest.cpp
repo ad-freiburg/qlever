@@ -247,13 +247,13 @@ TEST(ServerTest, createResponseMetadata) {
   const Index& index = qec->getIndex();
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
-  qlever::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  const qlever::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
+  const PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
@@ -300,7 +300,7 @@ TEST(ServerTest, createResponseMetadata) {
 // _____________________________________________________________________________
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
+  auto makePlannedQuery = [](std::string operation) -> PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     auto* qec = ad_utility::testing::getQec();
     QueryExecutionTree qet =
@@ -313,8 +313,7 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
           ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
           std::string operation =
               "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const qlever::url_parser::ParamValueMap& parameters = {{"send",
-                                                                  {"12"}}},
+          const url_parser::ParamValueMap& parameters = {{"send", {"12"}}},
           ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));

@@ -27,9 +27,8 @@ NARY_EXPRESSION(
     LatitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
 
-NARY_EXPRESSION(
-    CentroidExpression, 1,
-    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<qlever::Centroid>>);
+NARY_EXPRESSION(CentroidExpression, 1,
+                FV<ad_utility::WktCentroid, GeometryInfoValueGetter<Centroid>>);
 
 NARY_EXPRESSION(
     DistExpression, 2,
@@ -42,37 +41,34 @@ NARY_EXPRESSION(
     FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
        GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
 
-NARY_EXPRESSION(
-    AreaExpression, 2,
-    FV<ad_utility::WktArea, GeometryInfoValueGetter<qlever::MetricArea>,
-       UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(AreaExpression, 2,
+                FV<ad_utility::WktArea, GeometryInfoValueGetter<MetricArea>,
+                   UnitOfMeasurementValueGetter>);
 NARY_EXPRESSION(
     MetricAreaExpression, 1,
-    FV<ad_utility::WktMetricArea, GeometryInfoValueGetter<qlever::MetricArea>>);
+    FV<ad_utility::WktMetricArea, GeometryInfoValueGetter<MetricArea>>);
 
 NARY_EXPRESSION(
     EnvelopeExpression, 1,
-    FV<ad_utility::WktEnvelope, GeometryInfoValueGetter<qlever::BoundingBox>>);
-NARY_EXPRESSION(
-    EnvelopeLowerLeftExpression, 1,
-    FV<ad_utility::WktEnvelopeCorner<qlever::BoundingBoxCorner::LOWER_LEFT>,
-       GeometryInfoValueGetter<qlever::BoundingBox>>);
+    FV<ad_utility::WktEnvelope, GeometryInfoValueGetter<BoundingBox>>);
+NARY_EXPRESSION(EnvelopeLowerLeftExpression, 1,
+                FV<ad_utility::WktEnvelopeCorner<BoundingBoxCorner::LOWER_LEFT>,
+                   GeometryInfoValueGetter<BoundingBox>>);
 NARY_EXPRESSION(
     EnvelopeUpperRightExpression, 1,
-    FV<ad_utility::WktEnvelopeCorner<qlever::BoundingBoxCorner::UPPER_RIGHT>,
-       GeometryInfoValueGetter<qlever::BoundingBox>>);
-
-NARY_EXPRESSION(GeometryTypeExpression, 1,
-                FV<ad_utility::WktGeometryType,
-                   GeometryInfoValueGetter<qlever::GeometryType>>);
+    FV<ad_utility::WktEnvelopeCorner<BoundingBoxCorner::UPPER_RIGHT>,
+       GeometryInfoValueGetter<BoundingBox>>);
 
 NARY_EXPRESSION(
-    LengthExpression, 2,
-    FV<ad_utility::WktLength, GeometryInfoValueGetter<qlever::MetricLength>,
-       UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(MetricLengthExpression, 1,
-                FV<ad_utility::WktMetricLength,
-                   GeometryInfoValueGetter<qlever::MetricLength>>);
+    GeometryTypeExpression, 1,
+    FV<ad_utility::WktGeometryType, GeometryInfoValueGetter<GeometryType>>);
+
+NARY_EXPRESSION(LengthExpression, 2,
+                FV<ad_utility::WktLength, GeometryInfoValueGetter<MetricLength>,
+                   UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(
+    MetricLengthExpression, 1,
+    FV<ad_utility::WktMetricLength, GeometryInfoValueGetter<MetricLength>>);
 
 NARY_EXPRESSION(
     GeometryNExpression, 2,
@@ -87,14 +83,14 @@ NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
-template <qlever::BoundingCoordinate RequestedCoordinate>
+template <BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
-                   GeometryInfoValueGetter<qlever::BoundingBox>>);
+                   GeometryInfoValueGetter<BoundingBox>>);
 
-NARY_EXPRESSION(NumGeometriesExpression, 1,
-                FV<ad_utility::WktNumGeometries,
-                   GeometryInfoValueGetter<qlever::NumGeometries>>);
+NARY_EXPRESSION(
+    NumGeometriesExpression, 1,
+    FV<ad_utility::WktNumGeometries, GeometryInfoValueGetter<NumGeometries>>);
 
 }  // namespace detail
 
@@ -198,7 +194,7 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
-template <qlever::BoundingCoordinate RequestedCoordinate>
+template <BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
@@ -361,15 +357,14 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 
 // Explicit instantiations for the different geometric relations to avoid linker
 // problems
-using Ptr = sparqlExpression::SparqlExpression::Ptr;
+using Ptr = qlever::sparqlExpression::SparqlExpression::Ptr;
 
 #ifdef QL_INSTANTIATE_GEO_RELATION_EXPR
 #error "Macro QL_INSTANTIATE_GEO_RELATION_EXPR already defined"
 #endif
-#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
-  template Ptr                                                                \
-      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
-          Ptr, Ptr);
+#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                  \
+  template Ptr qlever::sparqlExpression::makeGeoRelationExpression< \
+      SpatialJoinType::joinType>(Ptr, Ptr);
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
@@ -384,8 +379,8 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 #ifdef QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR
 #error "Macro QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR already defined"
 #endif
-#define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
-  template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
+#define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate)       \
+  template Ptr qlever::sparqlExpression::makeBoundingCoordinateExpression< \
       qlever::BoundingCoordinate::RequestedCoordinate>(Ptr);
 
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);

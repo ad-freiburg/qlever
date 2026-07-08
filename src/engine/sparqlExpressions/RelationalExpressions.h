@@ -10,8 +10,6 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
-namespace valueIdComparators = qlever::valueIdComparators;
-
 namespace qlever::sparqlExpression::relational {
 
 using valueIdComparators::Comparison;
@@ -135,7 +133,5 @@ std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H

@@ -49,6 +49,8 @@ using qlever::SparqlTriple;
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace materializedViewsTestHelpers;
@@ -224,18 +226,21 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Extract `MaterializedViewQuery` from `SERVICE` or special triple.
     auto viewQuery = parsed.children().at(0).visit(
-        [](const auto& contained) -> parsedQuery::MaterializedViewQuery {
+        [](const auto& contained)
+            -> qlever::parsedQuery::MaterializedViewQuery {
           using T = std::decay_t<decltype(contained)>;
-          if constexpr (std::is_same_v<T, parsedQuery::MaterializedViewQuery>) {
+          if constexpr (std::is_same_v<
+                            T, qlever::parsedQuery::MaterializedViewQuery>) {
             // `SERVICE` is visited automatically during parsing.
             return contained;
-          } else if constexpr (std::is_same_v<T,
-                                              parsedQuery::BasicGraphPattern>) {
+          } else if constexpr (std::is_same_v<
+                                   T, qlever::parsedQuery::BasicGraphPattern>) {
             // Special triple has to be processed after parsing.
             if (contained._triples.size() != 1) {
               throw std::runtime_error("Invalid graph pattern");
             }
-            return parsedQuery::MaterializedViewQuery{contained._triples.at(0)};
+            return qlever::parsedQuery::MaterializedViewQuery{
+                contained._triples.at(0)};
           } else {
             throw std::runtime_error(
                 "Only for testing materialized view predicate or SERVICE.");
@@ -536,7 +541,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using Triple = SparqlTripleSimple;
   using V = Variable;
   auto iri = [](const std::string& ref) {
-    return qlever::triple_component::Iri::fromIriref(ref);
+    return triple_component::Iri::fromIriref(ref);
   };
 
   const V placeholderP{"?_ql_materialized_view_p"};
@@ -781,7 +786,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
-  qlever::EngineConfig config;
+  EngineConfig config;
   config.baseName_ = testIndexBase_;
 
   // Write a new materialized view using the `writeMaterializedView` method of
@@ -790,7 +795,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Initialize but do not start a `Server` instance on our test index.
     Server server{4321, 1, "accessToken", config};
 
-    qlever::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
+    url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
@@ -945,7 +950,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", writePlan);
   auto view = manager.getView("testView1");
-  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using ViewQuery = qlever::parsedQuery::MaterializedViewQuery;
 
   // Run a simple query and consume its result lazily.
   {
@@ -1003,8 +1008,8 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
 
   // `BIND` is contained.
   {
-    auto expr = sparqlExpression::SparqlExpressionPimpl{
-        std::make_shared<sparqlExpression::IdExpression>(
+    auto expr = qlever::sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<qlever::sparqlExpression::IdExpression>(
             qlever::ValueId::makeFromInt(1)),
         "1"};
     auto cacheKey = expr.getCacheKey({});
@@ -1014,8 +1019,8 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
 
   // `BIND` is not contained.
   {
-    auto expr = sparqlExpression::SparqlExpressionPimpl{
-        std::make_shared<sparqlExpression::IdExpression>(
+    auto expr = qlever::sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<qlever::sparqlExpression::IdExpression>(
             qlever::ValueId::makeFromDouble(5.0)),
         "5.0"};
     auto cacheKey = expr.getCacheKey({});
@@ -1031,8 +1036,9 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
   )");
   auto view2 = manager.getView("testView2");
   {
-    auto expr = sparqlExpression::SparqlExpressionPimpl{
-        std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
+    auto expr = qlever::sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<qlever::sparqlExpression::VariableExpression>(V{"?x"}),
+        "?x"};
 
     // `BIND` is found using correct mapping despite different variable name.
     qlever::VariableToColumnMap correctVarToCol{
@@ -1222,16 +1228,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   }
 
   // The `2 * ?o + 1` expression.
-  auto bindExpr = sparqlExpression::makeAddExpression(
-      sparqlExpression::makeMultiplyExpression(
-          std::make_unique<sparqlExpression::IdExpression>(
+  auto bindExpr = qlever::sparqlExpression::makeAddExpression(
+      qlever::sparqlExpression::makeMultiplyExpression(
+          std::make_unique<qlever::sparqlExpression::IdExpression>(
               qlever::ValueId::makeFromInt(2)),
-          std::make_unique<sparqlExpression::VariableExpression>(V{"?o"})),
-      std::make_unique<sparqlExpression::IdExpression>(
+          std::make_unique<qlever::sparqlExpression::VariableExpression>(
+              V{"?o"})),
+      std::make_unique<qlever::sparqlExpression::IdExpression>(
           qlever::ValueId::makeFromInt(1)));
-  const parsedQuery::Bind bind{sparqlExpression::SparqlExpressionPimpl{
-                                   std::move(bindExpr), "2 * ?o + 1"},
-                               V{"?bind"}};
+  const qlever::parsedQuery::Bind bind{
+      qlever::sparqlExpression::SparqlExpressionPimpl{std::move(bindExpr),
+                                                      "2 * ?o + 1"},
+      V{"?bind"}};
 
   // Trying to push down a `BIND` into a `SpatialJoin` which does not have its
   // children yet is not possible. But the child `nullptr` should not crash.
@@ -1854,8 +1862,8 @@ TEST_F(MaterializedViewsTest,
   manager.loadView("threeVarPermTestView");
 
   // Create a three-variable scan on the view binding all three columns.
-  using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
-  parsedQuery::MaterializedViewQuery viewQuery{
+  using RCols = qlever::parsedQuery::MaterializedViewQuery::RequestedColumns;
+  qlever::parsedQuery::MaterializedViewQuery viewQuery{
       "threeVarPermTestView",
       RCols{{V{"?s"}, qlever::TripleComponent{V{"?s"}}},
             {V{"?p"}, qlever::TripleComponent{V{"?p"}}},

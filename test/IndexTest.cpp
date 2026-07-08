@@ -19,6 +19,8 @@
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 namespace qlever {
 
 using namespace ad_utility::testing;
@@ -609,10 +611,10 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  using enum qlever::Filetype;
-  std::vector<qlever::InputFileSpecification> singleFileSpec = {
+  using enum Filetype;
+  std::vector<InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
-  std::vector<qlever::InputFileSpecification> twoFilesSpec = {
+  std::vector<InputFileSpecification> twoFilesSpec = {
       {"firstFile.ttl", Turtle, std::nullopt},
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
@@ -936,8 +938,8 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.
-  stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
-  stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["git-hash"] = *version::gitShortHashWithoutLinking.wlock();
+  stats["index-format-version"] = indexFormatVersion;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
@@ -951,7 +953,7 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "2> . <a> <b> <c> <http://example.org/1> .")};
-  c.indexType = qlever::Filetype::NQuad;
+  c.indexType = Filetype::NQuad;
   c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   auto qec = getQec(c);
   const auto graphManager = qec->getIndex().graphNameManager();

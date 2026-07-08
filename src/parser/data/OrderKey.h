@@ -15,10 +15,10 @@
 class ExpressionOrderKey {
  public:
   bool isDescending_;
-  sparqlExpression::SparqlExpressionPimpl expression_;
+  qlever::sparqlExpression::SparqlExpressionPimpl expression_;
   // ___________________________________________________________________________
   explicit ExpressionOrderKey(
-      sparqlExpression::SparqlExpressionPimpl expression,
+      qlever::sparqlExpression::SparqlExpressionPimpl expression,
       bool isDescending = false)
       : isDescending_{isDescending}, expression_{std::move(expression)} {}
 };

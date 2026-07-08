@@ -24,7 +24,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
-namespace ad_utility {
+namespace qlever {
 
 namespace compressedExternalIdTable::detail {
 template <typename B, typename R>
@@ -74,7 +74,7 @@ class CompressedExternalIdTableWriter {
   // where the blocks of this table begin.
   std::vector<size_t> startOfSingleIdTables_;
 
-  ad_utility::AllocatorWithLimit<qlever::Id> allocator_;
+  ad_utility::AllocatorWithLimit<Id> allocator_;
   // Each column of each `IdTable` will be split up into blocks of this size and
   // then separately compressed and stored. Has to be chosen s.t. it is much
   // smaller than the size of the single `IdTables` and  large enough to make
@@ -92,7 +92,7 @@ class CompressedExternalIdTableWriter {
   // `IdTables` that will be passed in has to have exactly `numCols` columns.
   explicit CompressedExternalIdTableWriter(
       std::string filename, size_t numCols,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::MemorySize blockSizeUncompressed =
           DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
       : filename_{std::move(filename)},
@@ -109,7 +109,7 @@ class CompressedExternalIdTableWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
-  const MemorySize& blockSizeUncompressed() const {
+  const ad_utility::MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
 
@@ -122,7 +122,7 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(qlever::Id);
+    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The columns are compressed and stored in parallel.
@@ -131,26 +131,26 @@ class CompressedExternalIdTableWriter {
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(std::async(std::launch::async, [this, i,
-                                                                     blockSize,
-                                                                     &table]() {
-        auto& blockMetadata = blocksPerColumn_.at(i);
-        decltype(auto) column = table.getColumn(i);
-        // TODO<C++23> Use `ql::views::chunkd`
-        for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-          size_t upper = std::min<size_t>(lower + blockSize, column.size());
-          auto thisBlockSizeUncompressed = (upper - lower) * sizeof(qlever::Id);
-          auto compressed = ZstdWrapper::compress(column.data() + lower,
-                                                  thisBlockSizeUncompressed);
-          size_t offset = 0;
-          file_.withWriteLock([&offset, &compressed](ad_utility::File& file) {
-            offset = file.tell();
-            file.write(compressed.data(), compressed.size());
-          });
-          blockMetadata.push_back(
-              {compressed.size(), thisBlockSizeUncompressed, offset});
-        }
-      }));
+      compressColumFutures.push_back(
+          std::async(std::launch::async, [this, i, blockSize, &table]() {
+            auto& blockMetadata = blocksPerColumn_.at(i);
+            decltype(auto) column = table.getColumn(i);
+            // TODO<C++23> Use `ql::views::chunkd`
+            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
+              size_t upper = std::min<size_t>(lower + blockSize, column.size());
+              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
+              auto compressed = ZstdWrapper::compress(
+                  column.data() + lower, thisBlockSizeUncompressed);
+              size_t offset = 0;
+              file_.withWriteLock(
+                  [&offset, &compressed](ad_utility::File& file) {
+                    offset = file.tell();
+                    file.write(compressed.data(), compressed.size());
+                  });
+              blockMetadata.push_back(
+                  {compressed.size(), thisBlockSizeUncompressed, offset});
+            }
+          }));
     }
     for (auto& fut : compressColumFutures) {
       fut.get();
@@ -161,9 +161,10 @@ class CompressedExternalIdTableWriter {
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
   template <size_t N = 0>
-  std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
+  std::vector<ad_utility::InputRangeTypeErased<IdTableStatic<N>>>
+  getAllGenerators() {
     file_.wlock()->flush();
-    std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
+    std::vector<ad_utility::InputRangeTypeErased<IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
     for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
@@ -210,8 +211,8 @@ class CompressedExternalIdTableWriter {
 
   // Get the block generator for a single IdTable, specified by the `index`.
   template <size_t NumCols = 0>
-  InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
-      size_t index) {
+  ad_utility::InputRangeTypeErased<IdTableStatic<NumCols>>
+  makeGeneratorForIdTable(size_t index) {
     size_t firstBlock = startOfSingleIdTables_.at(index);
     size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
@@ -223,7 +224,7 @@ class CompressedExternalIdTableWriter {
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     using namespace ad_utility;
-    return InputRangeTypeErased{CallbackOnEndView(
+    return ad_utility::InputRangeTypeErased{ad_utility::CallbackOnEndView(
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
@@ -252,8 +253,8 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> makeBlock(size_t blockIdx) {
     IdTableStatic<NumCols> block{numColumns(), allocator_};
-    size_t blockSize = blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
-                       sizeof(qlever::Id);
+    size_t blockSize =
+        blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
     block.resize(blockSize);
     return block;
   }
@@ -290,17 +291,17 @@ class CompressedExternalIdTableWriter {
   }
 
  public:
-  // Read all blocks as a single `InputRangeTypeErased<IdTableStatic<N>>` via
-  // one background thread. This creates a constant number of threads regardless
-  // of the number of stored blocks. Columns are decompressed sequentially
-  // within a block; the single background thread already provides concurrency
-  // with the consumer.
+  // Read all blocks as a single
+  // `ad_utility::InputRangeTypeErased<IdTableStatic<N>>` via one background
+  // thread. This creates a constant number of threads regardless of the number
+  // of stored blocks. Columns are decompressed sequentially within a block; the
+  // single background thread already provides concurrency with the consumer.
   template <size_t N = 0>
-  InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
     size_t totalBlocks =
         blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
-    CachingTransformInputRange readBlocks{
+    ad_utility::CachingTransformInputRange readBlocks{
         ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
           return this->template readBlockSequential<N>(blockIdx);
         }};
@@ -308,7 +309,9 @@ class CompressedExternalIdTableWriter {
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     // Queue size 2 keeps the producer one block ahead of the consumer.
     return ad_utility::streams::runStreamAsync(
-        CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
+        ad_utility::CallbackOnEndView{std::move(readBlocks),
+                                      std::move(callback)},
+        2);
   }
 };
 
@@ -344,8 +347,7 @@ CPP_class_template(size_t NumStaticCols,
   // The division by two is there because we store two blocks at the same time:
   // One that is currently being sorted and written to disk in the background,
   // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() /
-                    (numColumns_ * sizeof(qlever::Id) * 2)};
+  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
@@ -384,7 +386,7 @@ CPP_class_template(size_t NumStaticCols,
 
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       BlockTransformation blockTransformation = {})
       : currentBlock_{numCols, allocator},
@@ -517,7 +519,7 @@ class CompressedExternalIdTable
   // Constructor.
   explicit CompressedExternalIdTable(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
       : Base{std::move(filename), numCols, memory, std::move(allocator),
              blocksizeCompression} {}
@@ -526,7 +528,7 @@ class CompressedExternalIdTable
   // constructor is redundant.
   CPP_member explicit CPP_ctor(CompressedExternalIdTable)(
       std::string filename, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)(
       requires(NumStaticCols > 0))
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
@@ -540,13 +542,14 @@ class CompressedExternalIdTable
     using namespace ad_utility;
     using Block = IdTableStatic<NumStaticCols>;
     // Both branches return the same type via this helper.
-    auto joinBlocks = [](InputRangeTypeErased<Block> stream) {
-      return ql::views::join(OwningViewNoConst{std::move(stream)});
+    auto joinBlocks = [](ad_utility::InputRangeTypeErased<Block> stream) {
+      return ql::views::join(ad_utility::OwningViewNoConst{std::move(stream)});
     };
     if (!this->transformAndPushLastBlock()) {
       // Single block: wrap currentBlock_ as a one-element block stream.
-      return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
-          [this]() { return std::move(this->currentBlock_); })});
+      return joinBlocks(ad_utility::InputRangeTypeErased<Block>{
+          ad_utility::lazySingleValueRange(
+              [this]() { return std::move(this->currentBlock_); })});
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -620,6 +623,7 @@ class CompressedExternalIdTableSorter
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
+  using MemorySize = ad_utility::MemorySize;
   [[no_unique_address]] Comparator comparator_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -637,7 +641,7 @@ class CompressedExternalIdTableSorter
   // Constructor.
   CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       Comparator comparator = {})
       : Base{std::move(filename),
@@ -652,7 +656,7 @@ class CompressedExternalIdTableSorter
   // constructor is redundant.
   CPP_member CPP_ctor(CompressedExternalIdTableSorter)(
       std::string filename, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<qlever::Id> allocator,
+      ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       Comparator comp = {})(requires(NumStaticCols > 0))
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
@@ -699,14 +703,14 @@ class CompressedExternalIdTableSorter
     // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
     // buffered by the async stream.
     using namespace ad_utility;
-    return InputRangeTypeErased{
-        CallbackOnEndView{ad_utility::streams::runStreamAsync(
-                              sortedBlocks<N>(blocksize),
-                              std::max(1, numBufferedOutputBlocks_ - 2)),
-                          [&, this]() noexcept {
-                            this->isFirstIteration_ = false;
-                            mergeIsActive_.store(false);
-                          }}};
+    return ad_utility::InputRangeTypeErased{ad_utility::CallbackOnEndView{
+        ad_utility::streams::runStreamAsync(
+            sortedBlocks<N>(blocksize),
+            std::max(1, numBufferedOutputBlocks_ - 2)),
+        [&, this]() noexcept {
+          this->isFirstIteration_ = false;
+          mergeIsActive_.store(false);
+        }}};
   }
 
   // The implementation of the type-erased interface. Push a complete block at
@@ -753,7 +757,7 @@ class CompressedExternalIdTableSorter
     size_t blockSizeOutput_;
 
     SortState(size_t numCols,
-              const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
+              const ad_utility::AllocatorWithLimit<Id>& allocator,
               CompType comp, RowGenVectorType rowGenerators, size_t blockSize,
               CompressedExternalIdTableSorter* sorter)
         : result_{numCols, allocator},
@@ -823,17 +827,19 @@ class CompressedExternalIdTableSorter
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
         return block.empty()
-                   ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
-                   : InputRangeTypeErased{
-                         lazySingleValueRange([this]() -> IdTableStatic<N> {
-                           if (this->moveResultOnMerge_) {
-                             return std::move(this->currentBlock_)
-                                 .template toStatic<N>();
-                           } else {
-                             return this->currentBlock_.clone()
-                                 .template toStatic<N>();
-                           }
-                         })};
+                   ? ad_utility::InputRangeTypeErased{ql::views::empty<
+                         IdTableStatic<N>>}
+                   : ad_utility::InputRangeTypeErased{
+                         ad_utility::lazySingleValueRange(
+                             [this]() -> IdTableStatic<N> {
+                               if (this->moveResultOnMerge_) {
+                                 return std::move(this->currentBlock_)
+                                     .template toStatic<N>();
+                               } else {
+                                 return this->currentBlock_.clone()
+                                     .template toStatic<N>();
+                               }
+                             })};
       }
       namespace rv = ::ranges::views;
       auto chunked =
@@ -868,12 +874,13 @@ class CompressedExternalIdTableSorter
       return std::move(table).template toStatic<N>();
     };
     using namespace ad_utility;
-    return InputRangeTypeErased{CachingTransformInputRange{
-        SortState<decltype(rowGenerators), decltype(directComp)>{
-            this->writer_.numColumns(), this->writer_.allocator(),
-            std::move(directComp), std::move(rowGenerators), blockSizeOutput,
-            this},
-        toStatic}};
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::CachingTransformInputRange{
+            SortState<decltype(rowGenerators), decltype(directComp)>{
+                this->writer_.numColumns(), this->writer_.allocator(),
+                std::move(directComp), std::move(rowGenerators),
+                blockSizeOutput, this},
+            toStatic}};
   }
 
   // _____________________________________________________________
@@ -917,7 +924,7 @@ class CompressedExternalIdTableSorter
                    maxOutputBlocksize_);
 
       size_t blockSizeForOutput =
-          blockSizeOutputMemory.getBytes() / (sizeof(qlever::Id) * numColumns);
+          blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns);
       // If blocks are smaller than this, the performance will probably be poor
       // because of the coroutine and vector resetting overhead.
       if (blockSizeForOutput <= 10'000) {
@@ -927,6 +934,6 @@ class CompressedExternalIdTableSorter
     }
   };
 };
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_COMPRESSEDEXTERNALIDTABLE_H

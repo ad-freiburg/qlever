@@ -13,6 +13,8 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+
 using namespace ad_utility;
 namespace {
 

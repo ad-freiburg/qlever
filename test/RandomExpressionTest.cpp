@@ -11,6 +11,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 TEST(RandomExpression, evaluate) {
   TestContext testContext{};

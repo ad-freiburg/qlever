@@ -91,6 +91,4 @@ SparqlExpression::Ptr makePrefixMatchExpression(
     SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix);
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_REGEXEXPRESSION_H

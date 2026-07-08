@@ -22,8 +22,6 @@
 
 using namespace std::string_view_literals;
 
-namespace RdfEscaping = qlever::RdfEscaping;
-
 namespace {
 // CTRE pattern for the SPARQL/Turtle `IRIREF` production used by
 // `Iri::fromIrirefValidated` (see its documentation in `Iri.h` for a full

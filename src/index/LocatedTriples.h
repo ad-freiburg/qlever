@@ -26,9 +26,6 @@
 
 namespace qlever {
 
-using qlever::Id;
-using qlever::IdTriple;
-
 class Permutation;
 
 struct NumAddedAndDeleted {
@@ -96,7 +93,7 @@ struct LocatedTriple {
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
       ql::span<const CompressedBlockMetadata> blockMetadata,
-      const qlever::KeyOrder& keyOrder, bool insertOrDelete,
+      const KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
   QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,

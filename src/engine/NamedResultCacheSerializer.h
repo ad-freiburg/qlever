@@ -140,7 +140,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     serializer >> numColumns;
 
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-    IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
+    qlever::IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
     for (auto&& col : idTable.getColumns()) {
       qlever::detail::deserializeIds(serializer, mapping, col);
@@ -178,7 +178,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Construct the `Value`.
     arg = qlever::NamedResultCache::Value{
-        std::make_shared<const IdTable>(std::move(idTable)),
+        std::make_shared<const qlever::IdTable>(std::move(idTable)),
         std::move(varToColMap),
         std::move(resultSortedOn),
         std::move(localVocab),

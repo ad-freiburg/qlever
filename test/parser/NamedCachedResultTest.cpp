@@ -99,9 +99,9 @@ TEST_F(NamedCachedResultTest, SequenceOfOperations) {
 
   // addGraph should always fail regardless of state.
   auto errorMatcher = ::testing::HasSubstr("must be empty");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      query_->addGraph(GraphPatternOperation(parsedQuery::BasicGraphPattern())),
-      errorMatcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(query_->addGraph(GraphPatternOperation(
+                                   qlever::parsedQuery::BasicGraphPattern())),
+                               errorMatcher);
   // addParameter should always fail regardless of state
   SparqlTriple testTriple = createTestTriple();
   AD_EXPECT_THROW_WITH_MESSAGE(query_->addParameter(testTriple), errorMatcher);

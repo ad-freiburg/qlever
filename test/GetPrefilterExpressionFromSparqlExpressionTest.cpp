@@ -18,7 +18,7 @@ using namespace makeFilterExpression;
 using namespace makeFilterExpression::filterHelper;
 
 namespace {
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 //______________________________________________________________________________
 // make `Literal`
@@ -703,12 +703,13 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // Test helper `getLiteralFromLiteralExpression` from LiteralExpression.h
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getLiteralFromStringLiteralExpression) {
-  using namespace sparqlExpression;
+  using namespace qlever::sparqlExpression;
   ASSERT_TRUE(
-      sparqlExpression::detail::getLiteralFromLiteralExpression(
+      qlever::sparqlExpression::detail::getLiteralFromLiteralExpression(
           std::make_unique<StringLiteralExpression>(L("\"hello\"")).get())
           .has_value());
-  ASSERT_FALSE(sparqlExpression::detail::getLiteralFromLiteralExpression(
-                   std::make_unique<IriExpression>(I("<iri>")).get())
-                   .has_value());
+  ASSERT_FALSE(
+      qlever::sparqlExpression::detail::getLiteralFromLiteralExpression(
+          std::make_unique<IriExpression>(I("<iri>")).get())
+          .has_value());
 }

@@ -63,6 +63,4 @@ class RandomExpression : public SparqlExpression {
 
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RANDOMEXPRESSION_H

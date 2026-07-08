@@ -104,7 +104,7 @@ class MaterializedViewsTest : public ::testing::Test {
   // Helper that evaluates a query on the test index and returns its result as
   // an `IdTable` with the same column ordering as the columns in the `SELECT`
   // statement.
-  IdTable getQueryResultAsIdTable(std::string query) {
+  qlever::IdTable getQueryResultAsIdTable(std::string query) {
     auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
     auto qet = plannedQuery.sharedQueryExecutionTree();
     auto& parsed = plannedQuery.parsedQuery();

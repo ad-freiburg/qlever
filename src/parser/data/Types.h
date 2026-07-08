@@ -29,7 +29,7 @@ using ObjectsAndTriples = std::pair<Objects, Triples>;
 using SubjectOrObjectAndTriples = std::pair<GraphTerm, Triples>;
 
 using VarOrPath = std::variant<Variable, PropertyPath>;
-using VarOrIri = std::variant<Variable, qlever::triple_component::Iri>;
+using VarOrIri = std::variant<Variable, triple_component::Iri>;
 using PathObjectPair = std::pair<VarOrPath, GraphTerm>;
 using PathObjectPairs = std::vector<PathObjectPair>;
 struct TripleWithPropertyPath {

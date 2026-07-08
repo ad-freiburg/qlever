@@ -896,14 +896,13 @@ std::vector<TurtleTriple> parseFromFile(
   auto parser = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{
-          ad_utility::InputRangeTypeErased{
-              std::vector<qlever::InputFileSpecification>{
-                  {filename, qlever::Filetype::Turtle, std::nullopt}}},
+          ad_utility::InputRangeTypeErased{std::vector<InputFileSpecification>{
+              {filename, Filetype::Turtle, std::nullopt}}},
           encodedIriManager(), bufferSize};
     } else {
-      return Parser{qlever::InputFileSpecification{
-                        filename, qlever::Filetype::Turtle, std::nullopt},
-                    bufferSize, encodedIriManager()};
+      return Parser{
+          InputFileSpecification{filename, Filetype::Turtle, std::nullopt},
+          bufferSize, encodedIriManager()};
     }
   }();
 
@@ -1252,16 +1251,15 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-          return Parser{
-              ad_utility::InputRangeTypeErased{
-                  std::vector<qlever::InputFileSpecification>{
-                      {filename, qlever::Filetype::Turtle, std::nullopt}}},
-              encodedIriManager(), 40_B};
+          return Parser{ad_utility::InputRangeTypeErased{
+                            std::vector<InputFileSpecification>{
+                                {filename, Filetype::Turtle, std::nullopt}}},
+                        encodedIriManager(), 40_B};
         } else {
-          return Parser{qlever::InputFileSpecification{
-                            filename, qlever::Filetype::Turtle, std::nullopt},
-                        ad_utility::MemorySize::bytes(40), encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
+          return Parser{
+              InputFileSpecification{filename, Filetype::Turtle, std::nullopt},
+              ad_utility::MemorySize::bytes(40), encodedIriManager(),
+              specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
         }
       }();
       timer.cont();
@@ -1293,8 +1291,7 @@ TEST(RdfParserTest, nQuadParser) {
     auto lit = ad_utility::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
-    auto internalGraphId =
-        qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
+    auto internalGraphId = specialIds().at(std::string{DEFAULT_GRAPH_IRI});
     // Blank node labels include the parser prefix (42) for cross-file
     // uniqueness.
     expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_42_blank",
@@ -1373,10 +1370,10 @@ TEST(RdfParserTest, multifileParser) {
       auto f = ad_utility::makeOfstream(file2);
       f << nq;
     }
-    std::vector<qlever::InputFileSpecification> specs;
-    specs.emplace_back(file1, qlever::Filetype::Turtle, "defaultGraphTTL",
+    std::vector<InputFileSpecification> specs;
+    specs.emplace_back(file1, Filetype::Turtle, "defaultGraphTTL",
                        useParallelParser);
-    specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
+    specs.emplace_back(file2, Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
     Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
              encodedIriManager()};
@@ -1653,8 +1650,8 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 TEST(RdfParserTest, parseTriplesObject) {
   using Parser = RdfStringParser<TurtleParser<TokenizerCtre>>;
   using namespace testing;
-  auto Iri = qlever::triple_component::Iri::fromIriref;
-  auto Literal = qlever::triple_component::Literal::fromStringRepresentation;
+  auto Iri = triple_component::Iri::fromIriref;
+  auto Literal = triple_component::Literal::fromStringRepresentation;
   auto isTC = [](auto e) -> Matcher<const TripleComponent> {
     return Eq(TripleComponent(e));
   };
@@ -1711,9 +1708,9 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{qlever::InputFileSpecification{
-                    filename, qlever::Filetype::Turtle, std::nullopt},
-                ad_utility::MemorySize::bytes(50), encodedIriManager()};
+  Parser parser{
+      InputFileSpecification{filename, Filetype::Turtle, std::nullopt},
+      ad_utility::MemorySize::bytes(50), encodedIriManager()};
 
   TurtleTriple triple;
   EXPECT_THROW(parser.getLine(triple), TurtleParser<Tokenizer>::ParseException);
@@ -1750,9 +1747,9 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
     }
   }
   absl::Cleanup fileCleanup{[&filename] { ad_utility::deleteFile(filename); }};
-  Parser parser{qlever::InputFileSpecification{
-                    filename, qlever::Filetype::Turtle, std::nullopt},
-                ad_utility::MemorySize::bytes(50), encodedIriManager()};
+  Parser parser{
+      InputFileSpecification{filename, Filetype::Turtle, std::nullopt},
+      ad_utility::MemorySize::bytes(50), encodedIriManager()};
 
   TurtleTriple triple;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1785,9 +1782,9 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
   absl::Cleanup cleanup{[&] { ad_utility::deleteFile(filename); }};
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
-  Parser parser{qlever::InputFileSpecification{
-                    filename, qlever::Filetype::Turtle, std::nullopt},
-                2_kB, encodedIriManager()};
+  Parser parser{
+      InputFileSpecification{filename, Filetype::Turtle, std::nullopt}, 2_kB,
+      encodedIriManager()};
   TurtleTriple triple;
   ASSERT_TRUE(parser.getLine(triple));
   EXPECT_EQ(triple.subject_, iri("<a>"));

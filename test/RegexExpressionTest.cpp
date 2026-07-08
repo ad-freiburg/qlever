@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 using ad_utility::source_location;
 

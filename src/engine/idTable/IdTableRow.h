@@ -20,7 +20,7 @@
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
-namespace columnBasedIdTable {
+namespace qlever::columnBasedIdTable {
 
 // A simple tag enum to differentiate between "views" (non-owning data
 // structures) and "ordinary" data structures that own their storage (see
@@ -106,7 +106,7 @@ class Row {
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   CPP_template_2(typename = void)(
-      requires(std::is_same_v<T, qlever::Id>)) friend std::ostream&
+      requires(std::is_same_v<T, Id>)) friend std::ostream&
   operator<<(std::ostream& os, const Row& idTableRow) {
     os << "(";
     for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
@@ -463,5 +463,5 @@ class RowReference
 #endif
 };
 
-}  // namespace columnBasedIdTable
+}  // namespace qlever::columnBasedIdTable
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

@@ -23,10 +23,6 @@
 
 namespace qlever {
 
-using qlever::CompactVectorOfStrings;
-using qlever::Id;
-using qlever::Pattern;
-
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.
 struct PatternStatistics {
@@ -76,11 +72,9 @@ struct PatternStatistics {
 /// for these predicates.
 class PatternCreator {
  public:
-  using PSOSorter =
-      ad_utility::CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
+  using PSOSorter = CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
   using OSPSorter4Cols =
-      ad_utility::CompressedExternalIdTableSorter<SortByOSP,
-                                                  NumColumnsIndexBuilding + 1>;
+      CompressedExternalIdTableSorter<SortByOSP, NumColumnsIndexBuilding + 1>;
 
   // Combine all the triples that this pattern creator creates.
   struct TripleSorter {

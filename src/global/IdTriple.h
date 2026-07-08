@@ -83,7 +83,7 @@ struct IdTriple {
 
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
-  IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
+  IdTriple<N> permute(const KeyOrder& keyOrder) const {
     return IdTriple{keyOrder.permuteTuple(ids()), payload()};
   }
 

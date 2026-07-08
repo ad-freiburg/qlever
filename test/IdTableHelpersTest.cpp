@@ -20,6 +20,8 @@
 #include "util/Iterators.h"
 #include "util/RandomTestHelpers.h"
 
+using namespace qlever;
+
 /*
 @brief Calculate all sub-sets of a container of elements. Note: Duplicated
 elements will not be ignored.

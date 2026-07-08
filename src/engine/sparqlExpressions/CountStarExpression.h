@@ -40,6 +40,4 @@ class CountStarExpression : public SparqlExpression {
 SparqlExpression::Ptr makeCountStarExpression(bool distinct);
 }  // namespace qlever::sparqlExpression
 
-namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_COUNTSTAREXPRESSION_H

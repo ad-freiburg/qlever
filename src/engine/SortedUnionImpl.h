@@ -17,7 +17,7 @@ namespace sortedUnion {
 // Helper struct that has the same layout as `Result::IdTableVocabPair` but
 // doesn't own the data.
 struct Wrapper {
-  const IdTableView<0>& idTable_;
+  const qlever::IdTableView<0>& idTable_;
   const qlever::LocalVocab& localVocab_;
 };
 
@@ -65,7 +65,8 @@ struct IterationData {
 
   // Append the remainder of the last partially consumed table to the current
   // result table and merge the local vocabs.
-  void appendCurrent(IdTable& resultTable, qlever::LocalVocab& localVocab) {
+  void appendCurrent(qlever::IdTable& resultTable,
+                     qlever::LocalVocab& localVocab) {
     resultTable.insertAtEnd(it_.value()->idTable_, index_, std::nullopt,
                             permutation_, qlever::Id::makeUndefined());
     localVocab.mergeWith(it_.value()->localVocab_);
@@ -75,7 +76,8 @@ struct IterationData {
 
   // For the non-lazy case just append the remaining tables to the aggregated
   // result table until the range is exhausted.
-  void appendRemaining(IdTable& resultTable, qlever::LocalVocab& localVocab) {
+  void appendRemaining(qlever::IdTable& resultTable,
+                       qlever::LocalVocab& localVocab) {
     while (it_ != range_.end()) {
       appendCurrent(resultTable, localVocab);
     }
@@ -103,7 +105,7 @@ struct SortedUnionImpl
   IterationData<Range2> data2_;
 
   // Result storage.
-  IdTable resultTable_;
+  qlever::IdTable resultTable_;
   qlever::LocalVocab localVocab_{};
 
   // Metadata
@@ -182,7 +184,7 @@ struct SortedUnionImpl
   qlever::Result::IdTableVocabPair popResult() {
     auto result = qlever::Result::IdTableVocabPair{std::move(resultTable_),
                                                    std::move(localVocab_)};
-    resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
+    resultTable_ = qlever::IdTable{resultTable_.numColumns(), allocator_};
     resultTable_.reserve(qlever::Union::chunkSize);
     localVocab_ = qlever::LocalVocab{};
     return result;

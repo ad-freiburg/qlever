@@ -611,7 +611,7 @@ TEST(IndexRebuilder, serverIntegration) {
   std::string indexName = "IndexRebuilder_serverIntegration";
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
-  qlever::EngineConfig config;
+  EngineConfig config;
   config.baseName_ = indexName;
   Server server{4321, 1, "accessToken", config};
   auto performRequest = [&threadPool, &server](auto& request) {

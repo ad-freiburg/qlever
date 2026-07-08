@@ -20,9 +20,9 @@ struct EvaluationContext;
 
 // Improve return type readability.
 // Pair containing `PrefilterExpression` pointer and a `Variable`.
-using PrefilterExprVariablePair = std::pair<
-    std::unique_ptr<qlever::prefilterExpressions::PrefilterExpression>,
-    Variable>;
+using PrefilterExprVariablePair =
+    std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
+              Variable>;
 
 // Hide the `SparqlExpression` implementation in a Pimpl class, so that code
 // using this implementation only has to include the (small and therefore cheap
@@ -59,7 +59,7 @@ class SparqlExpressionPimpl {
   bool containsAggregate() const;
 
   struct VariableAndDistinctness {
-    qlever::Variable variable_;
+    Variable variable_;
     bool isDistinct_;
   };
   // TODO<joka921> Comment out of sync.
@@ -73,7 +73,7 @@ class SparqlExpressionPimpl {
   // std::nullopt. Knowing this enables some optimizations because we can
   // directly handle these trivial "expressions" without using the
   // `SparqlExpression` module.
-  [[nodiscard]] std::optional<qlever::Variable> getVariableOrNullopt() const;
+  [[nodiscard]] std::optional<Variable> getVariableOrNullopt() const;
 
   // The implementation of these methods is small and straightforward, but
   // has to be in the .cpp file because `SparqlExpression` is only forward
@@ -148,7 +148,5 @@ class SparqlExpressionPimpl {
   std::shared_ptr<SparqlExpression> _pimpl;
 };
 }  // namespace qlever::sparqlExpression
-
-namespace sparqlExpression = qlever::sparqlExpression;
 
 #endif  // QLEVER_SPARQLEXPRESSIONPIMPL_H
