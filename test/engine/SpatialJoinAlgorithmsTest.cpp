@@ -95,7 +95,7 @@ class SpatialJoinParamTest
     };
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        qlever::makeExecutionTree<SpatialJoin>(
             qec, SpatialJoinConfiguration{task, left, right}, std::nullopt,
             std::nullopt);
 
@@ -277,7 +277,7 @@ class SpatialJoinParamTest
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
         qlever::triple_component::Iri::fromIriref(geometry)};
-    auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
+    auto smallChild = qlever::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),
                            point1});
@@ -1582,7 +1582,7 @@ TEST(SpatialJoin, areaFormat) {
       buildIndexScan(qec, {"?geo2", std::string{"<asWKT>"}, "?obj2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      qlever::makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig(100000000),
                                    Variable{"?obj1"}, Variable{"?obj2"}},
@@ -1607,7 +1607,7 @@ TEST(SpatialJoin, trueAreaDistance) {
       auto subject = absl::StrCat("<geometry", nr, ">");
       auto objStr = absl::StrCat("?obj", nr);
       TripleComponent object{Variable{objStr}};
-      return ad_utility::makeExecutionTree<IndexScan>(
+      return qlever::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
           SparqlTripleSimple{TripleComponent::Iri::fromIriref(subject),
                              TripleComponent::Iri::fromIriref("<asWKT>"),
@@ -1619,7 +1619,7 @@ TEST(SpatialJoin, trueAreaDistance) {
     auto var2 = absl::StrCat("?obj", nr2);
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        qlever::makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig(100000000),
                                      Variable{var1}, Variable{var2}},
@@ -1670,7 +1670,7 @@ TEST(SpatialJoin, mixedDataSet) {
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        qlever::makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig(maxDist),
                                      Variable{"?geo1"}, Variable{"?geo2"}},
@@ -1725,8 +1725,8 @@ void testNumberOfThreads(size_t runtimeParamNumThreads,
       Variable{"?geo2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
-                                                 rightChild);
+      qlever::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
+                                             rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
@@ -1771,7 +1771,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
       LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
       Variable{"?area2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoinOperation = qlever::makeExecutionTree<SpatialJoin>(
       qec, config, leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
@@ -1805,7 +1805,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
       LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?area1"},
       Variable{"?area2"}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoinOperation = qlever::makeExecutionTree<SpatialJoin>(
       qec, config, leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());

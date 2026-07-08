@@ -285,7 +285,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // downside that it might look confusing
     tree->getRootOperation()->setSelectedVariablesForSubquery(
         pq.getVisibleVariables());
-    subtree = ad_utility::makeExecutionTree<ExistsJoin>(
+    subtree = qlever::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
   return subtree;

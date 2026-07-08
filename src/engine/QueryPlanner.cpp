@@ -76,7 +76,7 @@ using namespace qlever;
 namespace p = qlever::parsedQuery;
 namespace {
 
-using ad_utility::makeExecutionTree;
+using qlever::makeExecutionTree;
 using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>

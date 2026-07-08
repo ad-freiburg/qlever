@@ -621,7 +621,7 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
       [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
-        return ad_utility::makeExecutionTree<SpatialJoin>(
+        return qlever::makeExecutionTree<SpatialJoin>(
             _executionContext, config_, std::move(left), std::move(right));
       });
 }

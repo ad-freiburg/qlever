@@ -1255,7 +1255,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       }
     )");
     // `StripColumns` with a single column.
-    auto stripCols = ad_utility::makeExecutionTree<qlever::StripColumns>(
+    auto stripCols = qlever::makeExecutionTree<qlever::StripColumns>(
         &plannedQuery.queryExecutionContext(),
         std::make_shared<qlever::QueryExecutionTree>(
             plannedQuery.queryExecutionTree()),
@@ -1283,7 +1283,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      .getRootOperation()
                      ->makeTreeWithBindColumn(bind)
                      .has_value());
-    auto stripCols = ad_utility::makeExecutionTree<qlever::StripColumns>(
+    auto stripCols = qlever::makeExecutionTree<qlever::StripColumns>(
         &plannedQuery.queryExecutionContext(),
         std::make_shared<qlever::QueryExecutionTree>(
             plannedQuery.queryExecutionTree()),

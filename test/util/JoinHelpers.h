@@ -82,9 +82,9 @@ inline auto makeJoinLambda() {
             {qlever::Variable{"?x"}}};
         rightVariables.resize(b.numColumns());
         auto* qec = ad_utility::testing::getQec();
-        auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        auto leftTree = qlever::makeExecutionTree<ValuesForTesting>(
             qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
-        auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        auto rightTree = qlever::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
         qlever::JoinImpl join{qec, leftTree, rightTree, jc1, jc2, true, false};
         return join.join(a.asStaticView<0>(), b.asStaticView<0>(), result);

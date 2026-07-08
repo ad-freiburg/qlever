@@ -26,7 +26,7 @@ OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
   return OrderBy{qec, std::move(subtree), sortColumns};
 }

@@ -21,7 +21,7 @@ using Vars = std::vector<std::optional<Variable>>;
 
 namespace {
 Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTable), Vars{Variable{"?a"}});
   return {
       qec,
@@ -36,7 +36,7 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
                            SparqlExpression::Ptr expression,
                            std::string descriptor) {
   // This is a dummy value. It is not accessed by any of the tests.
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   return {qec,
@@ -95,7 +95,7 @@ TEST(Bind, computeResultWithTableWithoutRows) {
 TEST(Bind, computeResultWithTableWithoutColumns) {
   auto val = Id::makeFromInt(42);
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{}, {}}), Vars{});
   Bind bind{
       qec,
@@ -117,7 +117,7 @@ TEST(
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.resize(Bind::CHUNK_SIZE + 1);
   ql::ranges::fill(table, row);
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, table.clone(), Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   Bind bind{
@@ -156,7 +156,7 @@ TEST(
 // _____________________________________________________________________________
 TEST(Bind, clone) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   Bind bind{
@@ -175,7 +175,7 @@ TEST(Bind, clone) {
 // _____________________________________________________________________________
 TEST(Bind, limitIsPropagated) {
   auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}, {2}}, &Id::makeFromInt),
       Vars{Variable{"?a"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
       std::nullopt, true);
@@ -214,7 +214,7 @@ TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
                            ? makeIdTableFromVector({{42}}, &Id::makeFromInt)
                            : makeIdTableFromVector({{Id::makeUndefined()}});
 
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), Vars{inputVar});
 
   // Create BIND(?x AS ?y).

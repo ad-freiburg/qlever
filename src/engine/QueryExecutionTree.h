@@ -318,17 +318,15 @@ class QueryExecutionTree {
   }
 };
 
-}  // namespace qlever
-
-namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
 template <typename Operation, typename... Args>
-std::shared_ptr<qlever::QueryExecutionTree> makeExecutionTree(
-    qlever::QueryExecutionContext* qec, Args&&... args) {
-  return std::make_shared<qlever::QueryExecutionTree>(
+std::shared_ptr<QueryExecutionTree> makeExecutionTree(
+    QueryExecutionContext* qec, Args&&... args) {
+  return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
-}  // namespace ad_utility
+
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H

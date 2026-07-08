@@ -255,8 +255,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
-  return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                             sortColumns, explicitSort_);
+  return qlever::makeExecutionTree<Sort>(_executionContext, subtree_,
+                                         sortColumns, explicitSort_);
 }
 
 // _____________________________________________________________________________
@@ -291,7 +291,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
-                                             std::move(subtree),
-                                             sortColumnIndices, explicitSort_);
+  return qlever::makeExecutionTree<Sort>(getExecutionContext(),
+                                         std::move(subtree), sortColumnIndices,
+                                         explicitSort_);
 }

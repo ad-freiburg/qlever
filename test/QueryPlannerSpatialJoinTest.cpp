@@ -1707,7 +1707,7 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
               subject, iri(distanceIRI),
               object}}.toSpatialJoinConfiguration();
       std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-          ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+          qlever::makeExecutionTree<qlever::SpatialJoin>(
               qec, config, std::nullopt, std::nullopt);
       std::shared_ptr<qlever::Operation> op =
           spatialJoinOperation->getRootOperation();

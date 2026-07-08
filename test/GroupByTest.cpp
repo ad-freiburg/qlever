@@ -90,7 +90,7 @@ TEST(GroupBy, getDescriptor) {
   parsedQuery::SparqlValues input;
   input._variables = {Variable{"?a"}};
   auto* qec = getQec();
-  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+  auto values = qlever::makeExecutionTree<Values>(qec, input);
 
   GroupBy groupBy{qec, {Variable{"?a"}}, {alias}, values};
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
@@ -107,7 +107,7 @@ TEST(GroupBy, clone) {
   parsedQuery::SparqlValues input;
   input._variables = {Variable{"?a"}};
   auto* qec = getQec();
-  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+  auto values = qlever::makeExecutionTree<Values>(qec, input);
 
   GroupBy groupBy{qec, {Variable{"?a"}}, {alias}, values};
 
@@ -118,15 +118,6 @@ TEST(GroupBy, clone) {
 }
 
 namespace {
-// All the operations take a `QueryExecutionContext` as a first argument.
-// Todo: Continue the comment.
-template <typename Operation>
-std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
-}
-
 using namespace sparqlExpression;
 struct GroupByOptimizations : ::testing::Test {
   using Tree = std::shared_ptr<QueryExecutionTree>;
@@ -387,8 +378,8 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
   parsedQuery::SparqlValues input;
   input._variables = std::vector{varA, varB};
   input._values.push_back(std::vector{TC(1.0), TC(3.0)});
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
   GroupByImpl groupBy{
       ad_utility::testing::getQec(), {Variable{"?a"}}, {}, values};
 
@@ -657,7 +648,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
     tables.push_back(makeIdTableFromVector({{5, 2}, {3, 4}}, I));
     // The expected averages are as follows: (3 -> 5.0), (5 -> 6.0), (8
     // -> 27.0).
-    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
         qec, std::move(tables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
     auto& values =
@@ -742,8 +733,8 @@ TEST_F(GroupByOptimizations,
   input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(3.0)});
   input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(4.0)});
   input._values.push_back(std::vector{TC(2.0), TC(2.0), TC(5.0)});
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -803,8 +794,8 @@ TEST_F(GroupByOptimizations,
   input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(4.0)});
   input._values.push_back(std::vector{TC(4.0), TC(1.0), TC(42.0)});
 
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -859,8 +850,8 @@ TEST_F(GroupByOptimizations,
   input._values.push_back(std::vector{TC(1.0), TC(4.0), TC(2.0)});
   input._values.push_back(std::vector{TC(4.0), TC(42.0), TC(1.0)});
 
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -922,8 +913,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   input._values.push_back(std::vector{TC(4.0), TC(1.0), TC(2.0), TC(2.0),
                                       TC(2.0), TC(5.0), TC(2.0)});
 
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -984,8 +975,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   input._values.push_back(std::vector{TC(1.0), TC(3.0)});
   input._values.push_back(std::vector{TC(1.0), TC(7.0)});
   input._values.push_back(std::vector{TC(5.0), TC(4.0)});
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -1059,7 +1050,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   input._values.push_back(std::vector{TC(3.0), TC(4.0)});
   input._values.push_back(std::vector<TripleComponent>{TC(4.0), TC::UNDEF{}});
   auto qec = ad_utility::testing::getQec();
-  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+  auto values = qlever::makeExecutionTree<Values>(qec, input);
 
   using namespace sparqlExpression;
 
@@ -1143,7 +1134,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   ql::ranges::transform(secondColumn.begin(), secondColumn.end(),
                         secondTableColumn.begin(), unsignedLongToValueId);
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(testTable), variables, false);
 
   using namespace sparqlExpression;
@@ -1254,7 +1245,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   input._values.push_back(std::vector{TC(3.0), TC{lit("h")}});
   input._values.push_back(std::vector{TC(3.0), TC{lit("f")}});
   auto qec = ad_utility::testing::getQec();
-  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
+  auto values = qlever::makeExecutionTree<Values>(qec, input);
 
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
@@ -2204,8 +2195,8 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   input._values.push_back(std::vector{TC(1.0), TC(3.0)});
   input._values.push_back(std::vector{TC(1.0), TC(7.0)});
   input._values.push_back(std::vector{TC(5.0), TC(4.0)});
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -2267,8 +2258,8 @@ TEST(GroupBy, AliasResultReused) {
   input._values.push_back(std::vector{TC(1.0), TC(3.0)});
   input._values.push_back(std::vector{TC(1.0), TC(7.0)});
   input._values.push_back(std::vector{TC(5.0), TC(4.0)});
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto values =
+      qlever::makeExecutionTree<Values>(ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
 
@@ -2346,7 +2337,7 @@ TEST(GroupBy, AddedHavingRows) {
 TEST(GroupBy, Descriptor) {
   // Group by with variables
   auto* qec = ad_utility::testing::getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}});
   GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
@@ -2358,7 +2349,7 @@ TEST(GroupBy, Descriptor) {
 // _____________________________________________________________________________
 TEST(GroupBy, knownEmptyResult) {
   auto* qec = ad_utility::testing::getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?a"}});
 
@@ -2418,7 +2409,7 @@ class AggregationFunctionWithVector : public SparqlExpression {
 // _____________________________________________________________________________
 TEST(GroupBy, nonConstantAggregationFunctions) {
   auto* qec = ad_utility::testing::getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?a"}});
 
@@ -2503,7 +2494,7 @@ TEST(GroupBy, countDistinctGraph) {
   auto* qec = ad_utility::testing::getQec();
   {
     // Regression test for https://github.com/ad-freiburg/qlever/issues/2284
-    auto subtree = ad_utility::makeExecutionTree<IndexScan>(
+    auto subtree = qlever::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}});
 
@@ -2521,7 +2512,7 @@ TEST(GroupBy, countDistinctGraph) {
               makeIdTableFromVector({{Id::makeFromInt(1)}}));
   }
   {
-    auto subtree = ad_utility::makeExecutionTree<IndexScan>(
+    auto subtree = qlever::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}},
         IndexScan::Graphs::Blacklist(TripleComponent{
@@ -2954,7 +2945,7 @@ TEST_P(GroupByLazyFixture, countStarWorks) {
 TEST(GroupBy, isDeterministic) {
   using namespace sparqlExpression;
   auto* qec = ad_utility::testing::getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?x"}});
 
@@ -2993,7 +2984,7 @@ TEST(GroupBy, RegexOnGroupedVariable) {
   Id F = Id::makeFromBool(false);
 
   auto makeSubtree = [qec, &abc, &xyz, &o]() {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
+    return qlever::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{abc}, {abc}, {xyz}}),
         std::vector<std::optional<Variable>>{o}, false,
         std::vector<ColumnIndex>{0});
@@ -3039,11 +3030,11 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
       std::vector<std::optional<Variable>>{o, y});
-  auto sorted = ad_utility::makeExecutionTree<Sort>(
-      qec, values, std::vector<ColumnIndex>{0});
+  auto sorted =
+      qlever::makeExecutionTree<Sort>(qec, values, std::vector<ColumnIndex>{0});
 
   auto count = std::make_unique<CountExpression>(
       false, std::make_unique<VariableExpression>(y));
@@ -3070,7 +3061,7 @@ TEST(GroupBy, CoalesceOnGroupedVariable) {
   Id xyz = getId("\"xyz\"");
   Variable o{"?o"};
 
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc}, {abc}, {xyz}}),
       std::vector<std::optional<Variable>>{o}, false,
       std::vector<ColumnIndex>{0});
@@ -3097,7 +3088,7 @@ TEST(GroupBy, CoalesceWithGroupedVariableAndSample) {
   Variable v{"?v"};
   Id U = Id::makeUndefined();
 
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{U, I(7)}, {U, I(7)}}),
       std::vector<std::optional<Variable>>{missing, v}, false,
       std::vector<ColumnIndex>{0});
@@ -3129,7 +3120,7 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
   Id date2000 = Id::makeFromDate(DateYearOrDuration{Date{2000, 1, 1}});
   Id date1990 = Id::makeFromDate(DateYearOrDuration{Date{1990, 1, 1}});
 
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec,
       makeIdTableFromVector(
           {{I(1), date2000, U}, {I(1), date2000, U}, {I(2), U, date1990}}),
@@ -3158,7 +3149,7 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
 TEST(GroupBy, BlankNodeInGroupBy) {
   auto* qec = getQec();
   Variable o{"?o"};
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{I(1)}, {I(1)}, {I(2)}}),
       std::vector<std::optional<Variable>>{o}, false,
       std::vector<ColumnIndex>{0});

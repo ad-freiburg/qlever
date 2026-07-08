@@ -37,7 +37,7 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = HasPredicateScan::makePatternScan(
       qec, TripleComponent{subtreeVar}, objectVariable);
-  auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
+  auto joinedSubtree = qlever::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
       joinedSubtree->getVariableColumns().at(objectVariable).columnIndex_;
@@ -420,7 +420,7 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
       std::move(subject),
       qlever::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
       TripleComponent{std::move(object)}};
-  return ad_utility::makeExecutionTree<IndexScan>(
+  return qlever::makeExecutionTree<IndexScan>(
       qec,
       qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
                                       triple),

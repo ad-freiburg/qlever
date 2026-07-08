@@ -104,7 +104,7 @@ TEST_F(HasPredicateScanTest, clone) {
   }
   {
     HasPredicateScan scan{qec,
-                          ad_utility::makeExecutionTree<ValuesForTesting>(
+                          qlever::makeExecutionTree<ValuesForTesting>(
                               qec, makeIdTableFromVector({{0}}),
                               std::vector<std::optional<V>>{{V{"?p"}}}),
                           0, V{"?x"}};
@@ -156,7 +156,7 @@ TEST_F(HasPredicateScanTest, subtree) {
   // ?x ?y <o4> . ?x ql:has-predicate ?predicate.
   // The first triple matches only `<y> <p3> <o4>`, so we get the pattern
   // for `y` with an additional column that always is `<p3.`
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+  auto indexScan = qlever::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS,
       SparqlTripleSimple{V{"?x"}, V{"?y"}, iri("<o4>")});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
@@ -175,8 +175,8 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
   auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), V{"?y"}};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, triple);
+  auto indexScan =
+      qlever::makeExecutionTree<IndexScan>(qec, Permutation::Enum::PSO, triple);
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 1, V{"?predicate"}, V{"?count"});
 
@@ -187,8 +187,8 @@ TEST_F(HasPredicateScanTest, cloneCountAvailablePredicates) {
   auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), V{"?y"}};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, triple);
+  auto indexScan =
+      qlever::makeExecutionTree<IndexScan>(qec, Permutation::Enum::PSO, triple);
   CountAvailablePredicates patternTrick{qec, indexScan, 1, V{"?predicate"},
                                         V{"?count"}};
 
@@ -210,8 +210,8 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
   auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), iri("<o4>")};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::POS, triple);
+  auto indexScan =
+      qlever::makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, triple);
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
@@ -227,7 +227,7 @@ TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
   // nor a valid pattern index.
   auto illegalInput = makeIdTableFromVector(
       {{Voc(0), I(273)}, {Voc(1), I(Pattern::NoPattern)}});
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(illegalInput),
       std::vector<std::optional<Variable>>{V{"?x"}, V{"?predicate"}});
 

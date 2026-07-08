@@ -154,8 +154,8 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   // The spatial join gets an index scan returning points as the left child and
   // no right child (it will construct a `ExplicitResult` itself).
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
-                                                         std::nullopt);
+      qlever::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
+                                                     std::nullopt);
   auto spatialJoin = std::dynamic_pointer_cast<qlever::SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   const auto res = spatialJoin->computeResult(false);

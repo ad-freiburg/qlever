@@ -688,7 +688,7 @@ OptionalJoin::makeTreeWithStrippedColumns(
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
     return ad_utility::contains(variables, var);
   });
-  return ad_utility::makeExecutionTree<OptionalJoin>(
+  return qlever::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),
       keepJoinColumns);
 }

@@ -53,8 +53,7 @@ void checkSetPrefilterExpressionVariablePair(
   [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
       &RuntimeParameters::enablePrefilterOnIndexScans_>(
       enablePrefilterForFilter);
-  auto subtree =
-      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
+  auto subtree = qlever::makeExecutionTree<IndexScan>(qec, permutation, triple);
   Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
   const auto& optUpdatedSubtree = filter.getSubtree();
   if (prefilterIsApplicable && enablePrefilterForFilter) {
@@ -276,7 +275,7 @@ TEST(Filter, isDeterministic) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
 
   auto makeTree = [qec]() {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
+    return qlever::makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{Variable{"?x"}});
   };

@@ -89,7 +89,7 @@ class ShallowParentOperation : public qlever::Operation {
   static ShallowParentOperation of(qlever::QueryExecutionContext* qec,
                                    Args&&... args) {
     return ShallowParentOperation{
-        ad_utility::makeExecutionTree<ChildOperation>(qec, args...)};
+        qlever::makeExecutionTree<ChildOperation>(qec, args...)};
   }
 
   std::vector<qlever::QueryExecutionTree*> getChildren() override {

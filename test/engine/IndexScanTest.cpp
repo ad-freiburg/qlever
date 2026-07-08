@@ -789,7 +789,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
   auto qet =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+      qlever::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::move(prefilterPairs));
@@ -1369,7 +1369,7 @@ TEST(IndexScan, clone) {
     SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
                               Tc{Variable{"?price"}}};
     auto qet =
-        ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+        qlever::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
     ASSERT_TRUE(qet->getRootOperation()->canResultBeCached());
     auto clone = qet->clone();
     ASSERT_TRUE(clone);
@@ -1792,7 +1792,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // permutation where subject is bound to ?x (first column)
 
   auto makeBaseScan = [&qec]() {
-    return ad_utility::makeExecutionTree<IndexScan>(
+    return qlever::makeExecutionTree<IndexScan>(
         qec, Permutation::SPO,
         SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
   };

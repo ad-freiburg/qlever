@@ -1925,10 +1925,10 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
   auto* qec = ad_utility::testing::getQec();
 
-  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet1 = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}),
       std::vector<std::optional<Variable>>{std::nullopt}, false);
-  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet2 = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}),
       std::vector<std::optional<Variable>>{std::nullopt}, true);
 

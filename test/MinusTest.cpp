@@ -34,13 +34,13 @@ void testMinus(std::vector<IdTable> leftTables,
   auto g = generateLocationTrace(location);
   auto qec = ad_utility::testing::getQec();
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
                                                        Variable{"?y"}},
       false, std::vector<ColumnIndex>{0});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(rightTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
@@ -100,11 +100,11 @@ TEST(Minus, computeMinus) {
   // of a have to equal those of column 2 of b and vice versa).
   auto* qec = ad_utility::testing::getQec();
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, a.clone(),
               std::vector<std::optional<Variable>>{
                   Variable{"?a"}, Variable{"?b"}, std::nullopt}),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, b.clone(),
               std::vector<std::optional<Variable>>{
                   Variable{"?b"}, Variable{"?a"}, std::nullopt, std::nullopt})};
@@ -129,12 +129,12 @@ TEST(Minus, computeMinus) {
   jcls.push_back({2, 1});
 
   Minus vm{qec,
-           ad_utility::makeExecutionTree<ValuesForTesting>(
+           qlever::makeExecutionTree<ValuesForTesting>(
                qec, va.clone(),
                std::vector<std::optional<Variable>>{
                    std::nullopt, Variable{"?a"}, Variable{"?b"}, std::nullopt,
                    std::nullopt, std::nullopt}),
-           ad_utility::makeExecutionTree<ValuesForTesting>(
+           qlever::makeExecutionTree<ValuesForTesting>(
                qec, vb.clone(),
                std::vector<std::optional<Variable>>{
                    Variable{"?a"}, Variable{"?b"}, std::nullopt})};
@@ -160,11 +160,11 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
       LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext));
 
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(a),
               std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
               std::vector<ColumnIndex>{0}, std::move(vocabA)),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(b),
               std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
               std::vector<ColumnIndex>{0}, std::move(vocabB))};
@@ -206,12 +206,12 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
   for (bool forceFullyMaterialized : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     Minus m{qec,
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, a.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?a"}, Variable{"?b"}},
                 false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, b.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
@@ -262,12 +262,12 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
   for (bool requestLaziness : {false, true}) {
     qec->getQueryTreeCache().clearAll();
     Minus m{qec,
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, a.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
                 false, std::vector<ColumnIndex>{}, leftVocab.clone()),
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, b.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?a"}, Variable{"?b"}},
@@ -301,10 +301,10 @@ TEST(Minus, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
   auto* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(left),
               std::vector<std::optional<Variable>>{Variable{"?a"}}),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(right),
               std::vector<std::optional<Variable>>{Variable{"?a"}})};
   m.computeResultOnlyForTesting(true);
@@ -324,10 +324,10 @@ TEST(Minus, rightIndexNestedLoopJoinOptimizationisSkippedWhenPotentialUndef) {
   auto* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(left),
               std::vector<std::optional<Variable>>{Variable{"?a"}}),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(right),
               std::vector<std::optional<Variable>>{Variable{"?a"}})};
   m.computeResultOnlyForTesting(true);
@@ -347,11 +347,11 @@ TEST(Minus, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
   auto* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(left),
               std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
               std::vector<ColumnIndex>{0}),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::move(right),
               std::vector<std::optional<Variable>>{Variable{"?a"}})};
   m.computeResultOnlyForTesting(true);
@@ -373,10 +373,10 @@ TEST(Minus, computeMinusWithEmptyTables) {
   auto* qec = ad_utility::testing::getQec();
   Minus m{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      qlever::makeExecutionTree<ValuesForTesting>(
           qec, empty.clone(),
           std::vector<std::optional<Variable>>{Variable{"?a"}, std::nullopt}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      qlever::makeExecutionTree<ValuesForTesting>(
           qec, nonEmpty.clone(),
           std::vector<std::optional<Variable>>{Variable{"?a"}, std::nullopt})};
 
@@ -407,11 +407,11 @@ TEST(Minus, computeMinusWithUndefined) {
 
   auto* qec = ad_utility::testing::getQec();
   Minus m{qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, a.clone(),
               std::vector<std::optional<Variable>>{
                   Variable{"?a"}, Variable{"?b"}, std::nullopt}),
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, b.clone(),
               std::vector<std::optional<Variable>>{
                   Variable{"?b"}, Variable{"?a"}, std::nullopt})};
@@ -425,10 +425,10 @@ TEST(Minus, clone) {
   auto* qec = ad_utility::testing::getQec();
   Minus minus{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      qlever::makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      qlever::makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?x"},
                                                Variable{"?z"}})};
@@ -443,13 +443,13 @@ TEST(Minus, clone) {
 TEST(Minus, columnOriginatesFromGraphOrUndef) {
   using qlever::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto index = ad_utility::makeExecutionTree<IndexScan>(
+  auto index = qlever::makeExecutionTree<IndexScan>(
       qec, Permutation::POS,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Iri::fromIriref("<c>")});
@@ -577,12 +577,12 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
     std::vector<IdTable> rightTables;
     rightTables.push_back(makeIdTableFromVector({{2, 22}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = qlever::makeExecutionTree<ValuesForTesting>(
         qec,
         makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = qlever::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0});
@@ -608,11 +608,11 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
     leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
     leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = qlever::makeExecutionTree<ValuesForTesting>(
         qec, std::move(leftTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0});
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = qlever::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
@@ -640,12 +640,12 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 11, 111}, {2, 22, 222}, {3, 33, 333}}),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
                                            Variable{"?z"}},
       false, std::vector<ColumnIndex>{2});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2222, 222}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?z"}},
       false, std::vector<ColumnIndex>{1});
@@ -682,12 +682,12 @@ TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 11, 111}, {2, 22, 222}, {3, 33, 333}}),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
                                            Variable{"?z"}},
       false, std::vector<ColumnIndex>{2}, leftVocab.clone());
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2222, 222}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?z"}},
       false, std::vector<ColumnIndex>{1}, rightVocab.clone());
@@ -813,12 +813,12 @@ TEST(Minus, resultSortedOn) {
                                  std::vector<ColumnIndex> sortOrder) {
     auto* qec = ad_utility::testing::getQec();
     Minus m{qec,
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, reference.clone(),
                 std::vector<std::optional<Variable>>{
                     Variable{"?a"}, Variable{"?b"}, std::nullopt},
                 false, std::move(sortOrder)),
-            ad_utility::makeExecutionTree<ValuesForTesting>(
+            qlever::makeExecutionTree<ValuesForTesting>(
                 qec, smaller.clone(),
                 std::vector<std::optional<Variable>>{
                     Variable{"?a"}, Variable{"?b"}, std::nullopt})};

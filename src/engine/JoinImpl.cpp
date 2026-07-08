@@ -782,7 +782,7 @@ JoinImpl::makeTreeWithStrippedColumns(
   auto right = QueryExecutionTree::makeTreeWithStrippedColumns(right_, *vars);
   auto leftCol = left->getVariableColumn(joinVar_);
   auto rightCol = right->getVariableColumn(joinVar_);
-  return ad_utility::makeExecutionTree<Join>(
+  return qlever::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, joinVar_));
 }
@@ -797,7 +797,7 @@ JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         auto& right = newChildren.at(1);
         auto leftCol = left->getVariableColumn(joinVar_);
         auto rightCol = right->getVariableColumn(joinVar_);
-        return ad_utility::makeExecutionTree<Join>(
+        return qlever::makeExecutionTree<Join>(
             getExecutionContext(), std::move(left), std::move(right), leftCol,
             rightCol);
       });

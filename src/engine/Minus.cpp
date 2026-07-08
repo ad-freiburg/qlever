@@ -396,6 +396,6 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
         const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
         return ad_utility::contains(variables, var);
       });
-  return ad_utility::makeExecutionTree<Minus>(
-      getExecutionContext(), std::move(left), std::move(right));
+  return qlever::makeExecutionTree<Minus>(getExecutionContext(),
+                                          std::move(left), std::move(right));
 }

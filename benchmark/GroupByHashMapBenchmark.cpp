@@ -430,7 +430,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     if (sorted) {
       sortedColumns = {0};
     }
-    auto valueTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto valueTree = qlever::makeExecutionTree<ValuesForTesting>(
         qec, std::move(table), variables, false, sortedColumns,
         std::move(localVocab));
 

@@ -27,8 +27,8 @@ using Vars = std::vector<std::optional<Variable>>;
 Result performPathSearch(PathSearchConfiguration config, IdTable input,
                          Vars vars) {
   auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(input), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(input), vars);
   PathSearch p = PathSearch(qec, std::move(subtree), std::move(config));
 
   return p.computeResult(false);
@@ -39,8 +39,8 @@ TEST(PathSearchTest, constructor) {
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   auto sub = makeIdTableFromVector({});
   sub.setNumColumns(2);
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(sub), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(sub), vars);
 
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(1)};
@@ -671,12 +671,12 @@ TEST(PathSearchTest, sourceBound) {
                                  {}};
 
   auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(sub), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(sub), vars);
   auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
 
   Vars sourceTreeVars = {Var{"?source"}};
-  auto sourceTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto sourceTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(sourceTable), sourceTreeVars);
   pathSearch.bindSourceSide(sourceTree, 0);
 
@@ -707,12 +707,12 @@ TEST(PathSearchTest, targetBound) {
                                  {}};
 
   auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(sub), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(sub), vars);
   auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
 
   Vars targetTreeVars = {Var{"?target"}};
-  auto targetTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto targetTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(targetTable), targetTreeVars);
   pathSearch.bindTargetSide(targetTree, 0);
 
@@ -742,12 +742,12 @@ TEST(PathSearchTest, sourceAndTargetBound) {
                                  {}};
 
   auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(sub), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(sub), vars);
   auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
 
   Vars sideTreeVars = {Var{"?source"}, Var{"?target"}};
-  auto sideTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto sideTree = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(sideTable), sideTreeVars);
   pathSearch.bindSourceAndTargetSide(sideTree, 0, 1);
 
@@ -771,8 +771,8 @@ TEST(PathSearchTest, clone) {
                                  {}};
 
   auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(sub), vars);
+  auto subtree =
+      qlever::makeExecutionTree<ValuesForTesting>(qec, std::move(sub), vars);
   PathSearch pathSearch{qec, subtree, std::move(config)};
 
   auto clone = pathSearch.clone();

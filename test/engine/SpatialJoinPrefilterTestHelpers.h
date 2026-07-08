@@ -241,8 +241,8 @@ inline void runParsingAndSweeper(
   SpatialJoinConfiguration config{sjTask, varLeft, varRight};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
-                                                         rightChild);
+      qlever::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
+                                                     rightChild);
   std::shared_ptr<qlever::Operation> op =
       spatialJoinOperation->getRootOperation();
   qlever::SpatialJoin* spatialJoin =

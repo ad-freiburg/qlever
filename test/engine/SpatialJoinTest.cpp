@@ -76,7 +76,7 @@ void testAddChild(bool addLeftChildFirst) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -138,7 +138,7 @@ TEST(SpatialJoin, isConstructed) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -175,7 +175,7 @@ TEST(SpatialJoin, getChildren) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -262,7 +262,7 @@ std::shared_ptr<qlever::SpatialJoin> makeSpatialJoinFromValues(
       qp.createExecutionTree(pqRight));
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{0}, qlever::Variable{"?a"},
                                    qlever::Variable{"?b"}, std::nullopt, pv,
@@ -332,7 +332,7 @@ class SpatialJoinVarColParamTest
       dist = qlever::Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
     std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+        qlever::makeExecutionTree<qlever::SpatialJoin>(
             qec,
             SpatialJoinConfiguration{
                 MaxDistanceConfig{0}, qlever::Variable{"?point1"},
@@ -723,7 +723,7 @@ class SpatialJoinKnownEmptyTest
     auto rightChild = getChild(qec, rightSideEmptyChild);
 
     std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+        qlever::makeExecutionTree<qlever::SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0},
                                      qlever::Variable{"?point1"},
@@ -787,7 +787,7 @@ TEST(SpatialJoin, resultSortedOn) {
   auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{10000000},
                                    qlever::Variable{"?point1"},
@@ -819,7 +819,7 @@ TEST(SpatialJoin, getDescriptor) {
   qlever::TripleComponent object{qlever::Variable{"?object"}};
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    subject.getVariable(), object.getVariable()},
@@ -841,7 +841,7 @@ TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
   // The `SpatialJoin`'s descriptor should contain a readable representation of
   // the join type
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           getQec(),
           SpatialJoinConfiguration{
               LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
@@ -867,7 +867,7 @@ TEST(SpatialJoin, getCacheKeyImpl) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec, SpatialJoinConfiguration{MaxDistanceConfig{1000}, subj, obj},
           std::nullopt, std::nullopt);
   std::shared_ptr<qlever::Operation> op =
@@ -1044,7 +1044,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     // result table of rightChild is identical to leftChild, see above
 
     std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+        qlever::makeExecutionTree<qlever::SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
             std::nullopt, std::nullopt);
@@ -1162,7 +1162,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
       std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-          ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+          qlever::makeExecutionTree<qlever::SpatialJoin>(
               qec,
               SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
                                        qlever::Variable{"?distanceForTesting"}},

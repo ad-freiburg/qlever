@@ -462,7 +462,7 @@ inline std::shared_ptr<qlever::QueryExecutionTree> buildIndexScan(
     qlever::QueryExecutionContext* qec, std::array<std::string, 3> triple) {
   qlever::TripleComponent subject{qlever::Variable{triple.at(0)}};
   qlever::TripleComponent object{qlever::Variable{triple.at(2)}};
-  return ad_utility::makeExecutionTree<qlever::IndexScan>(
+  return qlever::makeExecutionTree<qlever::IndexScan>(
       qec, qlever::Permutation::Enum::PSO,
       qlever::SparqlTripleSimple{
           subject, qlever::TripleComponent::Iri::fromIriref(triple.at(1)),
@@ -478,8 +478,7 @@ inline std::shared_ptr<qlever::QueryExecutionTree> buildJoin(
   auto varCol2 = tree2->getVariableColumns();
   size_t col1 = varCol1[joinVariable].columnIndex_;
   size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<qlever::Join>(qec, tree1, tree2, col1,
-                                                     col2);
+  return qlever::makeExecutionTree<qlever::Join>(qec, tree1, tree2, col1, col2);
 }
 
 inline std::shared_ptr<qlever::QueryExecutionTree> buildMediumChild(
@@ -518,7 +517,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   }
   MaxDistanceConfig task{static_cast<double>(maxDist)};
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+      qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec.value(),
           SpatialJoinConfiguration{task, qlever::Variable{"?point1"},
                                    qlever::Variable{"?point2"}},

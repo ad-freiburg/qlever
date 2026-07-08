@@ -245,8 +245,8 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
   auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
   std::vector<std::optional<Variable>> vars;
   std::generate_n(std::back_inserter(vars), input.numColumns(), std::ref(v));
-  return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
-                                                         std::move(vars));
+  return qlever::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
+                                                     std::move(vars));
 }
 
 // _____________________________________________________________________________

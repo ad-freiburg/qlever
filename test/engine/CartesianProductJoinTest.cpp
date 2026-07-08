@@ -41,7 +41,7 @@ CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
     std::vector<std::optional<Variable>> vars;
     std::generate_n(std::back_inserter(vars),
                     input.empty() ? 0 : input.at(0).size(), std::ref(v));
-    valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+    valueOperations.push_back(qlever::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector(input), std::move(vars),
         useLimitInSuboperations));
     // Make sure size estimates are increasing to ensure the order stays the
@@ -216,10 +216,10 @@ TEST(CartesianProductJoin, variableColumnMap) {
   auto qec = getQec();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
   using Vars = std::vector<std::optional<Variable>>;
-  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  subtrees.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3, 4}, {4, 7}}),
       Vars{Variable{"?x"}, std::nullopt}));
-  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  subtrees.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3, 4, 3, Id::makeUndefined()}}),
       Vars{std::nullopt, Variable{"?y"}, std::nullopt, Variable{"?z"}}));
   CartesianProductJoin join{qec, std::move(subtrees)};
@@ -282,7 +282,7 @@ class CartesianProductJoinLazyTest
     size_t counter = 0;
     CartesianProductJoin::Children children{};
     for (IdTable& table : ql::span{tables}.subspan(0, tables.size() - 1)) {
-      children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
       // Make sure size estimates are increasing to ensure the order stays the
       // same.
@@ -292,11 +292,11 @@ class CartesianProductJoinLazyTest
       counter++;
     }
     if (std::get<0>(GetParam()) == 0) {
-      children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
           qec, tables.back().clone(), makeUniqueVariables(tables.back()), false,
           std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true));
     } else {
-      children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
           qec, splitIntoRandomSubtables(tables.back()),
           makeUniqueVariables(tables.back())));
     }
@@ -587,11 +587,11 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
   IdTable nonEmpty = makeIdTableFromVector({{1}});
   IdTable empty{1, ad_utility::testing::makeAllocator()};
   CartesianProductJoin::Children children{};
-  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(nonEmpty),
       std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
   children.push_back(
-      ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
+      qlever::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
           qec, std::move(empty),
           std::vector<std::optional<Variable>>{{Variable{"?b"}}}));
   CartesianProductJoin join{qec, std::move(children)};
@@ -610,11 +610,11 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
   IdTable nonEmpty = makeIdTableFromVector({{1}});
   IdTable empty{1, ad_utility::testing::makeAllocator()};
   CartesianProductJoin::Children children{};
-  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(nonEmpty),
       std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
   children.push_back(
-      ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
+      qlever::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
           qec, std::vector<IdTable>{},
           std::vector<std::optional<Variable>>{{Variable{"?b"}}}));
   CartesianProductJoin join{qec, std::move(children)};
@@ -676,7 +676,7 @@ TEST(CartesianProductJoin, createLazyConsumerKeepsChildResultsAlive) {
   // and consumes only the child with the largest size estimate lazily.
   CartesianProductJoin::Children children;
   IdTable materializedInput = makeIdTableFromVector({{1}, {2}, {3}});
-  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, materializedInput.clone(), Vars{Variable{"?a"}}));
   std::dynamic_pointer_cast<ValuesForTesting>(
       children.back()->getRootOperation())
@@ -684,7 +684,7 @@ TEST(CartesianProductJoin, createLazyConsumerKeepsChildResultsAlive) {
   std::vector<IdTable> lazyInput;
   lazyInput.push_back(makeIdTableFromVector({{10}, {11}}));
   lazyInput.push_back(makeIdTableFromVector({{12}, {13}}));
-  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(lazyInput), Vars{Variable{"?b"}}));
   std::dynamic_pointer_cast<ValuesForTesting>(
       children.back()->getRootOperation())
@@ -717,7 +717,7 @@ TEST(CartesianProductJoin, clone) {
   auto qec = getQec();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
   using Vars = std::vector<std::optional<Variable>>;
-  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  subtrees.push_back(qlever::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3, 4}}),
       Vars{Variable{"?x"}, std::nullopt}));
   CartesianProductJoin join{qec, std::move(subtrees)};
@@ -738,7 +738,7 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
       IdTable idTable{1, qec->getAllocator()};
       idTable.resize(j);
       ql::ranges::fill(idTable.getColumn(0), Id::makeUndefined());
-      children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      children.push_back(qlever::makeExecutionTree<ValuesForTesting>(
           qec, std::move(idTable),
           std::vector<std::optional<Variable>>{{std::nullopt}}));
     }
@@ -761,7 +761,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
   // When the child does not handle the limit, it should always work
   {
     std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+    subtrees.push_back(qlever::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{3, 4}}),
         Vars{Variable{"?x"}, std::nullopt}));
 
@@ -785,7 +785,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
   // When the child handles the limit, it should stop working the second time
   {
     std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+    subtrees.push_back(qlever::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{3, 4}}),
         Vars{Variable{"?x"}, std::nullopt}, true));
 

@@ -30,7 +30,7 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
   auto* qec = ad_utility::testing::getQec();
   return {qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          qlever::makeExecutionTree<ValuesForTesting>(
               qec, std::vector<IdTable>{},
               std::vector<std::optional<Variable>>{Variable{"?x"}}),
           keepIndices};
@@ -41,12 +41,12 @@ TEST(Distinct, CacheKey) {
   // The cache key has to change when the subtree changes or when the
   // `keepIndices` (the distinct variables) change.
   auto qec = ad_utility::testing::getQec();
-  auto d = ad_utility::makeExecutionTree<Distinct>(
+  auto d = qlever::makeExecutionTree<Distinct>(
       ad_utility::testing::getQec(),
-      ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+      qlever::makeExecutionTree<NeutralElementOperation>(qec),
       std::vector<ColumnIndex>{0, 1});
   Distinct d2(ad_utility::testing::getQec(),
-              ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
+              qlever::makeExecutionTree<NeutralElementOperation>(qec), {0});
   Distinct d3(ad_utility::testing::getQec(), d, {0});
 
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
@@ -137,7 +137,7 @@ TEST(Distinct, nonLazy) {
   auto qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -173,7 +173,7 @@ TEST(Distinct, nonLazyWithLazyInputs) {
   auto qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -203,7 +203,7 @@ TEST(Distinct, lazyWithLazyInputs) {
   auto qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = qlever::makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -230,7 +230,7 @@ TEST(Distinct, lazyWithLazyInputs) {
 TEST(Distinct, clone) {
   auto qec = ad_utility::testing::getQec();
   Distinct distinct{ad_utility::testing::getQec(),
-                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    qlever::makeExecutionTree<NeutralElementOperation>(qec),
                     std::vector<ColumnIndex>{0, 1}};
 
   auto clone = distinct.clone();
