@@ -254,7 +254,7 @@ auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
 // `createVocabulary(std::vector<std::string>{})`, works as expected with the
 // given comparator.
 template <typename F, typename C>
-auto testEmptyVocabularyWithComparator(F createVocabulary, C comparator) {
+auto testEmptyVocabularyWithComparator(F&& createVocabulary, C comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
   auto expected = WordAndIndex::end();

@@ -118,8 +118,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     };
     // The underlying vocabularies require sorted input at write time.
     ql::ranges::sort(testLiterals);
-    for (size_t i = 0; i < testLiterals.size(); i++) {
-      EXPECT_EQ(i, (*ww)(testLiterals[i], true));
+    for (const auto& [i, literal] : ::ranges::views::enumerate(testLiterals)) {
+      EXPECT_EQ(static_cast<uint64_t>(i), (*ww)(literal, true));
     }
     ww->finish();
     geoVocab.open(filename);
