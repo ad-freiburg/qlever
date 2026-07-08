@@ -304,7 +304,7 @@ class Qlever {
   // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
-      ad_utility::SharedCancellationHandle handle =
+      SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
       std::function<void(std::string)> updateCallback =
@@ -348,14 +348,27 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
   void writeMaterializedView(
       std::string name, std::string query,
-      const ad_utility::Timer& requestTimer,
+      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       const std::vector<DatasetClause>& datasetClauses = {},
-      ad_utility::SharedCancellationHandle handle =
+      SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
-      std::optional<ad_utility::MemorySize> memoryLimit = std::nullopt) const;
+      std::optional<TimeLimit> timeLimit = std::nullopt) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.

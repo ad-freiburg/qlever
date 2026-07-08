@@ -26,6 +26,7 @@
 #include "libqlever/Qlever.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -339,8 +340,7 @@ class Server {
       const std::string& name,
       const ad_utility::url_parser::sparqlOperation::Query& query,
       const ad_utility::Timer& requestTimer,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      TimeLimit timeLimit);
+      SharedCancellationHandle cancellationHandle, TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new

@@ -1458,16 +1458,13 @@ Server::createMessageSender<http::request<http::string_body>>(
     std::string_view);
 
 // _____________________________________________________________________________
-void Server::writeMaterializedView(
-    const std::string& name, const Query& query,
-    const ad_utility::Timer& requestTimer,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    TimeLimit timeLimit) {
-  auto memoryLimit =
-      getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  qlever().writeMaterializedView(
-      name, query.query_, requestTimer, query.datasetClauses_,
-      std::move(cancellationHandle), timeLimit, memoryLimit);
+void Server::writeMaterializedView(const std::string& name, const Query& query,
+                                   const ad_utility::Timer& requestTimer,
+                                   SharedCancellationHandle cancellationHandle,
+                                   TimeLimit timeLimit) {
+  qlever().writeMaterializedView(name, query.query_, requestTimer,
+                                 query.datasetClauses_,
+                                 std::move(cancellationHandle), timeLimit);
 }
 
 // _____________________________________________________________________________
