@@ -207,16 +207,7 @@ struct PartitionedIdPositions {
   std::vector<size_t> nonVocabIndexIndices_;
 };
 
-inline PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids) {
-  PartitionedIdPositions positions;
-  ql::ranges::partition_copy(
-      ql::views::iota(size_t{0}, ids.size()),
-      std::back_inserter(positions.vocabIndexIndices_),
-      std::back_inserter(positions.nonVocabIndexIndices_), [&ids](size_t i) {
-        return ids[i].getDatatype() == Datatype::VocabIndex;
-      });
-  return positions;
-}
+PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids);
 
 // Resolve the IDs at `positions` (all non-`VocabIndex`) immediately via
 // in-memory `idToStringAndType`, writing each result into its slot in

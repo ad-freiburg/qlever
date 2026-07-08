@@ -281,4 +281,18 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
+// _____________________________________________________________________________
+PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids) {
+  PartitionedIdPositions positions;
+  positions.vocabIndexIndices_.reserve(ids.size());
+  positions.nonVocabIndexIndices_.reserve(ids.size());
+  ql::ranges::partition_copy(
+      ql::views::iota(size_t{0}, ids.size()),
+      std::back_inserter(positions.vocabIndexIndices_),
+      std::back_inserter(positions.nonVocabIndexIndices_), [&ids](size_t i) {
+        return ids[i].getDatatype() == Datatype::VocabIndex;
+      });
+  return positions;
+}
+
 }  // namespace ql::exportIds
