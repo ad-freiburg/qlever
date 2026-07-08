@@ -14,6 +14,7 @@ ExplicitIdTableOperation::ExplicitIdTableOperation(
     LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
       idTable_(std::move(table)),
+      view_(viewOf(idTable_)),
       variables_(std::move(variables)),
       sortedColumns_(std::move(sortedColumns)),
       localVocab_(std::move(localVocab)),

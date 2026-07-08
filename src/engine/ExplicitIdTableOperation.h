@@ -29,6 +29,14 @@ class ExplicitIdTableOperation : public Operation {
 
  private:
   IdTableOrView idTable_;
+  // A non-owning view of `idTable_`, computed once in the constructor and
+  // reused by `idTableView()`. This avoids rebuilding an `IdTableView<0>`
+  // (which copies the small but non-trivial `ViewSpans` of column pointers)
+  // on every call. This caching is safe because `idTable_` is never
+  // reassigned after construction: in the owning `shared_ptr<const IdTable>`
+  // alternative, the pointee is `const`, so it cannot be mutated (via this
+  // class) after `view_` has been computed from it.
+  IdTableView<0> view_;
   VariableToColumnMap variables_;
   std::vector<ColumnIndex> sortedColumns_;
   LocalVocab localVocab_;
@@ -45,9 +53,10 @@ class ExplicitIdTableOperation : public Operation {
   // `IdTableOrView` (e.g. `NamedResultCache::Value`).
   static IdTableView<0> viewOf(const IdTableOrView& table);
 
-  // Return a non-owning view of the underlying table, regardless of which
-  // alternative of `IdTableOrView` is currently active.
-  IdTableView<0> idTableView() const { return viewOf(idTable_); }
+  // Return the cached non-owning view of the underlying table (see `view_`
+  // above), regardless of which alternative of `IdTableOrView` is currently
+  // active.
+  const IdTableView<0>& idTableView() const { return view_; }
 
   // Const and public getter for testing.
   size_t sizeEstimate() const { return idTableView().numRows(); }

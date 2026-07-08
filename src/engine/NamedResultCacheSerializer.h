@@ -82,7 +82,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
-    auto resultView = ExplicitIdTableOperation::viewOf(arg.result_);
+    const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
     serializer << resultView.numRows();
     serializer << resultView.numColumns();
     for (const auto& col : resultView.getColumns()) {
