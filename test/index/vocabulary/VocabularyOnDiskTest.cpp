@@ -210,7 +210,6 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
 // same indices, including for reordered and duplicated indices.
 TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto vocab = createExampleVocabulary();
-
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
   auto result = vocab->lookupBatch(indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
