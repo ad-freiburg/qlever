@@ -120,7 +120,7 @@ auto createVocabulary() {
 }
 
 VocabularyOnDiskHandle createExampleVocabulary() {
-  return createVocabularyFromWords({"alpha", "delta", "beta", "42"});
+  return createVocabularyFromWords({"alpha", "delta", "beta", "42", "gamma"});
 }
 
 }  // namespace
