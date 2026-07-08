@@ -117,8 +117,8 @@ idToStringAndTypeForEncodedValue(Id id);
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
 // Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
-// options and `escapeFunction`. Returns `std::nullopt` when
-// `returnOnlyLiterals` is true and `word` is not a literal.
+// options and `escapeFunction`. Return `std::nullopt` when `returnOnlyLiterals`
+// is true and `word` is not a literal.
 CPP_template(bool removeQuotesAndAngleBrackets = false,
              bool returnOnlyLiterals = false,
              typename LiteralOrIriType = LiteralOrIri,
