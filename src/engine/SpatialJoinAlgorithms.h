@@ -188,7 +188,7 @@ class SpatialJoinAlgorithms {
   };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
-    util::geo::I32Box aggBoundingBox_;
+    ::util::geo::I32Box aggBoundingBox_;
     // Number of geometries that were actually parsed excluding prefiltered ones
     size_t numGeomsParsed_;
     // Number of geometries dropped by prefilter
@@ -200,7 +200,7 @@ class SpatialJoinAlgorithms {
   LibSpatialJoinParseMetadata libspatialjoinParse(
       bool leftOrRightSide, LibSpatialJoinParseInput input,
       sj::Sweeper& sweeper, size_t numThreads,
-      std::optional<util::geo::I32Box> prefilterBox) const;
+      std::optional<::util::geo::I32Box> prefilterBox) const;
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
@@ -210,13 +210,13 @@ class SpatialJoinAlgorithms {
   // `GeometryInfo` will be used. Then this should only be applied if the index
   // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
-      const std::optional<util::geo::DBox>& prefilterLatLngBox,
+      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
       const qlever::Index& index, qlever::VocabIndex vocabIndex,
-      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
+      const std::optional<qlever::BoundingBox>& precomputedBoundingBox);
 
   // Helper for `libspatialjoinParse` to get the bounding box from an
   // `IdTable` if available.
-  static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
+  static std::optional<qlever::BoundingBox> getBoundingBoxFromIdTable(
       const IdTableView<0>* idTable,
       const qlever::SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 

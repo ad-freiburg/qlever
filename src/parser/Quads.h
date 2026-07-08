@@ -49,7 +49,7 @@ struct Quads {
     // Store the mapping from labelds to IDs.
     ad_utility::HashMap<std::string, Id> map_;
     // The (global) blank node manager used to obtain new unique blank node IDs.
-    ad_utility::BlankNodeManager* bnodeManager_;
+    qlever::BlankNodeManager* bnodeManager_;
 
     // Get an `Id` for the `label`. If the same `label` was previously passed to
     // the same `BlankNodeAdder`, this will result in the same `Id`.

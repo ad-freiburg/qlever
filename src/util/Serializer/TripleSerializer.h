@@ -24,7 +24,7 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
-namespace ad_utility {
+namespace qlever {
 
 namespace detail {
 
@@ -36,7 +36,7 @@ constexpr uint16_t formatVersion = 1;
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) T
+    requires ad_utility::serialization::ReadSerializer<Serializer>) T
     readValue(Serializer& serializer) {
   T value;
   serializer >> value;
@@ -46,7 +46,7 @@ CPP_template(typename T, typename Serializer)(
 // Write the header of the file format to the output stream. We are currently at
 // version 1.
 CPP_template(typename Serializer)(
-    requires serialization::WriteSerializer<
+    requires ad_utility::serialization::WriteSerializer<
         Serializer>) void writeHeader(Serializer& serializer) {
   serializer << magicBytes;
   serializer << formatVersion;
@@ -55,7 +55,7 @@ CPP_template(typename Serializer)(
 // Read the header of the file format from the input stream and ensure that it
 // is correct.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<
+    requires ad_utility::serialization::ReadSerializer<
         Serializer>) void readHeader(Serializer& serializer) {
   std::decay_t<decltype(magicBytes)> magicByteBuffer{};
   serializer >> magicByteBuffer;
@@ -75,7 +75,7 @@ CPP_template(typename Serializer)(
 // Serialize the local vocabulary to the output stream. Returns a mapping from
 // Ids that map to their string position in the file.
 CPP_template(typename Serializer)(
-    requires serialization::WriteSerializer<
+    requires ad_utility::serialization::WriteSerializer<
         Serializer>) void serializeLocalVocab(Serializer& serializer,
                                               const qlever::LocalVocab& vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
@@ -95,7 +95,7 @@ CPP_template(typename Serializer)(
 
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>)
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
     std::tuple<
         qlever::LocalVocab,
         absl::flat_hash_map<
@@ -183,7 +183,7 @@ CPP_template(typename Range)(
         Range>) void serializeIds(const std::filesystem::path& path,
                                   const qlever::LocalVocab& vocab,
                                   Range&& idRanges) {
-  serialization::FileWriteSerializer serializer{path.c_str()};
+  ad_utility::serialization::FileWriteSerializer serializer{path.c_str()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
@@ -204,7 +204,7 @@ deserializeIds(const std::filesystem::path& path,
   }
   auto serializer = [p = path.c_str()]() {
     try {
-      return serialization::FileReadSerializer{p};
+      return ad_utility::serialization::FileReadSerializer{p};
     } catch (const std::runtime_error& err) {
       throw std::runtime_error{absl::StrCat(
           "The file '", p,
@@ -224,4 +224,4 @@ deserializeIds(const std::filesystem::path& path,
   }
   return {std::move(vocab), std::move(idVectors)};
 }
-}  // namespace ad_utility
+}  // namespace qlever

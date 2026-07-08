@@ -34,7 +34,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
   )";
 struct TestContextWithGivenTTl {
   std::string turtleInput;
-  std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
+  std::optional<qlever::VocabularyType> vocabularyType = std::nullopt;
   qlever::QueryExecutionContext* qec =
       ad_utility::testing::getQec(turtleInput, vocabularyType);
   qlever::VariableToColumnMap varToColMap;
@@ -52,7 +52,7 @@ struct TestContextWithGivenTTl {
       ad_utility::testing::makeGetId(qec->getIndex());
   TestContextWithGivenTTl(
       std::string turtle,
-      std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt)
+      std::optional<qlever::VocabularyType> vocabularyType = std::nullopt)
       : turtleInput{std::move(turtle)}, vocabularyType{vocabularyType} {}
 };
 
@@ -299,8 +299,8 @@ class ValueGetterTester {
 };
 
 using GeoInfoTester = ValueGetterTester<
-    sparqlExpression::detail::GeometryInfoValueGetter<ad_utility::GeometryInfo>,
-    ad_utility::GeometryInfo>;
+    sparqlExpression::detail::GeometryInfoValueGetter<qlever::GeometryInfo>,
+    qlever::GeometryInfo>;
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
                       GeoPointOrWkt>;

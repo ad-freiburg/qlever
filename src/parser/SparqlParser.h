@@ -26,7 +26,7 @@ class SparqlParser {
       const EncodedIriManager* encodedIriManager, std::string query,
       const std::vector<DatasetClause>& datasets = {});
   static std::vector<ParsedQuery> parseUpdate(
-      ad_utility::BlankNodeManager* bnodeManager,
+      qlever::BlankNodeManager* bnodeManager,
       const EncodedIriManager* encodedIriManager, std::string update,
       const std::vector<DatasetClause>& datasets = {});
 };

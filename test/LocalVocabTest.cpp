@@ -149,7 +149,7 @@ TEST(LocalVocab, clone) {
 
   // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
   // in the clone.
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   LocalVocab v;
   auto id = v.getBlankNodeIndex(&bnm);
   LocalVocab vClone = v.clone();
@@ -190,7 +190,7 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[3], lit("twoB"));
 
   // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   LocalVocab localVocabMerged2;
   BlankNodeIndex id;
   {
@@ -429,7 +429,7 @@ TEST(LocalVocab, propagation) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, getBlankNodeIndex) {
-  ad_utility::BlankNodeManager bnm(0);
+  qlever::BlankNodeManager bnm(0);
   LocalVocab v;
   BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
@@ -572,7 +572,7 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_EmptyCase) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Allocate some blank node IDs.
@@ -598,12 +598,11 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Call with empty vector - should not crash and should do nothing.
-  std::vector<
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+  std::vector<qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
       emptyIndices;
   EXPECT_NO_THROW(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(emptyIndices, &bnm));
@@ -615,7 +614,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
 
   // Step 1: Create original vocab with blank nodes.
   LocalVocab originalVocab;
@@ -649,7 +648,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Allocate a blank node, which creates the localBlankNodeManager_.
@@ -657,11 +656,10 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
 
   // Try to reserve blocks when localBlankNodeManager_ already exists.
   // This should violate the AD_CONTRACT_CHECK.
-  ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
+  qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
   entry.uuid_ = boost::uuids::random_generator()();
   entry.blockIndices_ = {1, 2, 3};
-  std::vector<
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+  std::vector<qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
       indices{entry};
 
   AD_EXPECT_THROW_WITH_MESSAGE(

@@ -20,7 +20,7 @@
 
 // _____________________________________________________________________________
 TEST(EnumWithStrings, VocabularyTypeEnum) {
-  using V = ad_utility::VocabularyType;
+  using V = qlever::VocabularyType;
   EXPECT_EQ(V::InMemoryUncompressed, V::fromString("in-memory-uncompressed"));
   EXPECT_EQ(V::OnDiskCompressed, V::fromString("on-disk-compressed"));
   EXPECT_EQ("in-memory-uncompressed", V::InMemoryUncompressed.toString());
@@ -60,7 +60,7 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
 // _____________________________________________________________________________
 TEST(EnumWithStrings, BoostProgramOptions) {
   namespace po = boost::program_options;
-  using V = ad_utility::VocabularyType;
+  using V = qlever::VocabularyType;
 
   V vocabType;
   po::options_description desc;
@@ -96,7 +96,7 @@ TEST(EnumWithStrings, BoostProgramOptions) {
 
 // _____________________________________________________________________________
 TEST(EnumWithStrings, FromStringAndToStringFunctors) {
-  using V = ad_utility::VocabularyType;
+  using V = qlever::VocabularyType;
   EXPECT_EQ(V::OnDiskCompressed, V::FromString{}("on-disk-compressed"));
   EXPECT_EQ("on-disk-compressed", V::ToString{}(V::OnDiskCompressed));
   EXPECT_EQ(V::InMemoryUncompressed, V::FromString{}("in-memory-uncompressed"));

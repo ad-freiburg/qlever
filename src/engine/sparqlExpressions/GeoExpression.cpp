@@ -29,7 +29,7 @@ NARY_EXPRESSION(
 
 NARY_EXPRESSION(
     CentroidExpression, 1,
-    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
+    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<qlever::Centroid>>);
 
 NARY_EXPRESSION(
     DistExpression, 2,
@@ -44,35 +44,35 @@ NARY_EXPRESSION(
 
 NARY_EXPRESSION(
     AreaExpression, 2,
-    FV<ad_utility::WktArea, GeometryInfoValueGetter<ad_utility::MetricArea>,
+    FV<ad_utility::WktArea, GeometryInfoValueGetter<qlever::MetricArea>,
        UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(MetricAreaExpression, 1,
-                FV<ad_utility::WktMetricArea,
-                   GeometryInfoValueGetter<ad_utility::MetricArea>>);
+NARY_EXPRESSION(
+    MetricAreaExpression, 1,
+    FV<ad_utility::WktMetricArea, GeometryInfoValueGetter<qlever::MetricArea>>);
 
-NARY_EXPRESSION(EnvelopeExpression, 1,
-                FV<ad_utility::WktEnvelope,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(
+    EnvelopeExpression, 1,
+    FV<ad_utility::WktEnvelope, GeometryInfoValueGetter<qlever::BoundingBox>>);
 NARY_EXPRESSION(
     EnvelopeLowerLeftExpression, 1,
-    FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,
-       GeometryInfoValueGetter<ad_utility::BoundingBox>>);
-NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
-                FV<ad_utility::WktEnvelopeCorner<
-                       ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+    FV<ad_utility::WktEnvelopeCorner<qlever::BoundingBoxCorner::LOWER_LEFT>,
+       GeometryInfoValueGetter<qlever::BoundingBox>>);
+NARY_EXPRESSION(
+    EnvelopeUpperRightExpression, 1,
+    FV<ad_utility::WktEnvelopeCorner<qlever::BoundingBoxCorner::UPPER_RIGHT>,
+       GeometryInfoValueGetter<qlever::BoundingBox>>);
 
 NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
-                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
+                   GeometryInfoValueGetter<qlever::GeometryType>>);
 
 NARY_EXPRESSION(
     LengthExpression, 2,
-    FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
+    FV<ad_utility::WktLength, GeometryInfoValueGetter<qlever::MetricLength>,
        UnitOfMeasurementValueGetter>);
 NARY_EXPRESSION(MetricLengthExpression, 1,
                 FV<ad_utility::WktMetricLength,
-                   GeometryInfoValueGetter<ad_utility::MetricLength>>);
+                   GeometryInfoValueGetter<qlever::MetricLength>>);
 
 NARY_EXPRESSION(
     GeometryNExpression, 2,
@@ -87,14 +87,14 @@ NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
+template <qlever::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+                   GeometryInfoValueGetter<qlever::BoundingBox>>);
 
 NARY_EXPRESSION(NumGeometriesExpression, 1,
                 FV<ad_utility::WktNumGeometries,
-                   GeometryInfoValueGetter<ad_utility::NumGeometries>>);
+                   GeometryInfoValueGetter<qlever::NumGeometries>>);
 
 }  // namespace detail
 
@@ -198,7 +198,7 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
+template <qlever::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
@@ -386,7 +386,7 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 #endif
 #define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
   template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
-      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr);
+      qlever::BoundingCoordinate::RequestedCoordinate>(Ptr);
 
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);

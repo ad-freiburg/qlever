@@ -769,7 +769,7 @@ TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
 
   std::vector<IdTable> resultTables;
 
-  ad_utility::MinusRowHandler handler{
+  qlever::MinusRowHandler handler{
       1, IdTable{1, qec->getAllocator()},
       std::make_shared<ad_utility::CancellationHandle<>>(),
       [&resultTables](IdTable& table, LocalVocab&) {

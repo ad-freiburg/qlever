@@ -302,7 +302,7 @@ class AddCombinedRowToIdTable {
     // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
     // If exactly one of them is UNDEF, return the other one, else return any of
     // them (they are equal anyway).
-    auto getJoinValue = [](const ValueId a, const ValueId b) {
+    auto getJoinValue = [](const qlever::ValueId a, const qlever::ValueId b) {
       // NOTE: For localVocabIndices we might have different pointers that
       // compare equal because they point to the same word. Therefore we cannot
       // use a simple bitwise operation to handle the "one of them is UNDEF"

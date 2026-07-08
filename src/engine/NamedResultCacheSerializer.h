@@ -77,7 +77,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::SimilarTo<T, qlever::NamedResultCache::Value>)) {
   if constexpr (WriteSerializer<S>) {
     // Serialize the LocalVocab first (required for ID remapping).
-    ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
+    qlever::detail::serializeLocalVocab(serializer, arg.localVocab_);
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
@@ -100,7 +100,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
           "currently cannot be serialized. Note that local vocab entries can "
           "also occur if SPARQL UPDATE operations have been performed on the "
           "index before creating the named cached result.");
-      ad_utility::detail::serializeIds(serializer, col);
+      qlever::detail::serializeIds(serializer, col);
     }
 
     // Serialize VariableToColumnMap manually (`Variable` is not
@@ -131,7 +131,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
-    auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
+    auto [localVocab, mapping] = qlever::detail::deserializeLocalVocab(
         serializer, *arg.contextForSerialization_);
 
     // Deserialize the IdTable with ID mapping applied.
@@ -143,7 +143,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
     for (auto&& col : idTable.getColumns()) {
-      ad_utility::detail::deserializeIds(serializer, mapping, col);
+      qlever::detail::deserializeIds(serializer, mapping, col);
     }
 
     // Deserialize VariableToColumnMap manually.

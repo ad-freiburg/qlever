@@ -15,7 +15,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
-namespace ad_utility {
+namespace qlever {
 using qlever::GeoPoint;
 using qlever::ValueId;
 
@@ -156,8 +156,8 @@ class GeometryInfo;
 // allowed to be requested.
 template <typename T>
 CPP_concept RequestedInfoT =
-    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              NumGeometries, MetricLength, MetricArea>;
+    ad_utility::SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
+                          NumGeometries, MetricLength, MetricArea>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -187,9 +187,9 @@ class GeometryInfo {
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(ValueId::numDatatypeBits);
+      ad_utility::bitMaskForHigherBits(ValueId::numDatatypeBits);
   static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(ValueId::numDataBits);
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -262,6 +262,6 @@ class GeometryInfo {
 // copyable.
 static_assert(std::is_trivially_copyable_v<GeometryInfo>);
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_GEOMETRYINFO_H

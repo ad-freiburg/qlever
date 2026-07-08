@@ -78,7 +78,7 @@ class SparqlQleverVisitor {
 
   // The blank node manager is needed to handle blank nodes in the templates of
   // UPDATE requests.
-  ad_utility::BlankNodeManager* blankNodeManager_;
+  qlever::BlankNodeManager* blankNodeManager_;
 
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
@@ -165,7 +165,7 @@ class SparqlQleverVisitor {
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      ad_utility::BlankNodeManager* bnodeManager,
+      qlever::BlankNodeManager* bnodeManager,
       const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =

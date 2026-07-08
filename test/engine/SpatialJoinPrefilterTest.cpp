@@ -212,7 +212,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   }
 
   // Update runtime parameter for second test
-  double bbSize = util::geo::area(boundingBoxVeryLarge);
+  double bbSize = ::util::geo::area(boundingBoxVeryLarge);
   EXPECT_GT(bbSize, 2'500);
   EXPECT_LT(bbSize, 10'000);
 
@@ -290,12 +290,12 @@ class SpatialJoinPrefilterGeoByBoundingBoxTest
     : public ::testing::TestWithParam<PrefilterTestMode> {
  protected:
   // Get the bounding box, if precomputation is the current test mode.
-  std::optional<ad_utility::BoundingBox> getPrecomputedBoundingBox(
+  std::optional<qlever::BoundingBox> getPrecomputedBoundingBox(
       std::string_view wkt) {
     if (GetParam() != PrefilterTestMode::PRECOMPUTED) {
       return std::nullopt;
     }
-    return ad_utility::GeometryInfo::getBoundingBox(wkt);
+    return qlever::GeometryInfo::getBoundingBox(wkt);
   };
 };
 

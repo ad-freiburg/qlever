@@ -339,7 +339,7 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
   auto action =
       [this, left = std::move(left), right = std::move(right),
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        ad_utility::MinusRowHandler rowAdder{
+        qlever::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
             cancellationHandle_, std::move(yieldTable)};
         auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);

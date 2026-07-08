@@ -42,8 +42,8 @@ std::vector<char> fileToBuffer(const std::string& filename) {
 
 // Select the correct suffixes.
 std::vector<std::string> getVocabSuffixesForType(
-    ad_utility::VocabularyType::Enum type) {
-  using enum ad_utility::VocabularyType::Enum;
+    qlever::VocabularyType::Enum type) {
+  using enum qlever::VocabularyType::Enum;
   switch (type) {
     case InMemoryUncompressed:
       return {""};
@@ -73,7 +73,7 @@ std::vector<std::string> getVocabSuffixesForType(
 
 // Helper function to clean up all vocabulary related files.
 void deleteVocabFiles(const std::string& vocabBasename,
-                      ad_utility::VocabularyType::Enum type) {
+                      qlever::VocabularyType::Enum type) {
   for (const auto& suffix : getVocabSuffixesForType(type)) {
     ad_utility::deleteFile(vocabBasename + suffix);
   }
@@ -82,7 +82,7 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = qlever::VocabularyType::random();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -108,7 +108,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = qlever::VocabularyType::random();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
@@ -191,8 +191,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, flattenBlankNodeBlocks) {
-  using OBE =
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  using OBE = qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
   std::vector ownedBlocks{OBE{{}, {4, 42}}, OBE{{}, {7, 77}}};
 
   auto flatBlockIndices = flattenBlankNodeBlocks(ownedBlocks);
@@ -223,7 +222,7 @@ TEST(IndexRebuilder, remapVocabId) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapBlankNodeId) {
   std::vector<uint64_t> blankNodeBlocks{4, 42, 77};
-  auto s = ad_utility::BlankNodeManager::blockSize_;
+  auto s = qlever::BlankNodeManager::blockSize_;
 
   EXPECT_EQ(remapBlankNodeId(B(4 * s), blankNodeBlocks, 0), B(0));
   EXPECT_EQ(remapBlankNodeId(B(4 * s + 1), blankNodeBlocks, 0), B(1));
@@ -491,7 +490,7 @@ TEST(IndexRebuilder, materializeToIndex) {
     newIndex.createFromOnDiskIndex(newIndexName, false);
     EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
               index.getBlankNodeManager()->minIndex_ +
-                  ad_utility::BlankNodeManager::blockSize_);
+                  qlever::BlankNodeManager::blockSize_);
     EXPECT_EQ(newIndex.numTriples().normal, 4);
     EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
     EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);

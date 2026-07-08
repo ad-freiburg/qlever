@@ -1618,7 +1618,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              sfGeoType("Polygon"), U});
 
   // Bounding coordinate expressions
-  using enum ad_utility::BoundingCoordinate;
+  using enum qlever::BoundingCoordinate;
   auto checkMinX =
       testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
   auto checkMinY =
@@ -1657,7 +1657,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   // depend on the method of calculation, which is not what is tested here, we
   // derive the expected values using the helper.
   auto expectedLength = [](std::string_view literal) -> double {
-    auto len = ad_utility::GeometryInfo::getMetricLength(
+    auto len = qlever::GeometryInfo::getMetricLength(
         absl::StrCat("\"", literal,
                      "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
     if (!len.has_value()) {
@@ -1700,7 +1700,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                                       D(expCollection), U});
 
   auto expectedArea = [](std::string_view literal) -> double {
-    auto area = ad_utility::GeometryInfo::getMetricArea(
+    auto area = qlever::GeometryInfo::getMetricArea(
         absl::StrCat("\"", literal,
                      "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
     if (!area.has_value() || std::isnan(area.value().area())) {

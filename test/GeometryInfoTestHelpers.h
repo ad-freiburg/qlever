@@ -18,6 +18,7 @@
 namespace geoInfoTestHelpers {
 
 using namespace ad_utility;
+using namespace qlever;
 using namespace ::testing;
 using Loc = source_location;
 
@@ -43,100 +44,109 @@ inline auto geoPointNear =
 #define EXPECT_GEOPOINT_NEAR(a, b) EXPECT_THAT(a, geoPointNear(b))
 
 // ____________________________________________________________________________
-inline auto centroidNear =
-    liftOptionalMatcher<Centroid>([](Centroid expected) -> Matcher<Centroid> {
-      return Property(&Centroid::centroid, geoPointNear(expected.centroid()));
+inline auto centroidNear = liftOptionalMatcher<qlever::Centroid>(
+    [](qlever::Centroid expected) -> Matcher<qlever::Centroid> {
+      return Property(&qlever::Centroid::centroid,
+                      geoPointNear(expected.centroid()));
     });
 #define EXPECT_CENTROID_NEAR(a, b) EXPECT_THAT(a, centroidNear(b))
 
 // ____________________________________________________________________________
-inline auto boundingBoxNear = liftOptionalMatcher<BoundingBox>(
-    [](BoundingBox expected) -> Matcher<BoundingBox> {
+inline auto boundingBoxNear = liftOptionalMatcher<qlever::BoundingBox>(
+    [](qlever::BoundingBox expected) -> Matcher<qlever::BoundingBox> {
       auto [lowerLeft, upperRight] = expected.pair();
       return AllOf(
-          Property(&BoundingBox::lowerLeft, geoPointNear(lowerLeft)),
-          Property(&BoundingBox::upperRight, geoPointNear(upperRight)));
+          Property(&qlever::BoundingBox::lowerLeft, geoPointNear(lowerLeft)),
+          Property(&qlever::BoundingBox::upperRight, geoPointNear(upperRight)));
     });
 #define EXPECT_BOUNDINGBOX_NEAR(a, b) EXPECT_THAT(a, boundingBoxNear(b))
 
 // ____________________________________________________________________________
-inline auto metricLengthNear = liftOptionalMatcher<MetricLength>(
-    [](MetricLength expected) -> Matcher<MetricLength> {
+inline auto metricLengthNear = liftOptionalMatcher<qlever::MetricLength>(
+    [](qlever::MetricLength expected) -> Matcher<qlever::MetricLength> {
       // The metric length may be off by up to 1%
       auto allowedError = expected.length() * 0.01;
-      return Property(&MetricLength::length,
+      return Property(&qlever::MetricLength::length,
                       DoubleNear(expected.length(), allowedError));
     });
 #define EXPECT_METRICLENGTH_NEAR(a, b) EXPECT_THAT(a, metricLengthNear(b))
 
 // ____________________________________________________________________________
-inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
-    [](MetricArea expected) -> Matcher<MetricArea> {
+inline auto metricAreaNear = liftOptionalMatcher<qlever::MetricArea>(
+    [](qlever::MetricArea expected) -> Matcher<qlever::MetricArea> {
       // The metric area may be off by up to 1%
       auto allowedError = expected.area() * 0.01;
-      return Property(&MetricArea::area,
+      return Property(&qlever::MetricArea::area,
                       DoubleNear(expected.area(), allowedError));
     });
 #define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
 // ____________________________________________________________________________
-inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
-    [](GeometryInfo expected) -> Matcher<GeometryInfo> {
-      return AllOf(
-          Property(&GeometryInfo::getWktType, Eq(expected.getWktType())),
-          Property(&GeometryInfo::getCentroid,
-                   centroidNear(expected.getCentroid())),
-          Property(&GeometryInfo::getBoundingBox,
-                   boundingBoxNear(expected.getBoundingBox())),
-          Property(&GeometryInfo::getNumGeometries,
-                   Eq(expected.getNumGeometries())),
-          Property(&GeometryInfo::getMetricLength,
-                   metricLengthNear(expected.getMetricLength())),
-          Property(&GeometryInfo::getMetricArea,
-                   metricAreaNear(expected.getMetricArea())));
+inline auto geoInfoMatcher = liftOptionalMatcher<qlever::GeometryInfo>(
+    [](qlever::GeometryInfo expected) -> Matcher<qlever::GeometryInfo> {
+      return AllOf(Property(&qlever::GeometryInfo::getWktType,
+                            Eq(expected.getWktType())),
+                   Property(&qlever::GeometryInfo::getCentroid,
+                            centroidNear(expected.getCentroid())),
+                   Property(&qlever::GeometryInfo::getBoundingBox,
+                            boundingBoxNear(expected.getBoundingBox())),
+                   Property(&qlever::GeometryInfo::getNumGeometries,
+                            Eq(expected.getNumGeometries())),
+                   Property(&qlever::GeometryInfo::getMetricLength,
+                            metricLengthNear(expected.getMetricLength())),
+                   Property(&qlever::GeometryInfo::getMetricArea,
+                            metricAreaNear(expected.getMetricArea())));
     });
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
 // ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
-    std::optional<GeometryInfo> optGeoInfo,
+    std::optional<qlever::GeometryInfo> optGeoInfo,
     Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   ASSERT_TRUE(optGeoInfo.has_value());
   auto gi = optGeoInfo.value();
   auto l = generateLocationTrace(sourceLocation);
 
-  EXPECT_GEOMETRYINFO(gi, gi.getRequestedInfo<GeometryInfo>());
+  EXPECT_GEOMETRYINFO(gi, gi.getRequestedInfo<qlever::GeometryInfo>());
   EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
-                          gi.getRequestedInfo<BoundingBox>());
-  EXPECT_CENTROID_NEAR(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
-  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
-            gi.getRequestedInfo<GeometryType>());
-  EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
+                          gi.getRequestedInfo<qlever::BoundingBox>());
+  EXPECT_CENTROID_NEAR(gi.getCentroid(),
+                       gi.getRequestedInfo<qlever::Centroid>());
+  EXPECT_EQ(std::optional<qlever::GeometryType>{gi.getWktType()},
+            gi.getRequestedInfo<qlever::GeometryType>());
+  EXPECT_EQ(gi.getNumGeometries(),
+            gi.getRequestedInfo<qlever::NumGeometries>());
   EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
-                           gi.getRequestedInfo<MetricLength>());
-  EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+                           gi.getRequestedInfo<qlever::MetricLength>());
+  EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
+                         gi.getRequestedInfo<qlever::MetricArea>());
 }
 
 // ____________________________________________________________________________
 inline void checkRequestedInfoForWktLiteral(
     const std::string_view& wkt, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto optGeoInfo = GeometryInfo::fromWktLiteral(wkt);
+  auto optGeoInfo = qlever::GeometryInfo::fromWktLiteral(wkt);
   ASSERT_TRUE(optGeoInfo.has_value());
   auto gi = optGeoInfo.value();
-  EXPECT_GEOMETRYINFO(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
-  EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
-                          GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
-  EXPECT_CENTROID_NEAR(gi.getCentroid(),
-                       GeometryInfo::getRequestedInfo<Centroid>(wkt));
-  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
-            GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+  EXPECT_GEOMETRYINFO(
+      gi, qlever::GeometryInfo::getRequestedInfo<qlever::GeometryInfo>(wkt));
+  EXPECT_BOUNDINGBOX_NEAR(
+      gi.getBoundingBox(),
+      qlever::GeometryInfo::getRequestedInfo<qlever::BoundingBox>(wkt));
+  EXPECT_CENTROID_NEAR(
+      gi.getCentroid(),
+      qlever::GeometryInfo::getRequestedInfo<qlever::Centroid>(wkt));
+  EXPECT_EQ(std::optional<qlever::GeometryType>{gi.getWktType()},
+            qlever::GeometryInfo::getRequestedInfo<qlever::GeometryType>(wkt));
   EXPECT_EQ(gi.getNumGeometries(),
-            GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
-  EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
-                           GeometryInfo::getRequestedInfo<MetricLength>(wkt));
-  EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
-                         GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+            qlever::GeometryInfo::getRequestedInfo<qlever::NumGeometries>(wkt));
+  EXPECT_METRICLENGTH_NEAR(
+      gi.getMetricLength(),
+      qlever::GeometryInfo::getRequestedInfo<qlever::MetricLength>(wkt));
+  EXPECT_METRICAREA_NEAR(
+      gi.getMetricArea(),
+      qlever::GeometryInfo::getRequestedInfo<qlever::MetricArea>(wkt));
 }
 
 // ____________________________________________________________________________
@@ -146,22 +156,28 @@ inline void checkInvalidLiteral(std::string_view wkt,
                                 Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
 
-  EXPECT_FALSE(GeometryInfo::fromWktLiteral(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getWktType(wkt).has_value(), expectValidGeometryType);
-  EXPECT_FALSE(GeometryInfo::getCentroid(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getBoundingBox(wkt).has_value());
-
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<GeometryInfo>(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(wkt).has_value(),
+  EXPECT_FALSE(qlever::GeometryInfo::fromWktLiteral(wkt).has_value());
+  EXPECT_EQ(qlever::GeometryInfo::getWktType(wkt).has_value(),
             expectValidGeometryType);
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value(),
+  EXPECT_FALSE(qlever::GeometryInfo::getCentroid(wkt).has_value());
+  EXPECT_FALSE(qlever::GeometryInfo::getBoundingBox(wkt).has_value());
+
+  EXPECT_FALSE(qlever::GeometryInfo::getRequestedInfo<qlever::GeometryInfo>(wkt)
+                   .has_value());
+  EXPECT_EQ(qlever::GeometryInfo::getRequestedInfo<qlever::GeometryType>(wkt)
+                .has_value(),
+            expectValidGeometryType);
+  EXPECT_FALSE(qlever::GeometryInfo::getRequestedInfo<qlever::Centroid>(wkt)
+                   .has_value());
+  EXPECT_FALSE(qlever::GeometryInfo::getRequestedInfo<qlever::BoundingBox>(wkt)
+                   .has_value());
+  EXPECT_EQ(qlever::GeometryInfo::getRequestedInfo<qlever::NumGeometries>(wkt)
+                .has_value(),
             expectNumGeom);
 }
 
 // ____________________________________________________________________________
-inline void checkUtilBoundingBox(util::geo::DBox a, util::geo::DBox b,
+inline void checkUtilBoundingBox(::util::geo::DBox a, ::util::geo::DBox b,
                                  Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_NEAR(a.getLowerLeft().getX(), b.getLowerLeft().getX(), 0.001);
@@ -172,19 +188,20 @@ inline void checkUtilBoundingBox(util::geo::DBox a, util::geo::DBox b,
 
 // Helpers to convert points and bounding boxes from double lat/lng to web
 // mercator int32 representation used by libspatialjoin
-inline util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
+inline ::util::geo::I32Point webMercProjFunc(const ::util::geo::DPoint& p) {
   auto projPoint = latLngToWebMerc(p);
   return {static_cast<int>(projPoint.getX() * PREC),
           static_cast<int>(projPoint.getY() * PREC)};
 }
-inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
+inline ::util::geo::I32Box boxToWebMerc(const ::util::geo::DBox& b) {
   return {webMercProjFunc(b.getLowerLeft()),
           webMercProjFunc(b.getUpperRight())};
 }
 
 // ____________________________________________________________________________
-inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
-  auto len = ad_utility::GeometryInfo::getMetricLength(quotedWktLiteral);
+inline qlever::MetricLength getLengthForTesting(
+    std::string_view quotedWktLiteral) {
+  auto len = qlever::GeometryInfo::getMetricLength(quotedWktLiteral);
   if (!len.has_value()) {
     throw std::runtime_error("Cannot compute expected length");
   }
@@ -241,8 +258,8 @@ inline void testMetricArea(const std::string_view wkt, double expectedArea,
 }
 
 // ____________________________________________________________________________
-inline MetricArea getAreaForTesting(const std::string_view wkt) {
-  auto area = GeometryInfo::getMetricArea(wkt);
+inline qlever::MetricArea getAreaForTesting(const std::string_view wkt) {
+  auto area = qlever::GeometryInfo::getMetricArea(wkt);
   if (!area.has_value()) {
     return MetricArea{std::numeric_limits<double>::quiet_NaN()};
   }
@@ -250,10 +267,10 @@ inline MetricArea getAreaForTesting(const std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
-inline auto geoPointOrWktMatcher = liftOptionalMatcher<GeoPointOrWkt>(
-    [](GeoPointOrWkt expected) -> Matcher<GeoPointOrWkt> {
+inline auto geoPointOrWktMatcher = liftOptionalMatcher<qlever::GeoPointOrWkt>(
+    [](qlever::GeoPointOrWkt expected) -> Matcher<qlever::GeoPointOrWkt> {
       return std::visit(
-          [&](auto& contained) -> Matcher<GeoPointOrWkt> {
+          [&](auto& contained) -> Matcher<qlever::GeoPointOrWkt> {
             using T = std::decay_t<decltype(contained)>;
             if constexpr (std::is_same_v<T, GeoPoint>) {
               return VariantWith<GeoPoint>(

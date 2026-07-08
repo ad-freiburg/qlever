@@ -957,8 +957,7 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                       Eq(LANGUAGE_PREDICATE)))));
 
-  using OBE =
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  using OBE = qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
   // Blank Nodes are assigned at random, so all we can check is that there is
   // exactly one block allocated.
   EXPECT_THAT(ownedBlocks, ElementsAre(AD_FIELD(OBE, blockIndices_,
@@ -1090,7 +1089,7 @@ namespace {
 qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
     const std::vector<LocalVocabIndex>& originalVocab,
     const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
         blankNodeBlocks,
     uint64_t minBlankNodeIndex) {
   qlever::indexRebuilder::IndexRebuildMapping idMapping;

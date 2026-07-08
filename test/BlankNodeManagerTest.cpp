@@ -17,7 +17,7 @@
 
 using namespace qlever;
 
-namespace ad_utility {
+namespace qlever {
 
 // ____________________________________________________________________________
 // Test fixture providing common infrastructure for BlankNodeManager tests.
@@ -175,7 +175,8 @@ TEST(BlankNodeManager, blockAllocationAndFree) {
   EXPECT_TRUE(bnm.state_.rlock()->usedBlocksSet_.empty());
 
   // Mock randomIntGenerator to let the block index generation collide.
-  bnm.state_.wlock()->randBlockIndex_ = SlowRandomIntGenerator<uint64_t>(0, 1);
+  bnm.state_.wlock()->randBlockIndex_ =
+      ad_utility::SlowRandomIntGenerator<uint64_t>(0, 1);
   [[maybe_unused]] auto _ = bnm.allocateBlock();
   for (int i = 0; i < 30; ++i) {
     auto block = bnm.allocateBlock();
@@ -579,4 +580,4 @@ TEST_F(BlankNodeManagerTestFixture, serializationPreservesBlockIndices) {
   EXPECT_TRUE(isBlockUsed(*bnm, 100));
 }
 
-}  // namespace ad_utility
+}  // namespace qlever

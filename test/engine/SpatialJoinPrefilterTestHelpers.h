@@ -68,8 +68,8 @@ using GeoRelationWithIds =
 // Struct for the output of `runParsingAndSweeper`
 struct SweeperTestResult {
   SweeperResultWithIds results_;
-  util::geo::DBox boxAfterAddingLeft_;
-  util::geo::DBox boxAfterAddingRight_;
+  ::util::geo::DBox boxAfterAddingLeft_;
+  ::util::geo::DBox boxAfterAddingRight_;
   size_t numElementsInSweeper_;
   size_t numElementsSkippedByPrefilter_;
   size_t numElementsAddedLeft_;
@@ -296,7 +296,7 @@ inline void runParsingAndSweeper(
   // `sweeper.setFilterBox(box);` here.
 
   // Run second parsing step (right side)
-  std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
+  std::optional<::util::geo::I32Box> prefilterBox = std::nullopt;
   if (usePrefilter) {
     prefilterBox = sweeper.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
@@ -360,8 +360,8 @@ inline void runParsingAndSweeper(
 
 // Helper to approximately compare two prefilter boxes from
 // `runParsingAndSweeper`
-inline void checkPrefilterBox(const util::geo::DBox& actualLatLng,
-                              const util::geo::DBox& expectedLatLng,
+inline void checkPrefilterBox(const ::util::geo::DBox& actualLatLng,
+                              const ::util::geo::DBox& expectedLatLng,
                               Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
 
@@ -449,7 +449,7 @@ inline void checkSweeperTestResult(
 // Construct a bounding box for a list of geometries simply by computing the
 // bounding box of a geometry collection with all geometries. Use to compute the
 // expected bounding box after adding the geometries to `Sweeper`.
-inline util::geo::DBox makeAggregatedBoundingBox(
+inline ::util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
   std::vector<std::string> wktWithoutDatatype;
   for (const auto& geom : wktGeometries) {
@@ -458,7 +458,7 @@ inline util::geo::DBox makeAggregatedBoundingBox(
   auto aggregatedWkt = absl::StrCat("\"GEOMETRYCOLLECTION(",
                                     absl::StrJoin(wktWithoutDatatype, ", "),
                                     ")\"^^<", GEO_WKT_LITERAL, ">");
-  auto boundingBox = ad_utility::GeometryInfo::getBoundingBox(aggregatedWkt);
+  auto boundingBox = qlever::GeometryInfo::getBoundingBox(aggregatedWkt);
   if (!boundingBox.has_value()) {
     throw std::runtime_error("Could not compute expected bounding box.");
   }

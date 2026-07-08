@@ -125,13 +125,13 @@ void SplitVocabulary<SF, SFN, S...>::close() {
 template <typename SF, typename SFN, typename... S>
 QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-std::optional<ad_utility::GeometryInfo> SplitVocabulary<
-    SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
+std::optional<qlever::GeometryInfo> SplitVocabulary<SF, SFN, S...>::getGeoInfo(
+    uint64_t indexWithMarker) const {
   // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
   // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
   return std::visit(
-      [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
+      [&](const auto& v) -> std::optional<qlever::GeometryInfo> {
         using T = std::decay_t<decltype(v)>;
         if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
           return v.getGeoInfo(getVocabIndex(indexWithMarker));

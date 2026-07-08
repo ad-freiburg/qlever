@@ -595,7 +595,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
-  ad_utility::BlankNodeManager bn;
+  qlever::BlankNodeManager bn;
   static EncodedIriManager ev;
   auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
                     .parseTypesafe(&SparqlAutomaticParser::filterR)

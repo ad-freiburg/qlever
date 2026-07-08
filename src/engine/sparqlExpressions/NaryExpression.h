@@ -84,7 +84,7 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
+template <qlever::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child);
 

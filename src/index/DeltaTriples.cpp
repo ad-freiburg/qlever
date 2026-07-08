@@ -593,7 +593,7 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
 std::tuple<
     LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
     std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+        qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
   return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
     auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
@@ -663,7 +663,7 @@ void DeltaTriples::writeToDisk() const {
   };
   std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
-  ad_utility::serializeIds(
+  qlever::serializeIds(
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
                  toRange(triplesSetsNormal_.triplesInserted_)});
@@ -677,7 +677,7 @@ void DeltaTriples::readFromDisk() {
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+      qlever::deserializeIds(filenameForPersisting_.value(), index_);
   if (idRanges.empty()) {
     return;
   }
@@ -728,7 +728,7 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 std::pair<
     std::vector<LocalVocabIndex>,
     std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+        qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriples::copyLocalVocab() const {
   AD_CORRECTNESS_CHECK(localVocab_.otherSets().empty(),
                        "This function only copies from the primary word set.");

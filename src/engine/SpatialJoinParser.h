@@ -20,11 +20,11 @@ constexpr inline size_t WKT_PARSER_BATCH_SIZE = 10'000;
 
 // Special parse job using `ValueId` instead of string.
 struct SpatialJoinParseJob {
-  ValueId valueId;
+  qlever::ValueId valueId;
   size_t line;
   bool side;
   std::string wkt;
-  std::optional<BoundingBox> boundingBox;
+  std::optional<qlever::BoundingBox> boundingBox;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
@@ -51,8 +51,8 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // left or right `side` of the spatial join). If available as part of the
   // `IdTable`, this function accepts a precomputed bounding box for
   // prefiltering.
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
-                         std::optional<BoundingBox> boundingBox);
+  void addValueIdToQueue(qlever::ValueId valueId, size_t rowIndex, bool side,
+                         std::optional<qlever::BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that

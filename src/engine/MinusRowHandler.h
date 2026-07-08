@@ -16,7 +16,7 @@
 #include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // Row handler for the `Minus` operation. Instead of materializing matching rows
 // like `AddCombinedRowToIdTable` it only keeps non-matching rows and skips all
@@ -109,8 +109,8 @@ class MinusRowHandler {
   template <typename L>
   void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
-    detail::mergeVocabInto(inputLeft, currentVocab_, mergedVocab_);
-    inputLeft_ = detail::toView(inputLeft);
+    ad_utility::detail::mergeVocabInto(inputLeft, currentVocab_, mergedVocab_);
+    inputLeft_ = ad_utility::detail::toView(inputLeft);
     AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
   }
 
@@ -174,14 +174,15 @@ class MinusRowHandler {
     auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
     for (const auto& [outputColumn, inputColumn] : ::ranges::zip_view(
              resultTable_.getColumns(), inputLeft_.value().getColumns())) {
-      chunkedCopy(ql::views::transform(
-                      indexBuffer_,
-                      [&inputColumn](size_t row) { return inputColumn[row]; }),
-                  outputColumn.begin() + oldSize, CHUNK_SIZE, action);
+      ad_utility::chunkedCopy(
+          ql::views::transform(
+              indexBuffer_,
+              [&inputColumn](size_t row) { return inputColumn[row]; }),
+          outputColumn.begin() + oldSize, CHUNK_SIZE, action);
     }
   }
 };
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // MINUSROWHANDLER_H

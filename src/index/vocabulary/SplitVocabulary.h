@@ -287,7 +287,7 @@ class SplitVocabulary {
 
   // Retrieve GeometryInfo from an underlying vocabulary, if it is a
   // GeoVocabulary.
-  std::optional<ad_utility::GeometryInfo> getGeoInfo(
+  std::optional<qlever::GeometryInfo> getGeoInfo(
       uint64_t indexWithMarker) const;
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.

@@ -34,25 +34,25 @@ inline S2Point toS2Point(const GeoPoint& p) {
 }
 
 // Helper function to convert `libspatialjoin` `DPoint` objects to `S2LatLng`.
-inline S2LatLng toS2LatLng(const util::geo::DPoint& point) {
+inline S2LatLng toS2LatLng(const ::util::geo::DPoint& point) {
   return S2LatLng::FromDegrees(point.getY(), point.getX());
 }
 
 // Helper function to convert `libspatialjoin` `DLine` objects to `S2Polyline`.
-inline S2Polyline toS2Polyline(const util::geo::DLine& line) {
+inline S2Polyline toS2Polyline(const ::util::geo::DLine& line) {
   AD_CORRECTNESS_CHECK(!line.empty());
   return S2Polyline{
       ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
 }
 
 // Helper function to convert `libspatialjoin` `DPoint` objects to `S2Point`.
-inline S2Point utilPointToS2Point(const util::geo::DPoint& p) {
+inline S2Point utilPointToS2Point(const ::util::geo::DPoint& p) {
   return S2LatLng::FromDegrees(p.getY(), p.getX()).ToPoint();
 }
 
 // Helper to convert a `libspatialjoin` `Ring` to an `S2Loop`
 inline std::unique_ptr<S2Loop> makeS2Loop(
-    const util::geo::Ring<CoordType>& ring) {
+    const ::util::geo::Ring<CoordType>& ring) {
   std::vector<S2Point> points = ::ranges::to<std::vector>(
       ring | ::ranges::views::transform(&utilPointToS2Point));
 
@@ -68,14 +68,14 @@ inline std::unique_ptr<S2Loop> makeS2Loop(
   auto loop = std::make_unique<S2Loop>(std::move(points), S2Debug::DISABLE);
   loop->Normalize();
   if (!loop->IsValid()) {
-    throw ad_utility::InvalidPolygonError();
+    throw qlever::InvalidPolygonError();
   }
   return loop;
 }
 
 // Helper to convert a `libspatialjoin` `Polygon` to an `S2Polygon`
 inline std::unique_ptr<S2Polygon> makeS2Polygon(
-    const util::geo::Polygon<CoordType>& polygon) {
+    const ::util::geo::Polygon<CoordType>& polygon) {
   std::vector<std::unique_ptr<S2Loop>> loops;
 
   // Outer boundary
@@ -90,7 +90,7 @@ inline std::unique_ptr<S2Polygon> makeS2Polygon(
   // throws an uncatchable fatal error otherwise if the polygon is invalid.
   S2Polygon s2polygon{std::move(loops), S2Debug::DISABLE};
   if (!s2polygon.IsValid()) {
-    throw ad_utility::InvalidPolygonError();
+    throw qlever::InvalidPolygonError();
   }
   return std::make_unique<S2Polygon>(std::move(s2polygon));
 }

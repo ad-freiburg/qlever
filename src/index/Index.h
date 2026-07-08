@@ -123,7 +123,7 @@ class Index {
   using TextVocab = TextVocabulary;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
-  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+  qlever::BlankNodeManager* getBlankNodeManager() const;
 
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();

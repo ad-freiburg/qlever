@@ -62,7 +62,7 @@ CPP_template(typename R,
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
                         ? row[j]
-                        : ValueId::makeUndefined();
+                        : qlever::ValueId::makeUndefined();
     }
     return rowLower;
   };
@@ -111,7 +111,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
       rowLower[colIdx] =
           (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
               ? row[colIdx]
-              : ValueId::makeUndefined();
+              : qlever::ValueId::makeUndefined();
     }
     return rowLower;
   };

@@ -308,9 +308,10 @@ class DeltaTriples {
   // Create a shallow copy of the local vocab such that it can be processed
   // without holding the lock. You have to make sure separately that the
   // pointers that the returned `LocalVocabIndex`es represent are still valid.
-  std::pair<std::vector<LocalVocabIndex>,
-            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
-                            OwnedBlocksEntry>>
+  std::pair<
+      std::vector<LocalVocabIndex>,
+      std::vector<
+          qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
   copyLocalVocab() const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -451,9 +452,10 @@ class DeltaTriplesManager {
   // local vocab entries and blank nodes will remain valid. So the return value
   // basically acts as a complete shallow copy of the current state of the
   // `DeltaTriples`.
-  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
-             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
-                             OwnedBlocksEntry>>
+  std::tuple<
+      LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+      std::vector<
+          qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 

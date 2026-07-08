@@ -415,11 +415,11 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
 struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
-  using Value = std::optional<ad_utility::GeoPointOrWkt>;
+  using Value = std::optional<qlever::GeoPointOrWkt>;
   using Mixin<GeoPointOrWktValueGetter>::operator();
-  std::optional<ad_utility::GeoPointOrWkt> operator()(
+  std::optional<qlever::GeoPointOrWkt> operator()(
       ValueId id, const EvaluationContext*) const;
-  std::optional<ad_utility::GeoPointOrWkt> operator()(
+  std::optional<qlever::GeoPointOrWkt> operator()(
       const LiteralOrIri&, const EvaluationContext*) const;
 };
 
@@ -479,8 +479,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // `RequestedInfo` is computed ad hoc (for example the bounding box is not
 // calculated, when requesting the centroid).
 
-CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
+CPP_template(typename RequestedInfo = qlever::GeometryInfo)(
+    requires qlever::RequestedInfoT<
         RequestedInfo>) struct GeometryInfoValueGetter
     : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
@@ -492,7 +492,7 @@ CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
 
   // Helper: This function returns a `GeometryInfo` object if it can be fetched
   // from a precomputation result. Otherwise `std::nullopt` is returned.
-  static std::optional<ad_utility::GeometryInfo> getPrecomputedGeometryInfo(
+  static std::optional<qlever::GeometryInfo> getPrecomputedGeometryInfo(
       ValueId id, const EvaluationContext* context);
 };
 

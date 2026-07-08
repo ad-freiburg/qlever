@@ -12,7 +12,7 @@
 
 #include "util/EnumWithStrings.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // A lightweight enum for the different implementation strategies of the
 // `PolymorphicVocabulary`. Also includes operations for conversion to and from
@@ -28,7 +28,8 @@ enum struct VocabularyTypeEnum {
 
 }
 class VocabularyType
-    : public EnumWithStrings<VocabularyType, detail::VocabularyTypeEnum> {
+    : public ad_utility::EnumWithStrings<VocabularyType,
+                                         detail::VocabularyTypeEnum> {
  public:
   // The different vocabulary implementations.
   using Enum = detail::VocabularyTypeEnum;
@@ -61,6 +62,6 @@ const inline VocabularyType VocabularyType::OnDiskCompressed{
     VocabularyType::Enum::OnDiskCompressed};
 const inline VocabularyType VocabularyType::OnDiskCompressedGeoSplit{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H

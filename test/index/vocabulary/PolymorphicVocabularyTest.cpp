@@ -6,7 +6,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
-using ad_utility::VocabularyType;
+using qlever::VocabularyType;
 
 namespace {
 

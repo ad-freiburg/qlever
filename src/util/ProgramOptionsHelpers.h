@@ -141,9 +141,9 @@ class ParameterToProgramOptionFactory {
 // This function is required  to use `VocabularyEnum` in
 // `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
-                     VocabularyType*, int) {
+                     qlever::VocabularyType*, int) {
   validateFromString(v, values, [](const std::string& s) {
-    return VocabularyType::fromString(s);
+    return qlever::VocabularyType::fromString(s);
   });
 }
 

@@ -68,7 +68,7 @@ struct TestIndexConfig {
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
-  std::optional<VocabularyType> vocabularyType = std::nullopt;
+  std::optional<qlever::VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
@@ -134,7 +134,7 @@ qlever::QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
 // input. All other settings are left at their default values.
 qlever::QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
-    std::optional<VocabularyType> vocabularyType = std::nullopt);
+    std::optional<qlever::VocabularyType> vocabularyType = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

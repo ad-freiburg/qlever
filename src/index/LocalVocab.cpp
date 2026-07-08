@@ -90,12 +90,12 @@ std::vector<LocalVocabEntry> LocalVocab::getAllWordsForTesting() const {
 
 // _____________________________________________________________________________
 BlankNodeIndex LocalVocab::getBlankNodeIndex(
-    ad_utility::BlankNodeManager* blankNodeManager) {
+    qlever::BlankNodeManager* blankNodeManager) {
   AD_CONTRACT_CHECK(blankNodeManager);
   // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
   if (!localBlankNodeManager_) [[unlikely]] {
     localBlankNodeManager_ =
-        std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+        std::make_shared<qlever::BlankNodeManager::LocalBlankNodeManager>(
             blankNodeManager);
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
@@ -133,13 +133,13 @@ auto LocalVocab::getOwnedLocalBlankNodeBlocks() const
 // _____________________________________________________________________________
 void LocalVocab::reserveBlankNodeBlocksFromExplicitIndices(
     const std::vector<LocalBlankNodeManager::OwnedBlocksEntry>& indices,
-    ad_utility::BlankNodeManager* blankNodeManager) {
+    qlever::BlankNodeManager* blankNodeManager) {
   AD_CONTRACT_CHECK(!localBlankNodeManager_);
   if (indices.empty()) {
     return;
   }
   localBlankNodeManager_ =
-      std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+      std::make_shared<qlever::BlankNodeManager::LocalBlankNodeManager>(
           blankNodeManager);
   localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
 }

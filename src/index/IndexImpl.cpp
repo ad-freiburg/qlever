@@ -1366,8 +1366,8 @@ void IndexImpl::readConfiguration() {
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 
-  ad_utility::VocabularyType vocabType(
-      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  qlever::VocabularyType vocabType(
+      qlever::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
@@ -1375,7 +1375,7 @@ void IndexImpl::readConfiguration() {
   uint64_t numBlankNodesTotal;
   loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);
   blankNodeManager_ =
-      std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
+      std::make_unique<qlever::BlankNodeManager>(numBlankNodesTotal);
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
@@ -1963,7 +1963,7 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 }
 
 // _____________________________________________________________________________
-ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
+qlever::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
 }

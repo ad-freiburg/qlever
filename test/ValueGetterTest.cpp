@@ -172,23 +172,23 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   t.checkFromLocalAndNormalVocabAndLiteral(
       std::string{line},
-      geoInfoMatcher(ad_utility::GeometryInfo{2,
-                                              {{2, 2}, {4, 4}},
-                                              {3, 3},
-                                              {1},
-                                              getLengthForTesting(line),
-                                              MetricArea{0}}));
+      geoInfoMatcher(qlever::GeometryInfo{2,
+                                          {{2, 2}, {4, 4}},
+                                          {3, 3},
+                                          {1},
+                                          getLengthForTesting(line),
+                                          MetricArea{0}}));
   static constexpr std::string_view polygon =
       "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   t.checkFromLocalAndNormalVocabAndLiteral(
       std::string{polygon},
-      geoInfoMatcher(ad_utility::GeometryInfo{3,
-                                              {{2, 2}, {4, 4}},
-                                              {3, 3},
-                                              {1},
-                                              getLengthForTesting(polygon),
-                                              getAreaForTesting(polygon)}));
+      geoInfoMatcher(qlever::GeometryInfo{3,
+                                          {{2, 2}, {4, 4}},
+                                          {3, 3},
+                                          {1},
+                                          getLengthForTesting(polygon),
+                                          getAreaForTesting(polygon)}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
@@ -205,7 +205,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
                                                  {{3, 2}, {3, 2}},
                                                  {3, 2},
                                                  {1},
-                                                 ad_utility::MetricLength{0},
+                                                 qlever::MetricLength{0},
                                                  MetricArea{0}}));
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);

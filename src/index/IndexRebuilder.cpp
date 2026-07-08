@@ -159,14 +159,14 @@ std::optional<Id> tryRemapBlankNodeId(Id original,
     return original;
   }
   auto normalizedId = rawId - minBlankNodeIndex;
-  auto blockIndex = normalizedId / ad_utility::BlankNodeManager::blockSize_;
+  auto blockIndex = normalizedId / qlever::BlankNodeManager::blockSize_;
   auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
   if (it == blankNodeBlocks.end() || *it != blockIndex) {
     return std::nullopt;
   }
-  auto relativeId = normalizedId % ad_utility::BlankNodeManager::blockSize_;
+  auto relativeId = normalizedId % qlever::BlankNodeManager::blockSize_;
   auto blockOffset = ql::ranges::distance(blankNodeBlocks.begin(), it) *
-                     ad_utility::BlankNodeManager::blockSize_;
+                     qlever::BlankNodeManager::blockSize_;
   return Id::makeFromBlankNodeIndex(
       BlankNodeIndex::make(relativeId + blockOffset + minBlankNodeIndex));
 }
@@ -376,7 +376,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // Set newer lower bound for dynamic blank node indices.
   newStats["num-blank-nodes-total"] =
       minBlankNodeIndex +
-      blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
+      blankNodeBlocks.size() * qlever::BlankNodeManager::blockSize_;
 
   // Pass a 0-byte allocator as a sanity check: nothing below allocates
   // through `newIndex`'s allocator, and if a future change ever does, this

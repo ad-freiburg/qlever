@@ -21,6 +21,7 @@
 namespace {
 
 using namespace ad_utility;
+using namespace qlever;
 using namespace geoInfoTestHelpers;
 
 // Example WKT literals for all supported geometry types
@@ -202,8 +203,8 @@ constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
-                 {2}, MetricLength{900}, MetricArea{5}};
+  qlever::GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
+                         {2}, MetricLength{900}, MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -254,63 +255,64 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   auto len = getLengthForTesting;
   auto area = getAreaForTesting;
 
-  auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1,   {{4, 3}, {4, 3}}, {4, 3},
-                   {1}, MetricLength{0},  MetricArea{0}};
+  auto g = qlever::GeometryInfo::fromWktLiteral(litPoint);
+  qlever::GeometryInfo exp{1,   {{4, 3}, {4, 3}}, {4, 3},
+                           {1}, MetricLength{0},  MetricArea{0}};
   EXPECT_GEOMETRYINFO(g, exp);
 
-  auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2,   {{2, 2}, {4, 4}},   {3, 3},
-                    {1}, len(litLineString), MetricArea{0}};
+  auto g2 = qlever::GeometryInfo::fromWktLiteral(litLineString);
+  qlever::GeometryInfo exp2{2,   {{2, 2}, {4, 4}},   {3, 3},
+                            {1}, len(litLineString), MetricArea{0}};
   EXPECT_GEOMETRYINFO(g2, exp2);
 
-  auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3,   {{2, 2}, {4, 4}}, {3, 3},
-                    {1}, len(litPolygon),  area(litPolygon)};
+  auto g3 = qlever::GeometryInfo::fromWktLiteral(litPolygon);
+  qlever::GeometryInfo exp3{3,   {{2, 2}, {4, 4}}, {3, 3},
+                            {1}, len(litPolygon),  area(litPolygon)};
   EXPECT_GEOMETRYINFO(g3, exp3);
 
-  auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4,   {{2, 2}, {4, 4}}, {3, 3},
-                    {2}, MetricLength{0},  MetricArea{0}};
+  auto g4 = qlever::GeometryInfo::fromWktLiteral(litMultiPoint);
+  qlever::GeometryInfo exp4{4,   {{2, 2}, {4, 4}}, {3, 3},
+                            {2}, MetricLength{0},  MetricArea{0}};
   EXPECT_GEOMETRYINFO(g4, exp4);
 
-  auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5,   {{2, 2}, {8, 6}},        {4.436542, 3.718271},
-                    {2}, len(litMultiLineString), MetricArea{0}};
+  auto g5 = qlever::GeometryInfo::fromWktLiteral(litMultiLineString);
+  qlever::GeometryInfo exp5{5,   {{2, 2}, {8, 6}},        {4.436542, 3.718271},
+                            {2}, len(litMultiLineString), MetricArea{0}};
   EXPECT_GEOMETRYINFO(g5, exp5);
 
-  auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6,   {{2, 2}, {6, 8}},     {4.5, 4.5},
-                    {2}, len(litMultiPolygon), area(litMultiPolygon)};
+  auto g6 = qlever::GeometryInfo::fromWktLiteral(litMultiPolygon);
+  qlever::GeometryInfo exp6{6,   {{2, 2}, {6, 8}},     {4.5, 4.5},
+                            {2}, len(litMultiPolygon), area(litMultiPolygon)};
   EXPECT_GEOMETRYINFO(g6, exp6);
 
-  auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7,   {{2, 2}, {6, 8}},   {5, 5},
-                    {3}, len(litCollection), area(litCollection)};
+  auto g7 = qlever::GeometryInfo::fromWktLiteral(litCollection);
+  qlever::GeometryInfo exp7{7,   {{2, 2}, {6, 8}},   {5, 5},
+                            {3}, len(litCollection), area(litCollection)};
   EXPECT_GEOMETRYINFO(g7, exp7);
 
-  auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
+  auto g8 = qlever::GeometryInfo::fromWktLiteral(litInvalidType);
   EXPECT_GEOMETRYINFO(g8, std::nullopt);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
-  auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}, MetricLength{0}, MetricArea{0}};
+  auto g = qlever::GeometryInfo::fromGeoPoint(p);
+  qlever::GeometryInfo exp{1,   {p, p},          Centroid{p},
+                           {1}, MetricLength{0}, MetricArea{0}};
   EXPECT_GEOMETRYINFO(g, exp);
 
   GeoPoint p2{0, 0};
-  auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1,   {p2, p2},        Centroid{p2},
-                    {1}, MetricLength{0}, MetricArea{0}};
+  auto g2 = qlever::GeometryInfo::fromGeoPoint(p2);
+  qlever::GeometryInfo exp2{1,   {p2, p2},        Centroid{p2},
+                            {1}, MetricLength{0}, MetricArea{0}};
   EXPECT_GEOMETRYINFO(g2, exp2);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, RequestedInfoInstance) {
   for (auto lit : getAllTestLiterals()) {
-    checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+    checkRequestedInfoForInstance(qlever::GeometryInfo::fromWktLiteral(lit));
   }
 }
 
@@ -323,11 +325,11 @@ TEST(GeometryInfoTest, RequestedInfoLiteral) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxAsWKT) {
-  BoundingBox bb1{{0, 0}, {1, 1}};
+  qlever::BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
-  BoundingBox bb2{{0, 0}, {0, 0}};
+  qlever::BoundingBox bb2{{0, 0}, {0, 0}};
   ASSERT_EQ(bb2.asWkt(), "POLYGON((0 0,0 0,0 0,0 0,0 0))");
-  auto bb3 = GeometryInfo::getBoundingBox(
+  auto bb3 = qlever::GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   ASSERT_TRUE(bb3.has_value());
@@ -336,15 +338,15 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  using enum qlever::BoundingCoordinate;
 
-  BoundingBox bb1{{2, 1}, {4, 3}};
+  qlever::BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_Y>(), 2, 0.0001);
   EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_X>(), 3, 0.0001);
   EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_Y>(), 4, 0.0001);
 
-  BoundingBox bb2{{-20, -5}, {-4, -3}};
+  qlever::BoundingBox bb2{{-20, -5}, {-4, -3}};
   EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_X>(), -5, 0.0001);
   EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_Y>(), -20, 0.0001);
   EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_X>(), -3, 0.0001);
@@ -389,7 +391,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
+  EXPECT_EQ(parseRes1.first, ::util::geo::WKTType::POINT);
   ASSERT_TRUE(parseRes1.second.has_value());
   auto parsed1 = parseRes1.second.value();
 
@@ -547,7 +549,7 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, WebMercProjection) {
-  util::geo::DBox b1{{1, 2}, {3, 4}};
+  ::util::geo::DBox b1{{1, 2}, {3, 4}};
   auto b1WebMerc = boxToWebMerc(b1);
   auto result1 =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
@@ -575,7 +577,7 @@ TEST(GeometryInfoTest, NumGeometries) {
 TEST(GeometryInfoTest, AnyGeometryMember) {
   // Test that the enum we define corresponds to the geometry type identifiers
   // used by `libspatialjoin`.
-  using namespace util::geo;
+  using namespace ::util::geo;
   using enum AnyGeometryMember;
 
   checkAnyGeometryMemberEnum({DPoint{}}, POINT);

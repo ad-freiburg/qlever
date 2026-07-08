@@ -61,10 +61,10 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
-    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
+    const std::optional<qlever::BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
     auto hasNoIntersection =
-        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
+        [&prefilterLatLngBox](const qlever::BoundingBox& geomBoundingBox) {
           return !::util::geo::intersects(
               prefilterLatLngBox.value(),
               ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
@@ -155,7 +155,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::BoundingBox>
+std::optional<qlever::BoundingBox>
 SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
     const IdTableView<0>* idTable,
     const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
@@ -168,8 +168,8 @@ SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
       idUpperRight.getDatatype() != Datatype::GeoPoint) {
     return std::nullopt;
   }
-  return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
-                                 idUpperRight.getGeoPoint()};
+  return qlever::BoundingBox{idLowerLeft.getGeoPoint(),
+                             idUpperRight.getGeoPoint()};
 }
 
 // ____________________________________________________________________________

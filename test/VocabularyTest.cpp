@@ -141,7 +141,7 @@ TEST(Vocabulary, PrefixFilter) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, IsGeoInfoAvailable) {
-  using ad_utility::VocabularyType;
+  using qlever::VocabularyType;
   using enum VocabularyType::Enum;
 
   RdfsVocabulary v1;

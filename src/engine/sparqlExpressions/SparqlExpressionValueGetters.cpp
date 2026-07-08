@@ -426,7 +426,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 }
 
 //______________________________________________________________________________
-std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
@@ -454,7 +454,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
@@ -560,11 +560,11 @@ std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires ad_utility::RequestedInfoT<RequestedInfo>)
-    std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter<
-        CPP_sfinae_args(RequestedInfo)>::
-        getPrecomputedGeometryInfo(ValueId id,
-                                   const EvaluationContext* context) {
+    requires qlever::RequestedInfoT<RequestedInfo>)
+    std::optional<qlever::GeometryInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+        RequestedInfo)>::getPrecomputedGeometryInfo(ValueId id,
+                                                    const EvaluationContext*
+                                                        context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
     // All geometry strings encountered during index build have a precomputed
@@ -576,7 +576,7 @@ CPP_template_out_def(typename RequestedInfo)(
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    requires qlever::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
                                     const EvaluationContext * context) const {
@@ -597,7 +597,7 @@ CPP_template_out_def(typename RequestedInfo)(
       }
     }
     case GeoPoint:
-      return ad_utility::GeometryInfo::fromGeoPoint(id.getGeoPoint())
+      return qlever::GeometryInfo::fromGeoPoint(id.getGeoPoint())
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
@@ -614,7 +614,7 @@ CPP_template_out_def(typename RequestedInfo)(
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
-    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    requires qlever::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(const LiteralOrIri & litOrIri,
                                     [[maybe_unused]] const EvaluationContext *
@@ -624,21 +624,20 @@ CPP_template_out_def(typename RequestedInfo)(
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
       asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
     auto wktLiteral = litOrIri.getLiteral().toStringRepresentation();
-    return ad_utility::GeometryInfo::getRequestedInfo<RequestedInfo>(
-        wktLiteral);
+    return qlever::GeometryInfo::getRequestedInfo<RequestedInfo>(wktLiteral);
   }
   return std::nullopt;
 };
 
 // Explicit instantiations
 namespace qlever::sparqlExpression::detail {
-template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
-template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
-template struct GeometryInfoValueGetter<ad_utility::Centroid>;
-template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
-template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
-template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
-template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
+template struct GeometryInfoValueGetter<qlever::GeometryInfo>;
+template struct GeometryInfoValueGetter<qlever::GeometryType>;
+template struct GeometryInfoValueGetter<qlever::Centroid>;
+template struct GeometryInfoValueGetter<qlever::BoundingBox>;
+template struct GeometryInfoValueGetter<qlever::NumGeometries>;
+template struct GeometryInfoValueGetter<qlever::MetricLength>;
+template struct GeometryInfoValueGetter<qlever::MetricArea>;
 }  // namespace qlever::sparqlExpression::detail
 
 //______________________________________________________________________________
@@ -701,19 +700,19 @@ template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
 template struct TypeErasedValueGetter<ParsedUriGetter>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::GeometryInfo>>;
+    GeometryInfoValueGetter<qlever::GeometryInfo>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::GeometryType>>;
+    GeometryInfoValueGetter<qlever::GeometryType>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::Centroid>>;
+    GeometryInfoValueGetter<qlever::Centroid>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::BoundingBox>>;
+    GeometryInfoValueGetter<qlever::BoundingBox>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::NumGeometries>>;
+    GeometryInfoValueGetter<qlever::NumGeometries>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::MetricLength>>;
+    GeometryInfoValueGetter<qlever::MetricLength>>;
 template struct TypeErasedValueGetter<
-    GeometryInfoValueGetter<ad_utility::MetricArea>>;
+    GeometryInfoValueGetter<qlever::MetricArea>>;
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;

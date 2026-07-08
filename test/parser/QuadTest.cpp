@@ -20,7 +20,7 @@ TEST(QuadTest, getQuads) {
         auto t = generateLocationTrace(l);
         // For this test, there are no blank nodes. Below you find a dedicated
         // test with blank nodes.
-        ad_utility::BlankNodeManager manager;
+        qlever::BlankNodeManager manager;
         Quads::BlankNodeAdder bn{{}, {}, &manager};
         const Quads quads{std::move(triples), std::move(graphs)};
         auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
@@ -56,7 +56,7 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
   };
 
   std::array tr{bn("a"), bn("b"), bn("a")};
-  ad_utility::BlankNodeManager manager;
+  qlever::BlankNodeManager manager;
   Quads::BlankNodeAdder adder{{}, {}, &manager};
   const Quads quads{{tr}, {}};
   auto res = quads.toTriplesWithGraph(std::monostate{}, adder);

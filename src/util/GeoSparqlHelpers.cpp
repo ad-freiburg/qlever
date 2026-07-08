@@ -58,19 +58,21 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
+std::optional<std::string> geometryNAsWkt(qlever::GeoPointOrWkt wkt,
+                                          int64_t n) {
   return utilGeomToWkt(getGeometryN(wkt, n));
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
+std::optional<std::string> simplifyWkt(qlever::GeoPointOrWkt wkt,
+                                       double tolerance) {
   auto [type, parsed] = parseGeoPointOrWkt(wkt);
   return utilGeomToWkt(simplifyGeometry(parsed, tolerance));
 }
 
 // _____________________________________________________________________________
-std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
-                                                const GeoPointOrWkt& b) {
+std::optional<double> wktDistLibSpatialJoinImpl(
+    const qlever::GeoPointOrWkt& a, const qlever::GeoPointOrWkt& b) {
   return computeMetricDistance(projectWebMerc(a), projectWebMerc(b));
 }
 

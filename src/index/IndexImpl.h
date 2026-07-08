@@ -193,11 +193,11 @@ class IndexImpl {
   bool doNotLoadPermutations_ = false;
 
   // The vocabulary type that is used (only relevant during index building).
-  ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
-      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+  qlever::VocabularyType vocabularyTypeForIndexBuilding_{
+      qlever::VocabularyType::Enum::OnDiskCompressed};
 
   // BlankNodeManager, initialized during `readConfiguration`
-  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+  std::unique_ptr<qlever::BlankNodeManager> blankNodeManager_{nullptr};
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
@@ -257,7 +257,7 @@ class IndexImpl {
     return allocator_;
   };
 
-  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+  qlever::BlankNodeManager* getBlankNodeManager() const;
 
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
@@ -274,8 +274,8 @@ class IndexImpl {
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
-  // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
-  void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
+  // Set the vocabulary type; see `qlever::VocabularyType` for details.
+  void setVocabularyTypeForIndexBuilding(qlever::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
   }

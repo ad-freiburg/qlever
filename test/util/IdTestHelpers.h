@@ -58,7 +58,7 @@ inline auto WordVocabId = [](const auto& t) {
   return qlever::Id::makeFromWordVocabIndex(WordVocabIndex ::make(t));
 };
 
-inline auto GeoPointId = [](const GeoPoint& v) {
+inline auto GeoPointId = [](const qlever::GeoPoint& v) {
   return qlever::Id::makeFromGeoPoint(v);
 };
 

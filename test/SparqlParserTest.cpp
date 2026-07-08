@@ -1591,7 +1591,7 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
 
-  ad_utility::BlankNodeManager bnm;
+  qlever::BlankNodeManager bnm;
   qlever::EncodedIriManager ev;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.

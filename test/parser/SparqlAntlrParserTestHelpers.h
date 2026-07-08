@@ -1246,7 +1246,7 @@ auto parse = [](const std::string& input,
                 std::string_view baseIri = "") {
   // We might parse updates here, should we move the blank node manager out
   // to make it testable/accessible?
-  static ad_utility::BlankNodeManager blankNodeManager;
+  static qlever::BlankNodeManager blankNodeManager;
   static qlever::EncodedIriManager encodedIriManager;
   ParserAndVisitor p{
       &blankNodeManager,   &encodedIriManager, input,

@@ -41,28 +41,29 @@ static constexpr double invalidCoordinate =
 std::pair<double, double> parseWktPoint(const std::string_view point);
 
 // Calculate geographic distance between points in kilometers using s2geometry.
-double wktDistImpl(GeoPoint point1, GeoPoint point2);
+double wktDistImpl(qlever::GeoPoint point1, qlever::GeoPoint point2);
 
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
-std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
+std::optional<std::string> geometryNAsWkt(qlever::GeoPointOrWkt wkt, int64_t n);
 
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
-std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
+std::optional<std::string> simplifyWkt(qlever::GeoPointOrWkt wkt,
+                                       double tolerance);
 
 const auto wktLiteralIri =
     qlever::triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
 // Calculate geographic distance between geometries in meters using `pb_util`.
-std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
-                                                const GeoPointOrWkt& b);
+std::optional<double> wktDistLibSpatialJoinImpl(const qlever::GeoPointOrWkt& a,
+                                                const qlever::GeoPointOrWkt& b);
 
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
 class WktLongitude {
  public:
-  double operator()(const std::optional<GeoPoint>& point) const {
+  double operator()(const std::optional<qlever::GeoPoint>& point) const {
     if (!point.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
@@ -73,7 +74,7 @@ class WktLongitude {
 // Return the latitude coordinate from a WKT point.
 class WktLatitude {
  public:
-  double operator()(const std::optional<GeoPoint>& point) const {
+  double operator()(const std::optional<qlever::GeoPoint>& point) const {
     if (!point.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
@@ -85,8 +86,8 @@ class WktLatitude {
 class WktDist {
  public:
   double operator()(
-      const std::optional<GeoPointOrWkt>& geom1,
-      const std::optional<GeoPointOrWkt>& geom2,
+      const std::optional<qlever::GeoPointOrWkt>& geom1,
+      const std::optional<qlever::GeoPointOrWkt>& geom2,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!geom1.has_value() || !geom2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
@@ -103,8 +104,8 @@ class WktDist {
 // Compute the distance between two WKT points in meters.
 class WktMetricDist {
  public:
-  double operator()(const std::optional<GeoPointOrWkt>& geom1,
-                    const std::optional<GeoPointOrWkt>& geom2) const {
+  double operator()(const std::optional<qlever::GeoPointOrWkt>& geom1,
+                    const std::optional<qlever::GeoPointOrWkt>& geom2) const {
     return WktDist{}(geom1, geom2, UnitOfMeasurement::METERS);
   }
 };
@@ -112,13 +113,13 @@ class WktMetricDist {
 // Compute the length of a WKT geometry.
 class WktLength {
  public:
-  ValueId operator()(
-      const std::optional<MetricLength>& len,
+  qlever::ValueId operator()(
+      const std::optional<qlever::MetricLength>& len,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!len.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(
+    return qlever::ValueId::makeFromDouble(
         detail::kilometerToUnit(len.value().length() / 1000.0, unit));
   }
 };
@@ -126,22 +127,24 @@ class WktLength {
 // Compute the length of a WKT geometry in meters.
 class WktMetricLength {
  public:
-  ValueId operator()(const std::optional<MetricLength>& len) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::MetricLength>& len) const {
     if (!len.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(len.value().length());
+    return qlever::ValueId::makeFromDouble(len.value().length());
   }
 };
 
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
-  ValueId operator()(const std::optional<Centroid>& geom) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::Centroid>& geom) const {
     if (!geom.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid());
+    return qlever::ValueId::makeFromGeoPoint(geom.value().centroid());
   }
 };
 
@@ -149,9 +152,9 @@ class WktCentroid {
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<BoundingBox>& boundingBox) const {
+      const std::optional<qlever::BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
     using qlever::triple_component::Iri;
     using qlever::triple_component::LiteralOrIri;
@@ -163,31 +166,34 @@ class WktEnvelope {
 };
 
 // Get one of the two bounding box corners as `GeoPoint`s.
-template <BoundingBoxCorner RequestedCorner>
+template <qlever::BoundingBoxCorner RequestedCorner>
 class WktEnvelopeCorner {
  public:
-  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    if constexpr (RequestedCorner == BoundingBoxCorner::LOWER_LEFT) {
-      return ValueId::makeFromGeoPoint(boundingBox.value().lowerLeft());
+    if constexpr (RequestedCorner == qlever::BoundingBoxCorner::LOWER_LEFT) {
+      return qlever::ValueId::makeFromGeoPoint(boundingBox.value().lowerLeft());
     } else {
-      static_assert(RequestedCorner == BoundingBoxCorner::UPPER_RIGHT);
-      return ValueId::makeFromGeoPoint(boundingBox.value().upperRight());
+      static_assert(RequestedCorner == qlever::BoundingBoxCorner::UPPER_RIGHT);
+      return qlever::ValueId::makeFromGeoPoint(
+          boundingBox.value().upperRight());
     }
   }
 };
 
 // Get a single coordinate of the bounding box.
-template <BoundingCoordinate RequestedCoordinate>
+template <qlever::BoundingCoordinate RequestedCoordinate>
 class WktBoundingCoordinate {
  public:
-  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::BoundingBox>& boundingBox) const {
     if (!boundingBox.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(
+    return qlever::ValueId::makeFromDouble(
         boundingBox.value().getBoundingCoordinate<RequestedCoordinate>());
   }
 };
@@ -196,14 +202,14 @@ class WktBoundingCoordinate {
 class WktGeometryType {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeometryType>& geometryType) const {
+      const std::optional<qlever::GeometryType>& geometryType) const {
     if (!geometryType.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
 
     auto typeIri = geometryType.value().asIri();
     if (!typeIri.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
 
     // The geometry type should be returned as an xsd:anyURI literal according
@@ -221,18 +227,18 @@ class WktGeometryType {
 class WktGeometryN {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeoPointOrWkt>& wkt,
+      const std::optional<qlever::GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
     using qlever::triple_component::Iri;
     using qlever::triple_component::LiteralOrIri;
     if (!wkt.has_value() || !n.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
 
     auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
 
     if (!resultWkt.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
     auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
         resultWkt.value());
@@ -247,12 +253,12 @@ class WktSimplify {
  public:
   template <typename NumericVariant>
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeoPointOrWkt>& geom,
+      const std::optional<qlever::GeoPointOrWkt>& geom,
       const NumericVariant& tolerance) const {
     using qlever::triple_component::Iri;
     using qlever::triple_component::LiteralOrIri;
     if (!geom.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
 
     // Extract the tolerance as a `double`.
@@ -267,12 +273,12 @@ class WktSimplify {
         },
         tolerance);
     if (!tol.has_value() || tol.value() <= 0 || !std::isfinite(tol.value())) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
 
     auto resultWkt = detail::simplifyWkt(geom.value(), tol.value());
     if (!resultWkt.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
     auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
         resultWkt.value());
@@ -286,11 +292,11 @@ class WktSimplify {
 template <SpatialJoinType Relation>
 class WktGeometricRelation {
  public:
-  ValueId operator()(
+  qlever::ValueId operator()(
       // TODO<ullingerc> For implementation, use a new appropriate value getter
       // for geometry literals and points.
-      [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
-      [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
+      [[maybe_unused]] const std::optional<qlever::GeoPoint>& geoLeft,
+      [[maybe_unused]] const std::optional<qlever::GeoPoint>& geoRight) const {
     AD_THROW(
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
@@ -301,40 +307,42 @@ class WktGeometricRelation {
 // Get the number of geometries in a WKT literal.
 class WktNumGeometries {
  public:
-  ValueId operator()(const std::optional<NumGeometries>& numGeom) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::NumGeometries>& numGeom) const {
     if (!numGeom.has_value()) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromInt(numGeom.value().numGeometries());
+    return qlever::ValueId::makeFromInt(numGeom.value().numGeometries());
   }
 };
 
 // Compute the area of a WKT geometry.
 class WktArea {
  public:
-  ValueId operator()(
-      const std::optional<MetricArea>& area,
+  qlever::ValueId operator()(
+      const std::optional<qlever::MetricArea>& area,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!area.has_value() ||
         (unit.has_value() && !detail::isAreaUnit(unit.value()))) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
     double val = detail::squareMeterToUnit(area.value().area(), unit);
     if (std::isnan(val)) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(val);
+    return qlever::ValueId::makeFromDouble(val);
   }
 };
 
 // Compute the area of a WKT geometry in square meters.
 class WktMetricArea {
  public:
-  ValueId operator()(const std::optional<MetricArea>& area) const {
+  qlever::ValueId operator()(
+      const std::optional<qlever::MetricArea>& area) const {
     if (!area.has_value() || std::isnan(area.value().area())) {
-      return ValueId::makeUndefined();
+      return qlever::ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(area.value().area());
+    return qlever::ValueId::makeFromDouble(area.value().area());
   }
 };
 

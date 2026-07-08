@@ -156,11 +156,12 @@ inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
 }
 
 // Compute the centroid of a parsed geometry and return it as a `GeoPoint`
-// wrapped inside a `Centroid` struct.
-inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
+// wrapped inside a `qlever::Centroid` struct.
+inline std::optional<qlever::Centroid> centroidAsGeoPoint(
+    const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
   try {
-    return Centroid{utilPointToGeoPoint(uPoint)};
+    return qlever::Centroid{utilPointToGeoPoint(uPoint)};
   } catch (const qlever::CoordinateOutOfRangeException& ex) {
     AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
                     "coordinates. Error: "
@@ -170,14 +171,14 @@ inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
 }
 
 // Compute the bounding box of a parsed geometry and return it as a pair of two
-// `GeoPoint`s wrapped inside a `BoundingBox` struct.
-inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
+// `GeoPoint`s wrapped inside a `qlever::BoundingBox` struct.
+inline std::optional<qlever::BoundingBox> boundingBoxAsGeoPoints(
     const ParsedWkt& geometry) {
   auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
   try {
     auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
     auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
-    return BoundingBox{lowerLeft, upperRight};
+    return qlever::BoundingBox{lowerLeft, upperRight};
   } catch (const qlever::CoordinateOutOfRangeException& ex) {
     AD_LOG_DEBUG << "Cannot compute bounding box due to "
                     "invalid coordinates. Error: "
@@ -200,9 +201,10 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   return getWKT(box);
 }
 
-// Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
-// required by `pb_util`.
-inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
+// Convert a `qlever::BoundingBox` struct holding two `GeoPoint`s to a `Box`
+// struct as required by `pb_util`.
+inline Box<CoordType> boundingBoxToUtilBox(
+    const qlever::BoundingBox& boundingBox) {
   return {geoPointToUtilPoint(boundingBox.lowerLeft()),
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
@@ -353,8 +355,8 @@ struct MetricLengthVisitor {
   }
 
   // Compute the length for a parsed WKT geometry.
-  MetricLength operator()(const ParsedWkt& geometry) const {
-    return MetricLength{std::visit(MetricLengthVisitor{}, geometry)};
+  qlever::MetricLength operator()(const ParsedWkt& geometry) const {
+    return qlever::MetricLength{std::visit(MetricLengthVisitor{}, geometry)};
   }
 };
 static constexpr MetricLengthVisitor computeMetricLength;
@@ -439,8 +441,8 @@ struct MetricAreaVisitor {
 
 static constexpr MetricAreaVisitor computeMetricArea;
 
-// Helper to convert an instance of the `GeoPointOrWkt` variant to `ParseResult`
-// containing a geometry for `pb_util`.
+// Helper to convert an instance of the `qlever::GeoPointOrWkt` variant to
+// `ParseResult` containing a geometry for `pb_util`.
 struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPoint& point) const {
     return {WKTType::POINT, geoPointToUtilPoint(point)};
@@ -448,7 +450,7 @@ struct ParseGeoPointOrWktVisitor {
 
   ParseResult operator()(const std::string& wkt) const { return parseWkt(wkt); }
 
-  ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+  ParseResult operator()(const qlever::GeoPointOrWkt& geoPointOrWkt) const {
     return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
   }
 
@@ -547,8 +549,8 @@ struct GeometryNVisitor {
     return GeometryNVisitor{}(geom.value(), n);
   }
 
-  // Visitor for `GeoPointOrWkt`.
-  std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
+  // Visitor for `qlever::GeoPointOrWkt`.
+  std::optional<ParsedWkt> operator()(const qlever::GeoPointOrWkt& geom,
                                       int64_t n) const {
     auto [type, parsed] = parseGeoPointOrWkt(geom);
     return GeometryNVisitor{}(parsed, n);
@@ -639,7 +641,7 @@ CPP_template(typename Projection)(
 
   // Handle values contained in `std::optional`.
   CPP_template_2(typename T)(
-      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+      requires(!SimilarTo<T, qlever::GeoPointOrWkt>)) std::optional<T>
   operator()(std::optional<T> opt) const {
     if (!opt.has_value()) {
       return std::nullopt;
@@ -647,8 +649,9 @@ CPP_template(typename Projection)(
     return (*this)(std::move(opt.value()));
   }
 
-  // Handle `GeoPointOrWkt` (raw unparsed geometry).
-  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
+  // Handle `qlever::GeoPointOrWkt` (raw unparsed geometry).
+  ParseResult operator()(
+      std::optional<qlever::GeoPointOrWkt> geoPointOrWkt) const {
     auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
     return {type, (*this)(std::move(parsed))};
   }

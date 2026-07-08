@@ -1755,7 +1755,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
-  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  std::optional<qlever::VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
@@ -1790,7 +1790,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   auto base = std::filesystem::current_path() / "_spatialjoinAbsTestIndex";
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
-  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  std::optional<qlever::VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
@@ -1838,7 +1838,7 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
 
   auto vocabType =
-      ad_utility::VocabularyType::fromString("on-disk-compressed-geo-split");
+      qlever::VocabularyType::fromString("on-disk-compressed-geo-split");
   auto qec = ad_utility::testing::getQec(kb, vocabType);
   auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
   auto result = scan->getResult();

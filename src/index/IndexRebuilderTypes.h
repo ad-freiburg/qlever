@@ -16,7 +16,7 @@
 
 namespace qlever::indexRebuilder {
 using OwnedBlocksEntry =
-    ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+    qlever::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
 using OwnedBlocks = std::vector<OwnedBlocksEntry>;
 using InsertionPositions = std::vector<VocabIndex>;
 using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;

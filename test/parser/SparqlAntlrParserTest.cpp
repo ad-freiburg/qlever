@@ -71,7 +71,7 @@ TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
   {
-    static ad_utility::BlankNodeManager blankNodeManager;
+    static qlever::BlankNodeManager blankNodeManager;
     ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
@@ -1227,7 +1227,7 @@ TEST(SparqlParser, ConstructQuery) {
 // _____________________________________________________________________________
 namespace qlever {
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  static ad_utility::BlankNodeManager blankNodeManager;
+  static qlever::BlankNodeManager blankNodeManager;
   SparqlQleverVisitor visitor{
       &blankNodeManager, encodedIriManager(), {}, std::nullopt};
 
@@ -1737,7 +1737,7 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   auto parseWithEncoding = [&](const std::string& input) {
-    static ad_utility::BlankNodeManager blankNodeManager;
+    static qlever::BlankNodeManager blankNodeManager;
     return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };
