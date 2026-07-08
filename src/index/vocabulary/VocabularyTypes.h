@@ -108,8 +108,7 @@ using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
 struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
 // A vocabulary batch-lookup result whose words are already materialized as
-// owning `std::string`s (e.g. the generic sequential fallback, where
-// `operator[]` returns a `std::string`). The words are moved into the
+// owning `std::string`s. The words are moved into the
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};

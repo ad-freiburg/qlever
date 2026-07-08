@@ -35,7 +35,19 @@ class VocabularyCreator {
       : vocabFilename_{std::move(filename)} {
     ad_utility::deleteFile(vocabFilename_, false);
   }
-  ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
+  // Move-only: a moved-from creator has an empty filename and deletes nothing.
+  VocabularyCreator(VocabularyCreator&& other) noexcept
+      : vocabFilename_{std::exchange(other.vocabFilename_, {})} {}
+  VocabularyCreator& operator=(VocabularyCreator&&) =
+      delete;  // not needed (TODO: why?)
+  VocabularyCreator(const VocabularyCreator&) = delete;
+  VocabularyCreator& operator=(const VocabularyCreator&) = delete;
+
+  ~VocabularyCreator() {
+    if (!vocabFilename_.empty()) {
+      ad_utility::deleteFile(vocabFilename_);
+    }
+  }
 
   // Create and return a `VocabularyOnDisk` from words.
   void createVocabularyImpl(const std::vector<std::string>& words) {
@@ -63,22 +75,48 @@ class VocabularyCreator {
   }
 };
 
+// Owns a `VocabularyOnDisk` together with the `VocabularyCreator` that manages
+// its backing file, so the file lives as long as the vocabulary reading from
+// it.
+class VocabularyOnDiskHandle {
+ public:
+  VocabularyOnDiskHandle(std::string filename,
+                         const std::vector<std::string>& words)
+      : creator_{std::move(filename)},
+        vocabulary_{creator_.createVocabulary(words)} {}
+
+  // Non-copyable/movable: a copy would give two `creator_`s the same file, so
+  // both destructors would unlink it (double free).
+  VocabularyOnDiskHandle(const VocabularyOnDiskHandle&) = delete;
+  VocabularyOnDiskHandle& operator=(const VocabularyOnDiskHandle&) = delete;
+  VocabularyOnDiskHandle(VocabularyOnDiskHandle&&) = delete;
+  VocabularyOnDiskHandle& operator=(VocabularyOnDiskHandle&&) = delete;
+
+ private:
+  // `vocabulary_` is declared after `creator_`, because the `vocabulary_`
+  // should be destroyed before the `creator_`: the `vocabulary_` must be torn
+  // down before the `creator_` unlinks the file.
+  VocabularyCreator creator_;
+  VocabularyOnDisk vocabulary_;
+
+ public:
+  // Access the underlying vocabulary transparently, so call sites can treat
+  // the handle like the `VocabularyOnDisk` it wraps.
+  VocabularyOnDisk& operator*() { return vocabulary_; }
+  VocabularyOnDisk* operator->() { return &vocabulary_; }
+};
+
 auto createVocabulary(std::string filename) {
   return [c = VocabularyCreator{std::move(filename)}](auto&&... args) mutable {
     return c.createVocabulary(AD_FWD(args)...);
   };
 }
 
-// TODO<ms2144> I think we can make use of `createVocabulary` here. But for that
-// I need to fully understand the notation of the method above first.
 VocabularyOnDisk createVocabularyFromWords(
     const std::vector<std::string>& words) {
-  VocabularyCreator creator{absl::StrCat(gtestCurrentTestName(), ".dat")};
-  return creator.createVocabulary(words);
+  return createVocabulary(absl::StrCat(gtestCurrentTestName(), ".dat"))(words);
 }
 
-// TODO<ms2144> I think we can make use of `createVocabulary` here. But for that
-// I need to fully understand the notation of the method above first.
 auto createVocabulary() {
   return [c = VocabularyCreator{absl::StrCat(gtestCurrentTestName(), ".dat")}](
              auto&&... args) mutable {
