@@ -37,7 +37,7 @@ using ::testing::Optional;
 using enum PositionInTriple;
 using namespace qlever::constructExport;
 using qlever::GraphTerm;
-using Triples = ad_utility::sparql_types::Triples;
+using Triples = qlever::sparql_types::Triples;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;
 auto iriV = ad_utility::testing::iriV;

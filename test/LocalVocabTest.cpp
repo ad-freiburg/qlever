@@ -41,7 +41,7 @@ using TestWords = std::vector<LocalVocabEntry>;
 
 TestWords getTestCollectionOfWords(size_t size,
                                    const LocalVocabContext& context) {
-  using namespace ad_utility::triple_component;
+  using namespace qlever::triple_component;
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
     testCollectionOfWords.push_back(LocalVocabEntry::literalWithoutQuotes(
@@ -52,7 +52,7 @@ TestWords getTestCollectionOfWords(size_t size,
 
 // _____________________________________________________________________________
 auto lit(std::string_view s) {
-  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
+  return qlever::triple_component::Literal::literalWithoutQuotes(s);
 }
 }  // namespace
 
@@ -164,7 +164,7 @@ TEST(LocalVocab, merge) {
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
-    return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
+    return qlever::triple_component::LiteralOrIri::literalWithoutQuotes(s);
   };
   indices.push_back(vocA.getIndexAndAddIfNotContained(
       LocalVocabEntry{lit("oneA"), localVocabContext}));
@@ -233,7 +233,7 @@ TEST(LocalVocab, propagation) {
     TestWords expectedWords;
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto toLitOrIri = [&localVocabContext](const auto& word) {
-      using namespace ad_utility::triple_component;
+      using namespace qlever::triple_component;
       if (ql::starts_with(word, '<')) {
         return LocalVocabEntry::fromIriref(word, localVocabContext);
       } else {
@@ -438,7 +438,7 @@ TEST(LocalVocab, getBlankNodeIndex) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
@@ -457,7 +457,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   using ::testing::UnorderedElementsAre;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
@@ -487,7 +487,7 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
@@ -529,7 +529,7 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");

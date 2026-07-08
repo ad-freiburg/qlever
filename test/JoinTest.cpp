@@ -573,7 +573,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   auto qec = ad_utility::testing::getQec(config);
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
       qec, POS,
       SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<1>")},
@@ -614,7 +614,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
       " <x> <p2> <5>");
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
       qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Var{"?o1"}});
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
@@ -945,7 +945,7 @@ TEST(JoinTest, clone) {
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
   auto keepJoinCol = GetParam();
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(

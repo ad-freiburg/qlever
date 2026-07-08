@@ -1043,7 +1043,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
-    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
+    return TripleComponent{qlever::triple_component::Iri::fromIriref(iri)}
         .toValueId(index)
         .value();
   };

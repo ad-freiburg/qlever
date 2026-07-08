@@ -25,11 +25,11 @@ namespace qlever {
 struct Quads {
   // A single block of triples wrapped in a `GRAPH ... { ... }`. Corresponds to
   // the `quadsNotTriples` grammar rule.
-  using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
-                                ad_utility::sparql_types::Triples>;
+  using GraphBlock =
+      std::tuple<qlever::sparql_types::VarOrIri, qlever::sparql_types::Triples>;
 
   // Free triples are outside a `GRAPH ...` clause.
-  ad_utility::sparql_types::Triples freeTriples_{};
+  qlever::sparql_types::Triples freeTriples_{};
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 

@@ -57,17 +57,15 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall(
-      "iRI(?x)",
-      matchNaryWithChildrenMatchers(
-          &makeIriOrUriExpression,
-          variableExpressionMatcher(qlever::Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
+      "iRI(?x)", matchNaryWithChildrenMatchers(
+                     &makeIriOrUriExpression,
+                     variableExpressionMatcher(qlever::Variable{"?x"}),
+                     matchLiteralExpression(qlever::triple_component::Iri{})));
   expectBuiltInCall(
-      "uRI(?x)",
-      matchNaryWithChildrenMatchers(
-          &makeIriOrUriExpression,
-          variableExpressionMatcher(qlever::Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
+      "uRI(?x)", matchNaryWithChildrenMatchers(
+                     &makeIriOrUriExpression,
+                     variableExpressionMatcher(qlever::Variable{"?x"}),
+                     matchLiteralExpression(qlever::triple_component::Iri{})));
   // Repeat the tests with a BASE IRI.
   expectBuiltInCall("IRI(?x)",
                     matchNaryWithChildrenMatchers(
@@ -391,8 +389,8 @@ TEST(SparqlParser, FunctionCall) {
           &makeDistWithUnitExpression,
           variableExpressionMatcher(qlever::Variable{"?a"}),
           variableExpressionMatcher(qlever::Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Iri>(
-              ad_utility::triple_component::Iri::fromIriref(
+          matchLiteralExpression<qlever::triple_component::Iri>(
+              qlever::triple_component::Iri::fromIriref(
                   "<http://qudt.org/vocab/unit/M>"))));
 
   // geof:distance with xsd:anyURI literal as unit in third argument
@@ -405,8 +403,8 @@ TEST(SparqlParser, FunctionCall) {
           &makeDistWithUnitExpression,
           variableExpressionMatcher(qlever::Variable{"?a"}),
           variableExpressionMatcher(qlever::Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Literal>(
-              ad_utility::triple_component::Literal::fromStringRepresentation(
+          matchLiteralExpression<qlever::triple_component::Literal>(
+              qlever::triple_component::Literal::fromStringRepresentation(
                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
                   "XMLSchema#anyURI>"))));
 

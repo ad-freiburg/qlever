@@ -131,8 +131,7 @@ TEST(GeoPoint, parseFromLiteral) {
     std::string content = absl::StrCat(
         "\"", input, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
     auto value =
-        ad_utility::triple_component::Literal::fromStringRepresentation(
-            content);
+        qlever::triple_component::Literal::fromStringRepresentation(content);
     auto g = GeoPoint::parseFromLiteral(value);
     ASSERT_EQ(g.has_value(), hasVal);
     if (g.has_value()) {
@@ -163,16 +162,14 @@ TEST(GeoPoint, parseFromLiteral) {
   testParseFromLiteral("", false);
 
   // Literals of different type
-  ASSERT_FALSE(
-      GeoPoint::parseFromLiteral(
-          ad_utility::triple_component::Literal::fromStringRepresentation(
-              "\"123\"^^xsd:integer"))
-          .has_value());
-  ASSERT_FALSE(
-      GeoPoint::parseFromLiteral(
-          ad_utility::triple_component::Literal::fromStringRepresentation(
-              "\"hi\"@en"))
-          .has_value());
+  ASSERT_FALSE(GeoPoint::parseFromLiteral(
+                   qlever::triple_component::Literal::fromStringRepresentation(
+                       "\"123\"^^xsd:integer"))
+                   .has_value());
+  ASSERT_FALSE(GeoPoint::parseFromLiteral(
+                   qlever::triple_component::Literal::fromStringRepresentation(
+                       "\"hi\"@en"))
+                   .has_value());
 }
 
 // _____________________________________________________________________________

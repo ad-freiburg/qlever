@@ -443,7 +443,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+      qlever::triple_component::Literal::literalWithoutQuotes("Test"),
       qec->getLocalVocabContext()});
   ValuesForTesting valuesForTesting{
       qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},

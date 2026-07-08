@@ -121,7 +121,7 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // collation level.
 // TODO<joka921> Make the collation level configurable.
 inline std::pair<ValueId, ValueId> getRangeFromVocab(
-    const ad_utility::triple_component::LiteralOrIri& s,
+    const qlever::triple_component::LiteralOrIri& s,
     const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`

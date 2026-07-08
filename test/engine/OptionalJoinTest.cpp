@@ -731,7 +731,7 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),

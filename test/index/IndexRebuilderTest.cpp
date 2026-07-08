@@ -271,7 +271,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+  auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
                                DEFAULT_GRAPH_IRI)}
                .toValueId(index)
                .value();
@@ -464,7 +464,7 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                     std::move(config));
     index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
                                                  DeltaTriples& deltaTriples) {
-      auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+      auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
                                    DEFAULT_GRAPH_IRI)}
                    .toValueId(index)
                    .value();
@@ -528,7 +528,7 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+        auto g = TripleComponent{qlever::triple_component::Iri::fromIriref(
                                      DEFAULT_GRAPH_IRI)}
                      .toValueId(index)
                      .value();

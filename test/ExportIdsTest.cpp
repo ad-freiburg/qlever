@@ -112,9 +112,9 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Literal = qlever::triple_component::Literal;
+  using Iri = qlever::triple_component::Iri;
 
   std::vector<std::pair<qlever::ValueId, std::optional<LiteralOrIri>>> expected{
       {getId("\"something\""),
@@ -141,8 +141,8 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
 // _____________________________________________________________________________
 TEST(ExportIds, getLiteralOrNullopt) {
   using LiteralOrIri = ql::exportIds::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
+  using Literal = qlever::triple_component::Literal;
+  using Iri = qlever::triple_component::Iri;
 
   auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
                                    std::optional<std::string> expectedRes) {
@@ -182,7 +182,7 @@ TEST(ExportIds, ReplaceAnglesByQuotes) {
 
 // _____________________________________________________________________________
 TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
       ql::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(

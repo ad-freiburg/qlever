@@ -23,8 +23,7 @@ using namespace std::literals;
 
 namespace qlever::sparqlExpression::detail {
 
-void ensureIsSimpleLiteral(
-    const ad_utility::triple_component::Literal& literal) {
+void ensureIsSimpleLiteral(const qlever::triple_component::Literal& literal) {
   if (literal.hasDatatype() || literal.hasLanguageTag()) {
     throw std::runtime_error{
         "The REGEX function only accepts simple literals (literals without a "

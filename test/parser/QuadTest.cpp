@@ -13,7 +13,7 @@ using namespace qlever;
 // _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =
-      [](ad_utility::sparql_types::Triples triples,
+      [](qlever::sparql_types::Triples triples,
          std::vector<Quads::GraphBlock> graphs,
          const std::vector<SparqlTripleSimpleWithGraph>& expected,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -79,7 +79,7 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
 
 TEST(QuadTest, getOperations) {
   auto expectGetQuads =
-      [](ad_utility::sparql_types::Triples triples,
+      [](qlever::sparql_types::Triples triples,
          std::vector<Quads::GraphBlock> graphs,
          const testing::Matcher<
              std::vector<parsedQuery::GraphPatternOperation>>& m,
@@ -130,7 +130,7 @@ TEST(QuadTest, forAllVariables) {
         });
         EXPECT_THAT(calledVariables, testing::Eq(expectVariables));
       };
-  auto TCIri = ad_utility::triple_component::Iri::fromIriref;
+  auto TCIri = qlever::triple_component::Iri::fromIriref;
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;

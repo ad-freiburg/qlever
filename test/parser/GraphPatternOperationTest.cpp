@@ -19,9 +19,9 @@ using V = qlever::Variable;
 // _____________________________________________________________________________
 TEST(GraphPatternOperationTest, BasicPatternContainedVars) {
   SparqlTripleSimple example1{V{"?s"}, V{"?p"}, V{"?o"}};
-  SparqlTripleSimple example2{
-      ad_utility::triple_component::Iri::fromIriref("<s>"),
-      ad_utility::triple_component::Iri::fromIriref("<p>"), V{"?o2"}};
+  SparqlTripleSimple example2{qlever::triple_component::Iri::fromIriref("<s>"),
+                              qlever::triple_component::Iri::fromIriref("<p>"),
+                              V{"?o2"}};
 
   auto triple1 = SparqlTriple::fromSimple(example1);
   auto triple2 = SparqlTriple::fromSimple(example2);

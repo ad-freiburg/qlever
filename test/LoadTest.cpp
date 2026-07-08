@@ -24,9 +24,9 @@ using namespace qlever;
 namespace {
 
 auto pqLoad = [](std::string url, bool silent = false) {
-  return parsedQuery::Load{ad_utility::triple_component::Iri::fromIriref(
-                               absl::StrCat("<", url, ">")),
-                           silent};
+  return parsedQuery::Load{
+      qlever::triple_component::Iri::fromIriref(absl::StrCat("<", url, ">")),
+      silent};
 };
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -159,7 +159,7 @@ TEST_F(LoadTest, computeResult) {
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
-              using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+              using LiteralOrIri = qlever::triple_component::LiteralOrIri;
               auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
                                     : LiteralOrIri{field.getIri()},
@@ -219,9 +219,8 @@ TEST_F(LoadTest, computeResult) {
                                                                   5_GB))),
       testing::HasSubstr("Tried to allocate"));
 
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
-  auto Literal =
-      ad_utility::triple_component::Literal::fromStringRepresentation;
+  auto Iri = qlever::triple_component::Iri::fromIriref;
+  auto Literal = qlever::triple_component::Literal::fromStringRepresentation;
   expectLoad("<x> <b> <c>", "text/turtle",
              {{Iri("<x>"), Iri("<b>"), Iri("<c>")}});
   expectLoad("<x> <b> <c> ; <d> <y>", "text/turtle",

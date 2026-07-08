@@ -145,7 +145,7 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::triple_component::Literal>
+std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
   return ql::exportIds::idToLiteral(context->_qec.getIndex(), id,
@@ -153,14 +153,14 @@ LiteralValueGetterWithStrFunction::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::triple_component::Literal>
+std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
                                               const EvaluationContext*) const {
   return ql::exportIds::handleIriOrLiteral(s, false);
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::triple_component::Literal>
+std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
   return ql::exportIds::idToLiteral(context->_qec.getIndex(), id,
@@ -168,7 +168,7 @@ LiteralValueGetterWithoutStrFunction::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::triple_component::Literal>
+std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
   return ql::exportIds::handleIriOrLiteral(s, true);

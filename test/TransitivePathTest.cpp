@@ -1043,7 +1043,7 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
-  using ad_utility::triple_component::Literal;
+  using qlever::triple_component::Literal;
   ad_utility::testing::TestIndexConfig config;
   config.turtleInput = "<a> a 0 , 1 , 2 , 4 .";
   auto* qec = getQec(std::move(config));

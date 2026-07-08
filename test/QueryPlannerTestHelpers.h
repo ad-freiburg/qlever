@@ -593,8 +593,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
     plans.reserve(filters.size());
 
     const auto equalTo =
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-            "equal-to");
+        qlever::triple_component::Iri::fromIrirefWithoutBrackets("equal-to");
 
     for (const auto& [i, filterExpression] :
          ::ranges::views::enumerate(filters)) {

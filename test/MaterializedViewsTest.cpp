@@ -536,7 +536,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using Triple = SparqlTripleSimple;
   using V = Variable;
   auto iri = [](const std::string& ref) {
-    return ad_utility::triple_component::Iri::fromIriref(ref);
+    return qlever::triple_component::Iri::fromIriref(ref);
   };
 
   const V placeholderP{"?_ql_materialized_view_p"};
@@ -950,7 +950,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   // Run a simple query and consume its result lazily.
   {
     ViewQuery query{SparqlTriple{qlever::Variable{"?s"},
-                                 ad_utility::triple_component::Iri::fromIriref(
+                                 qlever::triple_component::Iri::fromIriref(
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  qlever::Variable{"?o"}}};

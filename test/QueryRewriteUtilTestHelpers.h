@@ -22,7 +22,7 @@ using Loc = ad_utility::source_location;
 using V = qlever::Variable;
 using enum SpatialJoinType;
 using enum UnitOfMeasurement;
-using ad_utility::triple_component::Iri;
+using qlever::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;
 
 using GeoDistanceFilter =

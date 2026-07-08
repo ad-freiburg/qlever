@@ -62,7 +62,7 @@ void MaterializedViewQuery::addRequestedColumn(const Variable& column,
 
 // _____________________________________________________________________________
 MaterializedViewQuery::MaterializedViewQuery(
-    const ad_utility::triple_component::Iri& iri) {
+    const qlever::triple_component::Iri& iri) {
   viewName_ = extractParameterName(iri, MATERIALIZED_VIEW_IRI);
   if (viewName_.value().empty()) {
     throw MaterializedViewConfigException(absl::StrCat(

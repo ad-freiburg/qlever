@@ -32,7 +32,7 @@ auto U = qlever::Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
   return IdOrLiteralOrIri{
-      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
+      qlever::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
 };
 static const qlever::Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace

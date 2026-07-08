@@ -774,7 +774,7 @@ TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
 
   TransitivePathSide left{std::nullopt, 0, Iri::fromIriref("<s>"), 0};
   TransitivePathSide right{std::nullopt, 1, qlever::Variable("?y"), 1};
@@ -789,7 +789,7 @@ TEST(QueryPlanner, TransitivePathRightId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
 
   TransitivePathSide left{std::nullopt, 1, qlever::Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 0, Iri::fromIriref("<o>"), 1};

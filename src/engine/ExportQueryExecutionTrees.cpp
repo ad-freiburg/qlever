@@ -40,8 +40,8 @@ using ad_utility::InputRangeTypeErased;
 
 namespace {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using Literal = qlever::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -266,7 +266,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const qlever::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // For each result from the WHERE clause, we produce up to
@@ -287,7 +287,7 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
 InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const qlever::sparql_types::Triples& constructTriples,
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
@@ -760,7 +760,7 @@ template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const qlever::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {

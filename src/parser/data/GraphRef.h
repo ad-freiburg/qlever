@@ -10,7 +10,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 
-using GraphRef = ad_utility::triple_component::Iri;
+using GraphRef = qlever::triple_component::Iri;
 // Denotes the target graph for an operation. Here the target is the default
 // graph.
 struct DEFAULT {

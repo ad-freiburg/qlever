@@ -30,9 +30,9 @@ using LocalVocabContext = IndexImpl;
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 class alignas(16) LocalVocabEntry
-    : public ad_utility::triple_component::LiteralOrIri {
+    : public qlever::triple_component::LiteralOrIri {
  public:
-  using Base = ad_utility::triple_component::LiteralOrIri;
+  using Base = qlever::triple_component::LiteralOrIri;
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
@@ -103,7 +103,7 @@ class alignas(16) LocalVocabEntry
       NormalizedStringView view, const LocalVocabContext& ctx);
 
   // Slice to base class `LiteralOrIri`.
-  const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
+  const qlever::triple_component::LiteralOrIri& asLiteralOrIri() const {
     return *this;
   }
 

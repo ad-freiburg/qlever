@@ -839,7 +839,7 @@ TEST(SparqlExpression, stringOperators) {
                 std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
                                                   dateDate, dateLYear, T, F},
                            IdOrLocalVocabEntry{LocalVocabEntry{
-                               ad_utility::triple_component::Iri{},
+                               qlever::triple_component::Iri{},
                                testContext().qec->getLocalVocabContext()}}});
   // test valid
   checkIriOrUri(
@@ -864,7 +864,7 @@ TEST(SparqlExpression, stringOperators) {
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
           IdOrLocalVocabEntry{
-              LocalVocabEntry{ad_utility::triple_component::Iri{},
+              LocalVocabEntry{qlever::triple_component::Iri{},
                               testContext().qec->getLocalVocabContext()}}});
 
   // test with base iri

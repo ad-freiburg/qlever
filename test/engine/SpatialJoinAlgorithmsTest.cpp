@@ -276,7 +276,7 @@ class SpatialJoinParamTest
         getUseAreasOrPoints() ? "<geometryArea1>" : "<geometry1>";
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
-        ad_utility::triple_component::Iri::fromIriref(geometry)};
+        qlever::triple_component::Iri::fromIriref(geometry)};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),

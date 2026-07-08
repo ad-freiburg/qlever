@@ -34,8 +34,8 @@ class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Literal = qlever::triple_component::Literal;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -111,7 +111,7 @@ class ExportQueryExecutionTrees {
   static ad_utility::InputRangeTypeErased<std::string>
   constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
+      const qlever::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
@@ -128,7 +128,7 @@ class ExportQueryExecutionTrees {
   // `StringTriple`s.
   static auto constructQueryResultToStringTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
+      const qlever::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
@@ -137,7 +137,7 @@ class ExportQueryExecutionTrees {
   template <MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultToStream(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
+      const qlever::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 

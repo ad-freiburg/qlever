@@ -33,7 +33,7 @@ TEST(LiteralValueGetterWithStrFunction, OperatorWithId) {
 
 // _____________________________________________________________________________
 TEST(LiteralValueGetterWithStrFunction, OperatorWithLiteralOrIri) {
-  using Iri = ad_utility::triple_component::Iri;
+  using Iri = qlever::triple_component::Iri;
   sparqlExpression::detail::LiteralValueGetterWithStrFunction
       literalValueGetter;
   checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,
@@ -67,7 +67,7 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithId) {
 
 // _____________________________________________________________________________
 TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
-  using Iri = ad_utility::triple_component::Iri;
+  using Iri = qlever::triple_component::Iri;
   sparqlExpression::detail::LiteralValueGetterWithoutStrFunction
       literalValueGetter;
   checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,

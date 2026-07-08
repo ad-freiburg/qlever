@@ -96,7 +96,7 @@ ExecuteUpdate::transformTriplesTemplate(
     addGraphToLookup(triple.g_);
   }
   lookupItems.insert(TripleComponent(
-      ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
+      qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
 
   // Sort the `TripleComponent`s.
   std::vector lookupVec(std::move_iterator(lookupItems.begin()),
@@ -146,8 +146,8 @@ ExecuteUpdate::transformTriplesTemplate(
 
   // Lookup the default graph IRI once (we typically use it many times).
   Id defaultGraphIri = [&lookupTc] {
-    const IdOrVariableIndex defaultGraph = lookupTc(
-        ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
+    const IdOrVariableIndex defaultGraph =
+        lookupTc(qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
@@ -163,7 +163,7 @@ ExecuteUpdate::transformTriplesTemplate(
             [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
               return defaultGraphIri;
             },
-            [&lookupTc](const ad_utility::triple_component::Iri& iri) {
+            [&lookupTc](const qlever::triple_component::Iri& iri) {
               return lookupTc(TripleComponent(iri));
             },
             [&variableColumns](const Variable& var) -> IdOrVariableIndex {

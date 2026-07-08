@@ -103,7 +103,7 @@ static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 // to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 using IdOrLiteralOrIri =
-    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
+    std::variant<ValueId, qlever::triple_component::LiteralOrIri>;
 // Printing for GTest.
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 

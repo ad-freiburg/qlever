@@ -15,18 +15,17 @@ namespace qlever::sparqlExpression {
 namespace detail::uuidExpression {
 
 using qlever::LocalVocabEntry;
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+      qlever::triple_component::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(str))};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Iri::fromStringRepresentation(
-          absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
+  return LiteralOrIri{qlever::triple_component::Iri::fromStringRepresentation(
+      absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
 };
 
 inline constexpr auto litUuidKey = [](int64_t randId) {

@@ -418,7 +418,7 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
     QueryExecutionContext* qec, TripleComponent subject, Variable object) {
   SparqlTripleSimple triple{
       std::move(subject),
-      ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+      qlever::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
       TripleComponent{std::move(object)}};
   return ad_utility::makeExecutionTree<IndexScan>(
       qec,

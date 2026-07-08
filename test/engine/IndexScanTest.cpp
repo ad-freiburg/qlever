@@ -981,7 +981,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qlever::triple_component::Literal::literalWithoutQuotes("Test"),
         qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
@@ -1902,7 +1902,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
+        qlever::triple_component::Literal::literalWithoutQuotes("Test"),
         qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},

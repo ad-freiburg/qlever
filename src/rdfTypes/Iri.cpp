@@ -32,7 +32,7 @@ namespace {
 constexpr ctll::fixed_string irirefRegex = R"(<[^<>"{}|^\\`\0- ]*>)";
 }  // namespace
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 
 // ____________________________________________________________________________
 template <bool isOwning>
@@ -114,4 +114,4 @@ Iri Iri::fromUri(const qlever::util::ParsedUri& uri) {
   return fromStringRepresentation(uri.toIriString());
 }
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component

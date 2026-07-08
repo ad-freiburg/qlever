@@ -72,7 +72,8 @@ std::vector<DatasetClause> ad_utility::url_parser::parseDatasetClausesFrom(
   if (params.contains(key)) {
     for (const auto& uri : params.at(key)) {
       datasetClauses.emplace_back(
-          triple_component::Iri::fromIrirefWithoutBrackets(uri), isNamed);
+          qlever::triple_component::Iri::fromIrirefWithoutBrackets(uri),
+          isNamed);
     }
   }
   return datasetClauses;

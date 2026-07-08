@@ -87,7 +87,7 @@ TEST(RandomExpression, isResultAlwaysDefined) {
   EXPECT_TRUE(RandomExpression{}.isResultAlwaysDefined({}));
 }
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
 // The tests for UUID expressions follow almost exactly the pattern
 // of the above defined test for RandomExpression.
 TEST(UuidExpression, simpleMemberFunctionStrUuid) {

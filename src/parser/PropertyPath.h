@@ -84,12 +84,11 @@ class PropertyPath {
   };
 
   // The main content of this object.
-  std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
-      path_;
+  std::variant<qlever::triple_component::Iri, ModifiedPath, MinMaxPath> path_;
 
   // Private constructor that initializes the path with a variant type.
   explicit PropertyPath(
-      std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
+      std::variant<qlever::triple_component::Iri, ModifiedPath, MinMaxPath>
           path);
 
  public:
@@ -100,7 +99,7 @@ class PropertyPath {
   PropertyPath& operator=(const PropertyPath&) = default;
 
   // Create a basic PropertyPath from a basic IRI.
-  static PropertyPath fromIri(ad_utility::triple_component::Iri iri);
+  static PropertyPath fromIri(qlever::triple_component::Iri iri);
 
   // Create a PropertyPath with a minimum and maximum length.
   static PropertyPath makeWithLength(PropertyPath child, size_t min,
@@ -130,7 +129,7 @@ class PropertyPath {
 
   // Acquire the IRI of the path if it is a basic path. If the path is not a
   // basic path, this function will throw an assertion error.
-  const ad_utility::triple_component::Iri& getIri() const;
+  const qlever::triple_component::Iri& getIri() const;
 
   // Check if the path is a basic path with an IRI. Return true if it is, false
   // otherwise.
@@ -153,7 +152,7 @@ class PropertyPath {
   CPP_template(typename T, typename IriFunc, typename ModifiedPathFunc,
                typename MinMaxPathFunc)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          IriFunc, T, const ad_utility::triple_component::Iri&>
+          IriFunc, T, const qlever::triple_component::Iri&>
           CPP_and ad_utility::InvocableWithConvertibleReturnType<
               ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
               CPP_and ad_utility::InvocableWithConvertibleReturnType<

@@ -46,7 +46,7 @@ class GraphNameManager {
   GraphNameManager(std::string prefix, uint64_t nextUnallocatedGraph);
 
   // Return a new graph IRI that has not been allocated previously.
-  ad_utility::triple_component::Iri allocateNewGraph();
+  qlever::triple_component::Iri allocateNewGraph();
 
   friend void to_json(nlohmann::json& j,
                       const GraphNameManager& namespaceManager);

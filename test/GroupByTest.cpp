@@ -56,7 +56,7 @@ auto optionalHasTable = [](const VectorTable& table) {
 
 // _____________________________________________________________________________
 auto lit(std::string_view s) {
-  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
+  return qlever::triple_component::Literal::literalWithoutQuotes(s);
 }
 
 // Helper function to get the local vocab ID for a given word.
@@ -2525,7 +2525,7 @@ TEST(GroupBy, countDistinctGraph) {
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}},
         IndexScan::Graphs::Blacklist(TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}));
+            qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}));
 
     auto expr0 = std::make_unique<VariableExpression>(Variable{"?g"});
     auto expr1 = std::make_unique<CountExpression>(true, std::move(expr0));

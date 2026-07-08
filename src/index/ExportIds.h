@@ -32,9 +32,9 @@ using qlever::Index;
 using qlever::IndexImpl;
 using qlever::LocalVocab;
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Iri = ad_utility::triple_component::Iri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using Iri = qlever::triple_component::Iri;
+using Literal = qlever::triple_component::Literal;
 
 // Convert the `id` to a `Literal`. Datatypes are always stripped, so for
 // literals (this includes IDs that directly store their value, like Doubles)

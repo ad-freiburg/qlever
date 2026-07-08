@@ -361,7 +361,7 @@ class QueryPlanner {
       const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
-      const ad_utility::sparql_types::VarOrIri& varOrIri,
+      const qlever::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
 
   Variable generateUniqueVarName();

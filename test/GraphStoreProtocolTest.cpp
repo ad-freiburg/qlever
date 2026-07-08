@@ -23,7 +23,7 @@ using TC = TripleComponent;
 namespace {
 // A matcher that matches a ParsedQuery that is an updated that deletes all
 // triples from the given `graph`.
-auto ClearGraph = [](ad_utility::triple_component::Iri graph)
+auto ClearGraph = [](qlever::triple_component::Iri graph)
     -> testing::Matcher<const qlever::ParsedQuery&> {
   return m::UpdateClause(
       m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"),
@@ -37,7 +37,7 @@ auto ClearGraph = [](ad_utility::triple_component::Iri graph)
 auto HasMiddleware = AD_FIELD(qlever::ParsedQuery, responseMiddleware_,
                               testing::Ne(std::nullopt));
 
-auto GetGraph = [](ad_utility::triple_component::Iri graph) {
+auto GetGraph = [](qlever::triple_component::Iri graph) {
   return m::ConstructQuery(
       {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
       m::GraphPattern(m::GroupGraphPatternWithGraph(
@@ -500,7 +500,7 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
 
   // Test transformGet with specific graph IRI
   auto graphIri =
-      ad_utility::triple_component::Iri::fromIriref("<http://example.org/123>");
+      qlever::triple_component::Iri::fromIriref("<http://example.org/123>");
   auto graphQuery =
       GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
   EXPECT_THAT(

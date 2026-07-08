@@ -26,7 +26,7 @@ constexpr auto tripleComponentLiteral =
         return TripleComponent::Literal::fromEscapedRdfLiteral(
             literal, std::string(langtagOrDatatype));
       } else if (ql::starts_with(langtagOrDatatype, "^^")) {
-        auto iri = ad_utility::triple_component::Iri::fromIriref(
+        auto iri = qlever::triple_component::Iri::fromIriref(
             langtagOrDatatype.substr(2));
         return TripleComponent::Literal::fromEscapedRdfLiteral(literal,
                                                                std::move(iri));

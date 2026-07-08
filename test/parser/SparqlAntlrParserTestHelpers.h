@@ -34,7 +34,7 @@
 // human-readable output if a test fails.
 namespace qlever {
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
-  using Iri = ad_utility::triple_component::Iri;
+  using Iri = qlever::triple_component::Iri;
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
@@ -272,21 +272,21 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
-  using Iri = ad_utility::triple_component::Iri;
+  using Iri = qlever::triple_component::Iri;
   return MultiVariantWith<qlever::GraphTerm, Iri>(
       AD_PROPERTY(Iri, toStringRepresentation, testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
-inline auto Predicate = [](const ad_utility::triple_component::Iri& value) {
-  return MultiVariantWith<ad_utility::sparql_types::VarOrPath,
+inline auto Predicate = [](const qlever::triple_component::Iri& value) {
+  return MultiVariantWith<qlever::sparql_types::VarOrPath,
                           qlever::PropertyPath>(
       AD_PROPERTY(qlever::PropertyPath, getIri, testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
 inline auto PropertyPath = [](const qlever::PropertyPath& value) {
-  return MultiVariantWith<ad_utility::sparql_types::VarOrPath,
+  return MultiVariantWith<qlever::sparql_types::VarOrPath,
                           qlever::PropertyPath>(::testing::Eq(value));
 };
 
@@ -1025,7 +1025,7 @@ auto inline GraphRefIri = [](const std::string& iri) {
       qlever::TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
 
-inline auto Quads = [](const ad_utility::sparql_types::Triples& freeTriples,
+inline auto Quads = [](const qlever::sparql_types::Triples& freeTriples,
                        const std::vector<qlever::Quads::GraphBlock>& graphs)
     -> Matcher<const qlever::Quads&> {
   return AllOf(AD_FIELD(qlever::Quads, freeTriples_,
@@ -1191,7 +1191,7 @@ inline auto SelectAllPattern =
 
 // Matcher for a `ParsedQuery` with a clear of `graph`.
 inline auto Clear = ad_utility::OverloadCallOperator{
-    [](const ad_utility::triple_component::Iri& graph) {
+    [](const qlever::triple_component::Iri& graph) {
       return UpdateClause(GraphUpdate({{{qlever::Variable("?s")},
                                         {qlever::Variable("?p")},
                                         {qlever::Variable("?o")},
@@ -1212,7 +1212,7 @@ inline auto Clear = ad_utility::OverloadCallOperator{
     }};
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
-inline auto AddAll = [](const ad_utility::triple_component::Iri& from,
+inline auto AddAll = [](const qlever::triple_component::Iri& from,
                         const qlever::SparqlTripleSimpleWithGraph::Graph& to) {
   return UpdateClause(
       GraphUpdate({}, {qlever::SparqlTripleSimpleWithGraph(

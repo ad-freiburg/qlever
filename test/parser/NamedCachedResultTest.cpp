@@ -18,7 +18,7 @@ namespace {
 
 // Helper function to create a simple SparqlTriple for testing
 SparqlTriple createTestTriple() {
-  using namespace ad_utility::sparql_types;
+  using namespace qlever::sparql_types;
   TripleComponent subject{Variable{"?s"}};
   VarOrPath predicate = Variable{"?p"};
   TripleComponent object{Variable{"?o"}};

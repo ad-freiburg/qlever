@@ -24,9 +24,9 @@ using namespace qlever;
 
 namespace ql::exportIds {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Iri = ad_utility::triple_component::Iri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using Iri = qlever::triple_component::Iri;
+using Literal = qlever::triple_component::Literal;
 
 // _____________________________________________________________________________
 std::optional<Literal> idToLiteralForEncodedValue(
@@ -124,26 +124,23 @@ std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
   if (type == nullptr) {
     return std::nullopt;
   }
-  auto lit =
-      ad_utility::triple_component::Literal::literalWithoutQuotes(literal);
+  auto lit = qlever::triple_component::Literal::literalWithoutQuotes(literal);
   lit.addDatatype(
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(type));
+      qlever::triple_component::Iri::fromIrirefWithoutBrackets(type));
   return LiteralOrIri{std::move(lit)};
 }
 
 // _____________________________________________________________________________
 LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.indexToString(id.getWordVocabIndex()))};
+  return LiteralOrIri{qlever::triple_component::Literal::literalWithoutQuotes(
+      index.indexToString(id.getWordVocabIndex()))};
 };
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
     const IndexImpl& index, Id id) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()))};
+  return LiteralOrIri{qlever::triple_component::Literal::literalWithoutQuotes(
+      index.getTextExcerpt(id.getTextRecordIndex()))};
 };
 
 // _____________________________________________________________________________

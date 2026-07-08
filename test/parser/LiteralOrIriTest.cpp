@@ -24,7 +24,7 @@
 
 namespace {
 
-using namespace ad_utility::triple_component;
+using namespace qlever::triple_component;
 constexpr std::string_view myDatatype =
     "http://www.w3.org/2001/XMLSchema#myDatatype";
 const std::string myDatatypeWithBrackets = absl::StrCat("<", myDatatype, ">");

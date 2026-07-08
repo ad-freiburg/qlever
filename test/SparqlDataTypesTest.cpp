@@ -28,7 +28,7 @@ using qlever::GraphTerm;
 
 namespace {
 
-using Iri = ad_utility::triple_component::Iri;
+using Iri = qlever::triple_component::Iri;
 // Validating variant, used to test that invalid IRIs are rejected.
 auto iriV = Iri::fromIrirefValidated;
 

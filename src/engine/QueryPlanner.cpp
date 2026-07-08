@@ -973,7 +973,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+      [&left, &right](const qlever::triple_component::Iri& iri) {
         return seedFromVarOrIri(left, iri, right);
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
@@ -1140,8 +1140,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
-    const TripleComponent& left,
-    const ad_utility::sparql_types::VarOrIri& varOrIri,
+    const TripleComponent& left, const qlever::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
@@ -1149,10 +1148,11 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
       left,
       std::visit(
           ad_utility::OverloadCallOperator{
-              [](const Variable& variable)
-                  -> ad_utility::sparql_types::VarOrPath { return variable; },
-              [](const ad_utility::triple_component::Iri& iri)
-                  -> ad_utility::sparql_types::VarOrPath {
+              [](const Variable& variable) -> qlever::sparql_types::VarOrPath {
+                return variable;
+              },
+              [](const qlever::triple_component::Iri& iri)
+                  -> qlever::sparql_types::VarOrPath {
                 return PropertyPath::fromIri(iri);
               }},
           varOrIri),
@@ -2935,7 +2935,7 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
   if (defaultGraphBehaviour_ ==
       parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED) {
     return Filter::Blacklist(TripleComponent{
-        ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+        qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
   }
   return Filter::All();
 }

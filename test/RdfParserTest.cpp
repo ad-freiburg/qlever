@@ -1653,9 +1653,8 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 TEST(RdfParserTest, parseTriplesObject) {
   using Parser = RdfStringParser<TurtleParser<TokenizerCtre>>;
   using namespace testing;
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
-  auto Literal =
-      ad_utility::triple_component::Literal::fromStringRepresentation;
+  auto Iri = qlever::triple_component::Iri::fromIriref;
+  auto Literal = qlever::triple_component::Literal::fromStringRepresentation;
   auto isTC = [](auto e) -> Matcher<const TripleComponent> {
     return Eq(TripleComponent(e));
   };

@@ -281,7 +281,7 @@ struct IdTableWithVocab {
   }
 };
 
-using ad_utility::triple_component::Literal;
+using qlever::triple_component::Literal;
 
 Literal fromString(std::string_view string) {
   return Literal::fromStringRepresentation(absl::StrCat("\"", string, "\""));

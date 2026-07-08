@@ -151,8 +151,8 @@ namespace makeSparqlExpression {
 using namespace sparqlExpression;
 
 namespace {
-using Literal = ad_utility::triple_component::Literal;
-using Iri = ad_utility::triple_component::Iri;
+using Literal = qlever::triple_component::Literal;
+using Iri = qlever::triple_component::Iri;
 using SparqlPtr = std::unique_ptr<SparqlExpression>;
 using VariantArgs =
     std::variant<qlever::Variable, qlever::ValueId, Iri, Literal, SparqlPtr>;

@@ -836,7 +836,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   auto tmpFile = std::filesystem::temp_directory_path() / "testDeltaTriples";
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
@@ -922,7 +922,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, copyLocalVocab) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   const auto& localVocabContext = testQec->getLocalVocabContext();
   DeltaTriples deltaTriples{testQec->getIndex()};
 
@@ -968,7 +968,7 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using qlever::triple_component::LiteralOrIri;
   const auto& index = testQec->getIndex();
   DeltaTriplesManager deltaTriplesManager(index);
 

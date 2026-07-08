@@ -62,7 +62,7 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
 
 // _____________________________________________________________________________
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
-    const ad_utility::triple_component::Literal& value, bool checkDatatype) {
+    const qlever::triple_component::Literal& value, bool checkDatatype) {
   if (!checkDatatype ||
       (value.hasDatatype() &&
        value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {

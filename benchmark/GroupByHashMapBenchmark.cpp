@@ -97,7 +97,7 @@ auto generateRandomLocalVocabAndIndicesVec =
         for (size_t j = 0; j < m; j++) {
           str += alphanum.at(gen());
         }
-        using namespace ad_utility::triple_component;
+        using namespace qlever::triple_component;
         indices.push_back(localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::literalWithoutQuotes(str, context)));
       }

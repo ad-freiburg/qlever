@@ -21,7 +21,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/Forward.h"
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 static constexpr char literalPrefixChar = '"';
 static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
@@ -210,6 +210,6 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
   }
 };
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component
 
 #endif  // QLEVER_SRC_PARSER_LITERALORIRI_H

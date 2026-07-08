@@ -14,12 +14,12 @@ using namespace qlever;
 TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
   auto* qec = ad_utility::testing::getQec();
   const auto& index = qec->getIndex();
-  TripleComponent internalIri{ad_utility::triple_component::Iri::fromIriref(
+  TripleComponent internalIri{qlever::triple_component::Iri::fromIriref(
       makeQleverInternalIri("something"))};
   TripleComponent languageTaggedIri{
-      ad_utility::triple_component::Iri::fromIriref("@en@<abc>")};
+      qlever::triple_component::Iri::fromIriref("@en@<abc>")};
   TripleComponent regularIri{
-      ad_utility::triple_component::Iri::fromIriref("<abc>")};
+      qlever::triple_component::Iri::fromIriref("<abc>")};
   TripleComponent regularLiteral{1};
 
   for (auto permutation : Permutation::ALL) {

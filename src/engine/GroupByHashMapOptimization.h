@@ -164,7 +164,7 @@ struct GroupConcatAggregationData {
 
   // Actual implementation of `addValue`, but without template parameters.
   void addValueImpl(
-      const std::optional<ad_utility::triple_component::Literal>& value);
+      const std::optional<qlever::triple_component::Literal>& value);
 
   [[nodiscard]] qlever::ValueId calculateResult(
       const qlever::LocalVocabContext& context,

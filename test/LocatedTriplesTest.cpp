@@ -1007,7 +1007,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = qlever::triple_component::Iri::fromIriref;
   auto getId = [&lv, &index](TC&& tc) {
     return std::move(tc).toValueId(index, lv);
   };

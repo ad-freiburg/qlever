@@ -22,8 +22,8 @@ GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
       nextUnallocatedGraph_(nextUnallocatedGraph) {}
 
 // _____________________________________________________________________________
-ad_utility::triple_component::Iri GraphNameManager::allocateNewGraph() {
-  return ad_utility::triple_component::Iri::fromIriref(
+qlever::triple_component::Iri GraphNameManager::allocateNewGraph() {
+  return qlever::triple_component::Iri::fromIriref(
       absl::StrCat("<", prefixWithoutBraces_, nextUnallocatedGraph_++, ">"));
 }
 

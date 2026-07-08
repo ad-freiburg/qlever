@@ -68,10 +68,9 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.
-class SparqlTriple
-    : public SparqlTripleBase<ad_utility::sparql_types::VarOrPath> {
+class SparqlTriple : public SparqlTripleBase<qlever::sparql_types::VarOrPath> {
  public:
-  using Base = SparqlTripleBase<ad_utility::sparql_types::VarOrPath>;
+  using Base = SparqlTripleBase<qlever::sparql_types::VarOrPath>;
   using Base::Base;
 
   // ___________________________________________________________________________
@@ -91,8 +90,8 @@ class SparqlTriple
     TripleComponent p =
         holdsVariable
             ? TripleComponent{std::get<Variable>(p_)}
-            : TripleComponent(ad_utility::triple_component::Iri::fromIriref(
-                  predicate.value()));
+            : TripleComponent(
+                  qlever::triple_component::Iri::fromIriref(predicate.value()));
     return {s_, p, o_, additionalScanColumns_};
   }
 

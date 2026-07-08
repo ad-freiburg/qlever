@@ -238,7 +238,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   if (languagePredicate_.isUndefined()) {
     languagePredicate_ =
         TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
+            qlever::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
             .toValueId(index_, localVocab_);
   }
   ad_utility::HashSet<Id> addedObjects;

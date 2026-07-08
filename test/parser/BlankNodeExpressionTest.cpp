@@ -11,7 +11,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 
 using namespace sparqlExpression;
-using namespace ad_utility::triple_component;
+using namespace qlever::triple_component;
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, expectBlankNodeResultEquality) {

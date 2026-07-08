@@ -25,7 +25,7 @@ auto iri = ad_utility::testing::iri;
 auto iriV = ad_utility::testing::iriV;
 
 const std::string& getIriString(
-    const ad_utility::sparql_types::VarOrPath& varOrPath) {
+    const qlever::sparql_types::VarOrPath& varOrPath) {
   const auto& tripleComponent =
       std::get<qlever::PropertyPath>(varOrPath).getIri();
   return tripleComponent.toStringRepresentation();

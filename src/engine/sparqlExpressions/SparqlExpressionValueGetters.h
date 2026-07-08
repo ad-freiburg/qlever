@@ -30,8 +30,8 @@
 
 namespace qlever::sparqlExpression::detail {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Iri = ad_utility::triple_component::Iri;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using Iri = qlever::triple_component::Iri;
 
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.
@@ -47,7 +47,7 @@ using NumericOrDateValue =
 
 // Return type for `DatatypeValueGetter`.
 using LiteralOrString =
-    std::variant<std::monostate, ad_utility::triple_component::Literal,
+    std::variant<std::monostate, qlever::triple_component::Literal,
                  std::string>;
 
 // Used as return type for `IriValueGetter` and `DatatypeValueGetter`
@@ -186,13 +186,13 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 // see `ql::exportIds::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
-  using Value = std::optional<ad_utility::triple_component::Literal>;
+  using Value = std::optional<qlever::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithStrFunction>::operator();
 
-  std::optional<ad_utility::triple_component::Literal> operator()(
+  std::optional<qlever::triple_component::Literal> operator()(
       ValueId, const EvaluationContext*) const;
 
-  std::optional<ad_utility::triple_component::Literal> operator()(
+  std::optional<qlever::triple_component::Literal> operator()(
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
@@ -200,13 +200,13 @@ struct LiteralValueGetterWithStrFunction
 // returned. This is used in the string expressions in `StringExpressions.cpp`.
 struct LiteralValueGetterWithoutStrFunction
     : Mixin<LiteralValueGetterWithoutStrFunction> {
-  using Value = std::optional<ad_utility::triple_component::Literal>;
+  using Value = std::optional<qlever::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithoutStrFunction>::operator();
 
-  std::optional<ad_utility::triple_component::Literal> operator()(
+  std::optional<qlever::triple_component::Literal> operator()(
       ValueId, const EvaluationContext*) const;
 
-  std::optional<ad_utility::triple_component::Literal> operator()(
+  std::optional<qlever::triple_component::Literal> operator()(
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
@@ -370,7 +370,7 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 
 // ValueGetter for implementation of datatype() in RdfTermExpressions.cpp.
 // Returns an object of type std::variant<std::monostate,
-// ad_utility::triple_component::Literal, std::string> object.
+// qlever::triple_component::Literal, std::string> object.
 struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
   using Value = OptIri;
   using Mixin<DatatypeValueGetter>::operator();
@@ -380,7 +380,7 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 };
 
 // `IriValueGetter` returns an
-// `std::optional<ad_utility::triple_component::Iri>` object. If the
+// `std::optional<qlever::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
 // ValueGetter is currently used in `StringExpressions.cpp` within the
 // implementation of `STRDT()`.

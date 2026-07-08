@@ -7,8 +7,8 @@
 namespace qlever::sparqlExpression {
 namespace detail {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+using Literal = qlever::triple_component::Literal;
 
 // Date functions.
 // The input is `std::nullopt` if the argument to the expression is not a date.

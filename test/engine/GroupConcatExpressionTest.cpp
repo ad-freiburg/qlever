@@ -12,7 +12,7 @@
 
 namespace {
 using namespace sparqlExpression;
-namespace tc = ad_utility::triple_component;
+namespace tc = qlever::triple_component;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
@@ -49,7 +49,7 @@ void expectIdsAreConcatenatedTo(
 void expectLiteralsAreConcatenatedTo(
     qlever::QueryExecutionContext* qec, bool distinct,
     const std::vector<tc::Literal>& literals,
-    const ad_utility::triple_component::Literal& literal,
+    const qlever::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   qlever::LocalVocab localVocab;
   IdTable input{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};

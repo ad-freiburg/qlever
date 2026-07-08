@@ -53,7 +53,7 @@ struct MaterializedViewQuery : MagicServiceQuery {
   // This constructor takes an IRI consisting of the magic service IRI for
   // materialized views with the view name as a suffix. If this is used, add the
   // requested columns one-by-one using `addParameter`.
-  explicit MaterializedViewQuery(const ad_utility::triple_component::Iri& iri);
+  explicit MaterializedViewQuery(const qlever::triple_component::Iri& iri);
 
   // Alternative: Initialize using magic predicate. No calls to `addParameter`
   // are necessary in this case.

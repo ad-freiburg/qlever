@@ -31,7 +31,7 @@ TEST(SparqlExpressionTypes, expressionResult) {
 }
 
 TEST(SparqlExpressionTypes, printIdOrString) {
-  using namespace ad_utility::triple_component;
+  using namespace qlever::triple_component;
   std::stringstream str;
 
   IdOrLocalVocabEntry idOrString{qlever::Id::makeUndefined()};

@@ -64,16 +64,16 @@ static_assert(isVector<Collection<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
-  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
+  auto lit = qlever::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
   return std::string{asStringViewUnsafe(lit.getContent())};
 }
 
 // Adds quotation marks and the `geo:wktLiteral` datatype to a given string
 inline std::string addDatatype(const std::string_view wkt) {
-  auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(wkt);
-  auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-      GEO_WKT_LITERAL);
+  auto lit = qlever::triple_component::Literal::literalWithoutQuotes(wkt);
+  auto dt =
+      qlever::triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
   lit.addDatatype(dt);
   return std::move(lit).toStringRepresentation();
 }

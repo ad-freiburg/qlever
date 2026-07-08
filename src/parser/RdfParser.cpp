@@ -651,7 +651,7 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
-    const std::string& key, const ad_utility::triple_component::Iri& prefix) {
+    const std::string& key, const qlever::triple_component::Iri& prefix) {
   if (useSimplifiedGrammar_ &&
       (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
     raiseDisallowedPrefixOrBaseError();
@@ -662,7 +662,7 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
-    const ad_utility::triple_component::Iri& iri) {
+    const qlever::triple_component::Iri& iri) {
   qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
   if (useSimplifiedGrammar_ &&
       (!baseIri_.has_value() || baseIri_.value() != uri)) {

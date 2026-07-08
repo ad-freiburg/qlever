@@ -58,18 +58,18 @@ struct TestContextWithGivenTTl {
 
 // Helper function to check literal value and datatype
 inline void checkLiteralContentAndDatatype(
-    const std::optional<ad_utility::triple_component::Literal>& literal,
+    const std::optional<qlever::triple_component::Literal>& literal,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype) {
   ASSERT_EQ(literal.has_value(), expectedContent.has_value());
   if (!literal.has_value()) {
     return;
   }
-  auto expected = ad_utility::triple_component::Literal::literalWithoutQuotes(
+  auto expected = qlever::triple_component::Literal::literalWithoutQuotes(
       expectedContent.value());
   if (expectedDatatype.has_value()) {
     expected.addDatatype(
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+        qlever::triple_component::Iri::fromIrirefWithoutBrackets(
             expectedDatatype.value()));
   }
   ASSERT_EQ(literal.value(), expected);
@@ -99,14 +99,14 @@ inline void checkLiteralContentAndDatatypeFromId(
 // and datatype
 inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     const std::string_view& literalContent,
-    const std::optional<ad_utility::triple_component::Iri>& literalDescriptor,
+    const std::optional<qlever::triple_component::Iri>& literalDescriptor,
     const bool isIri, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
     std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
                  sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
         getter) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Literal = qlever::triple_component::Literal;
   TestContextWithGivenTTl testContext{ttl};
 
   auto toLiteralOrIri = [](std::string_view content, auto descriptor,
@@ -173,10 +173,10 @@ inline void checkUnitValueGetterFromLiteralOrIri(
     sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   TestContextWithGivenTTl testContext{unitTtl};
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Iri = qlever::triple_component::Iri;
 
-  auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
+  auto doTest = [&](const qlever::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
     ASSERT_EQ(actualResult,
@@ -280,7 +280,7 @@ class ValueGetterTester {
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     auto litOrIri =
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+        qlever::triple_component::LiteralOrIri::fromStringRepresentation(
             literal);
     auto res = getter(litOrIri, &testContext.context);
     EXPECT_THAT(res, expected);

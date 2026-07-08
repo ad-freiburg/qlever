@@ -346,12 +346,11 @@ auto getIdMapLambdas(
         result.push_back(
             IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
         // Add the internal triple `<object> ql:langtag <@language>`.
-        result.push_back(
-            IdTriple{spoIds[2],
-                     map.getId(qlever::TripleComponent{
-                         ad_utility::triple_component::Iri::fromIriref(
-                             LANGUAGE_PREDICATE)}),
-                     langTagId, tripleGraphId});
+        result.push_back(IdTriple{
+            spoIds[2],
+            map.getId(qlever::TripleComponent{
+                qlever::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}),
+            langTagId, tripleGraphId});
       }
 
       // Third, if applicable, add a `ql:has-word` triple for each distinct word
@@ -364,12 +363,11 @@ auto getIdMapLambdas(
       // eventually be refactored, so that this code duplication is avoided.
       if (!lt.wordFrequencies_.empty()) {
         auto hasWordPredId = map.getId(qlever::TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+            qlever::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
         for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
           // Add the internal triple `<literal> ql:has-word "word"`.
           auto wordId = map.getId(qlever::TripleComponent{
-              ad_utility::triple_component::Literal::literalWithoutQuotes(
-                  word)});
+              qlever::triple_component::Literal::literalWithoutQuotes(word)});
           result.push_back(IdTriple{
               spoIds[2], hasWordPredId, wordId,
               qlever::Id::makeFromInt(static_cast<int64_t>(termFrequency))});

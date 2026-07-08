@@ -64,7 +64,7 @@ namespace {
 constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 }  // namespace
 
-using namespace ad_utility::sparql_types;
+using namespace qlever::sparql_types;
 using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
 using namespace qlever::updateClause;
@@ -82,8 +82,8 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 namespace {
-const ad_utility::triple_component::Iri a =
-    ad_utility::triple_component::Iri::fromIriref(
+const qlever::triple_component::Iri a =
+    qlever::triple_component::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }  // namespace
 
@@ -417,12 +417,12 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 
 // ____________________________________________________________________________________
 parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
-    const ad_utility::sparql_types::Triples& triples) const {
+    const qlever::sparql_types::Triples& triples) const {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
   auto toTripleComponent = [this](const auto& item) {
     using T = std::decay_t<decltype(item)>;
-    namespace tc = ad_utility::triple_component;
+    namespace tc = qlever::triple_component;
     if constexpr (ad_utility::SimilarToAny<T, Variable, TripleComponent>) {
       return TripleComponent{item};
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
@@ -739,10 +739,9 @@ namespace {
 TripleComponent::Iri transformGraph(const GraphOrDefault& graph) {
   return std::visit(
       ad_utility::OverloadCallOperator{
-          [](const ad_utility::triple_component::Iri& iri) { return iri; },
+          [](const qlever::triple_component::Iri& iri) { return iri; },
           [](const DEFAULT&) {
-            return ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
+            return qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
           }},
       graph);
 }
@@ -795,8 +794,8 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
             return {makeAllTripleGraphPattern(graph), graph};
           },
           [](const DEFAULT&) -> P {
-            auto defaultGraph = ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
+            auto defaultGraph =
+                qlever::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
             auto copy = defaultGraph;
             return {makeAllTripleGraphPattern(std::move(defaultGraph)),
                     std::move(copy)};
@@ -1454,8 +1453,8 @@ std::string Visitor::visit(Parser::IrirefContext* ctx) const {
   if (!baseIri_.has_value()) {
     return ctx->getText();
   }
-  return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.value())
+  return qlever::triple_component::Iri::fromIrirefConsiderBase(ctx->getText(),
+                                                               baseIri_.value())
       .toStringRepresentation();
 }
 
@@ -2077,8 +2076,8 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithPathContext* ctx) {
 
 // ____________________________________________________________________________________
 VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
-  return visitAlternative<ad_utility::sparql_types::VarOrPath>(
-      ctx->verbPath(), ctx->verbSimple());
+  return visitAlternative<qlever::sparql_types::VarOrPath>(ctx->verbPath(),
+                                                           ctx->verbSimple());
 }
 
 // ___________________________________________________________________________
@@ -2323,11 +2322,11 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
 // _____________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
-  return toRdfCollection(
-      visitVector(ctx->graphNodePath()), [](std::string_view iri) {
-        return PropertyPath::fromIri(
-            ad_utility::triple_component::Iri::fromIriref(iri));
-      });
+  return toRdfCollection(visitVector(ctx->graphNodePath()),
+                         [](std::string_view iri) {
+                           return PropertyPath::fromIri(
+                               qlever::triple_component::Iri::fromIriref(iri));
+                         });
 }
 
 // ____________________________________________________________________________________

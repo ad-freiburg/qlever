@@ -26,7 +26,7 @@ static constexpr char quote{'"'};
 static constexpr char at{'@'};
 static constexpr char hat{'^'};
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 
 // __________________________________________
 template <bool isOwning>
@@ -233,4 +233,4 @@ void Literal::concat(const Literal& other) {
   beginOfSuffix() += otherContent.size();
 }
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component

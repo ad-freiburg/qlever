@@ -231,7 +231,7 @@ TEST_F(GroupByHashMapOptimizationTest,
 
   auto addStringWithLangTag = [&](std::string_view string,
                                   std::string langTag) {
-    using ad_utility::triple_component::Literal;
+    using qlever::triple_component::Literal;
     auto literal = Literal::literalWithoutQuotes(string, std::move(langTag));
     addValue(Id::makeFromLocalVocabIndex(
         localVocab_.getIndexAndAddIfNotContained(LocalVocabEntry{

@@ -142,7 +142,7 @@ class DeltaTriples {
   // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
   // are frequently used, so we try to avoid an expensive lookup from disk.
   static constexpr size_t predicateCacheSize_ = 1000;
-  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+  ad_utility::util::LRUCache<Id::T, qlever::triple_component::Iri>
       predicateCache_{predicateCacheSize_};
 
   // Assert that the Permutation Enum values have the expected int values.

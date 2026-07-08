@@ -51,7 +51,7 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
 
 const auto wktLiteralIri =
-    triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
+    qlever::triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
 // Calculate geographic distance between geometries in meters using `pb_util`.
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
@@ -153,8 +153,10 @@ class WktEnvelope {
     if (!boundingBox.has_value()) {
       return ValueId::makeUndefined();
     }
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    using qlever::triple_component::Iri;
+    using qlever::triple_component::LiteralOrIri;
+    auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
+        boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -206,8 +208,10 @@ class WktGeometryType {
 
     // The geometry type should be returned as an xsd:anyURI literal according
     // to the GeoSPARQL standard.
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    using qlever::triple_component::Iri;
+    using qlever::triple_component::LiteralOrIri;
+    auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
+        typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -219,7 +223,8 @@ class WktGeometryN {
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
-    using namespace triple_component;
+    using qlever::triple_component::Iri;
+    using qlever::triple_component::LiteralOrIri;
     if (!wkt.has_value() || !n.has_value()) {
       return ValueId::makeUndefined();
     }
@@ -229,7 +234,8 @@ class WktGeometryN {
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }
-    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
+        resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -243,7 +249,8 @@ class WktSimplify {
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& geom,
       const NumericVariant& tolerance) const {
-    using namespace triple_component;
+    using qlever::triple_component::Iri;
+    using qlever::triple_component::LiteralOrIri;
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
@@ -267,7 +274,8 @@ class WktSimplify {
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }
-    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    auto lit = qlever::triple_component::Literal::literalWithoutQuotes(
+        resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }

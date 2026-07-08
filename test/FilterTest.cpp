@@ -40,7 +40,7 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 }
 
 // Shorthand helper function
-ad_utility::triple_component::Iri iri(std::string_view string) {
+qlever::triple_component::Iri iri(std::string_view string) {
   return TripleComponent::Iri::fromIriref(string);
 }
 

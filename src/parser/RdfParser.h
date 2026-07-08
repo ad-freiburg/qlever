@@ -190,12 +190,12 @@ class TurtleParser : public RdfParserBase {
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
   void setPrefixOrThrow(const std::string& key,
-                        const ad_utility::triple_component::Iri& prefix);
+                        const qlever::triple_component::Iri& prefix);
 
   // Set the base IRI for the given key. If `prefixAndBaseDisabled_`
   // is true, throw an error if this would change the mapping, which is illegal
   // during parallel parsing.
-  void setBaseIriOrThrow(const ad_utility::triple_component::Iri& iri);
+  void setBaseIriOrThrow(const qlever::triple_component::Iri& iri);
 
  protected:
   // Data members.

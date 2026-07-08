@@ -37,24 +37,23 @@ namespace qlever {
 class SparqlQleverVisitor {
  public:
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
-  using Objects = ad_utility::sparql_types::Objects;
-  using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
-  using VarOrIri = ad_utility::sparql_types::VarOrIri;
-  using Iri = ad_utility::triple_component::Iri;
-  using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
+  using Objects = qlever::sparql_types::Objects;
+  using PredicateObjectPairs = qlever::sparql_types::PredicateObjectPairs;
+  using VarOrIri = qlever::sparql_types::VarOrIri;
+  using Iri = qlever::triple_component::Iri;
+  using PathObjectPairs = qlever::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
-      ad_utility::sparql_types::PathObjectPairsAndTriples;
-  using TripleWithPropertyPath =
-      ad_utility::sparql_types::TripleWithPropertyPath;
-  using Triples = ad_utility::sparql_types::Triples;
+      qlever::sparql_types::PathObjectPairsAndTriples;
+  using TripleWithPropertyPath = qlever::sparql_types::TripleWithPropertyPath;
+  using Triples = qlever::sparql_types::Triples;
   using SubjectOrObjectAndTriples =
-      ad_utility::sparql_types::SubjectOrObjectAndTriples;
+      qlever::sparql_types::SubjectOrObjectAndTriples;
   using SubjectOrObjectAndPathTriples =
-      ad_utility::sparql_types::SubjectOrObjectAndPathTriples;
-  using ObjectsAndTriples = ad_utility::sparql_types::ObjectsAndTriples;
-  using ObjectsAndPathTriples = ad_utility::sparql_types::ObjectsAndPathTriples;
+      qlever::sparql_types::SubjectOrObjectAndPathTriples;
+  using ObjectsAndTriples = qlever::sparql_types::ObjectsAndTriples;
+  using ObjectsAndPathTriples = qlever::sparql_types::ObjectsAndPathTriples;
   using PredicateObjectPairsAndTriples =
-      ad_utility::sparql_types::PredicateObjectPairsAndTriples;
+      qlever::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
       std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
@@ -413,8 +412,7 @@ class SparqlQleverVisitor {
 
   PathObjectPairsAndTriples visit(Parser::TupleWithPathContext* ctx);
 
-  ad_utility::sparql_types::VarOrPath visit(
-      Parser::VerbPathOrSimpleContext* ctx);
+  qlever::sparql_types::VarOrPath visit(Parser::VerbPathOrSimpleContext* ctx);
 
   ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
 
@@ -707,7 +705,7 @@ class SparqlQleverVisitor {
   // into internal variables so they are interpreted correctly by the query
   // planner.
   parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples) const;
+      const qlever::sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from

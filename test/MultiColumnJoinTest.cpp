@@ -113,7 +113,7 @@ TEST(MultiColumnJoin, clone) {
 
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
-  using ad_utility::triple_component::Iri;
+  using qlever::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(

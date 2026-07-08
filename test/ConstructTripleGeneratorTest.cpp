@@ -23,7 +23,7 @@ using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::ResultOf;
-using Triples = ad_utility::sparql_types::Triples;
+using Triples = qlever::sparql_types::Triples;
 
 auto iriV = ad_utility::testing::iriV;
 

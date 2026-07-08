@@ -31,7 +31,7 @@ const EncodedIriManager* encodedIriManager() {
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
 using TripleComponentT =
-    std::variant<Id, ColumnIndex, ad_utility::triple_component::LiteralOrIri>;
+    std::variant<Id, ColumnIndex, qlever::triple_component::LiteralOrIri>;
 
 // A matcher that never matches and outputs the given message.
 MATCHER_P(AlwaysFalse, msg, "") {
@@ -427,14 +427,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   using namespace ::testing;
   const auto Id = ad_utility::testing::makeGetId(index);
   using Graph = SparqlTripleSimpleWithGraph::Graph;
-  using LocalVocab = ad_utility::triple_component::LiteralOrIri;
+  using LocalVocab = qlever::triple_component::LiteralOrIri;
   auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
   auto Iri = [](const std::string& iri) {
-    return ad_utility::triple_component::Iri::fromIriref(iri);
+    return qlever::triple_component::Iri::fromIriref(iri);
   };
   auto Literal = [](const std::string& literal) {
-    return ad_utility::triple_component::Literal::fromStringRepresentation(
-        literal);
+    return qlever::triple_component::Literal::fromStringRepresentation(literal);
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
@@ -449,8 +448,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab, &index](
-                const ad_utility::triple_component::LiteralOrIri& literalOrIri)
+            [&localVocab,
+             &index](const qlever::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
                   LocalVocabEntry{literalOrIri, index});

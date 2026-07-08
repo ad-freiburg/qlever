@@ -32,8 +32,7 @@ auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+  return PropertyPath::fromIri(qlever::triple_component::Iri::fromIriref(iri));
 }
 
 const EncodedIriManager* encodedIriManager() {
@@ -1617,8 +1616,8 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
-  auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
-                       const ad_utility::sparql_types::Triples& triples)
+  auto GraphBlock = [](const qlever::sparql_types::VarOrIri& graph,
+                       const qlever::sparql_types::Triples& triples)
       -> testing::Matcher<const Quads::GraphBlock&> {
     return testing::FieldsAre(testing::Eq(graph),
                               testing::ElementsAreArray(triples));
