@@ -1521,15 +1521,15 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::idToStringAndType(qec->getIndex(), qlever::Id::max(),
-                                       qlever::LocalVocab{}),
+      qlever::exportIds::idToStringAndType(qec->getIndex(), qlever::Id::max(),
+                                           qlever::LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::getLiteralOrIriFromVocabIndex(
+      qlever::exportIds::getLiteralOrIriFromVocabIndex(
           qec->getIndex(), qlever::Id::max(), qlever::LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::idToStringAndTypeForEncodedValue(
+      qlever::exportIds::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }

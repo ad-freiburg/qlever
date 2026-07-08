@@ -96,7 +96,7 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // them per block is fine performance-wise: `LocalVocabEntry`s live in RAM,
   // so there is no disk I/O to amortize across batches.
   auto missResolved =
-      ql::exportIds::idsToStringAndType(index, missIds, localVocab);
+      qlever::exportIds::idsToStringAndType(index, missIds, localVocab);
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
     auto evaluate = [&resolved](const Id&) {

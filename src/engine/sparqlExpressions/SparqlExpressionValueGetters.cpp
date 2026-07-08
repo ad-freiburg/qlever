@@ -135,7 +135,7 @@ std::optional<std::string> StringValueGetter::operator()(
     }
   }
   // `true` means that we remove the quotes and angle brackets.
-  auto optionalStringAndType = ql::exportIds::idToStringAndType<true>(
+  auto optionalStringAndType = qlever::exportIds::idToStringAndType<true>(
       context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
@@ -148,30 +148,30 @@ std::optional<std::string> StringValueGetter::operator()(
 std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ql::exportIds::idToLiteral(context->_qec.getIndex(), id,
-                                    context->_localVocab);
+  return qlever::exportIds::idToLiteral(context->_qec.getIndex(), id,
+                                        context->_localVocab);
 }
 
 // ____________________________________________________________________________
 std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
                                               const EvaluationContext*) const {
-  return ql::exportIds::handleIriOrLiteral(s, false);
+  return qlever::exportIds::handleIriOrLiteral(s, false);
 }
 
 // ____________________________________________________________________________
 std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ql::exportIds::idToLiteral(context->_qec.getIndex(), id,
-                                    context->_localVocab, true);
+  return qlever::exportIds::idToLiteral(context->_qec.getIndex(), id,
+                                        context->_localVocab, true);
 }
 
 // ____________________________________________________________________________
 std::optional<qlever::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  return ql::exportIds::handleIriOrLiteral(s, true);
+  return qlever::exportIds::handleIriOrLiteral(s, true);
 }
 
 // ____________________________________________________________________________
@@ -234,7 +234,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
                                           context->_qec.getIndex().getVocab(),
                                           id.getVocabIndex()));
     case Datatype::LocalVocabIndex: {
-      auto word = ql::exportIds::idToStringAndType<false>(
+      auto word = qlever::exportIds::idToStringAndType<false>(
           context->_qec.getIndex(), id, context->_localVocab);
       return Id::makeFromBool(word.has_value() &&
                               ql::starts_with(word.value().first, prefix));
@@ -266,7 +266,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 // _____________________________________________________________________________
 std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  auto optionalStringAndType = ql::exportIds::idToStringAndType<true, true>(
+  auto optionalStringAndType = qlever::exportIds::idToStringAndType<true, true>(
       context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
@@ -345,7 +345,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(ql::exportIds::getLiteralOrIriFromVocabIndex(
+      return (*this)(qlever::exportIds::getLiteralOrIriFromVocabIndex(
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
     case Undefined:
@@ -394,7 +394,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
   return cache_.getOrCompute(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
         // Get string content of ValueId
-        auto str = ql::exportIds::idToLiteralOrIri(
+        auto str = qlever::exportIds::idToLiteralOrIri(
             context->_qec.getIndex(), value, context->_localVocab, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
@@ -434,7 +434,7 @@ std::optional<qlever::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
       return id.getGeoPoint();
     case VocabIndex:
     case LocalVocabIndex: {
-      auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
+      auto lit = qlever::exportIds::getLiteralOrIriFromVocabIndex(
           context->_qec.getIndex(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
@@ -475,7 +475,7 @@ CPP_template(typename T, typename ValueGetter)(
     case EncodedVal:
     case VocabIndex:
       return valueGetter(
-          ql::exportIds::getLiteralOrIriFromVocabIndex(
+          qlever::exportIds::getLiteralOrIriFromVocabIndex(
               context->_qec.getIndex(), id, context->_localVocab),
           context);
     case TextRecordIndex:
@@ -591,7 +591,7 @@ CPP_template_out_def(typename RequestedInfo)(
       } else {
         // No precomputed geometry info available: we have to fetch and parse
         // the string.
-        auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
+        auto lit = qlever::exportIds::getLiteralOrIriFromVocabIndex(
             context->_qec.getIndex(), id, context->_localVocab);
         return GeometryInfoValueGetter{}(lit, context);
       }

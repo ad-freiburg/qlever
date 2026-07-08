@@ -11,11 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 
-namespace compressedRelationHelpers {
-
-using qlever::CompressedRelationMetadata;
-using qlever::CompressedRelationWriter;
-using qlever::Id;
+namespace qlever::compressedRelationHelpers {
 
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
@@ -137,6 +133,6 @@ class DistinctIdCounter {
   }
 };
 
-}  // namespace compressedRelationHelpers
+}  // namespace qlever::compressedRelationHelpers
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_

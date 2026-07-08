@@ -261,7 +261,7 @@ CPP_template(typename NaryOperation)(
     }
 
     prefilterVec.emplace_back(
-        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+        std::make_unique<qlever::prefilterExpressions::PrefixRegexExpression>(
             prefixStr.value()),
         var.value());
     return prefilterVec;

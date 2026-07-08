@@ -21,7 +21,7 @@ using ad_utility::testing::VocabId;
 
 namespace {
 
-using namespace prefilterExpressions;
+using namespace qlever::prefilterExpressions;
 using namespace makeFilterExpression;
 using namespace filterHelper;
 using namespace qlever::valueIdComparators;
@@ -491,7 +491,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
     std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
         inputRange.begin(), inputRange.end(), referenceId, compOp);
-    using namespace prefilterExpressions::detail::mapping;
+    using namespace qlever::prefilterExpressions::detail::mapping;
     ASSERT_TRUE(assertEqRelevantBlockItRanges(
         convertFromSpanIdxToSpanBlockItRanges(evalBlocks.begin(),
                                               relevantIdxRanges),
@@ -1460,7 +1460,7 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 // Test PrefilterExpression unknown `CompOp comparison` value detection.
 TEST(PrefilterExpressionExpressionOnMetadataTest,
      checkMakePrefilterVecDetectsAndThrowsForInvalidComparisonOp) {
-  using namespace prefilterExpressions::detail;
+  using namespace qlever::prefilterExpressions::detail;
   AD_EXPECT_THROW_WITH_MESSAGE(
       makePrefilterExpressionYearImpl(static_cast<CompOp>(10),
                                       static_cast<int64_t>(0)),

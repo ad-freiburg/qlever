@@ -26,11 +26,7 @@
 #include "parser/LiteralOrIri.h"
 #include "util/ValueIdentity.h"
 
-namespace ql::exportIds {
-using qlever::Id;
-using qlever::Index;
-using qlever::IndexImpl;
-using qlever::LocalVocab;
+namespace qlever::exportIds {
 
 using LiteralOrIri = qlever::triple_component::LiteralOrIri;
 using Iri = qlever::triple_component::Iri;
@@ -226,6 +222,6 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   return results;
 }
 
-}  // namespace ql::exportIds
+}  // namespace qlever::exportIds
 
 #endif  // QLEVER_SRC_INDEX_EXPORTIDS_H

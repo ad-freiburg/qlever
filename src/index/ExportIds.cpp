@@ -22,7 +22,7 @@
 
 using namespace qlever;
 
-namespace ql::exportIds {
+namespace qlever::exportIds {
 
 using LiteralOrIri = qlever::triple_component::LiteralOrIri;
 using Iri = qlever::triple_component::Iri;
@@ -35,7 +35,7 @@ std::optional<Literal> idToLiteralForEncodedValue(
     return std::nullopt;
   }
   auto optionalStringAndType =
-      ql::exportIds::idToStringAndTypeForEncodedValue(id);
+      qlever::exportIds::idToStringAndTypeForEncodedValue(id);
   if (!optionalStringAndType) {
     return std::nullopt;
   }
@@ -119,7 +119,7 @@ std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
   // behavior. However, this is somewhat fragile and should be kept in mind if
   // this function is used in other contexts.
   auto [literal, type] =
-      ql::exportIds::idToStringAndTypeForEncodedValue(id).value_or(
+      qlever::exportIds::idToStringAndTypeForEncodedValue(id).value_or(
           std::make_pair(std::string{}, nullptr));
   if (type == nullptr) {
     return std::nullopt;
@@ -154,8 +154,8 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
     case VocabIndex:
     case LocalVocabIndex:
     case EncodedVal:
-      return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
-                                                          localVocab);
+      return qlever::exportIds::getLiteralOrIriFromVocabIndex(index, id,
+                                                              localVocab);
     case TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
     default:
@@ -275,4 +275,4 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
-}  // namespace ql::exportIds
+}  // namespace qlever::exportIds

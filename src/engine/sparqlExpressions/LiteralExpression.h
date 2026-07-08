@@ -269,7 +269,7 @@ using SingleUseExpression = detail::SingleUseExpression;
 namespace detail {
 
 //______________________________________________________________________________
-using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
+using IdOrLocalVocabEntry = qlever::prefilterExpressions::IdOrLocalVocabEntry;
 // Given a `SparqlExpression*` pointing to a `LiteralExpression`, this helper
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that

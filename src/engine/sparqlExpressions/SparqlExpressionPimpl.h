@@ -20,9 +20,9 @@ struct EvaluationContext;
 
 // Improve return type readability.
 // Pair containing `PrefilterExpression` pointer and a `Variable`.
-using PrefilterExprVariablePair =
-    std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
-              Variable>;
+using PrefilterExprVariablePair = std::pair<
+    std::unique_ptr<qlever::prefilterExpressions::PrefilterExpression>,
+    Variable>;
 
 // Hide the `SparqlExpression` implementation in a Pimpl class, so that code
 // using this implementation only has to include the (small and therefore cheap

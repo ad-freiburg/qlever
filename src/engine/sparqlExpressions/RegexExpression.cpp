@@ -338,7 +338,7 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   }
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
-      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+      std::make_unique<qlever::prefilterExpressions::PrefixRegexExpression>(
           TripleComponent::Literal::literalWithNormalizedContent(
               asNormalizedStringViewUnsafe(prefixRegex_))),
       variable_);

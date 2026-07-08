@@ -297,7 +297,7 @@ inline std::vector<std::string> printTable(
   for (size_t i = 0; i < table->idTableView().numRows(); i++) {
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
-      auto test = ql::exportIds::idToStringAndType(
+      auto test = qlever::exportIds::idToStringAndType(
           qec->getIndex(), table->idTableView().at(i, k), {});
       line += test.value().first;
       line += " ";

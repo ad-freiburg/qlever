@@ -11,52 +11,51 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
-// Note that the printers must be defined inside the `ad_utility` or `testing`
-// namespace such that argument-dependent lookup can find them within `gtest`.
-namespace ad_utility {
-
-using qlever::GeoPoint;
+// Note that the printers must be defined inside the `qlever` namespace (where
+// the printed types live) such that argument-dependent lookup can find them
+// within `gtest`.
+namespace qlever {
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::Centroid& centroid, std::ostream* os) {
+inline void PrintTo(const Centroid& centroid, std::ostream* os) {
   auto& s = *os;
   s << "Centroid(" << centroid.centroid().toStringRepresentation() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::BoundingBox& bb, std::ostream* os) {
+inline void PrintTo(const BoundingBox& bb, std::ostream* os) {
   auto& s = *os;
   s << "BoundingBox(Lower Left = " << bb.lowerLeft().toStringRepresentation()
     << ", Upper Right = " << bb.upperRight().toStringRepresentation() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::GeometryType& gt, std::ostream* os) {
+inline void PrintTo(const GeometryType& gt, std::ostream* os) {
   auto& s = *os;
   s << "GeometryType(" << std::to_string(gt.type())
     << ", IRI: " << gt.asIri().value_or("-") << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::NumGeometries& gt, std::ostream* os) {
+inline void PrintTo(const NumGeometries& gt, std::ostream* os) {
   auto& s = *os;
   s << "NumGeometries(" << gt.numGeometries() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::MetricLength& gt, std::ostream* os) {
+inline void PrintTo(const MetricLength& gt, std::ostream* os) {
   auto& s = *os;
   s << "MetricLength(" << gt.length() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::MetricArea& gt, std::ostream* os) {
+inline void PrintTo(const MetricArea& gt, std::ostream* os) {
   auto& s = *os;
   s << "MetricArea(" << gt.area() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::GeometryInfo& gi, std::ostream* os) {
+inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   auto& s = *os;
   s << "GeometryInfo(";
   PrintTo(gi.getWktType(), os);
@@ -74,7 +73,7 @@ inline void PrintTo(const qlever::GeometryInfo& gi, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const qlever::GeoPointOrWkt& g, std::ostream* os) {
+inline void PrintTo(const GeoPointOrWkt& g, std::ostream* os) {
   auto& s = *os;
   s << "GeoPointOrWkt(";
   std::visit(
@@ -91,6 +90,6 @@ inline void PrintTo(const qlever::GeoPointOrWkt& g, std::ostream* os) {
   s << ")";
 }
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_PRINTERS_GEOMETRYINFOPRINTERS_H

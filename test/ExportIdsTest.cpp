@@ -48,9 +48,9 @@ TEST(ExportIds, idToLiteralFunctionality) {
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
               cases) {
         for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
-          auto result = ql::exportIds::idToLiteral(qec->getIndex(), id,
-                                                   qlever::LocalVocab{},
-                                                   onlyLiteralsWithXsdString);
+          auto result = qlever::exportIds::idToLiteral(
+              qec->getIndex(), id, qlever::LocalVocab{},
+              onlyLiteralsWithXsdString);
           if (expected) {
             EXPECT_THAT(result,
                         ::testing::Optional(::testing::ResultOf(
@@ -132,21 +132,21 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
            "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")}},
       {qlever::ValueId::makeUndefined(), std::nullopt}};
   for (const auto& [valueId, expRes] : expected) {
-    ASSERT_EQ(ql::exportIds::idToLiteralOrIri(qec->getIndex(), valueId,
-                                              qlever::LocalVocab{}),
+    ASSERT_EQ(qlever::exportIds::idToLiteralOrIri(qec->getIndex(), valueId,
+                                                  qlever::LocalVocab{}),
               expRes);
   }
 }
 
 // _____________________________________________________________________________
 TEST(ExportIds, getLiteralOrNullopt) {
-  using LiteralOrIri = ql::exportIds::LiteralOrIri;
+  using LiteralOrIri = qlever::exportIds::LiteralOrIri;
   using Literal = qlever::triple_component::Literal;
   using Iri = qlever::triple_component::Iri;
 
   auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
                                    std::optional<std::string> expectedRes) {
-    auto res = ql::exportIds::getLiteralOrNullopt(input);
+    auto res = qlever::exportIds::getLiteralOrNullopt(input);
     ASSERT_EQ(res.has_value(), expectedRes.has_value());
     if (res.has_value()) {
       ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
@@ -171,12 +171,12 @@ TEST(ExportIds, getLiteralOrNullopt) {
 TEST(ExportIds, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
-  EXPECT_EQ(ql::exportIds::replaceAnglesByQuotes(input), expected);
+  EXPECT_EQ(qlever::exportIds::replaceAnglesByQuotes(input), expected);
   input = "s>";
-  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
+  EXPECT_THROW(qlever::exportIds::replaceAnglesByQuotes(input),
                ad_utility::Exception);
   input = "<s";
-  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
+  EXPECT_THROW(qlever::exportIds::replaceAnglesByQuotes(input),
                ad_utility::Exception);
 }
 
@@ -185,10 +185,10 @@ TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
   using qlever::triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
-      ql::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
+      qlever::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
           absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
       ::testing::Optional(::testing::Eq(input)));
-  EXPECT_EQ(ql::exportIds::blankNodeIriToString(
+  EXPECT_EQ(qlever::exportIds::blankNodeIriToString(
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
 }
@@ -217,7 +217,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     EXPECT_EQ(encodedId.getDatatype(), qlever::Datatype::EncodedVal);
 
     // Test getLiteralOrIriFromVocabIndex with the encoded ID
-    auto result = ql::exportIds::getLiteralOrIriFromVocabIndex(
+    auto result = qlever::exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), encodedId, emptyLocalVocab);
 
     // The result should be the original IRI
@@ -236,7 +236,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
         qlever::VocabIndex::make(0);  // First vocab entry
     qlever::Id vocabId = qlever::Id::makeFromVocabIndex(vocabIndex);
 
-    auto vocabResult = ql::exportIds::getLiteralOrIriFromVocabIndex(
+    auto vocabResult = qlever::exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), vocabId, emptyLocalVocab);
 
     // Should successfully return some IRI or literal from vocabulary
@@ -275,13 +275,13 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
   // `idsToStringAndType` requires the input to be sorted by `ValueId`.
   ql::ranges::sort(ids);
 
-  auto batchResults = ql::exportIds::idsToStringAndType(
+  auto batchResults = qlever::exportIds::idsToStringAndType(
       index, ql::span<const qlever::Id>{ids}, localVocab);
 
   ASSERT_EQ(batchResults.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(batchResults[i],
-              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+              qlever::exportIds::idToStringAndType(index, ids[i], localVocab))
         << "Mismatch at index " << i;
   }
 }
@@ -291,7 +291,7 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
 TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
   qlever::LocalVocab localVocab{};
-  auto result = ql::exportIds::idsToStringAndType(
+  auto result = qlever::exportIds::idsToStringAndType(
       qec->getIndex(), ql::span<const qlever::Id>{}, localVocab);
   EXPECT_TRUE(result.empty());
 }

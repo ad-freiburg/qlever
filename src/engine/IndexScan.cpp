@@ -243,8 +243,8 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+    const auto& blockMetadataRanges = qlever::prefilterExpressions::detail::
+        logicalOps::getIntersectionOfBlockRanges(
             it->first->evaluate(getLocalVocabContext(),
                                 getScanSpecAndBlocks().getBlockMetadataSpan(),
                                 colIndex),

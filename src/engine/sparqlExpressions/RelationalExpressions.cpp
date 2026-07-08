@@ -462,8 +462,8 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     const auto& optReferenceValue =
         detail::getIdOrLocalVocabEntryFromLiteralExpression(child1, context);
     if (!optReferenceValue.has_value()) return {};
-    return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
-        optReferenceValue.value(), variable, reversed, prefilterDate);
+    return qlever::prefilterExpressions::detail::makePrefilterExpressionVec<
+        comp>(optReferenceValue.value(), variable, reversed, prefilterDate);
   };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child
@@ -523,7 +523,8 @@ InExpression::getPrefilterExpressionForMetadata(
     return {};
   }
 
-  std::vector<prefilterExpressions::IdOrLocalVocabEntry> referenceValues;
+  std::vector<qlever::prefilterExpressions::IdOrLocalVocabEntry>
+      referenceValues;
   referenceValues.reserve(children_.size());
   for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
     auto optReferenceValue =
@@ -537,7 +538,8 @@ InExpression::getPrefilterExpressionForMetadata(
 
   std::vector<PrefilterExprVariablePair> resPrefilter;
   resPrefilter.emplace_back(
-      std::make_unique<prefilterExpressions::IsInExpression>(referenceValues),
+      std::make_unique<qlever::prefilterExpressions::IsInExpression>(
+          referenceValues),
       var.value());
   return resPrefilter;
 }

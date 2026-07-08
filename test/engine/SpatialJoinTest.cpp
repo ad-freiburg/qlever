@@ -409,22 +409,22 @@ class SpatialJoinVarColParamTest
         qlever::ValueId tableEntry = r->at(0, ind);
 
         if (tableEntry.getDatatype() == qlever::Datatype::VocabIndex) {
-          std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
-                  .value()
-                  .first;
+          std::string value = qlever::exportIds::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == qlever::Datatype::Int) {
-          std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
-                  .value()
-                  .first;
+          std::string value = qlever::exportIds::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == qlever::Datatype::GeoPoint) {
-          auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
-                  .value();
+          auto [value, type] = qlever::exportIds::idToStringAndType(
+                                   qec->getIndex(), tableEntry, {})
+                                   .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
@@ -486,7 +486,7 @@ class SpatialJoinVarColParamTest
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+              qlever::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
                   .value();
           if (valueId.getDatatype() == qlever::Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
