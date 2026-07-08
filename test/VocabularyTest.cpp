@@ -21,7 +21,9 @@ using ::testing::ElementsAre;
 namespace {
 using ad_utility::VocabularyType;
 
-// TODO: write descriptive comment here.
+// RAII helper that gives a test an on-disk `RdfsVocabulary` and cleans up its
+// backing files (the `.words`, `.words.offsets`, `.codebooks` sidecards)
+// afterward.
 class RdfsVocabularyCreator {
   std::string filename_;
   void deleteFiles() const {
